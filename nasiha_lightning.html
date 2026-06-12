@@ -168,13 +168,37 @@
     display: flex; align-items: center; gap: .65rem; text-decoration: none; border: none; background: none; cursor: pointer; flex-shrink: 0;
   }
   .logo-mark {
-    width: 36px; height: 36px; background: var(--primary); border-radius: var(--radius);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1rem; font-weight: 800; color: #fff; letter-spacing: -.03em;
-    flex-shrink: 0;
+    width: 36px; height: 36px; background: var(--primary); border-radius: 10px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    position: relative; overflow: hidden;
   }
-  .logo-text { font-size: 1.15rem; font-weight: 700; color: var(--foreground); line-height: 1.2; }
-  .logo-sub  { font-size: .6rem; color: var(--muted-fg); letter-spacing: .08em; text-transform: uppercase; }
+  .logo-mark::before {
+    content: 'N'; font-size: 1.1rem; font-weight: 900; color: #fff;
+    letter-spacing: -.05em; font-style: italic;
+  }
+  .logo-mark::after {
+    content: ''; position: absolute; bottom: 0; right: 0;
+    width: 16px; height: 3px; background: rgba(255,255,255,.4); border-radius: 2px 0 0 0;
+  }
+  /* Collapsible exchange system */
+  .exchange-toggle {
+    width: 100%; background: none; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1.25rem 1.5rem; text-align: left; transition: background .15s;
+    border-radius: calc(var(--radius) * 2);
+  }
+  .exchange-toggle:hover { background: var(--primary-pale2); }
+  .exchange-body {
+    display: none; padding: 0 1.5rem 1.5rem;
+  }
+  .exchange-body.open { display: block; }
+  .exchange-chevron { transition: transform .25s; color: var(--primary); }
+  .exchange-chevron.open { transform: rotate(180deg); }
+  .logo-wordmark {
+    font-size: 1.25rem; font-weight: 900; letter-spacing: .14em;
+    color: var(--primary); line-height: 1; text-transform: uppercase;
+  }
+  .logo-sub  { font-size: .58rem; color: var(--muted-fg); letter-spacing: .09em; text-transform: uppercase; margin-top: .2rem; }
   .nav-links { display: flex; align-items: center; gap: .2rem; }
   .nav-link {
     padding: .4rem .75rem; border-radius: var(--radius); font-size: .875rem; font-weight: 500;
@@ -538,17 +562,18 @@
 <!-- ═══════════════════════════════════ NAV -->
 <nav id="nav">
   <button class="nav-logo" onclick="navigate('home')">
-    <div class="logo-mark">N</div>
+    <div class="logo-mark"></div>
     <div>
-      <div class="logo-text">Nasiha</div>
+      <div class="logo-wordmark">NASIHA</div>
       <div class="logo-sub">Knowledge · Community · Growth</div>
     </div>
   </button>
 
-  <div class="nav-links" id="nav-public">
+  <div class="nav-links" id="nav-public" style="margin:0 auto;">
     <button class="nav-link" onclick="navigate('about')">About</button>
     <button class="nav-link" onclick="navigate('how-to-join')">How to Join</button>
     <button class="nav-link" onclick="navigate('public-events')">Events</button>
+    <button class="nav-link" onclick="navigate('contact')">Contact Us</button>
   </div>
 
   <div class="nav-links hidden" id="nav-member">
@@ -562,10 +587,10 @@
   <div class="nav-user">
     <div id="nav-guest-btns" class="flex gap-2">
       <button class="btn btn-ghost btn-sm" onclick="navigate('login')">Log in</button>
-      <button class="btn btn-primary btn-sm" onclick="navigate('apply')">Apply to Join</button>
+      <button class="btn btn-primary btn-sm" onclick="navigate('apply')">Join NASIHA</button>
     </div>
     <div id="nav-user-info" class="flex items-center gap-3 hidden">
-      <div id="nav-credits" class="badge badge-gold" style="font-size:.7rem;">✦ 4.5 hrs</div>
+      <div id="nav-credits" class="badge badge-gold" style="font-size:.7rem;">✦ 4.5 Knowledge Hours</div>
       <div class="flex items-center gap-2" style="cursor:pointer" onclick="navigate('profile')">
         <div class="avatar" id="nav-avatar">UZ</div>
         <div>
@@ -587,11 +612,11 @@
 
   <!-- Hero -->
   <section class="hero">
-    <div class="hero-label">A Global Medical Community</div>
-    <h1>Medicine is better<br>when we <em>share what we know</em>.</h1>
-    <p>Nasiha is a global community of medical professionals dedicated to free, reciprocal knowledge exchange — because every person who learns becomes a person who can teach.</p>
+    <div class="hero-label">A Global Learning Community</div>
+    <h1>Knowledge is better<br>when we <em>share what we know</em>.</h1>
+    <p>NASIHA is a global community where members are dedicated to free, reciprocal knowledge exchange — because every person who learns becomes a person who can teach.</p>
     <div class="hero-btns">
-      <button class="btn-hero-primary" onclick="navigate('apply')">Apply for Membership</button>
+      <button class="btn-hero-primary" onclick="navigate('apply')">Join NASIHA</button>
       <button class="btn-hero-outline" onclick="navigate('about')">Learn More</button>
     </div>
     <div class="hero-stats">
@@ -632,40 +657,46 @@
         <div class="card" style="text-align:center;">
           <div class="step-icon" style="margin:0 auto 1rem;"><i data-lucide="graduation-cap"></i></div>
           <div class="font-bold text-lg mb-2">Teach</div>
-          <div class="text-muted text-sm" style="line-height:1.7;">Members share knowledge through lectures, mentorship, and case discussions — unconditionally, because knowledge is a common good.</div>
+          <div class="text-muted text-sm" style="line-height:1.7;">Members share knowledge through lectures and case discussions — because knowledge is a common good.</div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Contribution Hours — image + text layout -->
+  <!-- Knowledge Exchange System — collapsible -->
   <section class="section">
     <div class="container">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4rem;align-items:center;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4rem;align-items:start;">
         <div>
           <div class="section-eyebrow">Our Currency</div>
-          <div class="section-title">Nasiha Contribution Hours</div>
-          <p class="text-muted mb-4" style="line-height:1.8;">Every hour you contribute — teaching, mentoring, curating — earns you one Nasiha Contribution Hour. Hours can be spent to access expert consultations and mentorship in return.</p>
-          <p class="text-muted mb-4" style="line-height:1.8;"><strong style="color:var(--foreground);">Critically:</strong> Contribution Hours are recognition, not gatekeeping. All members retain full access to the community regardless of their balance.</p>
+          <div class="section-title">The NASIHA Knowledge Exchange System</div>
+          <p class="text-muted mb-4" style="line-height:1.8;">Every hour you contribute — teaching, curating — earns you one Knowledge Hour. Hours can be spent to access expert knowledge in return.</p>
+          <p class="text-muted mb-4" style="line-height:1.8;"><strong style="color:var(--foreground);">Critically:</strong> Knowledge Hours are recognition, not gatekeeping. All members retain full access to the community regardless of their balance.</p>
           <button class="btn btn-outline" onclick="navigate('how-to-join')">See How to Join →</button>
         </div>
         <div>
-          <div class="card" style="background:var(--primary-pale);border-color:var(--primary-pale2);">
-            <div class="font-bold mb-4" style="font-size:1rem;">How Contribution Hours Work</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;">
+          <div class="card" style="background:var(--primary-pale);border-color:var(--primary-pale2);padding:0;overflow:hidden;">
+            <button class="exchange-toggle" onclick="toggleExchange(this)" aria-expanded="false">
               <div>
-                <div class="text-sm font-semibold text-primary mb-3">Earn by Teaching</div>
-                <div class="text-xs text-muted mb-2 flex items-center gap-2"><i data-lucide="mic" class="icon-xs" style="color:var(--primary);flex-shrink:0;"></i> Lecture / webinar · <strong>1 hr</strong></div>
-                <div class="text-xs text-muted mb-2 flex items-center gap-2"><i data-lucide="handshake" class="icon-xs" style="color:var(--primary);flex-shrink:0;"></i> Mentorship session · <strong>1 hr</strong></div>
-                <div class="text-xs text-muted mb-2 flex items-center gap-2"><i data-lucide="message-square" class="icon-xs" style="color:var(--primary);flex-shrink:0;"></i> Case discussion · <strong>0.5 hrs</strong></div>
-                <div class="text-xs text-muted mb-2 flex items-center gap-2"><i data-lucide="book-open" class="icon-xs" style="color:var(--primary);flex-shrink:0;"></i> Curate resource · <strong>0.5 hrs</strong></div>
+                <div class="font-bold" style="font-size:1rem;color:var(--foreground);">How the Knowledge Exchange Works</div>
+                <div class="text-xs text-muted mt-1">Click to see how you earn and spend Knowledge Hours</div>
               </div>
-              <div>
-                <div class="text-sm font-semibold text-gold mb-3">Spend to Learn</div>
-                <div class="text-xs text-muted mb-2 flex items-center gap-2"><i data-lucide="stethoscope" class="icon-xs" style="color:var(--gold);flex-shrink:0;"></i> Consultation · <strong>1 hr</strong></div>
-                <div class="text-xs text-muted mb-2 flex items-center gap-2"><i data-lucide="graduation-cap" class="icon-xs" style="color:var(--gold);flex-shrink:0;"></i> Mentorship · <strong>1/session</strong></div>
-                <div class="text-xs text-muted mb-2 flex items-center gap-2"><i data-lucide="clipboard-list" class="icon-xs" style="color:var(--gold);flex-shrink:0;"></i> Research resource · <strong>0.5 hrs</strong></div>
-                <div class="text-xs text-muted mb-2 flex items-center gap-2"><i data-lucide="monitor-play" class="icon-xs" style="color:var(--gold);flex-shrink:0;"></i> Attend webinar · <strong>Always free</strong></div>
+              <i data-lucide="chevron-down" class="icon-lg exchange-chevron" id="exchange-chevron"></i>
+            </button>
+            <div class="exchange-body" id="exchange-body">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;">
+                <div>
+                  <div class="text-sm font-semibold text-primary mb-3">Earn by Teaching</div>
+                  <div class="card card-sm mb-2 flex items-center gap-2" style="background:#fff;"><i data-lucide="mic" class="icon-xs" style="color:var(--primary);flex-shrink:0;"></i><span class="text-xs">Lecture / webinar · <strong>1 hr</strong></span></div>
+                  <div class="card card-sm mb-2 flex items-center gap-2" style="background:#fff;"><i data-lucide="message-square" class="icon-xs" style="color:var(--primary);flex-shrink:0;"></i><span class="text-xs">Knowledge discussion · <strong>0.5 hrs</strong></span></div>
+                  <div class="card card-sm flex items-center gap-2" style="background:#fff;"><i data-lucide="book-open" class="icon-xs" style="color:var(--primary);flex-shrink:0;"></i><span class="text-xs">Curate resource · <strong>0.5 hrs</strong></span></div>
+                </div>
+                <div>
+                  <div class="text-sm font-semibold text-gold mb-3">Spend to Learn</div>
+                  <div class="card card-sm mb-2 flex items-center gap-2" style="background:#fff;"><i data-lucide="stethoscope" class="icon-xs" style="color:var(--gold);flex-shrink:0;"></i><span class="text-xs">Expert consultation · <strong>1 hr</strong></span></div>
+                  <div class="card card-sm mb-2 flex items-center gap-2" style="background:#fff;"><i data-lucide="clipboard-list" class="icon-xs" style="color:var(--gold);flex-shrink:0;"></i><span class="text-xs">Research resource · <strong>0.5 hrs</strong></span></div>
+                  <div class="card card-sm flex items-center gap-2" style="background:#fff;"><i data-lucide="monitor-play" class="icon-xs" style="color:var(--gold);flex-shrink:0;"></i><span class="text-xs">Attend webinar · <strong>Always free</strong></span></div>
+                </div>
               </div>
             </div>
           </div>
@@ -680,7 +711,7 @@
       <div class="section-center mb-6">
         <div class="section-eyebrow">Community</div>
         <div class="section-title">Membership Tiers</div>
-        <div class="section-sub">Open internationally to anyone engaged in medicine, healthcare, or public health.</div>
+        <div class="section-sub">Open to all learners and teachers who share a passion for knowledge exchange.</div>
       </div>
       <div class="grid-4">
         <div class="tier-card tier-active-bg">
@@ -696,12 +727,13 @@
         <div class="tier-card tier-student-bg">
           <div class="font-bold text-lg mb-1">Student / Trainee</div>
           <div style="font-size:.78rem;opacity:.75;margin-bottom:1rem;">Future leaders</div>
-          <div style="font-size:.82rem;opacity:.9;line-height:1.65;">Lighter contribution requirements suited to the demands of medical training.</div>
+          <div style="font-size:.82rem;opacity:.9;line-height:1.65;">Lighter contribution requirements suited to the demands of training and early learning.</div>
         </div>
-        <div class="tier-card tier-friend-bg">
-          <div class="font-bold text-lg mb-1">Friend of Nasiha</div>
+        <div class="tier-card tier-friend-bg" style="cursor:pointer;" onclick="navigate('public-events')" title="Click to see free events and recordings">
+          <div class="font-bold text-lg mb-1">Friend of NASIHA</div>
           <div style="font-size:.78rem;opacity:.75;margin-bottom:1rem;">Welcome, no strings</div>
-          <div style="font-size:.82rem;opacity:.9;line-height:1.65;">No contribution obligation. Access all available content as a free benefit of the community.</div>
+          <div style="font-size:.82rem;opacity:.9;line-height:1.65;">Access free content available for the benefit of the community — including our event calendar and recorded webinars.</div>
+          <div style="font-size:.72rem;opacity:.6;margin-top:.75rem;display:flex;align-items:center;gap:.3rem;"><i data-lucide="arrow-right" style="width:12px;height:12px;"></i> View free events &amp; recordings</div>
         </div>
       </div>
     </div>
@@ -741,24 +773,25 @@
   <!-- CTA -->
   <section class="cta-banner">
     <div style="font-size:1.9rem;font-weight:800;margin-bottom:.75rem;letter-spacing:-.02em;">Ready to join the community?</div>
-    <div style="opacity:.88;margin-bottom:2rem;max-width:500px;margin-left:auto;margin-right:auto;font-size:1.05rem;line-height:1.7;">Membership is open to medical professionals, students, and healthcare workers worldwide. No fees. Just knowledge.</div>
-    <button class="btn-hero-primary" onclick="navigate('apply')">Apply for Membership</button>
+    <div style="opacity:.88;margin-bottom:2rem;max-width:520px;margin-left:auto;margin-right:auto;font-size:1.05rem;line-height:1.7;">Open to professionals, students and teachers who are enthusiastic about sharing their knowledge. No fees. Just knowledge.</div>
+    <button class="btn-hero-primary" onclick="navigate('apply')">Join NASIHA</button>
   </section>
 
   <!-- Footer -->
   <footer class="site-footer">
     <div class="footer-grid">
       <div>
-        <div class="footer-logo">Nasiha</div>
-        <div class="footer-desc">A non-profit community dedicated to free, reciprocal knowledge exchange among medical professionals worldwide.</div>
-        <div class="footer-disclaimer" style="margin-top:.75rem;">Dedicated to Narjis and Syed Iftikhar Hussain Abidi.</div>
+        <div class="footer-logo" style="letter-spacing:.1em;">NASIHA</div>
+        <div class="footer-desc">A non-profit community dedicated to free, reciprocal knowledge exchange among learners and teachers worldwide.</div>
+        <div class="footer-disclaimer" style="margin-top:.75rem;">NASIHA — Dedicated to Narjis and Syed Iftikhar Hussain Abidi.</div>
       </div>
       <div>
         <div class="footer-col-title">Community</div>
         <div class="footer-link" onclick="navigate('about')">About Nasiha</div>
         <div class="footer-link" onclick="navigate('how-to-join')">How to Join</div>
         <div class="footer-link" onclick="navigate('public-events')">Events</div>
-        <div class="footer-link" onclick="navigate('apply')">Apply</div>
+        <div class="footer-link" onclick="navigate('apply')">Join NASIHA</div>
+        <div class="footer-link" onclick="navigate('contact')">Contact Us</div>
       </div>
       <div>
         <div class="footer-col-title">Members</div>
@@ -790,12 +823,12 @@
           <div class="section-eyebrow">Our Mission</div>
           <div class="section-title mb-3" style="font-size:1.5rem;">Why We Exist</div>
           <div style="font-size:1.05rem;font-style:italic;border-left:3px solid var(--primary);padding-left:1.25rem;color:#374151;margin-bottom:1.75rem;line-height:1.8;">
-            "Nasiha is dedicated to spreading knowledge by encouraging each one of us to learn and to teach. We exist to create a community of learners focused on knowledge sharing — one that acknowledges the willingness of those around us who help us learn, and that shares knowledge unconditionally with others."
+            "NASIHA is dedicated to spreading knowledge by encouraging each one of us to learn and to teach. We exist to create a community of learners focused on knowledge sharing — one that acknowledges the willingness of those around us who help us learn, and that shares knowledge freely with others."
           </div>
           <div class="section-eyebrow">Values</div>
           <div class="section-title mb-3" style="font-size:1.3rem;">Core Principles</div>
           <div style="display:flex;flex-direction:column;gap:.75rem;">
-            <div class="card card-sm"><strong>Knowledge as a Common Good</strong> — Medical expertise should be shared, not hoarded. No exchange within Nasiha carries a fee.</div>
+            <div class="card card-sm"><strong>Knowledge as a Common Good</strong> — Knowledge should be shared, not hoarded. No exchange within NASIHA carries a fee.</div>
             <div class="card card-sm"><strong>Reciprocity</strong> — Those who receive guidance contribute in kind, sustaining a cycle of giving.</div>
             <div class="card card-sm"><strong>Inclusion &amp; Accessibility</strong> — Open to members from all corners of the world, all career stages, all disciplines.</div>
             <div class="card card-sm"><strong>Trust &amp; Integrity</strong> — Honest, evidence-based exchange. Knowledge shared responsibly.</div>
@@ -806,10 +839,10 @@
           <img src="images/174733785_orig.jpg" alt="Nasiha community" class="feature-img" style="margin-bottom:2rem;">
           <div class="section-eyebrow">Vision</div>
           <div class="section-title mb-3" style="font-size:1.3rem;">Our Vision</div>
-          <p class="text-muted mb-4" style="line-height:1.8;">A world in which every medical professional — regardless of where they practice, what they can afford, or where they are in their career — has access to a trusted network of peers, mentors, and experts committed to the advancement of their craft.</p>
+          <p class="text-muted mb-4" style="line-height:1.8;">A world in which every person — regardless of where they live, what they can afford, or where they are in their path to learning — has access to a trusted network of peers, advisors, and experts committed to the advancement of their craft and sharing their knowledge.</p>
           <div class="card" style="background:var(--primary-pale);border-color:var(--primary-pale2);">
             <div class="font-bold mb-2 text-primary">Dedicated To</div>
-            <p class="text-sm" style="color:#374151;font-style:italic;line-height:1.7;">Narjis and Syed Iftikhar Hussain Abidi, who guided us toward a life of learning.</p>
+            <p class="text-sm" style="color:#374151;font-style:italic;line-height:1.7;">NASIHA — Dedicated to Narjis and Syed Iftikhar Hussain Abidi, who guided us toward a life of learning.</p>
           </div>
         </div>
       </div>
@@ -827,17 +860,17 @@
         <div class="card" style="text-align:center;">
           <div class="step-icon" style="margin:0 auto 1rem;"><i data-lucide="microscope"></i></div>
           <div class="font-bold mb-2">Research &amp; Curation</div>
-          <div class="text-muted text-sm" style="line-height:1.7;">Finding, annotating, and sharing high-quality medical literature, guidelines, and clinical resources.</div>
+          <div class="text-muted text-sm" style="line-height:1.7;">Finding, annotating, and sharing high-quality literature, guidelines, and resources across all fields of knowledge.</div>
         </div>
         <div class="card" style="text-align:center;">
           <div class="step-icon" style="margin:0 auto 1rem;"><i data-lucide="eye"></i></div>
           <div class="font-bold mb-2">Peer Review &amp; Feedback</div>
-          <div class="text-muted text-sm" style="line-height:1.7;">Constructive, evidence-based critique of clinical work, research, and educational content.</div>
+          <div class="text-muted text-sm" style="line-height:1.7;">Constructive, evidence-based critique of work, research, and educational content across disciplines.</div>
         </div>
         <div class="card" style="text-align:center;">
           <div class="step-icon" style="margin:0 auto 1rem;"><i data-lucide="graduation-cap"></i></div>
-          <div class="font-bold mb-2">Teaching &amp; Mentorship</div>
-          <div class="text-muted text-sm" style="line-height:1.7;">Lectures, webinars, case discussions, and one-on-one mentorship across all disciplines.</div>
+          <div class="font-bold mb-2">Teaching &amp; Sharing</div>
+          <div class="text-muted text-sm" style="line-height:1.7;">Lectures, webinars, and knowledge discussions — sharing expertise freely across the community.</div>
         </div>
       </div>
     </div>
@@ -849,7 +882,7 @@
 <div id="page-how-to-join" class="page">
   <section class="page-hero hero-join">
     <h1>How to Join Nasiha</h1>
-    <p>Membership is open internationally to anyone engaged in medicine, healthcare, or public health who shares our values.</p>
+    <p>Open to all learners and teachers who share our values of free, reciprocal knowledge exchange.</p>
   </section>
 
   <section class="section">
@@ -904,8 +937,8 @@
             </div>
           </div>
           <div class="section-eyebrow">Eligibility</div>
-          <p class="text-sm text-muted mb-4" style="line-height:1.75;">Open to practicing physicians, residents, students, allied health professionals, retired medical professionals, and public health workers who share our values of open knowledge exchange.</p>
-          <button class="btn btn-primary btn-lg w-full" onclick="navigate('apply')">Start Your Application →</button>
+          <p class="text-sm text-muted mb-4" style="line-height:1.75;">Open to professionals, students and teachers who are enthusiastic about sharing their knowledge — regardless of field, career stage, or location.</p>
+          <button class="btn btn-primary btn-lg w-full" onclick="navigate('apply')">Join NASIHA →</button>
         </div>
       </div>
     </div>
@@ -917,15 +950,15 @@
 <div id="page-public-events" class="page">
   <section class="page-hero hero-events">
     <h1>Upcoming Events</h1>
-    <p>Open webinars and community sessions. Members get access to the full calendar and can register for all events.</p>
+    <p>Our full calendar is open for everyone to browse. Join NASIHA to register for member events.</p>
   </section>
   <section class="section">
     <div class="container">
       <div id="public-events-list"></div>
       <div style="margin-top:2rem;padding:2rem;background:var(--primary-pale);border:1px solid var(--primary-pale2);border-radius:calc(var(--radius)*2);text-align:center;">
-        <div class="font-bold mb-1" style="font-size:1.05rem;">Want to see the full calendar?</div>
-        <div class="text-sm text-muted mb-3">Members access all events, including member-only workshops and case discussions.</div>
-        <button class="btn btn-primary" onclick="navigate('apply')">Apply for Membership</button>
+        <div class="font-bold mb-1" style="font-size:1.05rem;">Want to attend member events?</div>
+        <div class="text-sm text-muted mb-3">Join NASIHA to access all events, live discussions, and the full recording library.</div>
+        <button class="btn btn-primary" onclick="navigate('apply')">Join NASIHA</button>
       </div>
     </div>
   </section>
@@ -937,8 +970,8 @@
   <div class="auth-wrapper">
     <div class="auth-box">
       <div class="auth-logo">
-        <div class="logo-mark">N</div>
-        <div class="logo-text" style="font-size:1.2rem;">Nasiha</div>
+        <div class="logo-mark"></div>
+        <div class="logo-wordmark">NASIHA</div>
       </div>
       <div style="text-align:center;margin-bottom:1.75rem;">
         <div class="font-bold" style="font-size:1.25rem;margin-bottom:.35rem;">Welcome back</div>
@@ -963,7 +996,7 @@
       </div>
       <button class="btn btn-primary w-full" onclick="login()">Sign In</button>
       <div style="text-align:center;margin-top:1rem;font-size:.85rem;color:var(--muted-fg);">
-        Don't have an account? <button class="nav-link" style="display:inline;padding:.1rem .3rem;" onclick="navigate('apply')">Apply to join</button>
+        Don't have an account? <button class="nav-link" style="display:inline;padding:.1rem .3rem;" onclick="navigate('apply')">Join NASIHA</button>
       </div>
     </div>
   </div>
@@ -975,8 +1008,8 @@
   <div class="auth-wrapper" style="background:linear-gradient(135deg,var(--primary-pale),var(--background));align-items:flex-start;padding-top:2.5rem;">
     <div class="auth-box" style="max-width:560px;">
       <div class="auth-logo">
-        <div class="logo-mark">N</div>
-        <div class="logo-text" style="font-size:1rem;">Membership Application</div>
+        <div class="logo-mark"></div>
+        <div><div class="logo-wordmark" style="font-size:1rem;">NASIHA</div><div style="font-size:.75rem;color:var(--muted-fg);">Membership Application</div></div>
       </div>
       <div class="grid-2" style="margin-bottom:1.25rem;">
         <div class="form-group" style="margin:0;"><label>First name</label><input type="text" placeholder="Sarah"></div>
@@ -987,9 +1020,9 @@
       <div class="form-group">
         <label>Career stage</label>
         <select>
-          <option>Practicing physician</option><option>Resident / Fellow</option>
-          <option>Medical student</option><option>Allied health professional</option>
-          <option>Retired medical professional</option><option>Public health worker</option>
+          <option>Expert</option>
+          <option>Early Career</option>
+          <option>Student</option>
         </select>
       </div>
       <div class="form-group"><label>Country / Region</label><input type="text" placeholder="e.g. Pakistan, United Kingdom, Nigeria"></div>
@@ -1004,6 +1037,59 @@
 </div>
 
 
+<!-- ─────────────────────────────────────── CONTACT US -->
+<div id="page-contact" class="page">
+  <section class="page-hero hero-join">
+    <h1>Contact Us</h1>
+    <p>We'd love to hear from you — whether you have a question, a suggestion, or want to learn more about NASIHA.</p>
+  </section>
+  <section class="section">
+    <div class="container">
+      <div class="grid-2" style="gap:3.5rem;align-items:start;max-width:900px;margin:0 auto;">
+        <div>
+          <div class="section-eyebrow">Get in Touch</div>
+          <div class="section-title mb-3" style="font-size:1.4rem;">We're Here to Help</div>
+          <p class="text-muted mb-4" style="line-height:1.8;">Have a question about membership, an idea for the community, or just want to introduce yourself? Send us a message and we'll get back to you.</p>
+          <div class="card mb-3 flex items-center gap-3">
+            <div class="step-icon" style="margin:0;flex-shrink:0;"><i data-lucide="mail"></i></div>
+            <div>
+              <div class="font-semibold text-sm">Email Us</div>
+              <div class="text-muted text-sm">contact@nasihaonline.com</div>
+            </div>
+          </div>
+          <div class="card flex items-center gap-3">
+            <div class="step-icon" style="margin:0;flex-shrink:0;"><i data-lucide="globe"></i></div>
+            <div>
+              <div class="font-semibold text-sm">Website</div>
+              <div class="text-muted text-sm">www.nasihaonline.com</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="card">
+            <div class="font-bold mb-4">Send a Message</div>
+            <div class="form-group"><label>Your Name</label><input type="text" placeholder="Your full name"></div>
+            <div class="form-group"><label>Email Address</label><input type="email" placeholder="you@example.com"></div>
+            <div class="form-group">
+              <label>Subject</label>
+              <select>
+                <option>General Inquiry</option>
+                <option>Membership Question</option>
+                <option>Event Information</option>
+                <option>Partnership or Collaboration</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div class="form-group"><label>Message</label><textarea placeholder="How can we help you?" style="min-height:120px;"></textarea></div>
+            <button class="btn btn-primary w-full" onclick="showToast('✅ Message sent! We\'ll be in touch within 48 hours.')">Send Message</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+
 <!-- ─────────────────────────────────────── MEMBER LAYOUT -->
 <div id="member-layout" class="app-layout hidden">
 
@@ -1011,7 +1097,7 @@
     <div class="sidebar-section">Main</div>
     <button class="sidebar-link" onclick="navigateMember('dashboard')"><i data-lucide="layout-dashboard"></i>Dashboard</button>
     <button class="sidebar-link" onclick="navigateMember('profile')"><i data-lucide="user"></i>My Profile</button>
-    <button class="sidebar-link" onclick="navigateMember('credits')"><i data-lucide="award"></i>Contribution Hours</button>
+    <button class="sidebar-link" onclick="navigateMember('credits')"><i data-lucide="award"></i>Knowledge Hours</button>
 
     <div class="sidebar-section">Community</div>
     <button class="sidebar-link" onclick="navigateMember('directory')"><i data-lucide="users"></i>Member Directory</button>
@@ -1113,7 +1199,7 @@
 
     <!-- CREDITS -->
     <div id="member-page-credits" class="member-page hidden">
-      <div class="text-2xl font-bold mb-6">My Nasiha Contribution Hours</div>
+      <div class="text-2xl font-bold mb-6">My Knowledge Exchange Hours</div>
       <div class="credit-bar mb-6">
         <div>
           <div class="credit-number">4.5</div>
@@ -1139,7 +1225,7 @@
           <thead><tr><th>Date</th><th>Activity</th><th>Counterpart</th><th>Hours</th></tr></thead>
           <tbody>
             <tr><td>May 22, 2026</td><td>Delivered webinar: Cardiology Update</td><td>—</td><td class="credit-pos">+1.0</td></tr>
-            <tr><td>May 15, 2026</td><td>One-on-one mentorship</td><td>Dr. Amir Siddiqui</td><td class="credit-pos">+1.0</td></tr>
+            <tr><td>May 15, 2026</td><td>Knowledge session — Dr. Amir Siddiqui</td><td>Dr. Amir Siddiqui</td><td class="credit-pos">+1.0</td></tr>
             <tr><td>May 10, 2026</td><td>Requested consultation</td><td>Dr. Priya Nair</td><td class="credit-neg">−1.0</td></tr>
             <tr><td>May 3, 2026</td><td>Case discussion (expert)</td><td>Fatima Al-Hassan</td><td class="credit-pos">+0.5</td></tr>
             <tr><td>Apr 28, 2026</td><td>Curated resource: AHA Guidelines 2025</td><td>—</td><td class="credit-pos">+0.5</td></tr>
@@ -1369,7 +1455,7 @@ function applyUserToUI() {
   document.getElementById('nav-avatar').textContent   = currentUser.initials;
   document.getElementById('nav-avatar').style.background = currentUser.bgColor;
   document.getElementById('nav-name').textContent     = currentUser.name;
-  document.getElementById('nav-credits').textContent  = '✦ ' + currentUser.credits + ' hrs';
+  document.getElementById('nav-credits').textContent  = '✦ ' + currentUser.credits + ' Knowledge Hours';
   document.getElementById('nav-tier-badge').innerHTML = tierBadge(currentUser.tier);
   document.getElementById('profile-avatar-big').textContent  = currentUser.initials;
   document.getElementById('profile-name-display').textContent= currentUser.name;
@@ -1413,8 +1499,7 @@ function showToast(msg) {
 // ─── RENDER: PUBLIC EVENTS ────────────────────────────────────────────
 function renderPublicEvents() {
   const el = document.getElementById('public-events-list');
-  const publicEvts = EVENTS.filter(e => e.open);
-  el.innerHTML = publicEvts.map(e => `
+  el.innerHTML = EVENTS.map(e => `
     <div class="card mb-3 flex" style="gap:1rem;align-items:center;">
       <div style="width:44px;height:44px;border-radius:var(--radius);background:var(--primary-pale);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
         <i data-lucide="${e.icon}" class="icon-lg" style="color:var(--primary);"></i>
@@ -1424,10 +1509,25 @@ function renderPublicEvents() {
         <div class="text-sm text-muted">${e.date} · ${e.time} · ${e.type}</div>
         <div class="text-xs text-muted">Hosted by ${e.host}</div>
       </div>
-      <span class="badge badge-gold">Open to Public</span>
-      <button class="btn btn-outline btn-sm" onclick="showToast('Registration would open here. Log in for the full calendar.')">Register</button>
+      ${e.open
+        ? `<span class="badge badge-gold">Free</span>
+           <button class="btn btn-outline btn-sm" onclick="showToast('Registration would open here.')">Register</button>`
+        : `<span class="badge badge-active">Members</span>
+           <button class="btn btn-primary btn-sm" onclick="navigate('apply')">Join NASIHA</button>`
+      }
     </div>
   `).join('');
+  lucide.createIcons();
+}
+
+// ─── TOGGLE: KNOWLEDGE EXCHANGE ──────────────────────────────────────
+function toggleExchange(btn) {
+  const body = document.getElementById('exchange-body');
+  const chevron = document.getElementById('exchange-chevron');
+  const isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  chevron.classList.toggle('open', !isOpen);
+  btn.setAttribute('aria-expanded', String(!isOpen));
   lucide.createIcons();
 }
 
