@@ -97,6 +97,7 @@ Application form fields (from prototype, `/apply`):
 - Why do you want to join Nasiha? (long text)
 - Areas of expertise to share (long text)
 - Topics most want to learn (long text)
+- **Professional reference (new):** name and contact info of a professional reference. The Charter requires "at least one professional reference" starting in the **Open Applications** phase (§3.2, phase 3); in the current Referral-Driven Growth phase it should be collected but treated as optional/soft — the field exists in the form now so it doesn't need to be added later as a breaking schema change, but form-level `required` validation should be tied to the active admission phase rather than hardcoded.
 
 On submit: confirmation toast/state ("Application submitted, Board will review within 7 days") + application enters admin review queue. No email verification loop is shown in the prototype for applicants, but system-design.md requires email verification for the general Authentication Domain — apply it at account-creation time post-approval.
 
@@ -117,6 +118,15 @@ submitted → under_review → approved | rejected
 Models: `MembershipApplication`, `ApplicationReview`, `ApplicationAttachment` (attachments not present in the prototype form but included in system-design.md — retain for future CV/credential uploads).
 
 Admin actions: approve (assign tier + create member account + trigger welcome email), reject (with admin notes, optionally visible to applicant), request more info (new state, recommended addition since ApplicationReview implies iterative review — **open question**, see §11).
+
+### 3.4 Inactivity & Re-engagement
+
+The Charter is explicit: **"No member will be removed solely for inactivity."** Inactive members are re-engaged, not purged. This needs to be a modeled lifecycle, not an ad hoc admin action:
+
+- Track `lastActiveAt` on `User` (updated on login, contribution logged, RSVP, forum post, etc. — any meaningful action, not just page views).
+- After an admin-configurable inactivity threshold (the Charter leaves the specific window to the Board — must be a settings value, not hardcoded), the system triggers a **"friendly nudge"** re-engagement notification/email — warm in tone, not a warning, consistent with the Charter's framing.
+- No automatic tier downgrade, suspension, or removal is triggered by inactivity alone. Any such action requires explicit Board/admin decision, tracked separately (this is distinct from Code of Conduct enforcement, §4.15).
+- Nudge history (sent dates, whether the member re-engaged afterward) should be visible to admins from `/admin/users`, both to avoid re-nudging too aggressively and to give the Board data on re-engagement effectiveness (feeds into the KPI dashboard, §4.11).
 
 ---
 
@@ -174,15 +184,27 @@ This is the platform's differentiating mechanic. system-design.md's generic "Con
 | Research resource / case discussion request | 0.5 |
 | Attend webinar | Always free (not a spend event) |
 
-**Transaction types:** `earned`, `spent`, `transferred`, `adjusted` (adjusted = admin correction, must require admin role + reason note for audit).
+**Transaction types:** `earned`, `spent`, `adjusted` (adjusted = admin correction, must require admin role + reason note for audit). **No `transferred` type** — the Charter explicitly prohibits Knowledge Hours being "transferred, gifted, or sold between members"; an earlier draft of this PRD included a `transferred` type that directly conflicted with this rule and has been removed. Nothing in the data model should allow one member's balance to be moved to another member's balance outside the normal earn/spend/admin-adjust flows.
+
+**How entries get posted (hybrid model — resolves the ambiguity left open in earlier drafts):**
+
+Every ledger transaction has a `status`: `pending` → `confirmed` | `rejected`. Only `confirmed` transactions (including auto-posted ones, which are confirmed by construction) count toward the balance and lifetime totals; `pending` items are visible to the member as "awaiting confirmation," and `rejected` items remain in the audit trail (never deleted) but contribute 0 to the balance.
+
+- **Auto-posted (no human confirmation step, because the system already has ground truth):**
+  - Hosting an event with recorded `Attendance` (§4.6) → auto-earn for the host on event completion, using the matching `ContributionRule` rate.
+  - An **accepted meeting request** (§4.7, Inbox) → auto-spend for the requester at acceptance time (e.g., Expert Consultation, 1.0 hr).
+- **Self-reported, then confirmed:** everything without a system-of-record trigger (curating a resource, an ad-hoc knowledge discussion not tied to a formal Event, administrative volunteer work, etc.) is submitted by the member via the "Log Contribution" form (activity type, optional counterpart, optional note) and enters as `pending`.
+  - If a **counterpart** is named on the submission, that counterpart can confirm or reject it directly (peer confirmation) — no admin involvement needed for routine peer-to-peer activity.
+  - If there's **no counterpart** (e.g., solo resource curation), it requires **admin confirmation** from `/admin/ledger`.
+  - This keeps the ledger auditable without an admin becoming a bottleneck for every transaction, while still gating anything unverifiable behind a second party.
 
 **UI requirements (member-facing `/contributions`):**
-- Summary bar: current balance, lifetime earned, lifetime spent, "Log Contribution" primary action.
-- Full transaction history table: date, activity description, counterpart (person, if applicable), hours (signed, color-coded positive/negative).
-- Nav badge showing live balance ("✦ N Knowledge Hours") next to the user's identity, always visible when authenticated.
+- Summary bar: current balance (confirmed only), lifetime earned, lifetime spent, "Log Contribution" primary action.
+- Full transaction history table: date, activity description, counterpart (person, if applicable), hours (signed, color-coded positive/negative), and status (confirmed / pending / rejected) — pending and rejected rows visually distinct from confirmed ones.
+- Nav badge showing live **confirmed** balance ("✦ N Knowledge Hours") next to the user's identity, always visible when authenticated.
 
-Entities: `ContributionLedger`, `ContributionEvent`, `ContributionRule`.
-Routes: `POST /api/contributions/earn`, `POST /api/contributions/spend`, `GET /api/contributions/history`.
+Entities: `ContributionLedger` (add `status`), `ContributionEvent`, `ContributionRule`.
+Routes: `POST /api/contributions/earn`, `POST /api/contributions/spend`, `GET /api/contributions/history`, `POST /api/contributions/:id/confirm`, `POST /api/contributions/:id/reject` (counterpart or admin).
 
 ### 4.5 Member Directory
 
@@ -197,9 +219,11 @@ Routes: `POST /api/contributions/earn`, `POST /api/contributions/spend`, `GET /a
 
 - Public events page (unauthenticated-visible): list of upcoming events, each flagged `open` (free/public) or members-only. Public CTA to join if members-only.
 - Member calendar: month-grid calendar view + linear upcoming-events list, RSVP and "Add to calendar" actions per event.
-- Event metadata: title, type (Webinar / Workshop / Case Discussion / Student Event / Roundtable / Lecture, extensible enum), host, date/time (must store as UTC + display with locale/timezone conversion — prototype hardcodes "UTC" labels, real system needs proper timezone handling), open/members-only flag, icon/category.
+- Event metadata: title, type (Webinar / Workshop / Case Discussion / Student Event / Roundtable / Lecture, extensible enum), host, date/time (must store as UTC + display with locale/timezone conversion — prototype hardcodes "UTC" labels, real system needs proper timezone handling), open/members-only flag, icon/category, **meeting/video link** (new — a URL field for the actual session, e.g. Zoom/Google Meet; per Technology_Roadmap.md the org runs live sessions on Zoom/Meet rather than a built-in video system, so Nasiha's platform hosts the event *listing and RSVP*, not the video call itself; only visible to RSVP'd members, not on the public `/events` listing).
 - Event submission by members ("Submit Event" action — implies an event-creation permission, likely gated to Active tier or above — **needs explicit rule**, see §11).
-- Entities: `Event`, `EventRecurrence`, `RSVP`, `Attendance`.
+- **De-identification confirmation (new):** submitting a **Case Discussion** type event requires an explicit checkbox — "I confirm no identifiable patient information will be shared" — before the event can be published. This mirrors the same requirement on Knowledge Library case-study submissions (§4.9) and is a hard requirement from the Charter's Code of Conduct and Risk_and_Liability.md, not optional guidance.
+- Entities: `Event` (add `meetingUrl`, `deidentificationConfirmed`), `EventRecurrence`, `RSVP`, `Attendance`.
+- Recording `Attendance` for an event's host is the trigger for an auto-posted Knowledge Hours earn transaction (§4.4) — no separate manual step needed for hosting.
 - UI tool: FullCalendar (per system-design.md).
 - Routes: `GET /api/events`, `POST /api/events`, `PATCH /api/events/:id`, `POST /api/events/:id/rsvp`.
 - Public route: `/events`. Member route: `/calendar`.
@@ -235,6 +259,7 @@ Routes: `POST /api/contributions/earn`, `POST /api/contributions/spend`, `GET /a
 - Member-authored posts, list view as cards (author avatar, tag/category badge, title, excerpt, date, hero image optional — falls back to an icon tile on brand-pale background when no image).
 - Filter by topic/category (chips: Cardiology, Education, Research, Global Health, Oncology, Mental Health — should be a managed taxonomy, not hardcoded).
 - "Write a Post" action opens an editor (Tiptap per system-design.md).
+- **Content licensing consent (new):** publishing a post requires a one-time (or per-post) acknowledgment of Nasiha's content terms — the author retains IP ownership of what they write, and by publishing grants Nasiha a non-exclusive right to make it available to the membership (and public, for `/blog`). This is a Risk_and_Liability.md requirement, not optional — see §4.15.
 - Comments supported per data model (not shown in prototype UI but required per system-design.md).
 - Entities: `Post`, `PostCategory`, `PostTag`, `PostComment`.
 - Routes: `/blog`, `/blog/[slug]` (public-readable; write requires member auth).
@@ -245,9 +270,14 @@ Routes: `POST /api/contributions/earn`, `POST /api/contributions/spend`, `GET /a
 - Filters: content type, specialty, career-stage level (Student-Friendly / Early Career / Advanced / All Levels).
 - Card metadata: contributor, category/specialty, file type icon, upload date, description.
 - "Submit Resource" action for members.
+- **Library Steward review workflow (new):** submitted resources do **not** publish immediately — they enter `pending_review`. A **Library Steward** (a volunteer member holding the `moderator` role, §2.1, ideally one per specialty area at scale) reviews for quality, correct tagging, and disclaimer/de-identification compliance before publishing. Only `published` items appear in search/browse; `pending_review` items are visible to their submitter (with status) and to Stewards/admins on a review queue.
+- **Community flagging (new):** any member can flag a published item as inaccurate or outdated. Flagged items are reviewed by a Steward and, if needed, escalated to the Board — flagged items stay visible (not auto-hidden) unless a Steward removes them, consistent with Knowledge_Library.md's "community flagging, not formal peer review" quality model.
+- **De-identification confirmation (new):** submitting a **case study** type resource requires the same explicit confirmation checkbox as case-discussion events (§4.6) — "I confirm all patient information has been de-identified" — before it can enter review.
+- **Content licensing consent (new):** same one-time/per-submission IP consent as Blog (§4.8) — contributor retains ownership, grants Nasiha a non-exclusive right to display it to the membership (see §4.15).
 - Preview: PDF.js for document types (per system-design.md); video type needs a player (not specified in system-design.md — recommend a standard HTML5/embedded player, e.g. via signed MinIO URL).
-- Entities: `KnowledgeItem`, `KnowledgeCategory`, `KnowledgeTag`, `KnowledgeAttachment`.
-- Storage: MinIO (binaries) + PostgreSQL (metadata) + Meilisearch (search index).
+- Entities: `KnowledgeItem` (add `status`: `pending_review` / `published` / `flagged` / `rejected`, `deidentificationConfirmed`, `licenseConsented`), `KnowledgeCategory`, `KnowledgeTag`, `KnowledgeAttachment`.
+- Storage: MinIO (binaries) + PostgreSQL (metadata) + Meilisearch (search index — index only `published` items).
+- Routes: add `GET /api/admin/library/review-queue`, `POST /api/library/:id/flag`, `POST /api/admin/library/:id/publish` alongside the existing library routes.
 - Route: `/library`.
 
 ### 4.10 Notifications
@@ -255,8 +285,10 @@ Routes: `POST /api/contributions/earn`, `POST /api/contributions/spend`, `GET /a
 Not visible in the HTML prototype's UI chrome but required per system-design.md; toasts in the prototype (e.g., "Registered for event!") are a proxy for what should become real, persistent, multi-channel notifications.
 
 - Types: new message, event reminder, membership update (application approved/rejected), blog comment, contribution awarded.
+- **Digest (new):** a periodic (frequency TBD by the Board, per Member_Communications.md) community digest — top discussions, new library resources, upcoming events, member spotlights — batched rather than sent as individual notifications, to avoid inbox overload. Members can control digest frequency via `NotificationPreference`.
+- **Board Announcement (new):** a distinct broadcast type for infrequent, org-wide messages issued by the Board/Officers (organizational updates, milestones) — deliberately rare and high-signal, not a general-purpose blast channel. Only admin/board-role users can send these; every member receives them regardless of other notification preferences (cannot be opted out of, consistent with Member_Communications.md's framing that these should "carry weight").
 - Channels: in-app + email (Novu + Resend per stack).
-- Entities: `Notification`, `NotificationPreference` (must allow per-type opt-out).
+- Entities: `Notification`, `NotificationPreference` (must allow per-type opt-out, except Board Announcements), `Announcement` (new — board-authored broadcast content: title, body, author, sent-at; a Board Announcement notification references one of these).
 
 ### 4.11 Admin
 
@@ -264,9 +296,115 @@ Not present in the HTML prototype (no `/admin` UI was built), but required per s
 
 - User management, content moderation, event management, contribution ledger auditing (including manual `adjusted` transactions), application review queue.
 - Tool: AdminJS.
-- Routes: `/admin`, `/admin/users`, `/admin/applications`, `/admin/content`, `/admin/events`, `/admin/ledger`.
-- Admin nav items (per ui-system.md): Users, Applications, Content, Events, Ledger, Reports.
+- Routes: `/admin`, `/admin/users`, `/admin/applications`, `/admin/content`, `/admin/events`, `/admin/ledger`, `/admin/team` (§4.12), `/admin/reports`.
+- Admin nav items (per ui-system.md): Users, Applications, Content, Events, Ledger, Reports. Add **Team** to this list for the new Our Team CRUD screen.
 - **This is a build gap vs. the prototype and should be treated as P0/critical-path** — approvals, tier assignment, and ledger adjustments are impossible without it.
+
+**Reports / KPI dashboard (fleshed out from `Nasiha_KPIs.md`, which previously left the "Reports" nav item unspecified):**
+
+`/admin/reports` should surface the four metric groups the org has already defined, computed from existing entities rather than requiring new tracking infrastructure:
+
+| Group | Metrics | Source |
+|---|---|---|
+| Community Health | Total active members (contributed/participated in past quarter), retention rate (YoY), geographic diversity (countries represented), new members/quarter, student & trainee representation | `users`, `profiles.country`, `membership_applications` |
+| Knowledge Exchange Activity | Lectures/webinars per month, case discussions per month, total Hours earned/spent, earn:spend ratio, unique contributor-recipient pairings, resources shared | `events`, `contribution_ledger`, `knowledge_items` |
+| Impact | Member satisfaction (periodic survey — needs a lightweight survey mechanism, not yet modeled elsewhere), trainee → Active progression rate, repeat engagement rate | `users.tier` history (§7.3 tier-promotion history), survey tool TBD |
+| Organizational Health | Budget adherence (out of platform scope — financial tooling, not this system), application turnaround time, Code of Conduct incident count/resolution (§4.15), ledger accuracy (reconciliation check, §7.1) | `membership_applications` timestamps, `code_of_conduct_violations` (§4.15) |
+
+Impact metrics require self-reported survey data that isn't otherwise generated by the system — flag this as needing its own lightweight feedback mechanism (e.g., a periodic in-app prompt) rather than assuming it falls out of existing entities for free.
+
+### 4.12 Our Team
+
+A new public page introducing the people behind Nasiha — founders, board members, and partners — in a single combined grid (not split into separate Founders/Board/Partners sections). This supersedes the "Founded By" section previously on the homepage (removed in commit `151a8b2`), which only showed initials avatars, name, and a one-line title for three people. The new page is intentionally richer: real photos and a bio paragraph per person, in a standard professional executive-team-bio layout.
+
+**Page structure:**
+- Page hero (consistent with other public pages — About, How to Join — per the `.page-hero` pattern in the prototype's CSS): title "Our Team" + short intro line.
+- Grid of team member cards. Each card: photo (falls back to initials + brand color if no photo uploaded, same convention as member avatars), name, **role badge** (`Founder` / `Board Member` / `Partner` — visually distinguished, e.g. using the existing badge component variants from ui-system.md), title/affiliation line (e.g. "Physician," "Technology Executive"), and a bio paragraph (2–4 sentences).
+- Grid sort order is admin-controlled (explicit `display_order`, not alphabetical or role-grouped), so the org can control who appears first (e.g., founders first by convention, without the page being hard-split into sections).
+
+**Content management:** team member records are **admin-manageable**, not hardcoded — consistent with how other public-facing lists (events, blog posts, library items) are data-backed with admin CRUD in system-design.md, rather than living as static marketing copy. This lets the org add/remove partners or update bios without a code deploy.
+
+**Entity:** `TeamMember` — `name`, `roleBadge` (enum: `founder` / `board_member` / `partner`), `title` (free text, e.g. "Physician," "Technology Executive"), `bio` (text), `photoUrl` (nullable, same MinIO `avatars/`-style storage and upload validation as profile photos, §4.3/§9), `displayOrder` (integer), `active` (boolean — allows retiring a team member from the public page without deleting their record).
+
+**Admin requirements:** add, edit, remove, and reorder team members from `/admin/team` — extends the Admin Domain (§4.11).
+
+**Navigation:** "Our Team" appears in the public navbar immediately after "About" (About → Our Team → How to Join → Events → Blog → Contact), and in the footer's Community column alongside About / How to Join / Events / Join NASIHA / Contact Us.
+
+**Routes:** `GET /api/team` (public, active members only, ordered by `displayOrder`), `GET/POST/PATCH/DELETE /api/admin/team` (admin CRUD).
+
+### 4.13 Discussion Forums
+
+`Member_Communications.md` describes this as **"the primary space for asynchronous, community-wide interaction"** — a gap in the prior PRD, since no forum functionality existed anywhere in the feature domains.
+
+**Structure:** topic-based forums, seeded with six categories from the source doc:
+
+| Forum | Purpose |
+|---|---|
+| General | Community announcements, introductions, open discussion |
+| Clinical Discussions | Case-based learning, diagnostic questions, treatment approaches |
+| Research & Resources | Sharing articles, tools, guidelines, curated learning materials |
+| Teaching & Mentorship | Advice on teaching, mentorship requests, pedagogical discussion |
+| Students & Trainees | Dedicated space for early-career members |
+| Organizational | Board updates, policy discussions, credit system questions |
+
+Categories should be admin-manageable (not hardcoded), same rationale as Our Team (§4.12) and Events — an org this size will want to add/retire categories over time.
+
+**Norms (enforced, not just documented):**
+- All posts are visible to the full membership (no private/DM-style forums in v1).
+- Commercial promotion, job postings, and fee-based service offers are **not permitted** — this needs actual moderation tooling (flag + remove), not just a written policy, tying into Code of Conduct enforcement (§4.15).
+- Members can **follow** specific forums and receive **digest** updates (§4.10) instead of a notification per post, to avoid inbox overload — this is an explicit anti-pattern the source doc calls out ("notification overload").
+- Case-discussion threads in Clinical Discussions carry the same de-identification requirement as Library case studies and Case Discussion events (§4.6, §4.9) — patient information must never appear in a forum post.
+
+**Entities:** `Forum` (category), `ForumThread` (title, author, forum, created date, pinned flag), `ForumPost` (thread, author, body, created date — top-level posts and replies are the same entity, threaded by `parentPostId`).
+
+**Moderation:** forum moderation uses the existing `moderator` role (§2.1); flagged posts route the same way as flagged Library content (§4.9) — one shared moderation queue, not a separate one per domain.
+
+**Routes:** `GET /api/forums`, `GET /api/forums/:forumId/threads`, `POST /api/forums/:forumId/threads`, `POST /api/forums/threads/:threadId/posts`, `POST /api/forums/posts/:postId/flag`.
+
+**Navigation:** add "Forums" to the Member Navigation (sidebar), alongside Directory/Calendar/Blogs — this is core community infrastructure, not a peripheral feature.
+
+**IA:** `/forums`, `/forums/[category]`, `/forums/[category]/[threadId]`.
+
+### 4.14 Donations
+
+`Nasiha_Funding.md` and `Technology_Roadmap.md` both call for a donation capability that the prior PRD had no page or feature for.
+
+**Public donation page (`/donate`):** open to anyone, member or not — a way for supporters to contribute financially to the Organization, separate from the Knowledge Hours exchange.
+
+**Member-facing option:** a voluntary annual contribution prompt, low-pressure and infrequent (per Funding.md's explicit guidance to never make members feel obligated) — surfaced from `/contributions` or `/settings`, not as a persistent nag.
+
+**Hard rule (from Funding.md's "What to avoid"):** donations confer **no advantage** in the Knowledge Hours system or membership tier. There is no "donor tier." This must be enforced structurally — a `Donation` record has no relationship to `ContributionLedger`, `users.tier`, or any access-control check anywhere in the system.
+
+**Recognition:** significant donors may be named in the community digest (§4.10) and annual report (an offline/organizational artifact, not a platform feature) at the donor's opt-in preference — a `recognitionConsent` flag on the donation record, not automatic public listing.
+
+**Entity:** `Donation` — donor name/email (or linked `User` if the donor is a member), amount, date, one-time vs. recurring, `recognitionConsent` (boolean), optional note (e.g., "in honor of..."). Institutional/sponsor-tier partnerships (Community/Supporting/Founding Partner, per Funding.md) are a related but distinct concept from an individual donation and from the Our Team "Partner" role badge (§4.12) — **not resolved in this pass** (flagged separately, out of scope for this round of changes); this section covers individual/one-off donations only.
+
+**New infrastructure requirement:** none of the existing tech stack (§8) includes a payment processor. A donation page needs one (e.g., Stripe) added to the stack — this is a new dependency, not something covered by the current architecture.
+
+**Routes:** `POST /api/donations` (public). **IA:** `/donate` (public).
+
+### 4.15 Trust & Safety / Compliance
+
+Several requirements from the Charter and `Nasiha_Risk_and_Liability.md` are treated as **hard pre-launch requirements** in the source docs but had no representation anywhere in the prior PRD. Grouped here rather than scattered, since they're all governance/legal-compliance concerns with overlapping infrastructure (the disclaimer and de-identification/IP-consent items already added to §4.6/§4.8/§4.9 are cross-referenced from here, not duplicated).
+
+**1. Standard educational disclaimer.** Must appear on all platform pages and communications, not just a one-time acceptance:
+> *"Nasiha is an educational knowledge-sharing community. Content shared by members — including lectures, case discussions, consultations, and forum posts — is intended for professional learning purposes only and does not constitute medical advice. Members are responsible for exercising independent clinical judgment in their own practice. Nasiha and its members accept no liability for clinical decisions made based on content shared within the community."*
+Implementation: a persistent, site-wide footer disclaimer component (all public and member pages), plus the same text (or a shortened form) attached to Library content, Events of type Case Discussion, and Forum Clinical Discussions posts.
+
+**2. Code of Conduct acceptance + enforcement.** The Charter defines seven Code of Conduct principles (share honestly, give generously, receive graciously, engage respectfully, protect privacy, uphold the mission, report concerns) with a two-strike enforcement ladder: first violation → formal warning; second or serious violation → suspension or removal, at Board discretion.
+- **Acceptance:** required as an explicit checkbox at application submission (§3.1) or first login post-approval — not buried in a terms-of-service link.
+- **Reporting:** any member can report a concern about another member (a lightweight "report" action, distinct from content-flagging in §4.9/§4.13, since this is about a *person's conduct*, not a specific piece of content).
+- **Enforcement tracking:** `CodeOfConductViolation` entity — reported member, reporter (may be system-flagged, not always a named member), description/evidence note, action taken (`warning` / `suspension` / `removal`), handling admin, date. Warnings and suspensions should be visible to the affected member and to admins reviewing future incidents (to correctly apply "second violation" escalation) but never publicly visible.
+- **Suspension** is a new `User` state distinct from tier — a suspended member cannot log in / access member routes but their historical contributions and content remain in the system (immutable ledger, per §4.4).
+
+**3. Privacy Policy + data rights.** Required before public launch per Risk_and_Liability.md, especially given GDPR exposure from international operation:
+- A public `/privacy` page describing what data is collected, how it's used, and how members can request access, correction, or deletion.
+- A member-facing **data request** flow (from `/settings`) to request export or deletion of personal data — routed to an admin/Privacy Lead role for fulfillment (the Charter specifies the Board appoints a Privacy Lead; this maps to an admin permission, not a new system role).
+- Deletion requests interact with the immutable ledger requirement (§4.4): personal profile data can be deleted/anonymized, but historical ledger transactions and content attribution may need to be retained in de-identified form for audit integrity — this tension should be resolved in the formal Privacy Policy, not silently in code.
+
+**Entities:** `CodeOfConductViolation`, `PrivacyDataRequest` (user, type: `export`/`deletion`, status, requested date, fulfilled date, handled by).
+
+**Routes:** `POST /api/conduct/report`, `GET/PATCH /api/admin/conduct` (admin), `POST /api/privacy/data-request`, `GET/PATCH /api/admin/privacy-requests` (admin). **IA:** `/privacy` (public).
 
 ---
 
@@ -276,6 +414,7 @@ Not present in the HTML prototype (no `/admin` UI was built), but required per s
 ```
 /                    Home (hero, how-it-works, knowledge exchange explainer, tiers, CTA)
 /about               Mission, values, vision, dedication, "what we do"
+/our-team            Founders, board members, and partners — combined grid with role badges, photo + bio per person (§4.12)
 /how-to-join         Admission phases, tier explainer, eligibility, CTA
 /events              Public event list (RSVP requires membership)
 /blog
@@ -284,6 +423,8 @@ Not present in the HTML prototype (no `/admin` UI was built), but required per s
 /login
 /forgot-password
 /contact             Contact form
+/donate              Public donation page (§4.14)
+/privacy             Privacy Policy (§4.15)
 ```
 
 ### Authenticated (Member)
@@ -296,8 +437,11 @@ Not present in the HTML prototype (no `/admin` UI was built), but required per s
 /inbox               Inbox list (messages + meeting requests, sent & received) / item detail pane
 /calendar            Month grid + upcoming events list, submit-event action
 /library             Search + filters (type, specialty, level), resource cards
+/forums              Forum category list (§4.13)
+/forums/[category]   Thread list for a forum category
+/forums/[category]/[threadId]  Thread detail + replies
 /blog (write access) Same routes as public, plus authoring
-/settings            (implied by system-design.md; not detailed in prototype — needs scoping)
+/settings            Notification/digest preferences, password change, data export/deletion request (§4.15)
 ```
 
 ### Admin
@@ -308,6 +452,11 @@ Not present in the HTML prototype (no `/admin` UI was built), but required per s
 /admin/content
 /admin/events
 /admin/ledger
+/admin/team
+/admin/reports        KPI dashboard (§4.11)
+/admin/library/review-queue   Library Steward review queue (§4.9)
+/admin/conduct         Code of Conduct violation tracking (§4.15)
+/admin/privacy-requests  Data export/deletion request fulfillment (§4.15)
 ```
 
 Note: system-design.md's route list uses `/join` for the application form; the prototype implements this as `/apply` in its JS routing (`navigate('apply')`). **Reconcile naming before implementation** — recommend `/join` to match system-design.md and the "Join NASIHA" CTA copy used everywhere.
@@ -357,17 +506,28 @@ events, rsvps, attendance,
 inbox_messages, meeting_requests,
 posts, post_categories, post_tags,
 knowledge_items, knowledge_categories,
-notifications
+notifications,
+team_members,
+forums, forum_threads, forum_posts,
+donations,
+code_of_conduct_violations, privacy_data_requests,
+announcements
 ```
 
 ### 7.1 Notes from prototype reconciliation
 
 - `users.tier` (active/associate/student/friend) is a first-class field distinct from `users.role` (guest/applicant/member/moderator/admin) — both are needed.
-- `contribution_ledger` balance must be derivable via `SUM(transactions WHERE user_id = ?)`; do not store balance as the sole source of truth.
+- `contribution_ledger` balance must be derivable via `SUM(transactions WHERE user_id = ? AND status = 'confirmed')`; do not store balance as the sole source of truth. Every row needs a `status` (`pending`/`confirmed`/`rejected`) per the hybrid auto/self-report/confirm model in §4.4 — rejected rows stay for audit but are excluded from the sum.
 - Directory visibility requires two booleans on `profiles` (or a JSON prefs blob): `list_in_directory`, `show_specialty_location`.
 - Event `open` boolean (public/free vs. members-only) is required on `events`.
 - `profiles` needs an `avatar_url` field (nullable) pointing to the MinIO-stored profile photo; absence of a value is the signal to render the initials fallback (§4.3) — this is a display rule, not a separate "has photo" flag.
 - `conversations`/`messages` (system-design.md's realtime DM tables) are **replaced** by `inbox_messages` + `meeting_requests` (§4.7) — no participant/conversation join table is needed since every thread is two-party and always originates from the Directory.
+- `team_members` (§4.12) is unlike the rest of the public marketing content (Home/About/How-to-Join copy, which is static): it's admin-CRUD-backed, closer in shape to `events`/`posts`/`knowledge_items` than to hardcoded page copy.
+- `knowledge_items` needs a `status` field (`pending_review`/`published`/`flagged`/`rejected`, §4.9) — same pattern as the ledger's `status` field; only `published` items are searchable/browsable.
+- `events` needs `meeting_url` and `deidentification_confirmed` fields (§4.6); `knowledge_items` needs `deidentification_confirmed` and `license_consented` fields (§4.9); `posts` needs `license_consented` (§4.8).
+- No `transferred` transaction type on `contribution_ledger` (§4.4) — removed for a direct conflict with the Charter's prohibition on transferring credits between members.
+- `donations` (§4.14) has **no foreign key or join to `contribution_ledger` or `users.tier`** — this is a structural guarantee that donating never confers Knowledge Hours or tier advantage, not just a UI convention.
+- `code_of_conduct_violations` introduces a new `User` state (`suspended`), distinct from `tier` — suspension blocks login/access but does not delete or alter historical ledger/content records (§4.15).
 
 ### 7.2 Search indexes (Meilisearch)
 
@@ -415,6 +575,7 @@ Security requirements: RBAC, CSRF protection, rate limiting (Redis-backed), uplo
 - **Content moderation:** blog posts, library submissions, and profile content need an admin moderation path (flag/remove), even though no explicit UI exists in the prototype — implied by system-design.md's Admin Domain "content moderation" feature. This should extend to uploaded profile photos (flaggable/removable by an admin) since it's user-uploaded media.
 - **Internationalization of time:** event times are currently displayed as raw UTC labels in the prototype; production must convert to viewer's local timezone.
 - **Upload validation:** profile photo uploads (§4.3) must be server-side validated for file type (JPEG/PNG/WebP only), a maximum file size, and image dimensions before storage; reject anything else with a clear inline error per the Forms rules in §6.
+- **Educational disclaimer:** the standard disclaimer (§4.15) must render on every public and member page footer, plus attach to Library case studies, Case Discussion events, and Clinical Discussions forum posts — this is a legal/compliance requirement, not a stylistic one, and should not be optional per-page.
 
 ---
 
@@ -445,6 +606,7 @@ Adopting system-design.md's phase structure, annotated with prototype coverage t
 6. **Route naming:** `/join` (system-design.md) vs. `/apply` (prototype JS) — pick one before scaffolding.
 7. **`/settings` page:** referenced in system-design.md's authenticated routes but has no corresponding UI in the prototype — scope needed (notification prefs, password change, account deletion?).
 8. **Video preview in Library:** system-design.md specifies PDF.js for document preview but is silent on video playback — needs a decision (embedded player + MinIO signed URL is the natural fit given the existing stack).
+9. **Our Team content gap:** the page's structure and admin CRUD are specified (§4.12), but real content for the **Partner** role is not — no partner names, titles, bios, or photos exist anywhere in the prototype or source docs. Founder/Board Member content exists from the previously-removed homepage section (git `151a8b2`: Dr. Uzma Khan, Nadeem Haider, Nighat Abidi) and can seed those three records, but Partners must be supplied by the org before this page can launch with real content.
 
 ---
 
@@ -452,16 +614,28 @@ Adopting system-design.md's phase structure, annotated with prototype coverage t
 
 MVP is considered feature-complete when:
 
-- [ ] A visitor can browse Home/About/How-to-Join/Events/Blog/Contact without an account.
+- [ ] A visitor can browse Home/About/Our Team/How-to-Join/Events/Blog/Contact without an account.
+- [ ] The Our Team page shows a combined grid of Founders, Board Members, and Partners (each with a role badge, photo or fallback avatar, and bio), sourced from admin-managed records rather than hardcoded content; an admin can add/edit/remove/reorder team members from `/admin/team`.
 - [ ] A visitor can submit a membership application; an admin can review, approve (assigning a tier), or reject it with notes, from a real `/admin/applications` UI.
 - [ ] An approved applicant receives credentials/invite and can log in via real auth (no demo-login shortcuts in production).
 - [ ] A member can view/edit their profile, including directory visibility preferences and profile photo upload (with graceful fallback to the initials avatar when no photo is set).
-- [ ] A member can view their Knowledge Hours balance and full transaction history; a real "log contribution" flow writes an immutable ledger entry (self-reported initially, or admin-confirmed — decide per §11).
+- [ ] A member can view their Knowledge Hours balance (confirmed transactions only) and full transaction history including pending/rejected items; hosting an attended event and an accepted meeting request both auto-post to the ledger; other activities post as `pending` via "Log Contribution" and require counterpart or admin confirmation before counting toward the balance (§4.4).
 - [ ] The Member Directory is searchable/filterable, respects each member's visibility preferences, and shows each member's uploaded photo (or initials fallback) as a thumbnail next to their name.
 - [ ] A member can find another member in the Directory and send them a message or request a meeting; the recipient sees it in their Inbox and can respond (including accept/decline/reschedule for meeting requests).
 - [ ] The Calendar shows real events; a member can RSVP and the event's attendee state updates.
 - [ ] A member can write and publish a blog post; other members can read it publicly at `/blog/[slug]`.
-- [ ] A member can submit a resource to the Knowledge Library with metadata and a file upload (MinIO-backed), and it becomes searchable/filterable.
+- [ ] A member can submit a resource to the Knowledge Library with metadata and a file upload (MinIO-backed); it enters `pending_review` and only appears in search/browse after a Library Steward publishes it from `/admin/library/review-queue`.
+- [ ] A member can browse and post in Discussion Forums (all six seeded categories); posts are visible to the full membership, and a member can follow a forum to receive digest updates instead of per-post notifications.
+- [ ] A visitor or member can make a donation from `/donate`; the donation record has no relationship to Knowledge Hours balance or membership tier anywhere in the system.
+- [ ] The Code of Conduct disclaimer and acceptance checkbox appear at application/first-login; a member can report a Code of Conduct concern; an admin can log a warning or suspension from `/admin/conduct`, and a suspended user cannot log in while their historical content/ledger entries remain intact.
+- [ ] The standard educational disclaimer renders on every public/member page footer and on Library case studies, Case Discussion events, and Clinical Discussions forum posts.
+- [ ] Case Discussion events and Library case-study submissions cannot be published without an explicit de-identification confirmation checkbox.
+- [ ] A visitor can read the Privacy Policy at `/privacy`; a member can submit a data export or deletion request from `/settings`, and an admin can fulfill it from `/admin/privacy-requests`.
+- [ ] Publishing a blog post or library item requires an explicit content-licensing consent step.
+- [ ] An RSVP'd member sees the event's meeting/video link; it is not shown on the public `/events` listing.
+- [ ] The application form collects a professional reference field; it becomes required (not just collected) once the admission phase config (§3.2) is set to Open Applications.
+- [ ] Members inactive past the admin-configured threshold receive a friendly re-engagement nudge automatically; inactivity alone never suspends, downgrades, or removes a member.
+- [ ] `/admin/reports` shows the four KPI groups (Community Health, Knowledge Exchange Activity, Impact, Organizational Health) computed from live platform data.
 - [ ] All member and admin routes enforce server-side auth + RBAC.
 - [ ] All pages implement loading/empty/error states per ui-system.md.
 - [ ] Mobile breakpoints match the responsive rules in ui-system.md (§6 above).
