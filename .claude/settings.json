@@ -1,15 +1,24 @@
 {
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Write|Edit|NotebookEdit",
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "PLANWRIGHT ALIGNMENT GATE: Before editing any file in this session, confirm you have called planwright_check_alignment with your agentRunId and received alignment confirmation. If planwright_check_alignment is available in your tool list and you have not yet called it, stop and call it now before proceeding. If planwright_check_alignment is NOT in your available tools (Planwright MCP not connected or removed), skip this gate and proceed with your edit."
-          }
-        ]
-      }
-    ]
-  }
+  "PreToolUse": [
+    {
+      "matcher": "Write|Edit|NotebookEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "sid=$(jq -r '.session_id // empty' < /dev/stdin); [ -z \"$sid\" ] && exit 0; mkdir -p \"${CLAUDE_PROJECT_DIR}/.claude/.pw-state\"; [ -f \"${CLAUDE_PROJECT_DIR}/.claude/.pw-state/$sid\" ] && exit 0; echo 'PLANWRIGHT ALIGNMENT GATE: call planwright_check_alignment with your agentRunId before editing files in this session.' >&2; exit 2"
+        }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": "mcp__planwright__planwright_check_alignment",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "sid=$(jq -r '.session_id // empty' < /dev/stdin); [ -z \"$sid\" ] && exit 0; mkdir -p \"${CLAUDE_PROJECT_DIR}/.claude/.pw-state\"; touch \"${CLAUDE_PROJECT_DIR}/.claude/.pw-state/$sid\""
+        }
+      ]
+    }
+  ]
 }
