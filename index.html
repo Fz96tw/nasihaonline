@@ -640,6 +640,7 @@
 
   <div class="nav-user">
     <div id="nav-guest-btns" class="flex gap-2">
+      <button class="btn btn-outline btn-sm" onclick="navigate('donate')">Donate</button>
       <button class="btn btn-ghost btn-sm" onclick="navigate('login')">Log in</button>
       <button class="btn btn-primary btn-sm" onclick="navigate('apply')">Join NASIHA</button>
     </div>
@@ -672,6 +673,7 @@
     <div class="hero-btns">
       <button class="btn-hero-primary" onclick="navigate('apply')">Join NASIHA</button>
       <button class="btn-hero-outline" onclick="navigate('about')">Learn More</button>
+      <button class="btn-hero-outline" onclick="navigate('donate')">Donate</button>
     </div>
     <div class="hero-stats">
       <div>
@@ -1598,8 +1600,9 @@ const MEMBERS = [
 
 const TEAM_MEMBERS = [
   { name: 'Dr. Uzma Khan',     initials: 'UZ', color: '#2563eb', role: 'founder',      title: 'Founder & Board Member · Physician',        photo: 'images/71645956.jpg', bio: 'Physician and founder of Nasiha, committed to democratizing medical education and building a global community of learners who teach as freely as they learn.' },
-  { name: 'Nadeem Haider',     initials: 'NH', color: '#374151', role: 'board_member', title: 'Board Member · Technology Executive',       photo: null,                   bio: 'Brings a technology executive\'s perspective to Nasiha\'s platform and long-term infrastructure, translating the community\'s values into the systems that support it.' },
-  { name: 'Nighat Abidi',      initials: 'NA', color: '#5b21b6', role: 'board_member', title: 'Board Member · Technology Executive',       photo: null,                   bio: 'A technology executive who helps steer Nasiha\'s strategy and operations, with a focus on building a platform that scales without losing the community\'s character.' },
+  { name: 'Dr. Zubair Khan',   initials: 'ZK', color: '#5b21b6', role: 'board_member', title: 'Board Member',                              photo: null,                   bio: 'Brings clinical and strategic perspective to Nasiha\'s board, helping guide the community\'s direction as it grows.' },
+  { name: 'Eric Schendel',     initials: 'ES', color: '#0f766e', role: 'board_member', title: 'Board Member',                              photo: null,                   bio: 'Serves on Nasiha\'s board, supporting the organization\'s governance and long-term strategy.' },
+  { name: 'Nadeem Haider',     initials: 'NH', color: '#374151', role: 'partner',      title: 'Partner · Technology Executive',            photo: null,                   bio: 'Brings a technology executive\'s perspective to Nasiha\'s platform and long-term infrastructure, translating the community\'s values into the systems that support it.' },
   { name: 'Dr. Priya Nair',    initials: 'PN', color: '#d97706', role: 'partner',      title: 'Partner · Regional Oncology Network',        photo: null,                   bio: 'Illustrative partner entry — Nasiha\'s partner program connects the community with allied organizations. Real partner profiles will replace this placeholder before launch.' },
   { name: 'Global Health Alliance', initials: 'GH', color: '#059669', role: 'partner', title: 'Partner Organization',                        photo: null,                   bio: 'Illustrative partner entry demonstrating the role-badge system for institutional partners. Not a real Nasiha partner yet — see PRD §11 for the content gap this fills once resolved.' },
 ];
