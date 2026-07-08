@@ -38,6 +38,7 @@ The platform carries a dedication — "NASIHA — Dedicated to Narjis and Syed I
 - Not a paid/subscription product — "no fees, just knowledge" is a stated principle; Knowledge Hours are never purchasable or convertible to currency.
 - Not an open-signup platform initially — admission is gated (see §3.3).
 - Not a general social network — no public feeds, likes, or follows outside the defined domains below.
+- No unified/global search across all content types in v1 — Directory (§4.5) and Library (§4.9) each ship their own section-scoped search; a single global search box is deferred to a future phase (§4.16).
 
 ---
 
@@ -408,6 +409,16 @@ Implementation: a persistent, site-wide footer disclaimer component (all public 
 
 ---
 
+### 4.16 Global Search (Future / Post-MVP)
+
+MVP ships **section-scoped** search only: the Member Directory (§4.5) and Knowledge Library (§4.9) each have their own search box over their own data. There is no single, site-wide search.
+
+**Requirement for a future phase:** a global search box in the main nav (present on both public and member layouts) that queries across all searchable content types in one place — profiles, blog posts, knowledge library items, and forum threads/posts — and returns categorized results (grouped by type, e.g. "Members," "Blog," "Library," "Forums") rather than one flat list. Should respect the same visibility rules already required per-domain (e.g. a member excluded from the Directory per their `list_in_directory` preference, §4.3/4.5, must not surface in global search either; only `published` knowledge items, §4.9, are eligible).
+
+Not scoped for MVP — tracked here so it isn't lost, and to flag the infrastructure implication in §7.2 (forums are not yet part of any search index, and a global query needs either a federated multi-index search or a combined index with a `type` field to distinguish results).
+
+---
+
 ## 5. Information Architecture / Routing
 
 ### Public
@@ -537,6 +548,8 @@ announcements
 ### 7.2 Search indexes (Meilisearch)
 
 Indexed domains: `profiles`, `posts`, `knowledge_items`, `events`. Sync strategy: DB write → queue event (BullMQ) → worker updates index.
+
+**Future (global search, §4.16):** extending search beyond MVP's section-scoped Directory/Library boxes to a single global search box means adding `forum_threads`/`forum_posts` to the indexed domains above, and choosing a federation strategy — either separate per-type Meilisearch indexes queried in parallel and merged client-side, or one combined index with a `type` discriminator field.
 
 ### 7.3 Recommended additions beyond system-design.md (gaps found during reconciliation)
 

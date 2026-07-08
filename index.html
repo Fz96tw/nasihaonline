@@ -1497,7 +1497,7 @@
         <button class="btn btn-primary ml-auto btn-sm" onclick="showToast('Resource submission form would open here.')"><i data-lucide="plus" class="icon-sm"></i> Submit Resource</button>
       </div>
       <div class="flex gap-3 mb-4" style="flex-wrap:wrap;">
-        <input type="text" placeholder="🔍  Search library…" style="flex:1;min-width:220px;padding:.55rem 1rem;border:1.5px solid var(--border);border-radius:var(--radius);font-size:.875rem;">
+        <input type="text" placeholder="🔍  Search library…" style="flex:1;min-width:220px;padding:.55rem 1rem;border:1.5px solid var(--border);border-radius:var(--radius);font-size:.875rem;" oninput="filterLibrary(this.value)">
       </div>
       <div style="display:flex;gap:1.5rem;flex-wrap:wrap;margin-bottom:1.5rem;">
         <div style="min-width:160px;">
@@ -1946,8 +1946,16 @@ function renderBlogs() {
 
 
 // ─── RENDER: LIBRARY ─────────────────────────────────────────────────
-function renderLibrary() {
-  document.getElementById('library-items').innerHTML = LIBRARY_ITEMS.map(l => `
+function renderLibrary(filter='') {
+  const q = filter.toLowerCase();
+  const filtered = LIBRARY_ITEMS.filter(l =>
+    !q ||
+    l.title.toLowerCase().includes(q) ||
+    l.desc.toLowerCase().includes(q) ||
+    l.specialty.toLowerCase().includes(q) ||
+    l.contributor.toLowerCase().includes(q)
+  );
+  document.getElementById('library-items').innerHTML = filtered.map(l => `
     <div class="lib-item">
       <div class="lib-icon lib-icon-${l.type}"><i data-lucide="${LIB_ICONS[l.type]}"></i></div>
       <div style="flex:1;">
@@ -1964,6 +1972,8 @@ function renderLibrary() {
   `).join('');
   lucide.createIcons();
 }
+
+function filterLibrary(q) { renderLibrary(q); }
 
 
 // ─── RENDER: OUR TEAM ───────────────────────────────────────────────
