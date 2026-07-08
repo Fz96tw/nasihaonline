@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(wget *)"
+      "Bash(wget *)",
+      "mcp__planwright__planwright_set_repo",
+      "mcp__planwright__planwright_list_objectives",
+      "mcp__planwright__planwright_get_objective",
+      "mcp__planwright__planwright_claim_objective",
+      "mcp__planwright__planwright_update_objective",
+      "mcp__planwright__planwright_append_plan",
+      "mcp__planwright__planwright_check_alignment"
     ]
   }
 }

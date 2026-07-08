@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "PLANWRIGHT ALIGNMENT GATE: Before editing any file in this session, confirm you have called planwright_check_alignment with your agentRunId and received alignment confirmation. If planwright_check_alignment is available in your tool list and you have not yet called it, stop and call it now before proceeding. If planwright_check_alignment is NOT in your available tools (Planwright MCP not connected or removed), skip this gate and proceed with your edit."
+          }
+        ]
+      }
+    ]
+  }
+}
