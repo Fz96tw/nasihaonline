@@ -48,7 +48,7 @@ The platform carries a dedication — "NASIHA — Dedicated to Narjis and Syed I
 ```
 guest       — unauthenticated visitor
 applicant   — has submitted a membership application, pending review
-member      — approved, authenticated user (see membership tiers, §3.2)
+member      — approved, authenticated user (see membership tiers, §2.2)
 moderator   — content moderation + limited admin capability
 admin       — full administrative access
 ```
@@ -296,7 +296,7 @@ Not present in the HTML prototype (no `/admin` UI was built), but required per s
 
 - User management, content moderation, event management, contribution ledger auditing (including manual `adjusted` transactions), application review queue.
 - Tool: AdminJS.
-- Routes: `/admin`, `/admin/users`, `/admin/applications`, `/admin/content`, `/admin/events`, `/admin/ledger`, `/admin/team` (§4.12), `/admin/reports`.
+- Routes: `/admin`, `/admin/users`, `/admin/applications`, `/admin/content`, `/admin/events`, `/admin/ledger`, `/admin/team` (§4.12), `/admin/reports`, `/admin/library/review-queue` (§4.9), `/admin/conduct` (§4.15), `/admin/privacy-requests` (§4.15).
 - Admin nav items (per ui-system.md): Users, Applications, Content, Events, Ledger, Reports. Add **Team** to this list for the new Our Team CRUD screen.
 - **This is a build gap vs. the prototype and should be treated as P0/critical-path** — approvals, tier assignment, and ledger adjustments are impossible without it.
 
@@ -488,6 +488,8 @@ Full spec lives in `ui-system.md`; key tokens are restated here since they gate 
 
 **Component & state rules:** buttons (primary/secondary/outline/ghost/destructive × sm/md/lg, primary reserved for the single most important action per view); cards support header/body/footer/action slot; tables collapse to card-stacks under 640px; all async states need skeleton loaders, and every page needs defined empty/error/success states (friendly message + retry for errors, explanation + primary action for empty).
 
+**Forms:** labels always visible (no placeholder-as-label); inline validation as the user types or on blur, not only on submit; clear, specific error states next to the offending field, not a generic banner; related fields grouped into sections (per ui-system.md). This is the rule referenced by upload-validation and consent-checkbox requirements elsewhere in this document (§9, §4.15).
+
 **Accessibility:** keyboard navigation, visible focus states, ARIA labels, semantic HTML, AA color contrast — required on all buttons, modals, forms, nav menus.
 
 **Theme preservation directive (explicit in ui-system.md):** do not redesign from scratch, do not change information hierarchy, do not over-simplify layouts — the prototype's card hierarchy, spacing, section order, density, and "premium" feel are the target, just rebuilt as reusable, data-driven components.
@@ -499,20 +501,23 @@ Full spec lives in `ui-system.md`; key tokens are restated here since they gate 
 Core tables (system-design.md, confirmed against prototype's implied entities):
 
 ```
-users, profiles, skills, profile_skills,
-membership_applications, application_reviews,
-contribution_ledger,
-events, rsvps, attendance,
+users, accounts, sessions, verification_tokens,
+profiles, skills, profile_skills,
+membership_applications, application_reviews, application_attachments,
+contribution_ledger, contribution_events, contribution_rules,
+events, event_recurrences, rsvps, attendance,
 inbox_messages, meeting_requests,
-posts, post_categories, post_tags,
-knowledge_items, knowledge_categories,
-notifications,
+posts, post_categories, post_tags, post_comments,
+knowledge_items, knowledge_categories, knowledge_tags, knowledge_attachments,
+notifications, notification_preferences,
 team_members,
 forums, forum_threads, forum_posts,
 donations,
 code_of_conduct_violations, privacy_data_requests,
 announcements
 ```
+
+(`accounts`/`sessions`/`verification_tokens` are Auth.js's standard tables, §4.1; `contribution_rules` also appears in §7.3 as a "recommended addition" — the two references describe the same table, not two different ones.)
 
 ### 7.1 Notes from prototype reconciliation
 
@@ -604,7 +609,7 @@ Adopting system-design.md's phase structure, annotated with prototype coverage t
 4. **Re-application policy:** can a rejected applicant reapply, and after what cooldown?
 5. **Tier promotion:** system implies Associate → Active progression ("growing toward Active status") but no promotion trigger/workflow is specified — manual admin action, automatic threshold on lifetime hours, or hybrid?
 6. **Route naming:** `/join` (system-design.md) vs. `/apply` (prototype JS) — pick one before scaffolding.
-7. **`/settings` page:** referenced in system-design.md's authenticated routes but has no corresponding UI in the prototype — scope needed (notification prefs, password change, account deletion?).
+7. ~~**`/settings` page:** referenced in system-design.md's authenticated routes but has no corresponding UI in the prototype — scope needed.~~ **Resolved:** scoped in §5 as notification/digest preferences, password change, and the data export/deletion request flow (§4.15).
 8. **Video preview in Library:** system-design.md specifies PDF.js for document preview but is silent on video playback — needs a decision (embedded player + MinIO signed URL is the natural fit given the existing stack).
 9. **Our Team content gap:** the page's structure and admin CRUD are specified (§4.12), but real content for the **Partner** role is not — no partner names, titles, bios, or photos exist anywhere in the prototype or source docs. Founder/Board Member content exists from the previously-removed homepage section (git `151a8b2`: Dr. Uzma Khan, Nadeem Haider, Nighat Abidi) and can seed those three records, but Partners must be supplied by the org before this page can launch with real content.
 
@@ -636,6 +641,7 @@ MVP is considered feature-complete when:
 - [ ] The application form collects a professional reference field; it becomes required (not just collected) once the admission phase config (§3.2) is set to Open Applications.
 - [ ] Members inactive past the admin-configured threshold receive a friendly re-engagement nudge automatically; inactivity alone never suspends, downgrades, or removes a member.
 - [ ] `/admin/reports` shows the four KPI groups (Community Health, Knowledge Exchange Activity, Impact, Organizational Health) computed from live platform data.
+- [ ] A member can set their digest frequency from `/settings` and receives a batched digest instead of per-item notifications; an admin/board-role user can send a Board Announcement that every member receives regardless of notification preferences.
 - [ ] All member and admin routes enforce server-side auth + RBAC.
 - [ ] All pages implement loading/empty/error states per ui-system.md.
 - [ ] Mobile breakpoints match the responsive rules in ui-system.md (§6 above).
