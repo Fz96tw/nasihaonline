@@ -121,6 +121,9 @@
   .badge-student { background: #ecfeff; color: var(--tier-student); }
   .badge-friend  { background: #f9fafb; color: var(--tier-friend); border: 1px solid var(--border); }
   .badge-gold    { background: var(--gold-light); color: var(--gold); }
+  .badge-confirmed { background: #ecfdf5; color: #059669; }
+  .badge-pending    { background: var(--gold-light); color: var(--gold); }
+  .badge-rejected   { background: #fef2f2; color: var(--destructive); }
 
   /* ─── BUTTONS ───────────────────────────────────────────────────── */
   .btn {
@@ -481,10 +484,16 @@
   }
   .profile-header > * { position: relative; z-index: 1; }
   .profile-avatar {
-    width: 70px; height: 70px; border-radius: 9999px;
+    width: 70px; height: 70px; border-radius: 9999px; position: relative; overflow: visible;
     background: rgba(255,255,255,.2); border: 3px solid rgba(255,255,255,.45);
     display: flex; align-items: center; justify-content: center;
-    font-size: 1.7rem; font-weight: 800;
+    font-size: 1.7rem; font-weight: 800; flex-shrink: 0;
+  }
+  .profile-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 9999px; }
+  .avatar-upload-btn {
+    position: absolute; bottom: -2px; right: -2px; width: 28px; height: 28px;
+    border-radius: 9999px; background: var(--primary); border: 2px solid #fff;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; color: #fff;
   }
 
   /* ─── SECTION HERO VARIANTS ─────────────────────────────────────── */
@@ -503,6 +512,9 @@
   .hero-about   { background: url('images/Blue-Rain.jpg') center/cover no-repeat; }
   .hero-join    { background: url('images/Writing.jpg') center/cover no-repeat; }
   .hero-events  { background: url('images/Meadow-Morning.jpg') center/cover no-repeat; }
+  .hero-team    { background: url('images/Brick-Texture.jpg') center/cover no-repeat; }
+  .hero-donate  { background: url('images/Lighthouse.jpg') center/cover no-repeat; }
+  .hero-privacy { background: url('images/Blue-Rain.jpg') center/cover no-repeat; }
 
   /* ─── CTA BANNER ────────────────────────────────────────────────── */
   .cta-banner {
@@ -540,6 +552,45 @@
   }
   .footer-disclaimer { font-size: .75rem; color: rgba(255,255,255,.35); margin-top: .25rem; }
 
+  /* ─── AVATAR PHOTOS ─────────────────────────────────────────────── */
+  .avatar img, .member-avatar img, .profile-avatar img, .team-photo img {
+    width: 100%; height: 100%; object-fit: cover; border-radius: inherit;
+  }
+
+  /* ─── ROLE BADGES (Our Team) ─────────────────────────────────────── */
+  .badge-founder { background: var(--primary-pale2); color: var(--tier-active); }
+  .badge-board   { background: #f3f0ff; color: var(--tier-assoc); }
+  .badge-partner { background: var(--gold-light); color: var(--gold); }
+
+  /* ─── TEAM CARDS ────────────────────────────────────────────────── */
+  .team-card { text-align: center; }
+  .team-photo {
+    width: 96px; height: 96px; border-radius: 9999px; margin: 0 auto 1rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.7rem; font-weight: 800; color: #fff; overflow: hidden;
+  }
+
+  /* ─── INBOX ─────────────────────────────────────────────────────── */
+  .inbox-layout { display: flex; border: 1px solid var(--border); border-radius: calc(var(--radius) * 2); overflow: hidden; min-height: 480px; background: var(--card); }
+  .inbox-list { width: 320px; flex-shrink: 0; border-right: 1px solid var(--border); overflow-y: auto; max-height: 620px; }
+  .inbox-item {
+    padding: 1rem 1.1rem; border-bottom: 1px solid var(--border); cursor: pointer;
+    transition: background .12s; border-left: 3px solid transparent;
+  }
+  .inbox-item:hover { background: var(--muted); }
+  .inbox-item.active { background: var(--primary-pale); border-left-color: var(--primary); }
+  .inbox-item.unread .inbox-item-title { font-weight: 800; }
+  .inbox-detail { flex: 1; padding: 2rem; }
+
+  /* ─── FORUMS ────────────────────────────────────────────────────── */
+  .forum-card { cursor: pointer; }
+  .forum-thread-row {
+    display: flex; align-items: center; gap: .75rem; padding: .9rem 0;
+    border-bottom: 1px solid var(--border); cursor: pointer;
+  }
+  .forum-thread-row:last-child { border-bottom: none; }
+  .forum-thread-row:hover .forum-thread-title { color: var(--primary); }
+
   /* ─── RESPONSIVE ────────────────────────────────────────────────── */
   @media (max-width: 900px) {
     .footer-grid { grid-template-columns: 1fr 1fr; }
@@ -553,6 +604,8 @@
     .hero-stats { gap: 1.5rem; }
     .footer-grid { grid-template-columns: 1fr; gap: 2rem; }
     .footer-bottom { flex-direction: column; text-align: center; }
+    .inbox-layout { flex-direction: column; }
+    .inbox-list { width: 100%; max-height: 260px; }
     .section { padding: 3.5rem 0; }
   }
 </style>
@@ -571,6 +624,7 @@
 
   <div class="nav-links" id="nav-public" style="margin:0 auto;">
     <button class="nav-link" onclick="navigate('about')">About</button>
+    <button class="nav-link" onclick="navigate('our-team')">Our Team</button>
     <button class="nav-link" onclick="navigate('how-to-join')">How to Join</button>
     <button class="nav-link" onclick="navigate('public-events')">Events</button>
     <button class="nav-link" onclick="navigate('contact')">Contact Us</button>
@@ -757,9 +811,11 @@
       <div>
         <div class="footer-col-title">Community</div>
         <div class="footer-link" onclick="navigate('about')">About Nasiha</div>
+        <div class="footer-link" onclick="navigate('our-team')">Our Team</div>
         <div class="footer-link" onclick="navigate('how-to-join')">How to Join</div>
         <div class="footer-link" onclick="navigate('public-events')">Events</div>
         <div class="footer-link" onclick="navigate('apply')">Join NASIHA</div>
+        <div class="footer-link" onclick="navigate('donate')">Donate</div>
         <div class="footer-link" onclick="navigate('contact')">Contact Us</div>
       </div>
       <div>
@@ -772,6 +828,7 @@
     </div>
     <div class="footer-bottom">
       <div>© 2026 Nasiha — A Non-Profit Organization</div>
+      <div class="footer-link" style="margin:0;" onclick="navigate('privacy')">Privacy Policy</div>
       <div style="font-size:.75rem;color:rgba(255,255,255,.35);">Content does not constitute clinical advice.</div>
     </div>
   </footer>
@@ -840,6 +897,106 @@
           <div class="step-icon" style="margin:0 auto 1rem;"><i data-lucide="graduation-cap"></i></div>
           <div class="font-bold mb-2">Teaching &amp; Sharing</div>
           <div class="text-muted text-sm" style="line-height:1.7;">Lectures, webinars, and knowledge discussions — sharing expertise freely across the community.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+
+<!-- ─────────────────────────────────────── OUR TEAM -->
+<div id="page-our-team" class="page">
+  <section class="page-hero hero-team">
+    <h1>Our Team</h1>
+    <p>Nasiha is guided by founders, board members, and partners who believe knowledge should be shared freely.</p>
+  </section>
+  <section class="section">
+    <div class="container">
+      <div id="team-grid" class="grid-3"></div>
+    </div>
+  </section>
+</div>
+
+
+<!-- ─────────────────────────────────────── DONATE -->
+<div id="page-donate" class="page">
+  <section class="page-hero hero-donate">
+    <h1>Support Nasiha</h1>
+    <p>Knowledge exchange within Nasiha is always free. Donations sustain the Organization's operations — nothing more.</p>
+  </section>
+  <section class="section">
+    <div class="container" style="max-width:640px;">
+      <div class="card">
+        <div class="font-bold mb-1" style="font-size:1.1rem;">Make a Donation</div>
+        <div class="text-sm text-muted mb-4">Every gift supports lectures, mentorship, and the free exchange of knowledge. Donations never affect Knowledge Hours or membership tier — there is no "donor tier."</div>
+
+        <div class="form-group">
+          <label>Amount</label>
+          <div class="flex gap-2" id="donate-amount-chips" style="flex-wrap:wrap;">
+            <div class="filter-chip active" onclick="selectDonateAmount(this,25)">$25</div>
+            <div class="filter-chip" onclick="selectDonateAmount(this,50)">$50</div>
+            <div class="filter-chip" onclick="selectDonateAmount(this,100)">$100</div>
+            <div class="filter-chip" onclick="selectDonateAmount(this,250)">$250</div>
+          </div>
+          <input type="number" id="donate-amount-custom" placeholder="Or enter a custom amount" style="margin-top:.6rem;" oninput="document.querySelectorAll('#donate-amount-chips .filter-chip').forEach(c=>c.classList.remove('active'))">
+        </div>
+
+        <div class="form-group">
+          <label>Frequency</label>
+          <div class="flex gap-2">
+            <div class="filter-chip active" id="donate-freq-once" onclick="selectDonateFreq('once')">One-time</div>
+            <div class="filter-chip" id="donate-freq-annual" onclick="selectDonateFreq('annual')">Annual</div>
+          </div>
+        </div>
+
+        <div class="form-group"><label>Your Name</label><input type="text" placeholder="Your full name"></div>
+        <div class="form-group"><label>Email Address</label><input type="email" placeholder="you@example.com"></div>
+        <div class="form-group"><label>Dedicate this gift (optional)</label><input type="text" placeholder="e.g. In honor of..."></div>
+        <div class="form-group" style="margin-bottom:1.5rem;">
+          <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-weight:500;">
+            <input type="checkbox" checked style="width:auto;"> List me as a supporter in the community digest and annual report
+          </label>
+        </div>
+        <button class="btn btn-primary w-full" onclick="showToast('✅ Thank you for supporting Nasiha! A receipt has been sent to your email.')">Donate</button>
+        <div class="text-xs text-muted mt-3" style="text-align:center;line-height:1.6;">Donations are separate from the Knowledge Hours exchange and confer no advantage in membership tier, governance, or access.</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+
+<!-- ─────────────────────────────────────── PRIVACY POLICY -->
+<div id="page-privacy" class="page">
+  <section class="page-hero hero-privacy">
+    <h1>Privacy Policy</h1>
+    <p>How Nasiha collects, uses, and protects member information.</p>
+  </section>
+  <section class="section">
+    <div class="container" style="max-width:760px;">
+      <div style="display:flex;flex-direction:column;gap:1.75rem;">
+        <div>
+          <div class="section-eyebrow">What We Collect</div>
+          <div class="section-title mb-2" style="font-size:1.2rem;">Information You Provide</div>
+          <p class="text-muted" style="line-height:1.8;">Name, email, professional title, specialty, career stage, country/region, bio, areas of expertise, and — if you choose to upload one — a profile photo. Membership applications also collect a professional reference once required by the current admission phase.</p>
+        </div>
+        <div>
+          <div class="section-eyebrow">How We Use It</div>
+          <div class="section-title mb-2" style="font-size:1.2rem;">Running Nasiha, Nothing Else</div>
+          <p class="text-muted" style="line-height:1.8;">Member data is collected only to operate the community — membership review, the Member Directory, the Knowledge Hours ledger, event RSVPs, and community communications. Nasiha never sells, shares, or uses member data for any purpose outside of running the Organization.</p>
+        </div>
+        <div>
+          <div class="section-eyebrow">Your Controls</div>
+          <div class="section-title mb-2" style="font-size:1.2rem;">Directory Visibility &amp; Data Rights</div>
+          <p class="text-muted" style="line-height:1.8;">You control whether you appear in the Member Directory and what's visible there. You may request an export or deletion of your personal data at any time from Settings. Historical Knowledge Hours ledger entries and content attribution may be retained in de-identified form to preserve the integrity of the community's audit trail.</p>
+        </div>
+        <div>
+          <div class="section-eyebrow">Patient Information</div>
+          <div class="section-title mb-2" style="font-size:1.2rem;">Never Shared, Anywhere</div>
+          <p class="text-muted" style="line-height:1.8;">Identifiable patient information must never appear in Nasiha — not in case discussions, library submissions, forum posts, or messages. Case-based content requires explicit confirmation that all information has been de-identified before it can be shared.</p>
+        </div>
+        <div class="card" style="background:var(--primary-pale);border-color:var(--primary-pale2);">
+          <div class="font-bold mb-2 text-primary">Questions or Requests</div>
+          <p class="text-sm" style="color:#374151;line-height:1.7;">To request your data, ask a question, or report a concern, contact us at <strong>contact@nasihaonline.com</strong> or visit the Contact page.</p>
         </div>
       </div>
     </div>
@@ -1014,6 +1171,7 @@
       </div>
       <div class="form-group"><label>Country / Region</label><input type="text" placeholder="e.g. Pakistan, United Kingdom, Nigeria"></div>
       <div class="form-group"><label>Referral (optional)</label><input type="text" placeholder="Name of the Nasiha member who referred you"></div>
+      <div class="form-group"><label>Professional reference <span class="text-muted" style="font-weight:400;">(name &amp; contact)</span></label><input type="text" placeholder="e.g. Dr. Jane Smith, jane@hospital.org"></div>
       <div class="form-group"><label>Why do you want to join Nasiha?</label><textarea placeholder="Tell us about yourself and what you hope to contribute to and learn from the community…"></textarea></div>
       <div class="form-group"><label>Areas of expertise you'd like to share</label><textarea placeholder="e.g. Cardiology, ECG interpretation, clinical research methodology…" style="min-height:70px;"></textarea></div>
       <div class="form-group"><label>Topics you most want to learn</label><textarea placeholder="e.g. Oncology, palliative care, healthcare leadership…" style="min-height:70px;"></textarea></div>
@@ -1085,10 +1243,12 @@
     <button class="sidebar-link" onclick="navigateMember('dashboard')"><i data-lucide="layout-dashboard"></i>Dashboard</button>
     <button class="sidebar-link" onclick="navigateMember('profile')"><i data-lucide="user"></i>My Profile</button>
     <button class="sidebar-link" onclick="navigateMember('credits')"><i data-lucide="award"></i>Knowledge Hours</button>
+    <button class="sidebar-link" onclick="navigateMember('inbox')"><i data-lucide="inbox"></i>Inbox</button>
 
     <div class="sidebar-section">Community</div>
     <button class="sidebar-link" onclick="navigateMember('directory')"><i data-lucide="users"></i>Member Directory</button>
     <button class="sidebar-link" onclick="navigateMember('calendar')"><i data-lucide="calendar-days"></i>Calendar</button>
+    <button class="sidebar-link" onclick="navigateMember('forums')"><i data-lucide="message-square"></i>Forums</button>
     <button class="sidebar-link" onclick="navigateMember('blogs')"><i data-lucide="pen-line"></i>Blogs</button>
 
     <div class="sidebar-section">Knowledge</div>
@@ -1140,7 +1300,10 @@
     <!-- PROFILE -->
     <div id="member-page-profile" class="member-page hidden">
       <div class="profile-header">
-        <div class="profile-avatar" id="profile-avatar-big">UZ</div>
+        <div class="profile-avatar" id="profile-avatar-big">
+          <span id="profile-avatar-initials">UZ</span>
+          <button class="avatar-upload-btn" onclick="uploadProfilePhoto()" title="Upload profile photo"><i data-lucide="camera" style="width:13px;height:13px;"></i></button>
+        </div>
         <div>
           <div style="font-size:1.4rem;font-weight:800;" id="profile-name-display">Dr. Uzma Khan</div>
           <div style="opacity:.85;margin-bottom:.4rem;" id="profile-title-display">Physician</div>
@@ -1203,28 +1366,66 @@
           <div class="text-sm text-muted mt-1">Total Spent</div>
         </div>
         <div class="ml-auto">
-          <button class="btn btn-primary" onclick="showToast('Log a contribution form would open here.')"><i data-lucide="plus" class="icon-sm"></i> Log Contribution</button>
+          <button class="btn btn-primary" onclick="showToast('A contribution form would open here — it posts as Pending until your counterpart or an admin confirms it.')"><i data-lucide="plus" class="icon-sm"></i> Log Contribution</button>
         </div>
       </div>
       <div class="card">
         <div class="font-bold mb-3">Transaction History</div>
         <table>
-          <thead><tr><th>Date</th><th>Activity</th><th>Counterpart</th><th>Hours</th></tr></thead>
+          <thead><tr><th>Date</th><th>Activity</th><th>Counterpart</th><th>Hours</th><th>Status</th></tr></thead>
           <tbody>
-            <tr><td>May 22, 2026</td><td>Delivered webinar: Cardiology Update</td><td>—</td><td class="credit-pos">+1.0</td></tr>
-            <tr><td>May 15, 2026</td><td>Knowledge session — Dr. Amir Siddiqui</td><td>Dr. Amir Siddiqui</td><td class="credit-pos">+1.0</td></tr>
-            <tr><td>May 10, 2026</td><td>Requested consultation</td><td>Dr. Priya Nair</td><td class="credit-neg">−1.0</td></tr>
-            <tr><td>May 3, 2026</td><td>Case discussion (expert)</td><td>Fatima Al-Hassan</td><td class="credit-pos">+0.5</td></tr>
-            <tr><td>Apr 28, 2026</td><td>Curated resource: AHA Guidelines 2025</td><td>—</td><td class="credit-pos">+0.5</td></tr>
-            <tr><td>Apr 20, 2026</td><td>Delivered lecture: Research Methodology</td><td>—</td><td class="credit-pos">+2.0</td></tr>
-            <tr><td>Apr 12, 2026</td><td>Requested mentorship session</td><td>Dr. James Okafor</td><td class="credit-neg">−1.0</td></tr>
-            <tr><td>Apr 5, 2026</td><td>Administrative volunteer work</td><td>—</td><td class="credit-pos">+2.0</td></tr>
-            <tr><td>Mar 30, 2026</td><td>Curated resource: BMJ Oncology Review</td><td>—</td><td class="credit-pos">+0.5</td></tr>
-            <tr><td>Mar 22, 2026</td><td>Case discussion (expert)</td><td>Omar Farouk</td><td class="credit-pos">+0.5</td></tr>
-            <tr><td>Mar 15, 2026</td><td>Requested consultation</td><td>Dr. Leila Mansouri</td><td class="credit-neg">−0.5</td></tr>
-            <tr><td>Mar 8, 2026</td><td>Starting balance</td><td>—</td><td class="credit-pos">+0.0</td></tr>
+            <tr><td>May 22, 2026</td><td>Delivered webinar: Cardiology Update</td><td>—</td><td class="credit-pos">+1.0</td><td><span class="badge badge-confirmed">Confirmed</span></td></tr>
+            <tr><td>May 20, 2026</td><td>Case discussion (expert)</td><td>Dr. James Okafor</td><td class="credit-pos">+0.5</td><td><span class="badge badge-pending" title="Awaiting confirmation from Dr. James Okafor">Pending</span></td></tr>
+            <tr><td>May 15, 2026</td><td>Knowledge session — Dr. Amir Siddiqui</td><td>Dr. Amir Siddiqui</td><td class="credit-pos">+1.0</td><td><span class="badge badge-confirmed">Confirmed</span></td></tr>
+            <tr><td>May 10, 2026</td><td>Requested consultation</td><td>Dr. Priya Nair</td><td class="credit-neg">−1.0</td><td><span class="badge badge-confirmed">Confirmed</span></td></tr>
+            <tr><td>May 3, 2026</td><td>Case discussion (expert)</td><td>Fatima Al-Hassan</td><td class="credit-pos">+0.5</td><td><span class="badge badge-confirmed">Confirmed</span></td></tr>
+            <tr><td>Apr 28, 2026</td><td>Curated resource: AHA Guidelines 2025</td><td>—</td><td class="credit-pos">+0.5</td><td><span class="badge badge-pending" title="Awaiting admin confirmation — no counterpart named">Pending</span></td></tr>
+            <tr><td>Apr 20, 2026</td><td>Delivered lecture: Research Methodology</td><td>—</td><td class="credit-pos">+2.0</td><td><span class="badge badge-confirmed">Confirmed</span></td></tr>
+            <tr><td>Apr 12, 2026</td><td>Requested mentorship session</td><td>Dr. James Okafor</td><td class="credit-neg">−1.0</td><td><span class="badge badge-confirmed">Confirmed</span></td></tr>
+            <tr><td>Apr 5, 2026</td><td>Administrative volunteer work</td><td>—</td><td class="credit-pos">+2.0</td><td><span class="badge badge-confirmed">Confirmed</span></td></tr>
+            <tr><td>Mar 30, 2026</td><td>Curated resource: BMJ Oncology Review</td><td>—</td><td style="color:var(--muted-fg);text-decoration:line-through;">+0.5</td><td><span class="badge badge-rejected" title="Rejected by admin — insufficient detail">Rejected</span></td></tr>
+            <tr><td>Mar 22, 2026</td><td>Case discussion (expert)</td><td>Omar Farouk</td><td class="credit-pos">+0.5</td><td><span class="badge badge-confirmed">Confirmed</span></td></tr>
+            <tr><td>Mar 15, 2026</td><td>Requested consultation</td><td>Dr. Leila Mansouri</td><td class="credit-neg">−0.5</td><td><span class="badge badge-confirmed">Confirmed</span></td></tr>
+            <tr><td>Mar 8, 2026</td><td>Starting balance</td><td>—</td><td class="credit-pos">+0.0</td><td><span class="badge badge-confirmed">Confirmed</span></td></tr>
           </tbody>
         </table>
+        <div class="text-xs text-muted mt-3" style="line-height:1.6;">Pending items await confirmation from the named counterpart, or an admin when none is named. Only Confirmed hours count toward your balance above.</div>
+      </div>
+    </div>
+
+    <!-- INBOX -->
+    <div id="member-page-inbox" class="member-page hidden">
+      <div class="flex items-center mb-4" style="flex-wrap:wrap;gap:1rem;">
+        <div class="text-2xl font-bold">Inbox</div>
+        <button class="btn btn-primary ml-auto btn-sm" onclick="showToast('A message composer would open here.')"><i data-lucide="pen-line" class="icon-sm"></i> New Message</button>
+      </div>
+      <div class="inbox-layout">
+        <div class="inbox-list" id="inbox-list"></div>
+        <div class="inbox-detail" id="inbox-detail">
+          <div class="text-muted text-sm" style="text-align:center;padding-top:3rem;">Select a message or meeting request to view it here.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FORUMS -->
+    <div id="member-page-forums" class="member-page hidden">
+      <div class="mb-6">
+        <div class="text-2xl font-bold mb-1">Discussion Forums</div>
+        <div class="text-muted text-sm">Topic-based discussion for the Nasiha community.</div>
+      </div>
+      <div id="forums-category-view">
+        <div id="forums-grid" class="grid-3"></div>
+      </div>
+      <div id="forums-thread-view" class="hidden">
+        <button class="btn btn-ghost btn-sm mb-4" onclick="showForumCategories()"><i data-lucide="arrow-left" class="icon-sm"></i> All Forums</button>
+        <div class="flex items-center mb-4" style="flex-wrap:wrap;gap:1rem;">
+          <div>
+            <div class="text-xl font-bold mb-1" id="forum-thread-title"></div>
+            <div class="text-muted text-sm" id="forum-thread-desc"></div>
+          </div>
+          <button class="btn btn-primary ml-auto btn-sm" onclick="showToast('A new thread composer would open here.')"><i data-lucide="plus" class="icon-sm"></i> New Thread</button>
+        </div>
+        <div class="card" id="forum-threads-list"></div>
       </div>
     </div>
 
@@ -1346,12 +1547,12 @@ const DEMO_USERS = {
 };
 
 const EVENTS = [
-  { date: 'Jun 5, 2026',  title: 'Cardiology Update 2026',              type: 'Webinar',         host: 'Dr. Uzma Khan',     open: true,  time: '7:00 PM UTC', icon: 'heart-pulse',    dot: '🫀' },
-  { date: 'Jun 10, 2026', title: 'Research Methodology for Clinicians', type: 'Workshop',        host: 'Nadeem Haider',     open: false, time: '6:00 PM UTC', icon: 'microscope',     dot: '🔬' },
-  { date: 'Jun 14, 2026', title: 'Case Discussion: Complex Oncology',   type: 'Case Discussion', host: 'Dr. Priya Nair',    open: false, time: '8:00 PM UTC', icon: 'stethoscope',    dot: '🏥' },
-  { date: 'Jun 19, 2026', title: 'Student Forum: Residency Applications',type: 'Student Event',  host: 'Fatima Al-Hassan',  open: true,  time: '5:00 PM UTC', icon: 'graduation-cap', dot: '🎓' },
-  { date: 'Jun 24, 2026', title: 'Global Health Policy Roundtable',     type: 'Roundtable',      host: 'Dr. James Okafor',  open: false, time: '3:00 PM UTC', icon: 'globe',          dot: '🌍' },
-  { date: 'Jun 28, 2026', title: 'ECG Masterclass',                     type: 'Lecture',         host: 'Dr. Amir Siddiqui', open: false, time: '7:00 PM UTC', icon: 'activity',       dot: '📈' },
+  { date: 'Jun 5, 2026',  title: 'Cardiology Update 2026',              type: 'Webinar',         host: 'Dr. Uzma Khan',     open: true,  time: '7:00 PM UTC', icon: 'heart-pulse',    dot: '🫀', meetingUrl: 'https://zoom.us/j/5551234567' },
+  { date: 'Jun 10, 2026', title: 'Research Methodology for Clinicians', type: 'Workshop',        host: 'Nadeem Haider',     open: false, time: '6:00 PM UTC', icon: 'microscope',     dot: '🔬', meetingUrl: 'https://zoom.us/j/5552345678' },
+  { date: 'Jun 14, 2026', title: 'Case Discussion: Complex Oncology',   type: 'Case Discussion', host: 'Dr. Priya Nair',    open: false, time: '8:00 PM UTC', icon: 'stethoscope',    dot: '🏥', meetingUrl: 'https://zoom.us/j/5553456789', deidentificationConfirmed: true },
+  { date: 'Jun 19, 2026', title: 'Student Forum: Residency Applications',type: 'Student Event',  host: 'Fatima Al-Hassan',  open: true,  time: '5:00 PM UTC', icon: 'graduation-cap', dot: '🎓', meetingUrl: 'https://zoom.us/j/5554567890' },
+  { date: 'Jun 24, 2026', title: 'Global Health Policy Roundtable',     type: 'Roundtable',      host: 'Dr. James Okafor',  open: false, time: '3:00 PM UTC', icon: 'globe',          dot: '🌍', meetingUrl: 'https://zoom.us/j/5555678901' },
+  { date: 'Jun 28, 2026', title: 'ECG Masterclass',                     type: 'Lecture',         host: 'Dr. Amir Siddiqui', open: false, time: '7:00 PM UTC', icon: 'activity',       dot: '📈', meetingUrl: 'https://zoom.us/j/5556789012' },
 ];
 
 const BLOG_IMAGES = [
@@ -1384,7 +1585,7 @@ const BLOGS = [
 ];
 
 const MEMBERS = [
-  { name: 'Dr. Uzma Khan',     initials: 'UZ', color: '#2563eb', title: 'Physician',            country: 'United States', tier: 'active',    expertise: 'Internal Medicine, Research' },
+  { name: 'Dr. Uzma Khan',     initials: 'UZ', color: '#2563eb', title: 'Physician',            country: 'United States', tier: 'active',    expertise: 'Internal Medicine, Research', photo: 'images/71645956.jpg' },
   { name: 'Dr. Amir Siddiqui', initials: 'AS', color: '#7c3aed', title: 'Cardiologist',         country: 'Pakistan',      tier: 'associate', expertise: 'Cardiology, ECG' },
   { name: 'Fatima Al-Hassan',  initials: 'FA', color: '#0891b2', title: 'Medical Student',      country: 'Egypt',         tier: 'student',   expertise: 'Research, Global Health' },
   { name: 'Dr. Priya Nair',    initials: 'PN', color: '#d97706', title: 'Oncologist',           country: 'India',         tier: 'active',    expertise: 'Oncology, Palliative Care' },
@@ -1395,6 +1596,65 @@ const MEMBERS = [
   { name: 'Nighat Abidi',      initials: 'NA', color: '#5b21b6', title: 'Technology (Board)',   country: 'United States', tier: 'active',    expertise: 'Technology, Strategy' },
 ];
 
+const TEAM_MEMBERS = [
+  { name: 'Dr. Uzma Khan',     initials: 'UZ', color: '#2563eb', role: 'founder',      title: 'Founder & Board Member · Physician',        photo: 'images/71645956.jpg', bio: 'Physician and founder of Nasiha, committed to democratizing medical education and building a global community of learners who teach as freely as they learn.' },
+  { name: 'Nadeem Haider',     initials: 'NH', color: '#374151', role: 'board_member', title: 'Board Member · Technology Executive',       photo: null,                   bio: 'Brings a technology executive\'s perspective to Nasiha\'s platform and long-term infrastructure, translating the community\'s values into the systems that support it.' },
+  { name: 'Nighat Abidi',      initials: 'NA', color: '#5b21b6', role: 'board_member', title: 'Board Member · Technology Executive',       photo: null,                   bio: 'A technology executive who helps steer Nasiha\'s strategy and operations, with a focus on building a platform that scales without losing the community\'s character.' },
+  { name: 'Dr. Priya Nair',    initials: 'PN', color: '#d97706', role: 'partner',      title: 'Partner · Regional Oncology Network',        photo: null,                   bio: 'Illustrative partner entry — Nasiha\'s partner program connects the community with allied organizations. Real partner profiles will replace this placeholder before launch.' },
+  { name: 'Global Health Alliance', initials: 'GH', color: '#059669', role: 'partner', title: 'Partner Organization',                        photo: null,                   bio: 'Illustrative partner entry demonstrating the role-badge system for institutional partners. Not a real Nasiha partner yet — see PRD §11 for the content gap this fills once resolved.' },
+];
+
+const FORUMS = [
+  { id: 'general',     name: 'General',               icon: 'message-circle',  desc: 'Community announcements, introductions, open discussion.', threads: 14 },
+  { id: 'clinical',    name: 'Clinical Discussions',   icon: 'stethoscope',     desc: 'Case-based learning, diagnostic questions, treatment approaches.', threads: 22 },
+  { id: 'research',    name: 'Research & Resources',   icon: 'book-open',       desc: 'Sharing articles, tools, guidelines, and curated learning materials.', threads: 18 },
+  { id: 'teaching',    name: 'Teaching & Mentorship',  icon: 'graduation-cap',  desc: 'Advice on teaching, mentorship requests, pedagogical discussion.', threads: 9 },
+  { id: 'students',    name: 'Students & Trainees',    icon: 'users',          desc: 'A dedicated space for early-career members to ask questions freely.', threads: 27 },
+  { id: 'organizational', name: 'Organizational',      icon: 'landmark',       desc: 'Board updates, policy discussions, credit system questions.', threads: 6 },
+];
+
+const FORUM_THREADS = {
+  general: [
+    { title: 'Welcome new members — introduce yourself here!', author: 'Dr. Uzma Khan', replies: 41, date: 'Jun 2, 2026' },
+    { title: 'Community digest frequency — weekly or monthly?', author: 'Nadeem Haider', replies: 12, date: 'May 28, 2026' },
+    { title: 'Suggestions for the June community call agenda', author: 'Fatima Al-Hassan', replies: 5, date: 'May 24, 2026' },
+  ],
+  clinical: [
+    { title: 'Atypical MI presentation in a 45-year-old — thoughts?', author: 'Dr. Amir Siddiqui', replies: 19, date: 'Jun 4, 2026' },
+    { title: 'Approach to unexplained dyspnea in primary care', author: 'Dr. Leila Mansouri', replies: 8, date: 'May 30, 2026' },
+    { title: 'Case discussion: complex oncology follow-up', author: 'Dr. Priya Nair', replies: 14, date: 'May 21, 2026' },
+  ],
+  research: [
+    { title: 'AHA Heart Failure Guidelines 2025 — key changes', author: 'Dr. Uzma Khan', replies: 11, date: 'Jun 1, 2026' },
+    { title: 'Looking for recent papers on palliative care communication', author: 'Dr. Leila Mansouri', replies: 6, date: 'May 26, 2026' },
+  ],
+  teaching: [
+    { title: 'How do you structure a first-time lecture?', author: 'Nadeem Haider', replies: 9, date: 'May 29, 2026' },
+    { title: 'Mentorship pairing — looking for a cardiology mentor', author: 'Omar Farouk', replies: 4, date: 'May 22, 2026' },
+  ],
+  students: [
+    { title: 'Residency application season — AMA', author: 'Fatima Al-Hassan', replies: 33, date: 'Jun 3, 2026' },
+    { title: 'Best resources for ECG interpretation as a student', author: 'Omar Farouk', replies: 15, date: 'May 27, 2026' },
+  ],
+  organizational: [
+    { title: 'Board update: referral-driven growth phase progress', author: 'Dr. Uzma Khan', replies: 7, date: 'May 20, 2026' },
+    { title: 'Questions about how Knowledge Hours confirmation works', author: 'Dr. James Okafor', replies: 10, date: 'May 18, 2026' },
+  ],
+};
+
+const INBOX_ITEMS = [
+  { id: 1, type: 'meeting', unread: true,  from: 'Dr. Priya Nair',    subject: 'Request: Oncology case consultation', date: 'Jun 3, 2026', status: 'pending',
+    body: 'Hi Dr. Khan — I\'d like to request a consultation on a complex oncology case I\'m seeing next week. Would you have 1 hour available Thursday or Friday afternoon (UTC)?' },
+  { id: 2, type: 'message', unread: true,  from: 'Fatima Al-Hassan',  subject: 'Thank you for the residency forum post', date: 'Jun 2, 2026', status: null,
+    body: 'Thank you for weighing in on the residency applications thread — your perspective on research years was exactly what I needed to hear.' },
+  { id: 3, type: 'meeting', unread: false, from: 'Dr. James Okafor',  subject: 'Request: Mentorship session', date: 'May 29, 2026', status: 'accepted',
+    body: 'Following up from the Global Health Policy Roundtable — would love a mentorship session on translating clinical work into policy advocacy.' },
+  { id: 4, type: 'message', unread: false, from: 'Dr. Amir Siddiqui', subject: 'ECG Masterclass slides', date: 'May 25, 2026', status: null,
+    body: 'Sharing the slide deck from the ECG Masterclass ahead of time in case you want to review before the session.' },
+  { id: 5, type: 'meeting', unread: false, from: 'Omar Farouk',       subject: 'Request: Career advice chat', date: 'May 20, 2026', status: 'declined',
+    body: 'Would you be open to a short call about transitioning from medical school into a research-focused residency?' },
+];
+
 
 // ─── NAVIGATION ──────────────────────────────────────────────────────
 function navigate(page) {
@@ -1403,7 +1663,7 @@ function navigate(page) {
   const el = document.getElementById('page-' + page);
   if (el) el.classList.add('active');
   document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-  const memberPages = ['dashboard','profile','credits','directory','calendar','blogs','library'];
+  const memberPages = ['dashboard','profile','credits','inbox','directory','calendar','forums','blogs','library'];
   if (memberPages.includes(page)) {
     if (!currentUser) { navigate('login'); return; }
     showMemberLayout(page); return;
@@ -1444,7 +1704,7 @@ function applyUserToUI() {
   document.getElementById('nav-name').textContent     = currentUser.name;
   document.getElementById('nav-credits').textContent  = '✦ ' + currentUser.credits + ' Knowledge Hours';
   document.getElementById('nav-tier-badge').innerHTML = tierBadge(currentUser.tier);
-  document.getElementById('profile-avatar-big').textContent  = currentUser.initials;
+  document.getElementById('profile-avatar-initials').textContent = currentUser.initials;
   document.getElementById('profile-name-display').textContent= currentUser.name;
   document.getElementById('profile-title-display').textContent=currentUser.title;
   document.getElementById('profile-tier-display').innerHTML  = tierBadge(currentUser.tier);
@@ -1453,6 +1713,22 @@ function applyUserToUI() {
   document.getElementById('pf-country').value  = currentUser.country;
   document.getElementById('pf-specialty').value= currentUser.title;
   document.getElementById('dash-greeting').textContent = 'Good morning, ' + currentUser.name.split(' ')[0] + ' 👋';
+}
+
+function uploadProfilePhoto() {
+  const big = document.getElementById('profile-avatar-big');
+  if (big.querySelector('img')) {
+    big.querySelector('img').remove();
+    document.getElementById('profile-avatar-initials').style.display = '';
+    showToast('Profile photo removed — showing initials again.');
+    return;
+  }
+  const img = document.createElement('img');
+  img.src = 'images/71645956.jpg';
+  img.alt = 'Profile photo';
+  big.insertBefore(img, big.firstChild);
+  document.getElementById('profile-avatar-initials').style.display = 'none';
+  showToast('✅ Profile photo uploaded. This now appears in the Member Directory too.');
 }
 
 function logout() {
@@ -1578,6 +1854,7 @@ function renderCalendar() {
         <div class="font-bold">${e.title}</div>
         <div class="text-sm text-muted">${e.date} · ${e.time}</div>
         <div class="text-xs text-muted">Hosted by ${e.host} · <span class="badge ${e.open?'badge-gold':'badge-active'}" style="font-size:.63rem;">${e.open?'Open to Public':'Members Only'}</span></div>
+        ${e.meetingUrl ? `<a href="${e.meetingUrl}" target="_blank" rel="noopener" class="text-xs" style="display:inline-flex;align-items:center;gap:.25rem;margin-top:.35rem;color:var(--primary);font-weight:600;"><i data-lucide="video" style="width:12px;height:12px;"></i> Join via Zoom (RSVP'd members only)</a>` : ''}
       </div>
       <div class="flex gap-2">
         <button class="btn btn-ghost btn-sm" onclick="showToast('Added to your calendar: ${e.title}')"><i data-lucide="calendar-plus" class="icon-sm"></i> Add</button>
@@ -1593,13 +1870,16 @@ function renderCalendar() {
 function renderMemberCards(list) {
   return list.map(m => `
     <div class="member-card">
-      <div class="member-avatar" style="background:${m.color};">${m.initials}</div>
+      <div class="member-avatar" style="background:${m.color};">${m.photo ? `<img src="${m.photo}" alt="${m.name}">` : m.initials}</div>
       <div class="font-semibold" style="font-size:.9rem;">${m.name}</div>
       <div class="text-xs text-muted">${m.title}</div>
       <div class="text-xs text-muted">📍 ${m.country}</div>
       ${tierBadge(m.tier)}
       <div class="text-xs text-muted" style="margin-top:.2rem;">${m.expertise}</div>
-      <button class="btn btn-ghost btn-sm w-full" style="margin-top:.4rem;" onclick="showToast('Messaging relay would open here.')"><i data-lucide="message-circle" class="icon-sm"></i> Connect</button>
+      <div class="flex gap-2 w-full" style="margin-top:.4rem;">
+        <button class="btn btn-ghost btn-sm w-full" onclick="showToast('A message composer would open here, addressed to ${m.name}.')"><i data-lucide="mail" class="icon-sm"></i> Message</button>
+        <button class="btn btn-outline btn-sm w-full" onclick="showToast('A meeting request form would open here, addressed to ${m.name}.')"><i data-lucide="calendar-clock" class="icon-sm"></i> Meet</button>
+      </div>
     </div>
   `).join('');
   lucide.createIcons();
@@ -1681,6 +1961,134 @@ function renderLibrary() {
 }
 
 
+// ─── RENDER: OUR TEAM ───────────────────────────────────────────────
+const TEAM_ROLE_LABEL = { founder: ['badge-founder', 'Founder'], board_member: ['badge-board', 'Board Member'], partner: ['badge-partner', 'Partner'] };
+function renderOurTeam() {
+  document.getElementById('team-grid').innerHTML = TEAM_MEMBERS.map(t => {
+    const [cls, label] = TEAM_ROLE_LABEL[t.role];
+    return `
+    <div class="card team-card">
+      <div class="team-photo" style="background:${t.color};">${t.photo ? `<img src="${t.photo}" alt="${t.name}">` : t.initials}</div>
+      <div class="font-bold" style="font-size:1.05rem;">${t.name}</div>
+      <div class="mb-2" style="margin-top:.3rem;"><span class="badge ${cls}">${label}</span></div>
+      <div class="text-xs text-muted mb-3">${t.title}</div>
+      <div class="text-sm text-muted" style="line-height:1.7;">${t.bio}</div>
+    </div>
+  `;
+  }).join('');
+  lucide.createIcons();
+}
+
+
+// ─── RENDER: FORUMS ─────────────────────────────────────────────────
+function renderForums() {
+  document.getElementById('forums-grid').innerHTML = FORUMS.map(f => `
+    <div class="card forum-card" onclick="openForumCategory('${f.id}')">
+      <div class="step-icon"><i data-lucide="${f.icon}"></i></div>
+      <div class="font-bold mb-1">${f.name}</div>
+      <div class="text-sm text-muted mb-2" style="line-height:1.6;">${f.desc}</div>
+      <div class="text-xs text-muted">${f.threads} threads</div>
+    </div>
+  `).join('');
+  lucide.createIcons();
+}
+
+function openForumCategory(id) {
+  const forum = FORUMS.find(f => f.id === id);
+  document.getElementById('forums-category-view').classList.add('hidden');
+  document.getElementById('forums-thread-view').classList.remove('hidden');
+  document.getElementById('forum-thread-title').textContent = forum.name;
+  document.getElementById('forum-thread-desc').textContent = forum.desc;
+  const threads = FORUM_THREADS[id] || [];
+  document.getElementById('forum-threads-list').innerHTML = threads.map(t => `
+    <div class="forum-thread-row" onclick="showToast('Thread detail would open here: ${t.title.replace(/'/g, "\\'")}')">
+      <i data-lucide="message-square" class="icon-sm" style="color:var(--muted-fg);flex-shrink:0;"></i>
+      <div style="flex:1;">
+        <div class="font-semibold text-sm forum-thread-title">${t.title}</div>
+        <div class="text-xs text-muted">Started by ${t.author} · ${t.date}</div>
+      </div>
+      <div class="text-xs text-muted" style="flex-shrink:0;">${t.replies} replies</div>
+    </div>
+  `).join('') || `<div class="text-muted text-sm" style="text-align:center;padding:2rem 0;">No threads yet — be the first to post.</div>`;
+  lucide.createIcons();
+  window.scrollTo(0, 0);
+}
+
+function showForumCategories() {
+  document.getElementById('forums-thread-view').classList.add('hidden');
+  document.getElementById('forums-category-view').classList.remove('hidden');
+}
+
+
+// ─── RENDER: INBOX ──────────────────────────────────────────────────
+const MEETING_STATUS_LABEL = { pending: ['badge-pending', 'Pending'], accepted: ['badge-confirmed', 'Accepted'], declined: ['badge-rejected', 'Declined'] };
+function renderInbox() {
+  document.getElementById('inbox-list').innerHTML = INBOX_ITEMS.map(i => `
+    <div class="inbox-item${i.unread ? ' unread' : ''}" id="inbox-item-${i.id}" onclick="selectInboxItem(${i.id})">
+      <div class="flex items-center gap-2" style="margin-bottom:.2rem;">
+        <i data-lucide="${i.type === 'meeting' ? 'calendar-clock' : 'mail'}" class="icon-sm" style="color:${i.type === 'meeting' ? 'var(--gold)' : 'var(--primary)'};flex-shrink:0;"></i>
+        <div class="text-sm inbox-item-title" style="flex:1;">${i.from}</div>
+        ${i.status ? `<span class="badge ${MEETING_STATUS_LABEL[i.status][0]}" style="font-size:.6rem;">${MEETING_STATUS_LABEL[i.status][1]}</span>` : ''}
+      </div>
+      <div class="text-xs text-muted" style="margin-bottom:.15rem;">${i.subject}</div>
+      <div class="text-xs" style="color:var(--muted-fg);">${i.date}</div>
+    </div>
+  `).join('');
+  lucide.createIcons();
+  if (INBOX_ITEMS.length) selectInboxItem(INBOX_ITEMS[0].id);
+}
+
+function selectInboxItem(id) {
+  const item = INBOX_ITEMS.find(i => i.id === id);
+  item.unread = false;
+  document.querySelectorAll('.inbox-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('inbox-item-' + id).classList.remove('unread');
+  document.getElementById('inbox-item-' + id).classList.add('active');
+
+  const actions = item.type === 'meeting' && item.status === 'pending'
+    ? `<div class="flex gap-2 mt-4">
+         <button class="btn btn-primary btn-sm" onclick="respondMeeting(${id},'accepted')">Accept</button>
+         <button class="btn btn-ghost btn-sm" onclick="respondMeeting(${id},'declined')">Decline</button>
+         <button class="btn btn-outline btn-sm" onclick="showToast('A reschedule form would open here.')">Propose New Time</button>
+       </div>`
+    : item.type === 'meeting'
+      ? `<div class="mt-4"><span class="badge ${MEETING_STATUS_LABEL[item.status][0]}">${MEETING_STATUS_LABEL[item.status][1]}</span></div>`
+      : `<div class="flex gap-2 mt-4"><button class="btn btn-outline btn-sm" onclick="showToast('A reply composer would open here.')"><i data-lucide="reply" class="icon-sm"></i> Reply</button></div>`;
+
+  document.getElementById('inbox-detail').innerHTML = `
+    <div class="flex items-center gap-3 mb-4">
+      <div class="avatar" style="width:44px;height:44px;font-size:1rem;">${item.from.split(' ').map(w=>w[0]).slice(0,2).join('')}</div>
+      <div>
+        <div class="font-bold">${item.from}</div>
+        <div class="text-xs text-muted">${item.date}${item.type === 'meeting' ? ' · Meeting Request' : ''}</div>
+      </div>
+    </div>
+    <div class="font-semibold mb-2">${item.subject}</div>
+    <div class="text-sm text-muted" style="line-height:1.8;">${item.body}</div>
+    ${actions}
+  `;
+}
+
+function respondMeeting(id, status) {
+  const item = INBOX_ITEMS.find(i => i.id === id);
+  item.status = status;
+  renderInbox();
+  showToast(status === 'accepted' ? '✅ Meeting accepted — a Knowledge Hours spend entry will post automatically.' : 'Meeting request declined.');
+}
+
+
+// ─── DONATE ─────────────────────────────────────────────────────────
+function selectDonateAmount(chip, amount) {
+  document.querySelectorAll('#donate-amount-chips .filter-chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  document.getElementById('donate-amount-custom').value = '';
+}
+function selectDonateFreq(freq) {
+  document.getElementById('donate-freq-once').classList.toggle('active', freq === 'once');
+  document.getElementById('donate-freq-annual').classList.toggle('active', freq === 'annual');
+}
+
+
 // ─── INIT ─────────────────────────────────────────────────────────────
 function init() {
   renderPublicEvents();
@@ -1689,6 +2097,9 @@ function init() {
   renderDirectory();
   renderBlogs();
   renderLibrary();
+  renderOurTeam();
+  renderForums();
+  renderInbox();
   navigate('home');
   lucide.createIcons();
 }
