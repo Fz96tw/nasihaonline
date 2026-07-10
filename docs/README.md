@@ -1,3 +1,3 @@
-# Nasiha_Drafts
+# nasihaonline
 
-[Nasiha Charter](https://github.com/Fz96tw/Nasiha_Drafts/blob/main/Nasiha_Charter.md)
+[Nasiha Charter](https://github.com/Fz96tw/nasihaonline/blob/main/docs/Nasiha_Charter.md)
