@@ -137,10 +137,10 @@ Each domain below states: purpose, functional requirements grounded in the proto
 
 ### 4.1 Authentication
 
-- Register (post-approval only — no self-serve signup), login, logout, forgot/reset password, email verification, session management.
-- Demo/dev-only affordance in the prototype (quick-login as each tier) must **not** ship to production; replace with real credential auth.
-- Server-side auth checks + RBAC on every member/admin route.
-- Entities: `User`, `Account`, `Session`, `VerificationToken`.
+- Login, logout, forgot/reset password, email verification, and session management are handled by **Clerk** (managed auth provider, free up to 50K monthly active users) rather than self-hosted. Registration remains post-approval only, no self-serve signup: Clerk's public sign-up is disabled at the project level, so the only way a Clerk account is ever created is server-side, triggered by an admin's approval action (§4.2) — never by a visitor hitting Clerk's hosted sign-up UI directly.
+- Demo/dev-only affordance in the prototype (quick-login as each tier) must **not** ship to production; replace with real Clerk-backed auth.
+- Server-side auth checks (Clerk session verification) + RBAC (Nasiha's own role check) on every member/admin route.
+- Entities: `User` (add `clerkUserId`, kept in sync with Clerk via webhook — e.g. `user.created`/`user.updated`). No local `Account`/`Session`/`VerificationToken` tables are needed: unlike a self-hosted Auth.js setup, Clerk hosts credentials and sessions itself, so Nasiha's own DB only stores the business-facing `User`/`Profile` records linked by `clerkUserId`.
 
 ### 4.2 Membership & Applications
 
@@ -514,7 +514,7 @@ Full spec lives in `ui-system.md`; key tokens are restated here since they gate 
 Core tables (system-design.md, confirmed against prototype's implied entities):
 
 ```
-users, accounts, sessions, verification_tokens,
+users,
 profiles, skills, profile_skills,
 membership_applications, application_reviews, application_attachments,
 contribution_ledger, contribution_events, contribution_rules,
@@ -530,7 +530,7 @@ code_of_conduct_violations, privacy_data_requests,
 announcements
 ```
 
-(`accounts`/`sessions`/`verification_tokens` are Auth.js's standard tables, §4.1; `contribution_rules` also appears in §7.3 as a "recommended addition" — the two references describe the same table, not two different ones.)
+(`users.clerkUserId` links each local `User` to its Clerk-hosted account, §4.1 — no local `accounts`/`sessions`/`verification_tokens` tables are needed since Clerk manages credentials and sessions itself, unlike a self-hosted Auth.js setup; `contribution_rules` also appears in §7.3 as a "recommended addition" — the two references describe the same table, not two different ones.)
 
 ### 7.1 Notes from prototype reconciliation
 
@@ -575,7 +575,7 @@ Indexed domains: `profiles`, `posts`, `knowledge_items`, `events`. Sync strategy
 | Realtime | Socket.IO + Redis pub/sub — **not required for Inbox messaging** (§4.7, which is request/response, not live chat); retained in the stack only if/when a genuinely realtime feature is added (e.g. live presence or push-on-arrival for Inbox items, currently handled via the Notification domain instead) |
 | Search | Meilisearch |
 | Object storage | MinIO (avatars/, documents/, attachments/, event-assets/ buckets; metadata always in Postgres; serve via signed URLs) |
-| Auth | Auth.js |
+| Auth | Clerk (managed; free up to 50K MAU — public sign-up disabled, accounts provisioned only via the approval flow, §4.1) |
 | Rich text editor | Tiptap (blog) |
 | Calendar UI | FullCalendar |
 | Notifications | Homegrown (`Notification`/`NotificationPreference` tables, in-app feed + preference API, digest batching via BullMQ) + Resend (email) — no third-party notification vendor; Novu was evaluated and dropped since its main differentiator (built-in digest engine) isn't used, see §4.10 |
@@ -583,7 +583,7 @@ Indexed domains: `profiles`, `posts`, `knowledge_items`, `events`. Sync strategy
 | Payments | Stripe (`/donate`, §4.14 — no relationship to `ContributionLedger` or `users.tier`; scoped to Phase 1, §10) |
 | Deployment | Docker Compose initially → Kubernetes later |
 
-Security requirements: RBAC, CSRF protection, rate limiting (Redis-backed), upload validation, audit logs, server-side auth checks on every protected route — enforced via Auth.js + Zod + Redis rate limiter.
+Security requirements: RBAC, CSRF protection, rate limiting (Redis-backed), upload validation, audit logs, server-side auth checks on every protected route — enforced via Clerk (session verification) + Zod + Redis rate limiter.
 
 ---
 
@@ -605,7 +605,7 @@ The plan below regroups work so each phase ships a coherent, demonstrable slice 
 
 | Phase | Scope | Demonstrable outcome | New in tech stack | Prototype coverage |
 |---|---|---|---|---|
-| **1** | Real auth (login only); Application form → admin review queue → approve/reject with tier assignment (creates the real `User`); Our Team page (public, admin CRUD); Donations (`/donate` + `/admin/donations`, no relationship to ledger/tier per §4.14); site-wide educational disclaimer + Code of Conduct acceptance checkbox at application submission; **Dashboard shell** (zero-state widgets) and **Settings shell** (password change only) | A visitor applies, an admin approves and assigns a tier, the approved applicant logs in with real credentials and lands on a working (if mostly empty) Dashboard — and a visitor can already donate. This is the front door — every later phase needs real member accounts, and this is the only phase that creates them. Donations rides along since it's a standalone public page with no dependency on (or dependents in) any other domain, so pulling it forward costs nothing structurally. | Foundational layer (Next.js/TS/Tailwind/shadcn, Prisma/PostgreSQL, Redis, Docker Compose); Auth.js; React Hook Form + Zod; AdminJS (application review queue, Team CRUD); MinIO (`avatars/` bucket, for Our Team photos); Resend (application-confirmation + approval/welcome email); **Stripe** (`/donate`) | Application form UI exists; admin review UI, Our Team page, Donations page, and disclaimer/CoC acceptance are all net-new |
+| **1** | Real auth (login only); Application form → admin review queue → approve/reject with tier assignment (creates the real `User`); Our Team page (public, admin CRUD); Donations (`/donate` + `/admin/donations`, no relationship to ledger/tier per §4.14); site-wide educational disclaimer + Code of Conduct acceptance checkbox at application submission; **Dashboard shell** (zero-state widgets) and **Settings shell** (password change only) | A visitor applies, an admin approves and assigns a tier, the approved applicant logs in with real credentials and lands on a working (if mostly empty) Dashboard — and a visitor can already donate. This is the front door — every later phase needs real member accounts, and this is the only phase that creates them. Donations rides along since it's a standalone public page with no dependency on (or dependents in) any other domain, so pulling it forward costs nothing structurally. | Foundational layer (Next.js/TS/Tailwind/shadcn, Prisma/PostgreSQL, Redis, Docker Compose); Clerk (managed auth, replacing Auth.js — public sign-up disabled); React Hook Form + Zod; AdminJS (application review queue, Team CRUD); MinIO (`avatars/` bucket, for Our Team photos); Resend (application-confirmation + approval/welcome email); **Stripe** (`/donate`) | Application form UI exists; admin review UI, Our Team page, Donations page, and disclaimer/CoC acceptance are all net-new |
 | **2** | Profile (edit, avatar upload, directory visibility prefs); Member Directory (search, tier filter, respects visibility) | Members can find and present themselves to each other in the Directory — the entry point every Inbox interaction in Phase 3 originates from. | Meilisearch (first search index — profiles); BullMQ (DB-write → queue → search-index-sync worker, per §7.2); TanStack Query + Zustand (directory list/filter state) | Directory UI exists in prototype; avatar-upload and directory-preference logic are net-new |
 | **3** | Contribution Ledger (log-contribution, peer/admin confirmation, auto-post rules); Inbox (send message / request meeting from Directory cards, accept/decline/reschedule) | The core knowledge-exchange loop: a member finds another in the Directory, requests a consultation, it's accepted, hours move on the ledger. **Dashboard's Hours-balance widget goes live.** | Homegrown Notification API (in-app feed for new Inbox items — no Socket.IO needed, per §8's explicit note that Inbox is request/response, not live chat) | Ledger UI/read-model and Directory "Connect" stub exist; ledger write workflows, Inbox list/detail UI, and meeting-accept→ledger linkage are all net-new |
 | **4** | Events & Calendar (public listing, member calendar, RSVP, submit-event); Attendance recording → auto-earn ledger transaction on event host | Hosting an event now closes the earn side of the ledger loop opened in Phase 3 — end-to-end earn *and* spend both demonstrable together. **Dashboard's upcoming-events widget goes live.** | FullCalendar | Full public + member calendar UI exists; RSVP/submit-event and the attendance→ledger auto-earn trigger are net-new |
