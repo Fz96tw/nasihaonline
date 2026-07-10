@@ -601,9 +601,6 @@ Security requirements: RBAC, CSRF protection, rate limiting (Redis-backed), uplo
 ---
 
 ## 10. Phased Delivery Plan
-
-The original system-design.md phase structure grouped work by technical layer (auth → applications/ledger → events → inbox → content → admin) but didn't hold up under two checks: (1) does each phase produce something a stakeholder can actually see working end-to-end, and (2) does each phase's output unblock the next one, rather than assuming data that doesn't exist yet. Concretely, the original Phase 1 included a dashboard showing Hours balance and member data, but the ledger (Phase 2) and the admin approval flow that creates real member accounts (also Phase 2) didn't exist yet — Phase 1 wasn't actually demonstrable on its own. The plan also never scheduled five full feature domains (Member Directory, Our Team, Discussion Forums, Donations, Trust & Safety/Compliance), left Inbox (directory-originated only, per §4.7) scheduled before Directory existed, and pushed the disclaimer/Code of Conduct acceptance — called out elsewhere as hard pre-launch requirements — to the last phase, where they'd have to be retrofitted onto every earlier screen instead of built in once.
-
 The plan below regroups work so each phase ships a coherent, demonstrable slice and unblocks the next by construction. Stack rows list only what's **newly introduced** in that phase; the foundational layer (Next.js 14/TypeScript/Tailwind/shadcn/ui, Prisma/PostgreSQL, Redis, Docker Compose, RBAC/CSRF/rate-limiting middleware) is established in Phase 1 and carries through every later phase without being repeated.
 
 | Phase | Scope | Demonstrable outcome | New in tech stack | Prototype coverage |
