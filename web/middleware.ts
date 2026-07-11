@@ -1,54 +1,86 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 
 const CSRF_COOKIE = "csrf_token";
 const CSRF_HEADER = "x-csrf-token";
-const SESSION_COOKIE = "session";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
-function isProtectedRoute(pathname: string) {
-  return pathname.startsWith("/api/protected");
+function isApiRoute(pathname: string) {
+  return pathname.startsWith("/api");
+}
+
+function isWebhookRoute(pathname: string) {
+  return pathname.startsWith("/api/webhooks");
+}
+
+function isProtectedApiRoute(pathname: string) {
+  return (
+    pathname.startsWith("/api/protected") || pathname.startsWith("/api/admin")
+  );
+}
+
+function isProtectedPageRoute(pathname: string) {
+  return pathname.startsWith("/dashboard") || pathname.startsWith("/admin");
 }
 
 /**
- * Placeholder session check — real auth (Clerk, per PRD §8) plugs in here
- * in the next objective without changing the surrounding middleware pattern.
+ * Middleware-level auth is a coarse gate only (redirect/401 on no session).
+ * The authoritative check — session + Nasiha role, via requireUser()/
+ * requireRole() in lib/auth.ts — happens in each route handler and
+ * protected page/layout. Relying on middleware alone was the shape of a
+ * disclosed Clerk bypass (GHSA-vqx2-fgx2-5wq9); this two-layer setup is the
+ * defense-in-depth pattern Clerk now recommends.
  */
-function hasValidSession(request: NextRequest) {
-  return Boolean(request.cookies.get(SESSION_COOKIE)?.value);
-}
-
-export function middleware(request: NextRequest) {
+export default clerkMiddleware(async (auth, request) => {
   const { pathname } = request.nextUrl;
+
+  if (isApiRoute(pathname) && !isWebhookRoute(pathname)) {
+    if (!SAFE_METHODS.has(request.method)) {
+      const cookieToken = request.cookies.get(CSRF_COOKIE)?.value;
+      const headerToken = request.headers.get(CSRF_HEADER);
+
+      if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+        return NextResponse.json(
+          { error: "Invalid CSRF token" },
+          { status: 403 },
+        );
+      }
+    }
+  }
+
+  if (isProtectedApiRoute(pathname)) {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  }
+
+  if (isProtectedPageRoute(pathname)) {
+    const { userId, redirectToSignIn } = await auth();
+    if (!userId) {
+      return redirectToSignIn({ returnBackUrl: request.url });
+    }
+  }
+
   const response = NextResponse.next();
 
-  if (SAFE_METHODS.has(request.method)) {
-    if (!request.cookies.get(CSRF_COOKIE)) {
+  if (isApiRoute(pathname) && !isWebhookRoute(pathname)) {
+    if (SAFE_METHODS.has(request.method) && !request.cookies.get(CSRF_COOKIE)) {
       response.cookies.set(CSRF_COOKIE, crypto.randomUUID(), {
         httpOnly: false,
         sameSite: "strict",
         path: "/",
       });
     }
-  } else {
-    const cookieToken = request.cookies.get(CSRF_COOKIE)?.value;
-    const headerToken = request.headers.get(CSRF_HEADER);
-
-    if (!cookieToken || !headerToken || cookieToken !== headerToken) {
-      return NextResponse.json(
-        { error: "Invalid CSRF token" },
-        { status: 403 },
-      );
-    }
-  }
-
-  if (isProtectedRoute(pathname) && !hasValidSession(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   return response;
-}
+});
 
 export const config = {
-  matcher: "/api/:path*",
+  matcher: [
+    "/((?!_next|.*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico)).*)",
+    "/(api|trpc)(.*)",
+  ],
 };

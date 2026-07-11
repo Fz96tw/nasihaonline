@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
+import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 
 /**
- * Reference protected route. The 401-on-missing-session check itself lives
- * in middleware.ts (isProtectedRoute) — this handler only runs once that
- * check has already passed.
+ * Reference protected route. Middleware only checks that a Clerk session
+ * exists (see middleware.ts); this handler does the authoritative check —
+ * real session verification plus the local User lookup — via requireUser().
  */
 export async function GET() {
-  return NextResponse.json({ id: "placeholder", role: "member" });
+  try {
+    const user = await requireUser();
+    return NextResponse.json({ id: user.id, email: user.email, role: user.role });
+  } catch (error) {
+    if (error instanceof AuthError) return authErrorResponse(error);
+    throw error;
+  }
 }
