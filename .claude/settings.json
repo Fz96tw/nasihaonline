@@ -1,24 +1,26 @@
 {
-  "PreToolUse": [
-    {
-      "matcher": "Write|Edit|NotebookEdit",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "sid=$(jq -r '.session_id // empty' < /dev/stdin); [ -z \"$sid\" ] && exit 0; mkdir -p \"${CLAUDE_PROJECT_DIR}/.claude/.pw-state\"; [ -f \"${CLAUDE_PROJECT_DIR}/.claude/.pw-state/$sid\" ] && exit 0; echo 'PLANWRIGHT ALIGNMENT GATE: call planwright_check_alignment with your agentRunId before editing files in this session.' >&2; exit 2"
-        }
-      ]
-    }
-  ],
-  "PostToolUse": [
-    {
-      "matcher": "mcp__planwright__planwright_check_alignment",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "sid=$(jq -r '.session_id // empty' < /dev/stdin); [ -z \"$sid\" ] && exit 0; mkdir -p \"${CLAUDE_PROJECT_DIR}/.claude/.pw-state\"; touch \"${CLAUDE_PROJECT_DIR}/.claude/.pw-state/$sid\""
-        }
-      ]
-    }
-  ]
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sid=$(jq -r '.session_id // empty' < /dev/stdin); [ -z \"$sid\" ] && exit 0; mkdir -p \"${CLAUDE_PROJECT_DIR}/.claude/.pw-state\"; [ -f \"${CLAUDE_PROJECT_DIR}/.claude/.pw-state/$sid\" ] && exit 0; echo 'PLANWRIGHT ALIGNMENT GATE: call planwright_check_alignment with your agentRunId before editing files in this session.' >&2; exit 2"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__planwright__planwright_check_alignment",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sid=$(jq -r '.session_id // empty' < /dev/stdin); [ -z \"$sid\" ] && exit 0; mkdir -p \"${CLAUDE_PROJECT_DIR}/.claude/.pw-state\"; touch \"${CLAUDE_PROJECT_DIR}/.claude/.pw-state/$sid\""
+          }
+        ]
+      }
+    ]
+  }
 }
