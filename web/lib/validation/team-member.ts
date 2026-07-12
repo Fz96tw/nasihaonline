@@ -23,9 +23,12 @@ export const teamMemberFormDataSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(120),
   bio: z.string().trim().min(1, "Bio is required").max(2000),
   active: z.enum(["true", "false"]).transform((v) => v === "true"),
+  // FormData.get() returns null (not undefined) for an absent key — e.g.
+  // whenever the "remove photo" checkbox isn't checked — so this must
+  // accept null as well as undefined, not just .optional().
   removePhoto: z
     .enum(["true", "false"])
-    .optional()
+    .nullish()
     .transform((v) => v === "true"),
 });
 

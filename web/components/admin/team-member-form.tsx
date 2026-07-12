@@ -83,7 +83,11 @@ export function TeamMemberForm({
       if (!res.ok) {
         const payload = await res.json().catch(() => null);
         throw new Error(
-          typeof payload?.error === "string" ? payload.error : "Request failed",
+          typeof payload?.error === "string"
+            ? payload.error
+            : payload?.error
+              ? JSON.stringify(payload.error)
+              : "Request failed",
         );
       }
       router.push("/admin/team");
