@@ -58,20 +58,21 @@ This starts the Next.js app, PostgreSQL, Redis, MinIO, Meilisearch, and the sear
 
 ## Getting Started (local, without Docker)
 
-Requires local PostgreSQL, Redis, and Meilisearch instances. Copy `.env.example` to `.env` and adjust `DATABASE_URL` / `REDIS_URL` / `MEILI_HOST` if needed, then:
+Requires local PostgreSQL and Redis instances. Copy `.env.example` to `.env` and adjust `DATABASE_URL` / `REDIS_URL` if needed, then:
 
 ```bash
 npm install
 npx prisma migrate dev
-npm run dev       # in one terminal
-npm run worker    # in another — syncs the Meilisearch index (see below)
+npm run dev
 ```
+
+`npm run dev` only runs the Next.js dev server — the search-index worker is expected to run via the docker-compose `worker` service (`docker compose up worker meilisearch`, alongside your local Postgres/Redis). Profile edits won't reach Directory search without it running somewhere; see below.
 
 ## Search (Meilisearch)
 
-Directory search (§7.2/§9) is powered by [Meilisearch](https://www.meilisearch.com), matching the docker-compose `meilisearch` service. Profile writes never touch Meilisearch inline in the request path — `PATCH /api/profile`, avatar upload, and avatar delete each enqueue a BullMQ job (`lib/queues/search-index-queue.ts`), and the standalone worker (`npm run worker`, `scripts/worker.ts`) is what actually reads the DB and updates the `profiles` index. Only profiles with `listInDirectory = true` and a Directory-eligible tier are present in the index.
+Directory search (§7.2/§9) is powered by [Meilisearch](https://www.meilisearch.com), matching the docker-compose `meilisearch` service. Profile writes never touch Meilisearch inline in the request path — `PATCH /api/profile`, avatar upload, and avatar delete each enqueue a BullMQ job (`lib/queues/search-index-queue.ts`), and the standalone worker (its own `worker` service in docker-compose, running `scripts/worker.ts`) is what actually reads the DB and updates the `profiles` index. Only profiles with `listInDirectory = true` and a Directory-eligible tier are present in the index.
 
-- `npm run worker` — long-running process; must be running for profile edits to show up in Directory search. Configures the index's searchable/filterable attributes on boot.
+- `npm run worker` — runs the worker process directly; this is what the docker-compose `worker` service invokes. Configures the index's searchable/filterable attributes on boot.
 - `npm run reindex:profiles` — one-off backfill; indexes all currently-eligible profiles. Needed once after standing up Meilisearch for the first time, since existing profiles predate the sync trigger.
 
 ## Reference API routes
