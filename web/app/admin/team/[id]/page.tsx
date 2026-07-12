@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { withSignedPhotoUrl } from "@/lib/team";
+import { withSignedPhotoUrl } from "@/lib/team-server";
 import { TeamMemberForm } from "@/components/admin/team-member-form";
 
 export default async function EditTeamMemberPage({ params }: { params: { id: string } }) {

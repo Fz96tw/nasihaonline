@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
-import { withSignedPhotoUrls } from "@/lib/team";
+import { withSignedPhotoUrls } from "@/lib/team-server";
 import { TeamMemberCard } from "@/components/team/team-member-card";
 
 export const metadata: Metadata = {

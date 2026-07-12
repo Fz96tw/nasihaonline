@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { withSignedPhotoUrls } from "@/lib/team";
+import { withSignedPhotoUrls } from "@/lib/team-server";
 import { Button } from "@/components/ui/button";
 import { TeamMemberTable } from "@/components/admin/team-member-table";
 

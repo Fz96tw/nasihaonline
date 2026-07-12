@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireRole } from "@/lib/auth";
 import { Role } from "@/lib/generated/prisma/enums";
 import { db } from "@/lib/db";
-import { withSignedPhotoUrls } from "@/lib/team";
+import { withSignedPhotoUrls } from "@/lib/team-server";
 import { teamMemberFormDataSchema } from "@/lib/validation/team-member";
 import { uploadTeamPhoto, UploadValidationError } from "@/lib/storage";
 

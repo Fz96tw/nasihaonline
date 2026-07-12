@@ -1,3 +1,4 @@
+import "server-only";
 import { Client as MinioClient } from "minio";
 
 const BUCKET_AVATARS = process.env.MINIO_BUCKET_AVATARS || "avatars";

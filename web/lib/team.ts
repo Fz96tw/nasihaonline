@@ -1,6 +1,5 @@
 import { TeamRoleBadge } from "@/lib/generated/prisma/enums";
 import type { TeamMemberModel } from "@/lib/generated/prisma/models/TeamMember";
-import { getSignedPhotoUrl } from "@/lib/storage";
 
 export const TEAM_ROLE_LABELS: Record<TeamRoleBadge, string> = {
   [TeamRoleBadge.founder]: "Founder",
@@ -27,20 +26,3 @@ export function getInitials(name: string): string {
 export type TeamMemberWithPhotoUrl = Omit<TeamMemberModel, "photoUrl"> & {
   photoUrl: string | null;
 };
-
-/**
- * TeamMember.photoUrl stores a MinIO object key, not a servable URL — this
- * resolves it to a time-limited signed URL for API responses/rendering.
- */
-export async function withSignedPhotoUrl(
-  member: TeamMemberModel,
-): Promise<TeamMemberWithPhotoUrl> {
-  const photoUrl = await getSignedPhotoUrl(member.photoUrl);
-  return { ...member, photoUrl };
-}
-
-export async function withSignedPhotoUrls(
-  members: TeamMemberModel[],
-): Promise<TeamMemberWithPhotoUrl[]> {
-  return Promise.all(members.map(withSignedPhotoUrl));
-}
