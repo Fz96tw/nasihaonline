@@ -192,7 +192,7 @@ This is the platform's differentiating mechanic. system-design.md's generic "Con
 Every ledger transaction has a `status`: `pending` → `confirmed` | `rejected`. Only `confirmed` transactions (including auto-posted ones, which are confirmed by construction) count toward the balance and lifetime totals; `pending` items are visible to the member as "awaiting confirmation," and `rejected` items remain in the audit trail (never deleted) but contribute 0 to the balance.
 
 - **Auto-posted (no human confirmation step, because the system already has ground truth):**
-  - Hosting an event with recorded `Attendance` (§4.6) → auto-earn for the host on event completion, using the matching `ContributionRule` rate.
+  - Hosting an event with recorded `Attendance` (§4.6) → auto-earn for the host on event completion, using the matching `ContributionRule` rate. Single host only — see §11's open question on multi-host/co-presenter attribution.
   - An **accepted meeting request** (§4.7, Inbox) → auto-spend for the requester at acceptance time (e.g., Expert Consultation, 1.0 hr).
 - **Self-reported, then confirmed:** everything without a system-of-record trigger (curating a resource, an ad-hoc knowledge discussion not tied to a formal Event, administrative volunteer work, etc.) is submitted by the member via the "Log Contribution" form (activity type, optional counterpart, optional note) and enters as `pending`.
   - If a **counterpart** is named on the submission, that counterpart can confirm or reject it directly (peer confirmation) — no admin involvement needed for routine peer-to-peer activity.
@@ -224,7 +224,7 @@ Routes: `POST /api/contributions/earn`, `POST /api/contributions/spend`, `GET /a
 - Event submission by members ("Submit Event" action — implies an event-creation permission, likely gated to Active tier or above — **needs explicit rule**, see §11).
 - **De-identification confirmation (new):** submitting a **Case Discussion** type event requires an explicit checkbox — "I confirm no identifiable patient information will be shared" — before the event can be published. This mirrors the same requirement on Knowledge Library case-study submissions (§4.9) and is a hard requirement from the Charter's Code of Conduct and Risk_and_Liability.md, not optional guidance.
 - Entities: `Event` (add `meetingUrl`, `deidentificationConfirmed`), `EventRecurrence`, `RSVP`, `Attendance`.
-- Recording `Attendance` for an event's host is the trigger for an auto-posted Knowledge Hours earn transaction (§4.4) — no separate manual step needed for hosting.
+- Recording `Attendance` for an event's host is the trigger for an auto-posted Knowledge Hours earn transaction (§4.4) — no separate manual step needed for hosting. `host` is single-actor only (see §11's open question on multi-host/co-presenter attribution).
 - UI tool: FullCalendar (per system-design.md).
 - Routes: `GET /api/events`, `POST /api/events`, `PATCH /api/events/:id`, `POST /api/events/:id/rsvp`.
 - Public route: `/events`. Member route: `/calendar`.
@@ -630,6 +630,7 @@ The plan below regroups work so each phase ships a coherent, demonstrable slice 
 8. ~~**Video preview in Library:** system-design.md specifies PDF.js for document preview but is silent on video playback — needs a decision.~~ **Resolved:** recorded lectures are hosted on Nasiha's own YouTube channel and embedded via YouTube's player (§4.9) — no MinIO video storage or custom player needed.
 9. **Our Team content gap:** the page's structure and admin CRUD are specified (§4.12), but real content for the **Partner** role is not — no partner names, titles, bios, or photos exist anywhere in the prototype or source docs. Founder/Board Member content exists from the previously-removed homepage section (git `151a8b2`: Dr. Uzma Khan, Nadeem Haider, Nighat Abidi) and can seed those three records, but Partners must be supplied by the org before this page can launch with real content.
 10. **Moderator role scoping:** Library Stewards are described as "ideally one per specialty area at scale" (§4.9), but the data model has a single flat `moderator` role with no specialty/domain scoping — a Steward assigned informally to Cardiology could just as easily review or publish a Law submission. Needs a decision: acceptable v1 limitation (any moderator can act on any domain), or does the role need a `scope` field before launch?
+11. **Multi-host / co-presenter attribution:** `Event.host` (§4.6) and `ContributionEvent.actorId` (§4.4) are both single-actor fields — a webinar co-presented by two members has no way to auto-credit both hosts; only whoever is recorded as *the* host gets the auto-posted earn transaction on `Attendance` completion. The existing workaround (each co-presenter self-reporting their own entry and naming the other as counterpart) is peer *confirmation*, not shared authorship credit, and doesn't cover the auto-posted host path at all once §4.6's Events domain is built. Needs a decision: extend `Event`/`ContributionEvent` to support multiple hosts/actors, or accept single-host-only as a documented v1 limitation.
 
 ---
 
