@@ -43,6 +43,8 @@ services:
       NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: /dashboard
       NEXT_PUBLIC_CLERK_AFTER_SIGN_OUT_URL: /sign-in
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Nasiha <no-reply@nasihaonline.org>}
     volumes:
       - ./web:/app
       - /app/node_modules

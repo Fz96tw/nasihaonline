@@ -1,0 +1,400 @@
+"use client";
+
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { CODE_OF_CONDUCT_PRINCIPLES } from "@/lib/legal";
+import {
+  AdmissionPhase,
+  CareerStage,
+  ApplicationAvailability,
+  AreaOfInterest,
+} from "@/lib/generated/prisma/enums";
+import { ADMISSION_PHASE_LABELS, professionalReferenceRequired } from "@/lib/admission-phase";
+import { getCsrfToken } from "@/lib/csrf-client";
+import {
+  applicationSchema,
+  type ApplicationFormValues,
+  CAREER_STAGE_LABELS,
+  AVAILABILITY_LABELS,
+  AREA_OF_INTEREST_LABELS,
+} from "@/lib/validation/application";
+
+const emptyValues: ApplicationFormValues = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  professionalTitle: "",
+  careerStage: "" as CareerStage,
+  availability: "" as ApplicationAvailability,
+  areaOfInterest: "" as AreaOfInterest,
+  countryRegion: "",
+  referral: "",
+  whyJoin: "",
+  expertiseToShare: "",
+  topicsToLearn: "",
+  professionalReferenceName: "",
+  professionalReferenceContact: "",
+  codeOfConductAccepted: false,
+};
+
+export function JoinForm({ phase }: { phase: AdmissionPhase }) {
+  const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const referenceRequired = professionalReferenceRequired(phase);
+
+  const form = useForm<ApplicationFormValues>({
+    resolver: zodResolver(applicationSchema(phase)),
+    defaultValues: emptyValues,
+    mode: "onTouched",
+    reValidateMode: "onChange",
+  });
+
+  async function onSubmit(values: ApplicationFormValues) {
+    setSubmitError(null);
+    try {
+      const csrfToken = await getCsrfToken();
+      const res = await fetch("/api/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        body: JSON.stringify(values),
+      });
+      if (!res.ok) throw new Error("Submission failed");
+      setSubmitted(true);
+    } catch {
+      setSubmitError("Something went wrong submitting your application. Please try again.");
+    }
+  }
+
+  if (submitted) {
+    return (
+      <div className="mx-auto max-w-xl rounded-[10px] border bg-card p-8 text-center shadow-sm">
+        <h1 className="text-2xl font-bold tracking-tight">Application submitted</h1>
+        <p className="mt-2 text-muted-foreground">
+          Application submitted — the Board will review within 7 days. Check your email
+          for a confirmation.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <Form {...form}>
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="mx-auto flex max-w-xl flex-col gap-6 p-8"
+        noValidate
+      >
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Membership Application</h1>
+          <p className="text-sm text-muted-foreground">
+            Current Phase:{" "}
+            <span className="font-medium text-foreground">{ADMISSION_PHASE_LABELS[phase]}</span>
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="firstName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>First name</FormLabel>
+                <FormControl>
+                  <Input placeholder="Sarah" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="lastName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Last name</FormLabel>
+                <FormControl>
+                  <Input placeholder="Al-Rashidi" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <FormField
+          control={form.control}
+          name="email"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Email address</FormLabel>
+              <FormControl>
+                <Input type="email" placeholder="you@hospital.org" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="professionalTitle"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Professional title / Specialty</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="e.g. Cardiologist, Medical Student, Public Health Researcher"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="careerStage"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Career stage</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select your career stage" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {Object.values(CareerStage).map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {CAREER_STAGE_LABELS[value]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="availability"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Availability</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="How can you participate?" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {Object.values(ApplicationAvailability).map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {AVAILABILITY_LABELS[value]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="areaOfInterest"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Area of interest</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an area" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {Object.values(AreaOfInterest).map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {AREA_OF_INTEREST_LABELS[value]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="countryRegion"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Country / Region</FormLabel>
+              <FormControl>
+                <Input placeholder="e.g. Pakistan, United Kingdom, Nigeria" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="referral"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Referral (optional)</FormLabel>
+              <FormControl>
+                <Input placeholder="Name of the Nasiha member who referred you" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="whyJoin"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Why do you want to join Nasiha?</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="Tell us about yourself and what you hope to contribute to and learn from the community…"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="expertiseToShare"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Areas of expertise you&rsquo;d like to share</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="e.g. Cardiology, ECG interpretation, clinical research methodology…"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="topicsToLearn"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Topics you most want to learn</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="e.g. Oncology, palliative care, healthcare leadership…"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <div className="flex flex-col gap-4 rounded-[10px] border p-4">
+          <div>
+            <p className="text-sm font-medium">
+              Professional reference {referenceRequired ? "" : "(optional for now)"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {referenceRequired
+                ? "Required during the Open Applications phase: name and contact info of someone who can vouch for your professional standing."
+                : "Not required during the current phase, but collected now so it's already on file when Open Applications begins."}
+            </p>
+          </div>
+          <FormField
+            control={form.control}
+            name="professionalReferenceName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Reference name</FormLabel>
+                <FormControl>
+                  <Input placeholder="Dr. Jane Doe" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="professionalReferenceContact"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Reference contact info</FormLabel>
+                <FormControl>
+                  <Input placeholder="Email or phone number" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <FormField
+          control={form.control}
+          name="codeOfConductAccepted"
+          render={({ field }) => (
+            <FormItem>
+              <div className="rounded-[10px] border p-4">
+                <p className="text-sm font-medium">Code of Conduct</p>
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                  {CODE_OF_CONDUCT_PRINCIPLES.map((principle) => (
+                    <li key={principle}>{principle}</li>
+                  ))}
+                </ul>
+                <label className="mt-3 flex items-start gap-2 text-sm">
+                  <FormControl>
+                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                  <span>I have read and agree to uphold the Nasiha Code of Conduct.</span>
+                </label>
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {submitError && <p className="text-sm text-destructive">{submitError}</p>}
+
+        <Button type="submit" size="lg" disabled={form.formState.isSubmitting}>
+          {form.formState.isSubmitting ? "Submitting…" : "Submit Application"}
+        </Button>
+      </form>
+    </Form>
+  );
+}

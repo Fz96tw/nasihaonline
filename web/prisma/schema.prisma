@@ -31,3 +31,77 @@ model User {
 
   @@map("users")
 }
+
+// Rollout phase for public applications (PRD §3.2). Gates whether the
+// application form's professional-reference field is required.
+enum AdmissionPhase {
+  founding_cohort
+  referral_driven_growth
+  open_applications
+}
+
+// Singleton row (fixed id = 1) holding site-wide, admin-editable settings.
+// Extend with more columns as future settings (e.g. inactivity threshold,
+// §3.4) are added, rather than introducing a generic key/value table.
+model SiteSettings {
+  id             Int            @id @default(1)
+  admissionPhase AdmissionPhase @default(referral_driven_growth)
+  updatedAt      DateTime       @updatedAt
+
+  @@map("site_settings")
+}
+
+enum CareerStage {
+  expert
+  early_career
+  student
+}
+
+enum ApplicationAvailability {
+  virtual_meeting
+  in_person
+  online_review
+}
+
+enum AreaOfInterest {
+  healthcare
+  science
+  law
+  business
+  it
+}
+
+enum ApplicationStatus {
+  submitted
+  under_review
+  approved
+  rejected
+}
+
+// Public membership application (PRD §3.1). professionalReference* is
+// collected unconditionally but only *required* once admissionPhase =
+// open_applications — enforced in application code (lib/validation), not
+// the DB, since the requirement changes at runtime via SiteSettings.
+model MembershipApplication {
+  id                            String                   @id @default(cuid())
+  firstName                     String
+  lastName                      String
+  email                         String
+  professionalTitle             String
+  careerStage                   CareerStage
+  availability                  ApplicationAvailability
+  areaOfInterest                AreaOfInterest
+  countryRegion                 String
+  referral                      String?
+  whyJoin                       String
+  expertiseToShare              String
+  topicsToLearn                 String
+  professionalReferenceName     String?
+  professionalReferenceContact  String?
+  codeOfConductAcceptedAt       DateTime
+  status                        ApplicationStatus        @default(submitted)
+  createdAt                     DateTime                 @default(now())
+  updatedAt                     DateTime                 @updatedAt
+
+  @@map("membership_applications")
+}
