@@ -21,7 +21,11 @@ function isProtectedApiRoute(pathname: string) {
 }
 
 function isProtectedPageRoute(pathname: string) {
-  return pathname.startsWith("/dashboard") || pathname.startsWith("/admin");
+  return (
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/settings")
+  );
 }
 
 /**
