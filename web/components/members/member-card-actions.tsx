@@ -20,24 +20,26 @@ export function MemberCardActions() {
   }
 
   return (
-    <div className="flex gap-2">
+    <div className="flex justify-end gap-2">
       <Button
         variant="outline"
-        size="sm"
-        className="flex-1"
+        size="icon"
+        className="h-8 w-8"
+        title="Send Message"
+        aria-label="Send Message"
         onClick={() => setComingSoon(true)}
       >
-        <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-        Send Message
+        <MessageSquare className="h-3.5 w-3.5" />
       </Button>
       <Button
         variant="outline"
-        size="sm"
-        className="flex-1"
+        size="icon"
+        className="h-8 w-8"
+        title="Request Meeting"
+        aria-label="Request Meeting"
         onClick={() => setComingSoon(true)}
       >
-        <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />
-        Request Meeting
+        <CalendarPlus className="h-3.5 w-3.5" />
       </Button>
     </div>
   );

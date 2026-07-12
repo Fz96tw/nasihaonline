@@ -27,6 +27,9 @@ export async function SiteHeader() {
         </span>
       </Link>
       <Button variant="ghost" size="sm" asChild>
+        <Link href="/about">About</Link>
+      </Button>
+      <Button variant="ghost" size="sm" asChild>
         <Link href="/our-team">Our Team</Link>
       </Button>
       <Button variant="ghost" size="sm" asChild>
