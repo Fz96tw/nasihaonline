@@ -7,28 +7,28 @@ const TIERS = [
     tagline: "Full contributors",
     description:
       "Regular contributors via teaching, reviewing, or research. Full access plus governance voting rights.",
-    gradient: "from-primary to-primary-hover",
+    gradient: "from-blue-600 to-blue-900",
   },
   {
     name: "Associate",
     tagline: "Building momentum",
     description:
       "Newer members establishing their footing, growing toward Active status. Full community access.",
-    gradient: "from-success to-success/70",
+    gradient: "from-violet-600 to-violet-900",
   },
   {
     name: "Student / Trainee",
     tagline: "Future leaders",
     description:
       "Students and trainees with lighter contribution expectations. Full community access.",
-    gradient: "from-accent to-accent/70",
+    gradient: "from-cyan-600 to-cyan-900",
   },
   {
     name: "Friend of Nasiha",
     tagline: "Welcome, no strings",
     description:
       "No contribution obligation. Free/public content only — including the events calendar and recorded webinars.",
-    gradient: "from-muted-foreground to-foreground",
+    gradient: "from-gray-500 to-gray-700",
   },
 ];
 
