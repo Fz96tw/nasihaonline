@@ -3,9 +3,9 @@ import { Readable } from "node:stream";
 import { getAvatarObject } from "@/lib/storage";
 
 /**
- * Streams a team photo from MinIO through our own origin. See the comment
- * on getSignedPhotoUrl (lib/storage.ts) for why this proxy exists instead
- * of handing browsers a MinIO presigned URL directly.
+ * Streams a profile avatar from MinIO through our own origin. See the
+ * comment on getProfileAvatarUrl (lib/storage.ts) for why this proxy exists
+ * instead of handing browsers a MinIO presigned URL directly.
  */
 export async function GET(_request: Request, { params }: { params: { key: string[] } }) {
   const key = params.key.join("/");

@@ -50,13 +50,20 @@ model User {
 // the full Profile domain (PRD §4.3 — avatar upload, directory prefs, skills)
 // has a real record to extend rather than needing a backfill later.
 model Profile {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bio       String?
-  avatarUrl String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio            String?
+  // MinIO object key (not a servable URL — see getProfileAvatarUrl in lib/storage.ts),
+  // same convention as TeamMember.photoUrl.
+  avatarUrl      String?
+  countryRegion  String?
+  titleSpecialty String?
+  careerStage    String?
+  expertiseAreas String[] @default([])
+  learningTopics String[] @default([])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@map("profiles")
 }

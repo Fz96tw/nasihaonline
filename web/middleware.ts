@@ -16,7 +16,9 @@ function isWebhookRoute(pathname: string) {
 
 function isProtectedApiRoute(pathname: string) {
   return (
-    pathname.startsWith("/api/protected") || pathname.startsWith("/api/admin")
+    pathname.startsWith("/api/protected") ||
+    pathname.startsWith("/api/admin") ||
+    pathname.startsWith("/api/profile")
   );
 }
 
@@ -24,7 +26,8 @@ function isProtectedPageRoute(pathname: string) {
   return (
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/admin") ||
-    pathname.startsWith("/settings")
+    pathname.startsWith("/settings") ||
+    pathname.startsWith("/profile")
   );
 }
 

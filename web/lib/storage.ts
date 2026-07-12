@@ -1,8 +1,14 @@
 import "server-only";
 import { Client as MinioClient } from "minio";
+import sharp from "sharp";
 
 const BUCKET_AVATARS = process.env.MINIO_BUCKET_AVATARS || "avatars";
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB
+
+// Profile avatars are always resized/cropped to this square thumbnail before
+// storage — the original upload is never persisted or served at avatar size
+// (PRD §4.3/§9).
+const PROFILE_AVATAR_THUMBNAIL_PX = 256;
 
 let client: MinioClient | undefined;
 
@@ -54,12 +60,13 @@ function detectImageType(buffer: Buffer): { mime: string; ext: string } | null {
 }
 
 /**
- * Validates size + real (magic-byte) file type for team member photo
- * uploads, then stores the object in the avatars/ bucket. Returns the
- * object key to persist on TeamMember.photoUrl — not a browser-facing URL,
- * since signed URLs expire and must be minted per-request (see getSignedPhotoUrl).
+ * Shared size + real (magic-byte) file type validation for avatar-style
+ * image uploads (team photos, profile photos). Throws UploadValidationError
+ * with a message safe to surface inline next to the offending field.
  */
-export async function uploadTeamPhoto(file: File): Promise<string> {
+async function validateImageUpload(
+  file: File,
+): Promise<{ buffer: Buffer; mime: string; ext: string }> {
   if (file.size > MAX_UPLOAD_BYTES) {
     throw new UploadValidationError("File exceeds the 5MB size limit.");
   }
@@ -70,11 +77,47 @@ export async function uploadTeamPhoto(file: File): Promise<string> {
     throw new UploadValidationError("File must be a JPEG, PNG, or WebP image.");
   }
 
+  return { buffer, ...detected };
+}
+
+/**
+ * Validates size + real (magic-byte) file type for team member photo
+ * uploads, then stores the object in the avatars/ bucket. Returns the
+ * object key to persist on TeamMember.photoUrl — not a browser-facing URL,
+ * since signed URLs expire and must be minted per-request (see getSignedPhotoUrl).
+ */
+export async function uploadTeamPhoto(file: File): Promise<string> {
+  const { buffer, mime, ext } = await validateImageUpload(file);
+
   await ensureBucket(BUCKET_AVATARS);
-  const key = `team/${crypto.randomUUID()}.${detected.ext}`;
+  const key = `team/${crypto.randomUUID()}.${ext}`;
   const minio = getClient();
   await minio.putObject(BUCKET_AVATARS, key, buffer, buffer.length, {
-    "Content-Type": detected.mime,
+    "Content-Type": mime,
+  });
+  return key;
+}
+
+/**
+ * Validates a member's uploaded profile photo, then resizes/crops it
+ * server-side to a fixed square thumbnail (never storing/serving the
+ * original at avatar size, per PRD §4.3/§9) before storing it in the
+ * avatars/ bucket. Returns the object key to persist on Profile.avatarUrl.
+ */
+export async function uploadProfileAvatar(file: File): Promise<string> {
+  const { buffer } = await validateImageUpload(file);
+
+  const thumbnail = await sharp(buffer)
+    .rotate() // apply EXIF orientation before the fixed-size crop
+    .resize(PROFILE_AVATAR_THUMBNAIL_PX, PROFILE_AVATAR_THUMBNAIL_PX, { fit: "cover" })
+    .webp({ quality: 85 })
+    .toBuffer();
+
+  await ensureBucket(BUCKET_AVATARS);
+  const key = `profile/${crypto.randomUUID()}.webp`;
+  const minio = getClient();
+  await minio.putObject(BUCKET_AVATARS, key, thumbnail, thumbnail.length, {
+    "Content-Type": "image/webp",
   });
   return key;
 }
@@ -94,7 +137,18 @@ export function getSignedPhotoUrl(key: string | null): string | null {
   return `/api/team/photo/${key}`;
 }
 
-export async function getTeamPhotoObject(
+/** Same proxy rationale as getSignedPhotoUrl, for profile avatars. */
+export function getProfileAvatarUrl(key: string | null): string | null {
+  if (!key) return null;
+  return `/api/profile/photo/${key}`;
+}
+
+/**
+ * Fetches a stored avatar-style image (team photo or profile photo — same
+ * bucket, the key's prefix already disambiguates) for streaming through a
+ * proxy route.
+ */
+export async function getAvatarObject(
   key: string,
 ): Promise<{ stream: NodeJS.ReadableStream; contentType: string } | null> {
   await ensureBucket(BUCKET_AVATARS);
@@ -108,7 +162,7 @@ export async function getTeamPhotoObject(
   }
 }
 
-export async function deleteTeamPhoto(key: string | null): Promise<void> {
+export async function deleteAvatarObject(key: string | null): Promise<void> {
   if (!key) return;
   await ensureBucket(BUCKET_AVATARS);
   const minio = getClient();

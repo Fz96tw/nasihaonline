@@ -5,7 +5,7 @@ import { Role } from "@/lib/generated/prisma/enums";
 import { db } from "@/lib/db";
 import { withSignedPhotoUrls } from "@/lib/team-server";
 import { teamMemberFormDataSchema } from "@/lib/validation/team-member";
-import { deleteTeamPhoto, uploadTeamPhoto, UploadValidationError } from "@/lib/storage";
+import { deleteAvatarObject, uploadTeamPhoto, UploadValidationError } from "@/lib/storage";
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   try {
@@ -44,9 +44,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       }
       throw error;
     }
-    await deleteTeamPhoto(existing.photoUrl);
+    await deleteAvatarObject(existing.photoUrl);
   } else if (parsed.data.removePhoto) {
-    await deleteTeamPhoto(existing.photoUrl);
+    await deleteAvatarObject(existing.photoUrl);
     photoUrl = null;
   }
 
@@ -81,7 +81,7 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
   }
 
   await db.teamMember.delete({ where: { id: params.id } });
-  await deleteTeamPhoto(existing.photoUrl);
+  await deleteAvatarObject(existing.photoUrl);
 
   revalidatePath("/our-team");
 
