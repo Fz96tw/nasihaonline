@@ -26,7 +26,7 @@ export default async function MembersPage() {
       </div>
 
       <DirectoryFiltersBar availableSkills={skills} />
-      <DirectoryGrid initialMembers={members} />
+      <DirectoryGrid initialMembers={members} currentUserId={user.id} />
     </main>
   );
 }

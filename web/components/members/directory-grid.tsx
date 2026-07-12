@@ -28,7 +28,13 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
   return debounced;
 }
 
-export function DirectoryGrid({ initialMembers }: { initialMembers: DirectoryMember[] }) {
+export function DirectoryGrid({
+  initialMembers,
+  currentUserId,
+}: {
+  initialMembers: DirectoryMember[];
+  currentUserId: string;
+}) {
   const search = useDirectoryFilters((state) => state.search);
   const tier = useDirectoryFilters((state) => state.tier);
   const skillIds = useDirectoryFilters((state) => state.skillIds);
@@ -70,7 +76,7 @@ export function DirectoryGrid({ initialMembers }: { initialMembers: DirectoryMem
   return (
     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {filtered.map((member) => (
-        <MemberCard key={member.id} member={member} />
+        <MemberCard key={member.id} member={member} currentUserId={currentUserId} />
       ))}
     </div>
   );

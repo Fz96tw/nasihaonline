@@ -4,7 +4,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT, type DirectoryMember } from "@/lib/members";
 import { MemberCardActions } from "@/components/members/member-card-actions";
 
-export function MemberCard({ member }: { member: DirectoryMember }) {
+export function MemberCard({ member, currentUserId }: { member: DirectoryMember; currentUserId: string }) {
   const name = member.name ?? "Nasiha Member";
 
   return (
@@ -44,7 +44,7 @@ export function MemberCard({ member }: { member: DirectoryMember }) {
       )}
 
       <div className="mt-auto pt-2">
-        <MemberCardActions />
+        <MemberCardActions memberId={member.id} memberName={name} isSelf={member.id === currentUserId} />
       </div>
     </Card>
   );

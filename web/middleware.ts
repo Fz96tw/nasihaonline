@@ -21,7 +21,8 @@ function isProtectedApiRoute(pathname: string) {
     pathname.startsWith("/api/admin") ||
     pathname.startsWith("/api/profile") ||
     pathname.startsWith("/api/members") ||
-    pathname.startsWith("/api/contributions")
+    pathname.startsWith("/api/contributions") ||
+    pathname.startsWith("/api/inbox")
   );
 }
 
@@ -31,7 +32,8 @@ function isProtectedPageRoute(pathname: string) {
     pathname.startsWith("/admin") ||
     pathname.startsWith("/settings") ||
     pathname.startsWith("/profile") ||
-    pathname.startsWith("/contributions")
+    pathname.startsWith("/contributions") ||
+    pathname.startsWith("/inbox")
   );
 }
 
