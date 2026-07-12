@@ -25,6 +25,27 @@ Both `/sign-in` and `/accept-invite` redirect an already-authenticated visitor s
 
 Every protected route/page does its own server-side check via `requireUser()`/`requireRole()` in `lib/auth.ts` (Clerk session + local role), not just the middleware gate — see the comment in `middleware.ts` for why.
 
+## Payments (Stripe) setup
+
+`/donate` (§4.14) uses [Stripe Checkout](https://dashboard.stripe.com) for one-time and recurring donations. Checkout-session creation (`POST /api/donations`) never touches the database — a `Donation` row is only ever created by the webhook once Stripe confirms the payment actually succeeded.
+
+1. Create a Stripe account (or use an existing one) and copy the **test mode** secret key from [dashboard.stripe.com/test/apikeys](https://dashboard.stripe.com/test/apikeys) into `.env` as `STRIPE_SECRET_KEY`.
+2. Register a webhook endpoint pointing at `<your-app-url>/api/webhooks/stripe`, subscribed to `checkout.session.completed`. Copy its signing secret into `.env` as `STRIPE_WEBHOOK_SIGNING_SECRET`.
+3. For local dev, instead of a dashboard endpoint, use the [Stripe CLI](https://stripe.com/docs/stripe-cli) to forward events and print a local webhook secret:
+   ```bash
+   stripe listen --forward-to localhost:3000/api/webhooks/stripe
+   ```
+4. Test a donation with Stripe's test card `4242 4242 4242 4242`, any future expiry date, any CVC, any ZIP.
+
+### Donation routes
+
+- `GET /donate` — public, no auth required; one-time or monthly giving.
+- `POST /api/donations` — creates a Stripe Checkout Session; rate-limited (10 requests/hour/IP), CSRF-protected.
+- `POST /api/webhooks/stripe` — Stripe → `Donation` row, verified via Stripe's signature (exempt from the CSRF check below, same rationale as the Clerk webhook).
+- `GET /admin/donations`, `GET /api/admin/donations` (add `?export=csv` for a CSV download) — admin-only.
+
+`Donation` has no relation to `ContributionLedger` or `users.tier` anywhere in the schema — donating never confers Knowledge Hours or membership advantage (§4.14).
+
 ## Getting Started (Docker)
 
 From the repo root:
