@@ -2,9 +2,11 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/user-menu";
 import { getSessionUser } from "@/lib/auth";
+import { getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
 
 export async function SiteHeader() {
   const user = await getSessionUser();
+  const profile = user ? withResolvedAvatarUrl(await getOrCreateProfile(user.id)) : null;
 
   return (
     <header className="sticky top-0 z-50 flex h-[62px] items-center gap-6 border-b bg-background px-4 shadow-sm md:px-8">
@@ -39,7 +41,7 @@ export async function SiteHeader() {
             <Button variant="ghost" size="sm" asChild>
               <Link href="/settings">Settings</Link>
             </Button>
-            <UserMenu />
+            <UserMenu name={user.name ?? user.email} avatarUrl={profile?.avatarUrl ?? null} />
           </>
         ) : (
           <>
