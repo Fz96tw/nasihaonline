@@ -1,0 +1,2 @@
+export const EDUCATIONAL_DISCLAIMER =
+  "Nasiha is an educational knowledge-sharing community. Content shared by members — including lectures, case discussions, consultations, and forum posts — is intended for professional learning purposes only and does not constitute medical advice. Members are responsible for exercising independent clinical judgment in their own practice. Nasiha and its members accept no liability for clinical decisions made based on content shared within the community.";
