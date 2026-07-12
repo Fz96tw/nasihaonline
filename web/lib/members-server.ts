@@ -8,7 +8,15 @@ import type { UserModel } from "@/lib/generated/prisma/models/User";
 
 export type { DirectoryMember };
 
-type ProfileWithUser = ProfileModel & { user: Pick<UserModel, "name" | "tier"> };
+type ProfileWithUser = ProfileModel & {
+  user: Pick<UserModel, "name" | "tier">;
+  skills: { skill: { id: string; name: string } }[];
+};
+
+const PROFILE_INCLUDE = {
+  user: { select: { name: true, tier: true } },
+  skills: { select: { skill: { select: { id: true, name: true } } } },
+} as const;
 
 /**
  * Shared shape/visibility mapping (§4.3/§4.5/§9) used both by the plain
@@ -22,6 +30,7 @@ function toDirectoryMember(profile: ProfileWithUser): DirectoryMember {
     name: profile.user.name,
     avatarUrl: getProfileAvatarUrl(profile.avatarUrl),
     tier: profile.user.tier,
+    skills: profile.skills.map(({ skill }) => skill),
     expertiseAreas: profile.expertiseAreas,
     titleSpecialty: profile.showSpecialtyLocation ? profile.titleSpecialty : null,
     countryRegion: profile.showSpecialtyLocation ? profile.countryRegion : null,
@@ -42,7 +51,7 @@ export async function getDirectoryMembers(): Promise<DirectoryMember[]> {
       listInDirectory: true,
       user: { tier: { in: DIRECTORY_TIERS } },
     },
-    include: { user: { select: { name: true, tier: true } } },
+    include: PROFILE_INCLUDE,
     orderBy: { user: { name: "asc" } },
   });
 
@@ -65,7 +74,7 @@ export async function searchDirectoryMembers(query: string): Promise<DirectoryMe
       listInDirectory: true,
       user: { tier: { in: DIRECTORY_TIERS } },
     },
-    include: { user: { select: { name: true, tier: true } } },
+    include: PROFILE_INCLUDE,
   });
 
   const byId = new Map(profiles.map((profile) => [profile.userId, profile]));

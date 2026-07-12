@@ -11,8 +11,9 @@ import {
 } from "@/components/ui/select";
 import { DIRECTORY_TIERS, DIRECTORY_TIER_LABELS } from "@/lib/members";
 import { useDirectoryFilters, type DirectoryTierFilter } from "@/lib/stores/directory-filters";
+import { SkillFilter } from "@/components/members/skill-filter";
 
-export function DirectoryFiltersBar() {
+export function DirectoryFiltersBar({ availableSkills }: { availableSkills: { id: string; name: string }[] }) {
   const search = useDirectoryFilters((state) => state.search);
   const setSearch = useDirectoryFilters((state) => state.setSearch);
   const tier = useDirectoryFilters((state) => state.tier);
@@ -47,6 +48,8 @@ export function DirectoryFiltersBar() {
           ))}
         </SelectContent>
       </Select>
+
+      <SkillFilter options={availableSkills} />
     </div>
   );
 }

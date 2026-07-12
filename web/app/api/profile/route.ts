@@ -37,10 +37,22 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  await getOrCreateProfile(user.id);
+  const existingProfile = await getOrCreateProfile(user.id);
 
-  const [, profile] = await db.$transaction([
+  // Members can only attach existing catalog skills (§4.3/§7.3), not create
+  // new ones inline — reject anything that isn't a real Skill id rather than
+  // silently dropping it.
+  const skillIds = Array.from(new Set(parsed.data.skillIds));
+  const validSkills = await db.skill.findMany({ where: { id: { in: skillIds } } });
+  if (validSkills.length !== skillIds.length) {
+    return NextResponse.json({ error: "One or more selected skills are invalid." }, { status: 400 });
+  }
+
+  const [, , profile] = await db.$transaction([
     db.user.update({ where: { id: user.id }, data: { name: parsed.data.name } }),
+    db.profileSkill.deleteMany({
+      where: { profileId: existingProfile.id, skillId: { notIn: skillIds } },
+    }),
     db.profile.update({
       where: { userId: user.id },
       data: {
@@ -52,7 +64,14 @@ export async function PATCH(request: Request) {
         learningTopics: parsed.data.learningTopics,
         listInDirectory: parsed.data.listInDirectory,
         showSpecialtyLocation: parsed.data.showSpecialtyLocation,
+        skills: {
+          createMany: {
+            data: skillIds.map((skillId) => ({ skillId })),
+            skipDuplicates: true,
+          },
+        },
       },
+      include: { skills: { include: { skill: true } } },
     }),
   ]);
 

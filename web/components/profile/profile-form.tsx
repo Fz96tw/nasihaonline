@@ -18,6 +18,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { ProfilePhotoUpload } from "@/components/profile/profile-photo-upload";
+import { SkillPicker, type SkillOption } from "@/components/profile/skill-picker";
 import {
   profileFormSchema,
   splitList,
@@ -29,10 +30,12 @@ export function ProfileForm({
   email,
   avatarUrl,
   defaultValues,
+  availableSkills,
 }: {
   email: string;
   avatarUrl: string | null;
   defaultValues: ProfileFormValues;
+  availableSkills: SkillOption[];
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -60,6 +63,7 @@ export function ProfileForm({
           countryRegion: values.countryRegion,
           titleSpecialty: values.titleSpecialty,
           careerStage: values.careerStage,
+          skillIds: values.skillIds,
           expertiseAreas: splitList(values.expertiseAreas),
           learningTopics: splitList(values.learningTopics),
           listInDirectory: values.listInDirectory,
@@ -178,12 +182,26 @@ export function ProfileForm({
 
             <FormField
               control={form.control}
-              name="expertiseAreas"
+              name="skillIds"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Areas of Expertise</FormLabel>
                   <FormControl>
-                    <Textarea rows={3} placeholder="e.g. Internal Medicine, Clinical Research" {...field} />
+                    <SkillPicker options={availableSkills} value={field.value} onChange={field.onChange} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="expertiseAreas"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Other Expertise (not listed above)</FormLabel>
+                  <FormControl>
+                    <Textarea rows={2} placeholder="e.g. Regional dialect proficiency, niche subspecialty" {...field} />
                   </FormControl>
                   <FormDescription>Separate with commas.</FormDescription>
                   <FormMessage />

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getDirectoryMembers } from "@/lib/members-server";
+import { getAllSkills } from "@/lib/skills-server";
 import { DirectoryFiltersBar } from "@/components/members/directory-filters-bar";
 import { DirectoryGrid } from "@/components/members/directory-grid";
 
@@ -13,7 +14,7 @@ export default async function MembersPage() {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const members = await getDirectoryMembers();
+  const [members, skills] = await Promise.all([getDirectoryMembers(), getAllSkills()]);
 
   return (
     <main className="mx-auto flex max-w-[1120px] flex-col gap-8 p-8">
@@ -24,7 +25,7 @@ export default async function MembersPage() {
         </p>
       </div>
 
-      <DirectoryFiltersBar />
+      <DirectoryFiltersBar availableSkills={skills} />
       <DirectoryGrid initialMembers={members} />
     </main>
   );

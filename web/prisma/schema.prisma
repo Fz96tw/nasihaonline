@@ -50,9 +50,9 @@ model User {
 // the full Profile domain (PRD §4.3 — avatar upload, directory prefs, skills)
 // has a real record to extend rather than needing a backfill later.
 model Profile {
-  id                    String   @id @default(cuid())
-  userId                String   @unique
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String        @id @default(cuid())
+  userId                String        @unique
+  user                  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   bio                   String?
   // MinIO object key (not a servable URL — see getProfileAvatarUrl in lib/storage.ts),
   // same convention as TeamMember.photoUrl.
@@ -60,16 +60,47 @@ model Profile {
   countryRegion         String?
   titleSpecialty        String?
   careerStage           String?
-  expertiseAreas        String[] @default([])
-  learningTopics        String[] @default([])
+  // Free-text fallback only, for expertise entries that don't map to a
+  // seeded Skill tag (PRD §4.3/§7.3) — tagged expertise lives in
+  // ProfileSkill. Not the source of truth for Directory tag filtering.
+  expertiseAreas        String[]      @default([])
+  learningTopics        String[]      @default([])
+  skills                ProfileSkill[]
   // Directory visibility prefs (§4.3/§4.5/§9) — enforced server-side in
   // lib/members-server.ts, not just hidden client-side.
-  listInDirectory       Boolean  @default(true)
-  showSpecialtyLocation Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  listInDirectory       Boolean       @default(true)
+  showSpecialtyLocation Boolean       @default(true)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 
   @@map("profiles")
+}
+
+// Normalized expertise tag (PRD §4.3/§7.3 — migrates "areas of expertise"
+// from pure free text toward a taggable model to power Directory
+// search/filter). Seeded from a fixed list (prisma/seed.ts); members can
+// only attach existing skills, not create new ones inline — anything not
+// in the seed list stays in Profile.expertiseAreas as free-text fallback.
+model Skill {
+  id        String         @id @default(cuid())
+  name      String         @unique
+  slug      String         @unique
+  createdAt DateTime       @default(now())
+  profiles  ProfileSkill[]
+
+  @@map("skills")
+}
+
+model ProfileSkill {
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  skillId   String
+  skill     Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([profileId, skillId])
+  @@index([skillId])
+  @@map("profile_skills")
 }
 
 // Rollout phase for public applications (PRD §3.2). Gates whether the

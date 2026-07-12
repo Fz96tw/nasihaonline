@@ -13,6 +13,10 @@ export type DirectoryMember = {
   name: string | null;
   avatarUrl: string | null;
   tier: Tier | null;
+  // Tagged skills (§4.3/§7.3) — used both for card display and tag
+  // filtering. expertiseAreas is the free-text fallback for anything not
+  // in the Skill catalog.
+  skills: { id: string; name: string }[];
   expertiseAreas: string[];
   titleSpecialty: string | null;
   countryRegion: string | null;

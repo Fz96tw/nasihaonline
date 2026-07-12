@@ -12,6 +12,10 @@ export type ProfileSearchDocument = {
   name: string | null;
   tier: Tier | null;
   expertiseAreas: string[];
+  // Tagged Skill names (§4.3/§7.3) — kept searchable alongside expertiseAreas
+  // so a free-text match on e.g. "Cardiology" still works once that entry has
+  // moved from the free-text fallback into a ProfileSkill link.
+  skillNames: string[];
   titleSpecialty: string | null;
   countryRegion: string | null;
 };
@@ -48,6 +52,7 @@ export async function ensureProfilesIndexConfigured(): Promise<void> {
     "titleSpecialty",
     "countryRegion",
     "expertiseAreas",
+    "skillNames",
   ]);
   await index.updateFilterableAttributes(["tier"]);
 }

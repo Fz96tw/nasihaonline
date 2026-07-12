@@ -14,7 +14,10 @@ import { DIRECTORY_TIERS } from "@/lib/members";
 export async function syncProfileToIndex(userId: string): Promise<void> {
   const profile = await db.profile.findUnique({
     where: { userId },
-    include: { user: { select: { name: true, tier: true } } },
+    include: {
+      user: { select: { name: true, tier: true } },
+      skills: { select: { skill: { select: { name: true } } } },
+    },
   });
 
   const eligible =
@@ -30,6 +33,7 @@ export async function syncProfileToIndex(userId: string): Promise<void> {
     name: profile.user.name,
     tier: profile.user.tier,
     expertiseAreas: profile.expertiseAreas,
+    skillNames: profile.skills.map(({ skill }) => skill.name),
     titleSpecialty: profile.showSpecialtyLocation ? profile.titleSpecialty : null,
     countryRegion: profile.showSpecialtyLocation ? profile.countryRegion : null,
   });

@@ -36,6 +36,7 @@ export async function POST(request: Request) {
   const profile = await db.profile.update({
     where: { userId: user.id },
     data: { avatarUrl },
+    include: { skills: { include: { skill: true } } },
   });
 
   await enqueueProfileIndexSync(user.id);
@@ -58,6 +59,7 @@ export async function DELETE() {
   const profile = await db.profile.update({
     where: { userId: user.id },
     data: { avatarUrl: null },
+    include: { skills: { include: { skill: true } } },
   });
 
   await enqueueProfileIndexSync(user.id);

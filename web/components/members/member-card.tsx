@@ -28,8 +28,13 @@ export function MemberCard({ member }: { member: DirectoryMember }) {
         </Badge>
       )}
 
-      {member.expertiseAreas.length > 0 && (
+      {(member.skills.length > 0 || member.expertiseAreas.length > 0) && (
         <div className="mb-4 flex flex-wrap gap-1.5">
+          {member.skills.map((skill) => (
+            <Badge key={skill.id} variant="neutral">
+              {skill.name}
+            </Badge>
+          ))}
           {member.expertiseAreas.map((area) => (
             <Badge key={area} variant="neutral">
               {area}

@@ -31,6 +31,7 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
 export function DirectoryGrid({ initialMembers }: { initialMembers: DirectoryMember[] }) {
   const search = useDirectoryFilters((state) => state.search);
   const tier = useDirectoryFilters((state) => state.tier);
+  const skillIds = useDirectoryFilters((state) => state.skillIds);
   const debouncedSearch = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
 
   const { data: members, isLoading } = useQuery({
@@ -41,8 +42,12 @@ export function DirectoryGrid({ initialMembers }: { initialMembers: DirectoryMem
 
   const filtered = useMemo(() => {
     if (!members) return [];
-    return tier === "all" ? members : members.filter((member) => member.tier === tier);
-  }, [members, tier]);
+    return members.filter((member) => {
+      if (tier !== "all" && member.tier !== tier) return false;
+      if (skillIds.length > 0 && !member.skills.some((skill) => skillIds.includes(skill.id))) return false;
+      return true;
+    });
+  }, [members, tier, skillIds]);
 
   if (isLoading) {
     return (
