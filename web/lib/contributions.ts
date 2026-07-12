@@ -27,6 +27,22 @@ export type ContributionTransaction = {
   hours: number;
 };
 
+/**
+ * A `pending` ledger row surfaced for confirm/reject action (§4.4). Shared
+ * shape for both the member-facing "awaiting your confirmation" list
+ * (counterpart-scoped) and the admin `/admin/ledger` review queue
+ * (unscoped) — `counterpartName` is null there for no-counterpart entries,
+ * the ones that require admin action per §4.4.
+ */
+export type ContributionPendingEntry = {
+  id: string;
+  date: string;
+  activity: string;
+  actorName: string;
+  counterpartName: string | null;
+  hours: number;
+};
+
 export const LEDGER_STATUS_LABELS: Record<LedgerStatus, string> = {
   [LedgerStatus.pending]: "Pending",
   [LedgerStatus.confirmed]: "Confirmed",

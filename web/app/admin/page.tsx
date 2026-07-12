@@ -41,6 +41,9 @@ export default async function AdminPage() {
             <Link href="/admin/applications">Review Applications</Link>
           </Button>
           <Button asChild variant="outline">
+            <Link href="/admin/ledger">Knowledge Hours Ledger</Link>
+          </Button>
+          <Button asChild variant="outline">
             <Link href="/admin/team">Our Team</Link>
           </Button>
           <Button asChild variant="outline">

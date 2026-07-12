@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
-import { getContributionHistory, getContributionSummary } from "@/lib/contributions-server";
+import {
+  getContributionHistory,
+  getContributionSummary,
+  getPendingConfirmationsForCounterpart,
+} from "@/lib/contributions-server";
 
 export async function GET() {
   let user;
@@ -11,13 +15,14 @@ export async function GET() {
     throw error;
   }
 
-  const [summary, transactions] = await Promise.all([
+  const [summary, transactions, pendingConfirmations] = await Promise.all([
     getContributionSummary(user.id),
     getContributionHistory(user.id),
+    getPendingConfirmationsForCounterpart(user.id),
   ]);
 
   return NextResponse.json(
-    { summary, transactions },
+    { summary, transactions, pendingConfirmations },
     { headers: { "cache-control": "no-store" } },
   );
 }

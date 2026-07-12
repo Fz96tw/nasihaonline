@@ -1,7 +1,12 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { getActiveEarnRules, getContributionHistory, getContributionSummary } from "@/lib/contributions-server";
+import {
+  getActiveEarnRules,
+  getContributionHistory,
+  getContributionSummary,
+  getPendingConfirmationsForCounterpart,
+} from "@/lib/contributions-server";
 import { ContributionsPanel } from "@/components/contributions/contributions-panel";
 
 export const metadata: Metadata = {
@@ -12,10 +17,11 @@ export default async function ContributionsPage() {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const [summary, transactions, rules] = await Promise.all([
+  const [summary, transactions, rules, pendingConfirmations] = await Promise.all([
     getContributionSummary(user.id),
     getContributionHistory(user.id),
     getActiveEarnRules(),
+    getPendingConfirmationsForCounterpart(user.id),
   ]);
 
   return (
@@ -27,7 +33,12 @@ export default async function ContributionsPage() {
         </p>
       </div>
 
-      <ContributionsPanel initialSummary={summary} initialTransactions={transactions} rules={rules} />
+      <ContributionsPanel
+        initialSummary={summary}
+        initialTransactions={transactions}
+        initialPendingConfirmations={pendingConfirmations}
+        rules={rules}
+      />
     </main>
   );
 }
