@@ -25,6 +25,8 @@ export type ContributionTransaction = {
   status: LedgerStatus;
   /** Signed — positive for earned, negative for spent (§4.4). */
   hours: number;
+  /** Admin's rejection reason, when status is rejected and one was given (§4.4). */
+  reason: string | null;
 };
 
 /**

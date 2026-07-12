@@ -45,7 +45,12 @@ export function ContributionsHistoryTable({ transactions }: { transactions: Cont
             return (
               <TableRow key={transaction.id} className={cn(notConfirmed && "text-muted-foreground")}>
                 <TableCell>{formatDate(transaction.date)}</TableCell>
-                <TableCell>{transaction.activity}</TableCell>
+                <TableCell>
+                  {transaction.activity}
+                  {transaction.status === LedgerStatus.rejected && transaction.reason && (
+                    <p className="mt-1 text-xs text-muted-foreground">Reason: {transaction.reason}</p>
+                  )}
+                </TableCell>
                 <TableCell>{transaction.counterpartName ?? "—"}</TableCell>
                 <TableCell
                   className={cn(

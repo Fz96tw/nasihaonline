@@ -70,6 +70,7 @@ export async function getContributionHistory(userId: string): Promise<Contributi
     type: row.type,
     status: row.status,
     hours: row.hours.toNumber(),
+    reason: row.status === LedgerStatus.rejected ? row.reason : null,
   }));
 }
 
@@ -148,11 +149,19 @@ export class ContributionResolutionError extends Error {
  * Authorization: the submitter can never resolve their own entry, even as
  * admin; the entry's named counterpart or any admin can. Entries with no
  * named counterpart therefore require an admin.
+ *
+ * `reason` is required when an admin rejects in their admin capacity (i.e.
+ * not also the named counterpart) — same audit requirement as the
+ * membership-application rejection flow. A named counterpart rejecting
+ * their own peer-confirmation entry doesn't need one; that includes an
+ * admin who happens to be the named counterpart, since they're acting in
+ * the peer role there, not the admin one.
  */
 export async function resolveContribution(
   ledgerId: string,
   actingUser: UserModel,
   decision: typeof LedgerStatus.confirmed | typeof LedgerStatus.rejected,
+  reason?: string,
 ) {
   const entry = await db.contributionLedger.findUnique({
     where: { id: ledgerId },
@@ -176,8 +185,18 @@ export async function resolveContribution(
     );
   }
 
+  const trimmedReason = reason?.trim();
+  if (decision === LedgerStatus.rejected && isAdmin && !isNamedCounterpart && !trimmedReason) {
+    throw new ContributionResolutionError(400, "A reason is required to reject this contribution.");
+  }
+
   return db.contributionLedger.update({
     where: { id: ledgerId },
-    data: { status: decision, resolvedByUserId: actingUser.id, resolvedAt: new Date() },
+    data: {
+      status: decision,
+      resolvedByUserId: actingUser.id,
+      resolvedAt: new Date(),
+      ...(trimmedReason ? { reason: trimmedReason } : {}),
+    },
   });
 }

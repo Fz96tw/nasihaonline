@@ -357,8 +357,10 @@ model ContributionLedger {
   type   LedgerTransactionType
   status LedgerStatus          @default(pending)
   hours  Decimal               @db.Decimal(5, 2)
-  // Required (enforced in app code) when type = adjusted — the admin's
-  // reason note for the correction, per §4.4's audit requirement.
+  // Required (enforced in app code) when type = adjusted (the admin's
+  // correction reason) or when an admin rejects a pending entry in their
+  // admin capacity (not as the named counterpart) — same §4.4 audit
+  // requirement, reused rather than adding a second reason column.
   reason String?
 
   // Set only for admin-initiated `adjusted` rows; null for self-reported
