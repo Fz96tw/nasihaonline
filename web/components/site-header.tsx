@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { UserButton } from "@clerk/nextjs";
-import { UserCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { UserMenu } from "@/components/user-menu";
 import { getSessionUser } from "@/lib/auth";
 
 export async function SiteHeader() {
@@ -40,15 +39,7 @@ export async function SiteHeader() {
             <Button variant="ghost" size="sm" asChild>
               <Link href="/settings">Settings</Link>
             </Button>
-            <UserButton>
-              <UserButton.MenuItems>
-                <UserButton.Link
-                  label="Edit Profile"
-                  labelIcon={<UserCircle className="h-4 w-4" />}
-                  href="/profile"
-                />
-              </UserButton.MenuItems>
-            </UserButton>
+            <UserMenu />
           </>
         ) : (
           <>
