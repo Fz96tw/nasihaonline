@@ -2,7 +2,6 @@ import "server-only";
 import { Client as MinioClient } from "minio";
 
 const BUCKET_AVATARS = process.env.MINIO_BUCKET_AVATARS || "avatars";
-const SIGNED_URL_EXPIRY_SECONDS = 60 * 60; // 1 hour
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB
 
 let client: MinioClient | undefined;
@@ -80,11 +79,33 @@ export async function uploadTeamPhoto(file: File): Promise<string> {
   return key;
 }
 
-export async function getSignedPhotoUrl(key: string | null): Promise<string | null> {
+/**
+ * Returns a browser-facing URL for a team photo. This proxies through our
+ * own /api/team/photo route rather than handing back a MinIO presigned URL
+ * directly: presigned URLs are stamped with MINIO_ENDPOINT, which is only
+ * reachable from wherever the Next.js server can reach MinIO (e.g.
+ * "localhost" or the Docker service name) — not necessarily wherever the
+ * browser is (a different host, an ngrok tunnel, etc). Proxying keeps the
+ * image same-origin with the page that requested it, and keeps MinIO itself
+ * off the public internet.
+ */
+export function getSignedPhotoUrl(key: string | null): string | null {
   if (!key) return null;
+  return `/api/team/photo/${key}`;
+}
+
+export async function getTeamPhotoObject(
+  key: string,
+): Promise<{ stream: NodeJS.ReadableStream; contentType: string } | null> {
   await ensureBucket(BUCKET_AVATARS);
   const minio = getClient();
-  return minio.presignedGetObject(BUCKET_AVATARS, key, SIGNED_URL_EXPIRY_SECONDS);
+  try {
+    const stat = await minio.statObject(BUCKET_AVATARS, key);
+    const stream = await minio.getObject(BUCKET_AVATARS, key);
+    return { stream, contentType: stat.metaData["content-type"] || "application/octet-stream" };
+  } catch {
+    return null;
+  }
 }
 
 export async function deleteTeamPhoto(key: string | null): Promise<void> {
