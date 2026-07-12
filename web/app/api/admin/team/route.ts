@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { AuthError, authErrorResponse, requireRole } from "@/lib/auth";
 import { Role } from "@/lib/generated/prisma/enums";
 import { db } from "@/lib/db";
@@ -60,6 +61,11 @@ export async function POST(request: Request) {
   const member = await db.teamMember.create({
     data: { ...parsed.data, photoUrl, displayOrder },
   });
+
+  // The public page and any already-visited client-side navigation cache
+  // for it must be invalidated, or the new/edited photo won't show up
+  // until an unrelated full reload.
+  revalidatePath("/our-team");
 
   return NextResponse.json({ member: await withSignedPhotoUrls([member]).then((m) => m[0]) });
 }

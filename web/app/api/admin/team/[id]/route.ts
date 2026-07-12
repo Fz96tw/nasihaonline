@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { AuthError, authErrorResponse, requireRole } from "@/lib/auth";
 import { Role } from "@/lib/generated/prisma/enums";
 import { db } from "@/lib/db";
@@ -61,6 +62,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     },
   });
 
+  revalidatePath("/our-team");
+
   return NextResponse.json({ member: await withSignedPhotoUrls([member]).then((m) => m[0]) });
 }
 
@@ -79,6 +82,8 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
 
   await db.teamMember.delete({ where: { id: params.id } });
   await deleteTeamPhoto(existing.photoUrl);
+
+  revalidatePath("/our-team");
 
   return NextResponse.json({ ok: true });
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -209,9 +210,14 @@ export function TeamMemberForm({
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        <Button type="submit" disabled={submitting}>
-          {submitting ? "Saving…" : member ? "Save changes" : "Add team member"}
-        </Button>
+        <div className="flex gap-3">
+          <Button type="submit" disabled={submitting}>
+            {submitting ? "Saving…" : member ? "Save changes" : "Add team member"}
+          </Button>
+          <Button type="button" variant="outline" disabled={submitting} asChild>
+            <Link href="/admin/team">Cancel</Link>
+          </Button>
+        </div>
       </form>
     </Form>
   );
