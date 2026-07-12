@@ -21,7 +21,7 @@ export function CtaBanner() {
           Open to professionals, students and teachers who are enthusiastic about
           sharing their knowledge. No fees. Just knowledge.
         </p>
-        <Button size="lg" variant="secondary" className="mt-8" asChild>
+        <Button size="lg" className="mt-8 shadow-lg" asChild>
           <Link href="/join">Join NASIHA</Link>
         </Button>
       </div>

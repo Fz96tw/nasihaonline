@@ -58,7 +58,7 @@ export function KnowledgeExchangeSection() {
             <Link href="/join">See How to Join →</Link>
           </Button>
         </div>
-        <Card className="bg-secondary/40 p-5">
+        <Card className="border-primary/15 bg-primary/5 p-5">
           <p className="text-sm font-semibold">How the Knowledge Exchange Works</p>
           <p className="mt-1 text-xs text-muted-foreground">
             How members earn and spend Knowledge Hours

@@ -42,7 +42,7 @@ export function HowItWorksSection() {
           {STEPS.map(({ icon: Icon, title, description }) => (
             <Card key={title} className="text-center">
               <CardHeader className="items-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary text-secondary-foreground">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
                   <Icon className="h-6 w-6" aria-hidden="true" />
                 </div>
                 <CardTitle className="text-lg">{title}</CardTitle>
