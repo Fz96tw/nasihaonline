@@ -108,6 +108,31 @@ enum ApplicationStatus {
 // collected unconditionally but only *required* once admissionPhase =
 // open_applications — enforced in application code (lib/validation), not
 // the DB, since the requirement changes at runtime via SiteSettings.
+enum TeamRoleBadge {
+  founder
+  board_member
+  partner
+}
+
+// Public "Our Team" page content (PRD §4.12), admin-managed. photoUrl stores
+// the MinIO object key (not a browser-facing URL) — signed URLs are
+// generated per-request since they expire, same rationale as Profile
+// avatars once those exist (§4.3).
+model TeamMember {
+  id           String        @id @default(cuid())
+  name         String
+  roleBadge    TeamRoleBadge
+  title        String
+  bio          String
+  photoUrl     String?
+  displayOrder Int           @default(0)
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@map("team_members")
+}
+
 model MembershipApplication {
   id                            String                   @id @default(cuid())
   firstName                     String

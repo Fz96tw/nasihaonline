@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { EDUCATIONAL_DISCLAIMER } from "@/lib/legal";
 
-const COMMUNITY_LINKS = [{ label: "Join NASIHA", href: "/join" }];
+const COMMUNITY_LINKS = [
+  { label: "Our Team", href: "/our-team" },
+  { label: "Join NASIHA", href: "/join" },
+];
 
 const MEMBER_LINKS = [
   { label: "Log In", href: "/sign-in" },

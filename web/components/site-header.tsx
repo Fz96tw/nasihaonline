@@ -24,6 +24,9 @@ export async function SiteHeader() {
           </span>
         </span>
       </Link>
+      <Button variant="ghost" size="sm" asChild>
+        <Link href="/our-team">Our Team</Link>
+      </Button>
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
         {user ? (
           <>

@@ -36,9 +36,14 @@ export default async function AdminPage() {
           <h1 className="text-3xl font-bold tracking-tight">Admin</h1>
           <p className="text-muted-foreground">Signed in as {user.email} (admin)</p>
         </div>
-        <Button asChild variant="outline">
-          <Link href="/admin/applications">Review Applications</Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button asChild variant="outline">
+            <Link href="/admin/applications">Review Applications</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/admin/team">Our Team</Link>
+          </Button>
+        </div>
       </div>
       <AdminPhaseForm currentPhase={admissionPhase} />
     </main>
