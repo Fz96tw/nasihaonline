@@ -1,7 +1,9 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getAdmissionPhase } from "@/lib/settings";
 import { AdminPhaseForm } from "@/components/admin-phase-form";
+import { Button } from "@/components/ui/button";
 
 /**
  * Role-gated at the Node.js runtime (not middleware — see middleware.ts):
@@ -29,9 +31,14 @@ export default async function AdminPage() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-6 p-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Admin</h1>
-        <p className="text-muted-foreground">Signed in as {user.email} (admin)</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Admin</h1>
+          <p className="text-muted-foreground">Signed in as {user.email} (admin)</p>
+        </div>
+        <Button asChild variant="outline">
+          <Link href="/admin/applications">Review Applications</Link>
+        </Button>
       </div>
       <AdminPhaseForm currentPhase={admissionPhase} />
     </main>

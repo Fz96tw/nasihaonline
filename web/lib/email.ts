@@ -25,3 +25,26 @@ export async function sendApplicationConfirmationEmail(to: string, firstName: st
     console.error("[email] Failed to send application confirmation email", error);
   }
 }
+
+/**
+ * Sent by the admin approve action once provisionMemberAccount() has
+ * created the Clerk invitation. Best-effort, same as above: a failed send
+ * must not undo the approval, which has already happened by this point.
+ */
+export async function sendWelcomeEmail(to: string, firstName: string) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping welcome email to ${to}`);
+    return;
+  }
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: "Welcome to Nasiha!",
+      text: `Hi ${firstName},\n\nYour Nasiha membership application has been approved. Check your inbox for a separate invitation email to set up your account and log in.\n\n— The Nasiha Team`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send welcome email", error);
+  }
+}

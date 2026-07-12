@@ -20,16 +20,42 @@ enum Role {
   admin
 }
 
+// Member-facing classification, distinct from the system Role — PRD §2.2/§7.1
+// calls this out as a required first-class field on User, separate from role.
+enum Tier {
+  active
+  associate
+  student
+  friend
+}
+
 model User {
   id          String   @id @default(cuid())
   clerkUserId String   @unique
   email       String   @unique
   name        String?
   role        Role     @default(applicant)
+  tier        Tier?
+  profile     Profile?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@map("users")
+}
+
+// Minimal seed row created alongside every new User (lib/clerk-sync.ts) so
+// the full Profile domain (PRD §4.3 — avatar upload, directory prefs, skills)
+// has a real record to extend rather than needing a backfill later.
+model Profile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio       String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("profiles")
 }
 
 // Rollout phase for public applications (PRD §3.2). Gates whether the
@@ -100,6 +126,18 @@ model MembershipApplication {
   professionalReferenceContact  String?
   codeOfConductAcceptedAt       DateTime
   status                        ApplicationStatus        @default(submitted)
+
+  // Review outcome (PRD §3.3/§4.11). Set once by the admin review action;
+  // the application row itself is the audit trail — never deleted, so these
+  // stay populated permanently once a decision is made. reviewedByEmail is
+  // a denormalized snapshot (not a live FK) since this is a log entry, not
+  // a relation that needs to track the reviewer's current identity.
+  assignedTier                  Tier?
+  adminNote                     String?
+  adminNoteVisibleToApplicant   Boolean                  @default(false)
+  reviewedAt                    DateTime?
+  reviewedByEmail               String?
+
   createdAt                     DateTime                 @default(now())
   updatedAt                     DateTime                 @updatedAt
 
