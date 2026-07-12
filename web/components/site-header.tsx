@@ -1,13 +1,11 @@
 import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
+import { UserCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Avatar } from "@/components/ui/avatar";
 import { getSessionUser } from "@/lib/auth";
-import { getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
 
 export async function SiteHeader() {
   const user = await getSessionUser();
-  const profile = user ? withResolvedAvatarUrl(await getOrCreateProfile(user.id)) : null;
 
   return (
     <header className="sticky top-0 z-50 flex h-[62px] items-center gap-6 border-b bg-background px-4 shadow-sm md:px-8">
@@ -42,10 +40,15 @@ export async function SiteHeader() {
             <Button variant="ghost" size="sm" asChild>
               <Link href="/settings">Settings</Link>
             </Button>
-            <Link href="/profile" aria-label="My Profile">
-              <Avatar name={user.name ?? user.email} src={profile?.avatarUrl ?? null} size="sm" />
-            </Link>
-            <UserButton />
+            <UserButton>
+              <UserButton.MenuItems>
+                <UserButton.Link
+                  label="Edit Profile"
+                  labelIcon={<UserCircle className="h-4 w-4" />}
+                  href="/profile"
+                />
+              </UserButton.MenuItems>
+            </UserButton>
           </>
         ) : (
           <>
