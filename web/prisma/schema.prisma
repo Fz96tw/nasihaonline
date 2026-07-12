@@ -37,6 +37,9 @@ model User {
   role        Role     @default(applicant)
   tier        Tier?
   profile     Profile?
+  // Denormalized donation attribution only (§4.14) — never joined against
+  // for Knowledge Hours/tier logic. See Donation model for the guarantee.
+  donations   Donation[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -131,6 +134,37 @@ model TeamMember {
   updatedAt    DateTime      @updatedAt
 
   @@map("team_members")
+}
+
+enum DonationFrequency {
+  one_time
+  recurring
+}
+
+// Individual donation record (PRD §4.14). Deliberately has NO relation to
+// ContributionLedger or User.tier anywhere in this model or in any code
+// path — donations must never confer Knowledge Hours or membership
+// advantage. userId is purely a denormalized "who donated" attribution
+// (nullable — most donors won't be logged in) and is never read by any
+// tier/ledger logic. Rows are created only from the Stripe webhook on
+// confirmed payment (app/api/webhooks/stripe/route.ts), never at checkout
+// creation time, so a failed/cancelled/expired session never produces one.
+model Donation {
+  id                      String            @id @default(cuid())
+  donorName               String
+  donorEmail              String
+  userId                  String?
+  user                    User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  amountCents             Int
+  currency                String            @default("usd")
+  frequency               DonationFrequency
+  recognitionConsent      Boolean           @default(false)
+  note                    String?
+  stripeCheckoutSessionId String            @unique
+  stripeSubscriptionId    String?
+  createdAt               DateTime          @default(now())
+
+  @@map("donations")
 }
 
 model MembershipApplication {

@@ -68,6 +68,8 @@ services:
       MINIO_ACCESS_KEY: nasiha
       MINIO_SECRET_KEY: nasiha123
       MINIO_BUCKET_AVATARS: avatars
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SIGNING_SECRET: ${STRIPE_WEBHOOK_SIGNING_SECRET}
     volumes:
       - ./web:/app
       - /app/node_modules

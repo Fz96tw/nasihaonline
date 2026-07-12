@@ -43,6 +43,9 @@ export default async function AdminPage() {
           <Button asChild variant="outline">
             <Link href="/admin/team">Our Team</Link>
           </Button>
+          <Button asChild variant="outline">
+            <Link href="/admin/donations">Donations</Link>
+          </Button>
         </div>
       </div>
       <AdminPhaseForm currentPhase={admissionPhase} />
