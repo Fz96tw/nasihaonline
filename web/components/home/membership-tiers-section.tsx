@@ -7,28 +7,28 @@ const TIERS = [
     tagline: "Full contributors",
     description:
       "Regular contributors via teaching, reviewing, or research. Full access plus governance voting rights.",
-    accent: "border-t-primary",
+    gradient: "from-primary to-primary-hover",
   },
   {
     name: "Associate",
     tagline: "Building momentum",
     description:
       "Newer members establishing their footing, growing toward Active status. Full community access.",
-    accent: "border-t-success",
+    gradient: "from-success to-success/70",
   },
   {
     name: "Student / Trainee",
     tagline: "Future leaders",
     description:
       "Students and trainees with lighter contribution expectations. Full community access.",
-    accent: "border-t-accent",
+    gradient: "from-accent to-accent/70",
   },
   {
     name: "Friend of Nasiha",
     tagline: "Welcome, no strings",
     description:
       "No contribution obligation. Free/public content only — including the events calendar and recorded webinars.",
-    accent: "border-t-muted-foreground",
+    gradient: "from-muted-foreground to-foreground",
   },
 ];
 
@@ -50,12 +50,24 @@ export function MembershipTiersSection() {
         </div>
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {TIERS.map((tier) => (
-            <Card key={tier.name} className={cn("border-t-4", tier.accent)}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg">{tier.name}</CardTitle>
-                <p className="text-xs text-muted-foreground">{tier.tagline}</p>
+            <Card
+              key={tier.name}
+              className={cn(
+                "relative overflow-hidden border-none bg-gradient-to-br text-primary-foreground",
+                tier.gradient,
+              )}
+            >
+              <div
+                aria-hidden="true"
+                className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-primary-foreground/10"
+              />
+              <CardHeader className="relative pb-2">
+                <CardTitle className="text-lg text-primary-foreground">
+                  {tier.name}
+                </CardTitle>
+                <p className="text-xs text-primary-foreground/75">{tier.tagline}</p>
               </CardHeader>
-              <CardContent className="pt-0 text-sm leading-relaxed text-muted-foreground">
+              <CardContent className="relative pt-0 text-sm leading-relaxed text-primary-foreground/90">
                 {tier.description}
               </CardContent>
             </Card>
