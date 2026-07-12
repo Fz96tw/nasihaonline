@@ -35,6 +35,8 @@ export default async function ProfilePage() {
           careerStage: profile.careerStage ?? "",
           expertiseAreas: joinList(profile.expertiseAreas),
           learningTopics: joinList(profile.learningTopics),
+          listInDirectory: profile.listInDirectory,
+          showSpecialtyLocation: profile.showSpecialtyLocation,
         }}
       />
     </main>

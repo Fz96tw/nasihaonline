@@ -13,6 +13,8 @@ export const profileFormSchema = z.object({
   careerStage: z.string().trim().max(120),
   expertiseAreas: z.string().trim().max(500),
   learningTopics: z.string().trim().max(500),
+  listInDirectory: z.boolean(),
+  showSpecialtyLocation: z.boolean(),
 });
 
 export type ProfileFormValues = z.infer<typeof profileFormSchema>;
@@ -40,6 +42,8 @@ export const profilePatchSchema = z.object({
   careerStage: z.string().trim().max(120),
   expertiseAreas: z.array(z.string().trim().min(1).max(80)).max(30),
   learningTopics: z.array(z.string().trim().min(1).max(80)).max(30),
+  listInDirectory: z.boolean(),
+  showSpecialtyLocation: z.boolean(),
 });
 
 export type ProfilePatchValues = z.infer<typeof profilePatchSchema>;

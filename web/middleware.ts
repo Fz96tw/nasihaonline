@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server";
 import { clerkMiddleware } from "@clerk/nextjs/server";
 
@@ -18,7 +19,8 @@ function isProtectedApiRoute(pathname: string) {
   return (
     pathname.startsWith("/api/protected") ||
     pathname.startsWith("/api/admin") ||
-    pathname.startsWith("/api/profile")
+    pathname.startsWith("/api/profile") ||
+    pathname.startsWith("/api/members")
   );
 }
 

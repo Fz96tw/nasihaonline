@@ -49,6 +49,8 @@ export async function PATCH(request: Request) {
         careerStage: parsed.data.careerStage,
         expertiseAreas: parsed.data.expertiseAreas,
         learningTopics: parsed.data.learningTopics,
+        listInDirectory: parsed.data.listInDirectory,
+        showSpecialtyLocation: parsed.data.showSpecialtyLocation,
       },
     }),
   ]);

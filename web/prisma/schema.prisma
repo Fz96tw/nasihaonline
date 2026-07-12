@@ -30,18 +30,18 @@ enum Tier {
 }
 
 model User {
-  id          String   @id @default(cuid())
-  clerkUserId String   @unique
-  email       String   @unique
+  id          String     @id @default(cuid())
+  clerkUserId String     @unique
+  email       String     @unique
   name        String?
-  role        Role     @default(applicant)
+  role        Role       @default(applicant)
   tier        Tier?
   profile     Profile?
   // Denormalized donation attribution only (§4.14) — never joined against
   // for Knowledge Hours/tier logic. See Donation model for the guarantee.
   donations   Donation[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   @@map("users")
 }
@@ -50,20 +50,24 @@ model User {
 // the full Profile domain (PRD §4.3 — avatar upload, directory prefs, skills)
 // has a real record to extend rather than needing a backfill later.
 model Profile {
-  id             String   @id @default(cuid())
-  userId         String   @unique
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bio            String?
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio                   String?
   // MinIO object key (not a servable URL — see getProfileAvatarUrl in lib/storage.ts),
   // same convention as TeamMember.photoUrl.
-  avatarUrl      String?
-  countryRegion  String?
-  titleSpecialty String?
-  careerStage    String?
-  expertiseAreas String[] @default([])
-  learningTopics String[] @default([])
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  avatarUrl             String?
+  countryRegion         String?
+  titleSpecialty        String?
+  careerStage           String?
+  expertiseAreas        String[] @default([])
+  learningTopics        String[] @default([])
+  // Directory visibility prefs (§4.3/§4.5/§9) — enforced server-side in
+  // lib/members-server.ts, not just hidden client-side.
+  listInDirectory       Boolean  @default(true)
+  showSpecialtyLocation Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   @@map("profiles")
 }
@@ -175,37 +179,37 @@ model Donation {
 }
 
 model MembershipApplication {
-  id                            String                   @id @default(cuid())
-  firstName                     String
-  lastName                      String
-  email                         String
-  professionalTitle             String
-  careerStage                   CareerStage
-  availability                  ApplicationAvailability
-  areaOfInterest                AreaOfInterest
-  countryRegion                 String
-  referral                      String?
-  whyJoin                       String
-  expertiseToShare              String
-  topicsToLearn                 String
-  professionalReferenceName     String?
-  professionalReferenceContact  String?
-  codeOfConductAcceptedAt       DateTime
-  status                        ApplicationStatus        @default(submitted)
+  id                           String                  @id @default(cuid())
+  firstName                    String
+  lastName                     String
+  email                        String
+  professionalTitle            String
+  careerStage                  CareerStage
+  availability                 ApplicationAvailability
+  areaOfInterest               AreaOfInterest
+  countryRegion                String
+  referral                     String?
+  whyJoin                      String
+  expertiseToShare             String
+  topicsToLearn                String
+  professionalReferenceName    String?
+  professionalReferenceContact String?
+  codeOfConductAcceptedAt      DateTime
+  status                       ApplicationStatus       @default(submitted)
 
   // Review outcome (PRD §3.3/§4.11). Set once by the admin review action;
   // the application row itself is the audit trail — never deleted, so these
   // stay populated permanently once a decision is made. reviewedByEmail is
   // a denormalized snapshot (not a live FK) since this is a log entry, not
   // a relation that needs to track the reviewer's current identity.
-  assignedTier                  Tier?
-  adminNote                     String?
-  adminNoteVisibleToApplicant   Boolean                  @default(false)
-  reviewedAt                    DateTime?
-  reviewedByEmail               String?
+  assignedTier                Tier?
+  adminNote                   String?
+  adminNoteVisibleToApplicant Boolean   @default(false)
+  reviewedAt                  DateTime?
+  reviewedByEmail             String?
 
-  createdAt                     DateTime                 @default(now())
-  updatedAt                     DateTime                 @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("membership_applications")
 }

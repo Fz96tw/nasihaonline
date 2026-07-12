@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Form,
   FormControl,
@@ -61,6 +62,8 @@ export function ProfileForm({
           careerStage: values.careerStage,
           expertiseAreas: splitList(values.expertiseAreas),
           learningTopics: splitList(values.learningTopics),
+          listInDirectory: values.listInDirectory,
+          showSpecialtyLocation: values.showSpecialtyLocation,
         }),
       });
       if (!res.ok) {
@@ -204,6 +207,52 @@ export function ProfileForm({
             />
           </section>
         </div>
+
+        <section className="flex flex-col gap-4 rounded-[10px] border bg-card p-6 shadow-sm">
+          <div>
+            <h2 className="font-bold">Directory Visibility</h2>
+            <p className="text-sm text-muted-foreground">
+              Controls how you appear in the Member Directory.
+            </p>
+          </div>
+
+          <FormField
+            control={form.control}
+            name="listInDirectory"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between gap-4">
+                <div>
+                  <FormLabel>List me in Member Directory</FormLabel>
+                  <FormDescription>
+                    Turn this off to be excluded from the Directory entirely.
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch checked={field.value} onCheckedChange={field.onChange} />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="showSpecialtyLocation"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between gap-4">
+                <div>
+                  <FormLabel>Show my specialty and location</FormLabel>
+                  <FormDescription>
+                    When off, your title/specialty and country/region are hidden from your
+                    Directory card.
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch checked={field.value} onCheckedChange={field.onChange} />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </section>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
         {saved && !error && <p className="text-sm text-success">Profile saved.</p>}
