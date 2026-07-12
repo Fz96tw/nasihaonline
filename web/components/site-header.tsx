@@ -39,6 +39,9 @@ export async function SiteHeader() {
               <Link href="/dashboard">Dashboard</Link>
             </Button>
             <Button variant="ghost" size="sm" asChild>
+              <Link href="/members">Members</Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
               <Link href="/settings">Settings</Link>
             </Button>
             <UserMenu name={user.name ?? user.email} avatarUrl={profile?.avatarUrl ?? null} />

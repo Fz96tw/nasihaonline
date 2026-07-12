@@ -1,22 +1,9 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { getProfileAvatarUrl } from "@/lib/storage";
-import type { Tier } from "@/lib/generated/prisma/enums";
+import { DIRECTORY_TIERS, type DirectoryMember } from "@/lib/members";
 
-// Friend tier is intentionally excluded from the Directory (§4.5) — its
-// reduced access scope means it isn't listed/filterable there at all.
-// Applicants/guests have no tier and are excluded by the same filter.
-const DIRECTORY_TIERS: Tier[] = ["active", "associate", "student"];
-
-export type DirectoryMember = {
-  id: string;
-  name: string | null;
-  avatarUrl: string | null;
-  tier: Tier | null;
-  expertiseAreas: string[];
-  titleSpecialty: string | null;
-  countryRegion: string | null;
-};
+export type { DirectoryMember };
 
 /**
  * The server-side enforcement point for directory visibility prefs (§4.3/§9):
