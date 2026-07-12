@@ -31,6 +31,31 @@ const SKILLS: string[] = [
   "Communication",
 ];
 
+// Configurable earn/spend rate card (PRD §4.4's tables) — a managed
+// table, not hardcoded, so the org can tune rates over time. "Attend
+// webinar" is deliberately excluded: the PRD states it's always free,
+// not a spend event, so it has no rule.
+const CONTRIBUTION_RULES: {
+  activityKey: string;
+  label: string;
+  type: "earned" | "spent";
+  hours: number;
+}[] = [
+  { activityKey: "lecture_webinar", label: "Lecture / webinar delivered", type: "earned", hours: 1.0 },
+  { activityKey: "knowledge_discussion", label: "Knowledge discussion", type: "earned", hours: 0.5 },
+  { activityKey: "curate_resource", label: "Curate a resource", type: "earned", hours: 0.5 },
+  // "variable (seen: 2.0)" per §4.4 — 2.0 is the default rate; an admin
+  // can override the hours on an individual ledger entry when logging.
+  { activityKey: "admin_volunteer_work", label: "Administrative volunteer work", type: "earned", hours: 2.0 },
+  { activityKey: "expert_consultation", label: "Expert consultation", type: "spent", hours: 1.0 },
+  {
+    activityKey: "research_case_discussion",
+    label: "Research resource / case discussion request",
+    type: "spent",
+    hours: 0.5,
+  },
+];
+
 function slugify(name: string): string {
   return name
     .toLowerCase()
@@ -88,6 +113,15 @@ async function main() {
   console.log(`Seeded ${SKILLS.length} skills.`);
 
   await backfillProfileSkills();
+
+  for (const rule of CONTRIBUTION_RULES) {
+    await db.contributionRule.upsert({
+      where: { activityKey: rule.activityKey },
+      update: { label: rule.label, type: rule.type, hours: rule.hours },
+      create: rule,
+    });
+  }
+  console.log(`Seeded ${CONTRIBUTION_RULES.length} contribution rules.`);
 }
 
 main()

@@ -40,8 +40,27 @@ model User {
   // Denormalized donation attribution only (§4.14) — never joined against
   // for Knowledge Hours/tier logic. See Donation model for the guarantee.
   donations   Donation[]
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+
+  // Knowledge Hours ledger (§4.4) — every relation named since a single
+  // user can be the balance-holder, the actor/counterpart on the
+  // originating ContributionEvent, or an admin who created/resolved a
+  // ledger row, all independently of each other.
+  contributionLedgerEntries       ContributionLedger[] @relation("LedgerUser")
+  contributionAdjustmentsCreated  ContributionLedger[] @relation("LedgerCreatedBy")
+  contributionResolutions         ContributionLedger[] @relation("LedgerResolvedBy")
+  contributionEventsAsActor       ContributionEvent[]  @relation("ContributionEventActor")
+  contributionEventsAsCounterpart ContributionEvent[]  @relation("ContributionEventCounterpart")
+
+  // Inbox (§4.7) — directory-originated, two-party only, no live chat.
+  sentInboxMessages       InboxMessage[]   @relation("InboxMessageSender")
+  receivedInboxMessages   InboxMessage[]   @relation("InboxMessageRecipient")
+  sentMeetingRequests     MeetingRequest[] @relation("MeetingRequestSender")
+  receivedMeetingRequests MeetingRequest[] @relation("MeetingRequestRecipient")
+
+  notifications Notification[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("users")
 }
@@ -50,9 +69,9 @@ model User {
 // the full Profile domain (PRD §4.3 — avatar upload, directory prefs, skills)
 // has a real record to extend rather than needing a backfill later.
 model Profile {
-  id                    String        @id @default(cuid())
-  userId                String        @unique
-  user                  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String         @id @default(cuid())
+  userId                String         @unique
+  user                  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   bio                   String?
   // MinIO object key (not a servable URL — see getProfileAvatarUrl in lib/storage.ts),
   // same convention as TeamMember.photoUrl.
@@ -63,15 +82,15 @@ model Profile {
   // Free-text fallback only, for expertise entries that don't map to a
   // seeded Skill tag (PRD §4.3/§7.3) — tagged expertise lives in
   // ProfileSkill. Not the source of truth for Directory tag filtering.
-  expertiseAreas        String[]      @default([])
-  learningTopics        String[]      @default([])
+  expertiseAreas        String[]       @default([])
+  learningTopics        String[]       @default([])
   skills                ProfileSkill[]
   // Directory visibility prefs (§4.3/§4.5/§9) — enforced server-side in
   // lib/members-server.ts, not just hidden client-side.
-  listInDirectory       Boolean       @default(true)
-  showSpecialtyLocation Boolean       @default(true)
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+  listInDirectory       Boolean        @default(true)
+  showSpecialtyLocation Boolean        @default(true)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 
   @@map("profiles")
 }
@@ -243,4 +262,210 @@ model MembershipApplication {
   updatedAt DateTime @updatedAt
 
   @@map("membership_applications")
+}
+
+// Phase 3 data model — Knowledge Hours ledger + Inbox (PRD §4.4/§4.7).
+// ContributionRule and ContributionEvent are kept separate from
+// ContributionLedger per §4.4/§7: Rule is the configurable rate card,
+// Event is the descriptive "what happened" record (who/what/when),
+// Ledger is the append-only set of balance-affecting rows. A balance is
+// always SUM(ledger.hours WHERE status = confirmed) — never a stored,
+// directly-mutated field.
+enum LedgerTransactionType {
+  earned
+  spent
+  // No `transferred` — the Charter explicitly prohibits moving Knowledge
+  // Hours from one member's balance to another's (§4.4). `adjusted` is
+  // the only way a balance changes outside normal earn/spend, and it
+  // requires an admin actor + reason (enforced in app code, not the DB).
+  adjusted
+}
+
+enum LedgerStatus {
+  pending
+  confirmed
+  rejected
+}
+
+// Where a ContributionEvent originated (§4.4's hybrid auto/self-report
+// model). No FK to a calendar Event/Attendance row yet — those models
+// don't exist until Phase 4; this stays a plain tag until then.
+enum ContributionSource {
+  event_attendance
+  meeting_request
+  self_reported
+}
+
+// Configurable earn/spend rate card (§4.4) — not hardcoded, so rates can
+// be tuned by the org over time. `hours` is the unsigned magnitude;
+// ContributionLedger applies the sign based on `type` when a transaction
+// is posted.
+model ContributionRule {
+  id          String                @id @default(cuid())
+  activityKey String                @unique
+  label       String
+  type        LedgerTransactionType
+  hours       Decimal               @db.Decimal(5, 2)
+  active      Boolean               @default(true)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  events ContributionEvent[]
+
+  @@map("contribution_rules")
+}
+
+// The activity occurrence a ledger row is derived from (§4.4): who did
+// it, who the counterpart was (if any — peer confirmation target), and
+// where it came from. Kept separate from ContributionLedger so a single
+// occurrence's descriptive detail isn't duplicated across rows, and so
+// admin `adjusted` corrections (which have no originating activity) can
+// leave `ContributionLedger.eventId` null.
+model ContributionEvent {
+  id            String             @id @default(cuid())
+  ruleId        String
+  rule          ContributionRule   @relation(fields: [ruleId], references: [id])
+  actorId       String
+  actor         User               @relation("ContributionEventActor", fields: [actorId], references: [id])
+  counterpartId String?
+  counterpart   User?              @relation("ContributionEventCounterpart", fields: [counterpartId], references: [id])
+  note          String?
+  source        ContributionSource
+  occurredAt    DateTime           @default(now())
+  createdAt     DateTime           @default(now())
+
+  ledgerEntries ContributionLedger[]
+
+  @@index([actorId])
+  @@index([counterpartId])
+  @@map("contribution_events")
+}
+
+// The immutable, append-only balance-affecting transaction (§4.4). Never
+// updated in place after resolution — status moves pending -> confirmed
+// | rejected exactly once. `hours` is signed (positive for earned,
+// negative for spent, either sign for an admin `adjusted` correction) so
+// a plain SUM() over confirmed rows yields the balance.
+model ContributionLedger {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("LedgerUser", fields: [userId], references: [id])
+
+  eventId String?
+  event   ContributionEvent? @relation(fields: [eventId], references: [id])
+
+  type   LedgerTransactionType
+  status LedgerStatus          @default(pending)
+  hours  Decimal               @db.Decimal(5, 2)
+  // Required (enforced in app code) when type = adjusted — the admin's
+  // reason note for the correction, per §4.4's audit requirement.
+  reason String?
+
+  // Set only for admin-initiated `adjusted` rows; null for self-reported
+  // or auto-posted entries.
+  createdByUserId String?
+  createdByUser   User?   @relation("LedgerCreatedBy", fields: [createdByUserId], references: [id])
+
+  // The counterpart or admin who confirmed/rejected a pending row. Null
+  // for auto-posted rows (confirmed by construction) and while pending.
+  resolvedByUserId String?
+  resolvedByUser   User?     @relation("LedgerResolvedBy", fields: [resolvedByUserId], references: [id])
+  resolvedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  meetingRequest MeetingRequest?
+
+  @@index([userId, status])
+  @@map("contribution_ledger")
+}
+
+enum MeetingRequestStatus {
+  pending
+  accepted
+  declined
+  rescheduled
+}
+
+// Directory-originated meeting request (§4.7) — always two-party, no
+// conversation/participant join tables needed. Accepting one is the
+// trigger for an auto-spend ledger transaction (§4.4); that transaction
+// is linked back here once posted.
+model MeetingRequest {
+  id            String               @id @default(cuid())
+  senderId      String
+  sender        User                 @relation("MeetingRequestSender", fields: [senderId], references: [id])
+  recipientId   String
+  recipient     User                 @relation("MeetingRequestRecipient", fields: [recipientId], references: [id])
+  topic         String
+  proposedTimes DateTime[]
+  status        MeetingRequestStatus @default(pending)
+  message       String?
+
+  // Set on acceptance — the auto-spend ContributionLedger row this
+  // meeting produced. Null until accepted (declined/rescheduled requests
+  // never get one).
+  contributionLedgerId String?             @unique
+  contributionLedger   ContributionLedger? @relation(fields: [contributionLedgerId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([recipientId, status])
+  @@index([senderId])
+  @@map("meeting_requests")
+}
+
+// Directory-originated asynchronous message (§4.7). Threaded replies are
+// a self-relation via parentId, email-style — not a live conversation.
+model InboxMessage {
+  id          String  @id @default(cuid())
+  senderId    String
+  sender      User    @relation("InboxMessageSender", fields: [senderId], references: [id])
+  recipientId String
+  recipient   User    @relation("InboxMessageRecipient", fields: [recipientId], references: [id])
+  subject     String?
+  body        String
+
+  parentId String?
+  parent   InboxMessage?  @relation("InboxMessageThread", fields: [parentId], references: [id])
+  replies  InboxMessage[] @relation("InboxMessageThread")
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([recipientId, readAt])
+  @@index([senderId])
+  @@index([parentId])
+  @@map("inbox_messages")
+}
+
+// §4.10's notification types this objective's entities can produce
+// directly; the remaining types (event/blog/forum/library/digest/board
+// announcement) get added when those domains land in later phases.
+enum NotificationType {
+  inbox_message
+  meeting_request_received
+  meeting_request_accepted
+  meeting_request_declined
+  meeting_request_rescheduled
+  contribution_awarded
+}
+
+// Homegrown in-app notification feed (§4.10) — no third-party vendor.
+// NotificationPreference/Announcement are out of scope for this
+// objective (not part of Phase 3.1's entity list).
+model Notification {
+  id          String           @id @default(cuid())
+  recipientId String
+  recipient   User             @relation(fields: [recipientId], references: [id])
+  type        NotificationType
+  message     String
+  link        String?
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@index([recipientId, readAt])
+  @@map("notifications")
 }
