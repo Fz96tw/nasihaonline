@@ -3,6 +3,7 @@ import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
 import { profilePatchSchema } from "@/lib/validation/profile";
+import { enqueueProfileIndexSync } from "@/lib/queues/search-index-queue";
 
 export async function GET() {
   let user;
@@ -54,6 +55,8 @@ export async function PATCH(request: Request) {
       },
     }),
   ]);
+
+  await enqueueProfileIndexSync(user.id);
 
   return NextResponse.json({
     user: { name: parsed.data.name, email: user.email },

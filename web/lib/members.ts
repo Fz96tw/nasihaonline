@@ -26,15 +26,3 @@ export const TIER_BADGE_VARIANT: Record<Tier, "success" | "info" | "warning" | "
   [Tier.student]: "warning",
   [Tier.friend]: "neutral",
 };
-
-export function matchesDirectorySearch(member: DirectoryMember, rawQuery: string): boolean {
-  const query = rawQuery.trim().toLowerCase();
-  if (!query) return true;
-
-  const haystack = [member.name, member.titleSpecialty, member.countryRegion, ...member.expertiseAreas]
-    .filter((value): value is string => Boolean(value))
-    .join(" ")
-    .toLowerCase();
-
-  return haystack.includes(query);
-}

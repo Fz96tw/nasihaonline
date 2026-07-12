@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
-import { getDirectoryMembers } from "@/lib/members-server";
+import { getDirectoryMembers, searchDirectoryMembers } from "@/lib/members-server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     await requireUser();
   } catch (error) {
@@ -10,7 +10,11 @@ export async function GET() {
     throw error;
   }
 
-  const members = await getDirectoryMembers();
+  // Empty/absent query = full browse listing (plain Postgres query, sorted
+  // by name); a real query is delegated to Meilisearch (§7.2/§9) rather than
+  // scanning Postgres for a text match.
+  const query = request.nextUrl.searchParams.get("q")?.trim() ?? "";
+  const members = query ? await searchDirectoryMembers(query) : await getDirectoryMembers();
 
   return NextResponse.json(
     { members },

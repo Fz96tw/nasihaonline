@@ -1,35 +1,48 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MemberCard } from "@/components/members/member-card";
-import { matchesDirectorySearch, type DirectoryMember } from "@/lib/members";
+import { type DirectoryMember } from "@/lib/members";
 import { useDirectoryFilters } from "@/lib/stores/directory-filters";
 
-async function fetchDirectoryMembers(): Promise<DirectoryMember[]> {
-  const response = await fetch("/api/members");
+const SEARCH_DEBOUNCE_MS = 250;
+
+async function fetchDirectoryMembers(query: string): Promise<DirectoryMember[]> {
+  const response = await fetch(`/api/members${query ? `?q=${encodeURIComponent(query)}` : ""}`);
   if (!response.ok) throw new Error("Failed to load the member directory");
   const data = (await response.json()) as { members: DirectoryMember[] };
   return data.members;
 }
 
+/** Debounces the store's live search value so keystrokes don't each trigger a Meilisearch round trip (§9). */
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(timeout);
+  }, [value, delayMs]);
+
+  return debounced;
+}
+
 export function DirectoryGrid({ initialMembers }: { initialMembers: DirectoryMember[] }) {
   const search = useDirectoryFilters((state) => state.search);
   const tier = useDirectoryFilters((state) => state.tier);
+  const debouncedSearch = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
 
   const { data: members, isLoading } = useQuery({
-    queryKey: ["directory-members"],
-    queryFn: fetchDirectoryMembers,
-    initialData: initialMembers,
+    queryKey: ["directory-members", debouncedSearch],
+    queryFn: () => fetchDirectoryMembers(debouncedSearch),
+    initialData: debouncedSearch ? undefined : initialMembers,
   });
 
   const filtered = useMemo(() => {
-    return members.filter(
-      (member) =>
-        (tier === "all" || member.tier === tier) && matchesDirectorySearch(member, search),
-    );
-  }, [members, search, tier]);
+    if (!members) return [];
+    return tier === "all" ? members : members.filter((member) => member.tier === tier);
+  }, [members, tier]);
 
   if (isLoading) {
     return (

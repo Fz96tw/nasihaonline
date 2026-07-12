@@ -54,17 +54,25 @@ From the repo root:
 docker compose up
 ```
 
-This starts the Next.js app, PostgreSQL, and Redis together. On startup the app container generates the Prisma client and applies any pending migrations automatically. Once ready, open [http://localhost:3000](http://localhost:3000).
+This starts the Next.js app, PostgreSQL, Redis, MinIO, Meilisearch, and the search-index worker together. On startup the app container generates the Prisma client and applies any pending migrations automatically. Once ready, open [http://localhost:3000](http://localhost:3000).
 
 ## Getting Started (local, without Docker)
 
-Requires a local PostgreSQL and Redis instance. Copy `.env.example` to `.env` and adjust `DATABASE_URL` / `REDIS_URL` if needed, then:
+Requires local PostgreSQL, Redis, and Meilisearch instances. Copy `.env.example` to `.env` and adjust `DATABASE_URL` / `REDIS_URL` / `MEILI_HOST` if needed, then:
 
 ```bash
 npm install
 npx prisma migrate dev
-npm run dev
+npm run dev       # in one terminal
+npm run worker    # in another — syncs the Meilisearch index (see below)
 ```
+
+## Search (Meilisearch)
+
+Directory search (§7.2/§9) is powered by [Meilisearch](https://www.meilisearch.com), matching the docker-compose `meilisearch` service. Profile writes never touch Meilisearch inline in the request path — `PATCH /api/profile`, avatar upload, and avatar delete each enqueue a BullMQ job (`lib/queues/search-index-queue.ts`), and the standalone worker (`npm run worker`, `scripts/worker.ts`) is what actually reads the DB and updates the `profiles` index. Only profiles with `listInDirectory = true` and a Directory-eligible tier are present in the index.
+
+- `npm run worker` — long-running process; must be running for profile edits to show up in Directory search. Configures the index's searchable/filterable attributes on boot.
+- `npm run reindex:profiles` — one-off backfill; indexes all currently-eligible profiles. Needed once after standing up Meilisearch for the first time, since existing profiles predate the sync trigger.
 
 ## Reference API routes
 

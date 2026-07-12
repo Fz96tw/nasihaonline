@@ -3,6 +3,7 @@ import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
 import { deleteAvatarObject, uploadProfileAvatar, UploadValidationError } from "@/lib/storage";
+import { enqueueProfileIndexSync } from "@/lib/queues/search-index-queue";
 
 export async function POST(request: Request) {
   let user;
@@ -37,6 +38,8 @@ export async function POST(request: Request) {
     data: { avatarUrl },
   });
 
+  await enqueueProfileIndexSync(user.id);
+
   return NextResponse.json({ profile: withResolvedAvatarUrl(profile) });
 }
 
@@ -56,6 +59,8 @@ export async function DELETE() {
     where: { userId: user.id },
     data: { avatarUrl: null },
   });
+
+  await enqueueProfileIndexSync(user.id);
 
   return NextResponse.json({ profile: withResolvedAvatarUrl(profile) });
 }

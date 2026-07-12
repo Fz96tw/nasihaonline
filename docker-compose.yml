@@ -42,6 +42,21 @@ services:
       timeout: 5s
       retries: 5
 
+  meilisearch:
+    image: getmeili/meilisearch:v1.10
+    environment:
+      MEILI_MASTER_KEY: nasiha-dev-master-key
+      MEILI_ENV: development
+    ports:
+      - "7700:7700"
+    volumes:
+      - meilisearch_data:/meili_data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:7700/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   app:
     build:
       context: ./web
@@ -70,6 +85,8 @@ services:
       MINIO_BUCKET_AVATARS: avatars
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       STRIPE_WEBHOOK_SIGNING_SECRET: ${STRIPE_WEBHOOK_SIGNING_SECRET}
+      MEILI_HOST: http://meilisearch:7700
+      MEILI_MASTER_KEY: nasiha-dev-master-key
     volumes:
       - ./web:/app
       - /app/node_modules
@@ -81,7 +98,33 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    command: ["sh", "-c", "npx prisma generate && npm run worker"]
+    environment:
+      DATABASE_URL: postgresql://nasiha:nasiha@postgres:5432/nasiha?schema=public
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: development
+      MEILI_HOST: http://meilisearch:7700
+      MEILI_MASTER_KEY: nasiha-dev-master-key
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
 
 volumes:
   postgres_data:
   minio_data:
+  meilisearch_data:
