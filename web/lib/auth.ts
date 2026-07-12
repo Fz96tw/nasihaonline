@@ -1,19 +1,26 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { syncUserFromClerk } from "@/lib/clerk-sync";
 import type { Role } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 
 /**
  * Resolves the current request's Clerk session to Nasiha's own `User` row.
- * Returns null when there is no session or the session's Clerk user has no
- * matching local row yet (e.g. the user.created webhook hasn't landed).
+ * Returns null when there is no Clerk session at all. If a session exists
+ * but the local row is missing (the user.created webhook hasn't landed —
+ * wrong secret, endpoint unreachable, delivery failure), falls back to
+ * fetching the user from Clerk directly and syncing on read, so a webhook
+ * hiccup can't strand a real, already-authenticated session.
  */
 export async function getSessionUser(): Promise<UserModel | null> {
   const { userId } = await auth();
   if (!userId) return null;
 
-  return db.user.findUnique({ where: { clerkUserId: userId } });
+  const user = await db.user.findUnique({ where: { clerkUserId: userId } });
+  if (user) return user;
+
+  return syncUserFromClerk(userId);
 }
 
 export class AuthError extends Error {

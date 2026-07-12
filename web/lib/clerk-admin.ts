@@ -15,11 +15,20 @@ const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
  * flow, so no plaintext password ever exists in Nasiha's systems. `role`
  * rides along in publicMetadata so the user.created webhook can assign it
  * to the local User row it creates.
+ *
+ * redirectUrl points at our own /accept-invite (a <SignUp/> mount) rather
+ * than leaving Clerk to default to its generic hosted Account Portal —
+ * the ticket Clerk issues here is a sign-up ticket (setting an initial
+ * password for a brand-new account), which needs a <SignUp/>-shaped form;
+ * <SignIn/> can't render that step. Restricted mode still rejects anyone
+ * without a valid ticket at /accept-invite, so this doesn't reopen
+ * self-serve registration.
  */
 export async function provisionMemberAccount(email: string, role: Role) {
   return clerk.invitations.createInvitation({
     emailAddress: email,
     publicMetadata: { role },
     ignoreExisting: true,
+    redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL}/accept-invite`,
   });
 }

@@ -23,7 +23,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider signInUrl="/sign-in" signUpUrl="/sign-in">
+    <ClerkProvider signInUrl="/sign-in" signUpUrl="/accept-invite">
       <html lang="en" className={cn("font-sans", inter.variable)}>
         <body className="antialiased">{children}</body>
       </html>

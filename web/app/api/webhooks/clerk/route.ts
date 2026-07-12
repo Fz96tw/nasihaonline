@@ -1,16 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { verifyWebhook } from "@clerk/nextjs/webhooks";
 import { db } from "@/lib/db";
-import { Role } from "@/lib/generated/prisma/enums";
-
-const KNOWN_ROLES = new Set<string>(Object.values(Role));
-
-function roleFromMetadata(publicMetadata: Record<string, unknown>): Role {
-  const role = publicMetadata.role;
-  return typeof role === "string" && KNOWN_ROLES.has(role)
-    ? (role as Role)
-    : Role.applicant;
-}
+import { upsertUserFromClerkData } from "@/lib/clerk-sync";
 
 /**
  * Keeps Nasiha's local `User` row in sync with Clerk, the source of truth
@@ -42,18 +33,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      await db.user.upsert({
-        where: { clerkUserId: id },
-        create: {
-          clerkUserId: id,
-          email: primaryEmail.email_address,
-          role: roleFromMetadata(public_metadata),
-        },
-        update: {
-          email: primaryEmail.email_address,
-          role: roleFromMetadata(public_metadata),
-        },
-      });
+      await upsertUserFromClerkData(id, primaryEmail.email_address, public_metadata);
       break;
     }
     case "user.deleted": {

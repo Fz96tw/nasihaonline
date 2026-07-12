@@ -4,21 +4,24 @@ Nasiha web app — Next.js 14 (App Router), TypeScript, TailwindCSS, shadcn/ui, 
 
 Login/logout, sessions, password reset, and email verification are handled by [Clerk](https://dashboard.clerk.com) — there is no self-hosted credential storage. Registration is **not** self-serve: Clerk accounts are only ever created server-side (`lib/clerk-admin.ts`), triggered by admin approval (a later objective) or, for local testing, the script below.
 
-1. Create a Clerk application (or use an existing dev instance) and copy the API keys into `.env` (see `.env.example`): `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`.
-2. **Required manual step — disable public sign-up:** in the Clerk Dashboard, go to **User & Authentication → Restrictions** and enable **Restricted** sign-up mode. This isn't automatable via Clerk's API; it must be set per Clerk project. Without this, Clerk's hosted sign-up UI would accept self-registration.
+1. Create a Clerk application (or use an existing dev instance) and copy the API keys into `.env` (see `.env.example`): `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`. Set `NEXT_PUBLIC_APP_URL` to wherever the app is actually reachable (`http://localhost:3000` for local dev) — it's used to build the invitation redirect URL below.
+2. **Required manual step — disable public sign-up:** in the Clerk Dashboard, go to **User & Authentication → Restrictions** and enable **Restricted** sign-up mode. This isn't automatable via Clerk's API; it must be set per Clerk project. With this enabled, `/accept-invite` (see below) still works for invited users — Clerk validates the invitation ticket regardless of this setting — but nobody can complete sign-up without one.
 3. Register a webhook endpoint in the Clerk Dashboard pointing at `<your-app-url>/api/webhooks/clerk`, subscribed to `user.created`, `user.updated`, `user.deleted`. Copy its signing secret into `.env` as `CLERK_WEBHOOK_SIGNING_SECRET`. (For local dev, use the Clerk CLI or a tunnel like ngrok to receive webhooks.)
 4. Provision a test user (stands in for the admin-approval flow, which doesn't exist yet):
    ```bash
    npx tsx scripts/create-test-user.ts you@example.com member
    ```
-   This sends a Clerk invitation email; the recipient sets their own password via Clerk's hosted flow, and the local `User` row is created by the webhook once they accept.
+   This sends a Clerk invitation email; the recipient follows the link to `/accept-invite`, sets their own password, and the local `User` row is created by the webhook once they accept.
 
 ### Auth routes
 
-- `GET /sign-in` — Clerk's hosted sign-in UI (embedded `<SignIn/>` component), includes forgot-password and email-verification flows built in. There is no `/sign-up` route anywhere in this app.
+- `GET /sign-in` — Clerk's hosted sign-in UI (embedded `<SignIn/>` component), includes forgot-password and email-verification flows built in.
+- `GET /accept-invite` — Clerk's hosted invitation-acceptance UI (embedded `<SignUp/>` component, ticket-only). This is where `lib/clerk-admin.ts`'s invitations redirect to set an initial password — it is **not** a public registration page: Clerk's Restricted sign-up mode (step 2 above) rejects anyone who lands here without a valid `__clerk_ticket`, regardless of the component existing.
 - `GET /dashboard` — session-protected member page; redirects to `/sign-in` if unauthenticated.
 - `GET /admin` — admin-only page; redirects to `/sign-in` if unauthenticated, renders a Forbidden message for non-admins.
 - `POST /api/webhooks/clerk` — Clerk → local `User` sync, verified via Svix (exempt from the CSRF check below).
+
+Both `/sign-in` and `/accept-invite` redirect an already-authenticated visitor straight to `/dashboard` rather than rendering the Clerk widget — Clerk's components render blank for a signed-in visitor since there's nothing left for them to do, so without this the page would just look broken.
 
 Every protected route/page does its own server-side check via `requireUser()`/`requireRole()` in `lib/auth.ts` (Clerk session + local role), not just the middleware gate — see the comment in `middleware.ts` for why.
 
