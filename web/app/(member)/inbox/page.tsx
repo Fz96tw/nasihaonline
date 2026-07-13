@@ -19,7 +19,7 @@ export default async function InboxPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Inbox</h1>
         <p className="text-muted-foreground">
-          Asynchronous messages from fellow members — reply here, no live chat.
+          Asynchronous messages and meeting requests from fellow members — no live chat.
         </p>
       </div>
 

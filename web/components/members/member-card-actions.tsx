@@ -4,11 +4,11 @@ import { useState } from "react";
 import { MessageSquare, CalendarPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SendMessageDialog } from "@/components/inbox/send-message-dialog";
+import { RequestMeetingDialog } from "@/components/members/request-meeting-dialog";
 
 /**
- * "Send Message" opens the real compose flow (§4.7). "Request Meeting" is a
- * separate objective's scope — it stays a "coming soon" no-op entry point
- * for now, same rationale as before Phase 3 landed.
+ * "Send Message" and "Request Meeting" both open into the Inbox domain
+ * (§4.7) — no live chat entry point from the Directory.
  */
 export function MemberCardActions({
   memberId,
@@ -20,13 +20,9 @@ export function MemberCardActions({
   isSelf: boolean;
 }) {
   const [messageOpen, setMessageOpen] = useState(false);
-  const [meetingComingSoon, setMeetingComingSoon] = useState(false);
+  const [meetingOpen, setMeetingOpen] = useState(false);
 
   if (isSelf) return null;
-
-  if (meetingComingSoon) {
-    return <p className="text-xs text-muted-foreground">Meeting requests arrive in a later phase.</p>;
-  }
 
   return (
     <>
@@ -47,7 +43,7 @@ export function MemberCardActions({
           className="h-8 w-8"
           title="Request Meeting"
           aria-label="Request Meeting"
-          onClick={() => setMeetingComingSoon(true)}
+          onClick={() => setMeetingOpen(true)}
         >
           <CalendarPlus className="h-3.5 w-3.5" />
         </Button>
@@ -57,6 +53,12 @@ export function MemberCardActions({
         recipientName={memberName}
         open={messageOpen}
         onOpenChange={setMessageOpen}
+      />
+      <RequestMeetingDialog
+        recipientId={memberId}
+        recipientName={memberName}
+        open={meetingOpen}
+        onOpenChange={setMeetingOpen}
       />
     </>
   );

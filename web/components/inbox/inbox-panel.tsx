@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { InboxList } from "@/components/inbox/inbox-list";
 import { InboxDetail } from "@/components/inbox/inbox-detail";
+import { MeetingRequestDetail } from "@/components/inbox/meeting-request-detail";
 import { type InboxListItem, type InboxThread } from "@/lib/inbox";
 import { cn } from "@/lib/utils";
 
@@ -37,10 +38,12 @@ export function InboxPanel({ initialItems }: { initialItems: InboxListItem[] }) 
     initialData: initialItems,
   });
 
+  const selectedItem = items.find((item) => item.id === selectedId) ?? null;
+
   const { data: thread, isLoading: threadLoading } = useQuery({
     queryKey: ["inbox-thread", selectedId],
     queryFn: () => fetchThread(selectedId as string),
-    enabled: selectedId !== null,
+    enabled: selectedItem?.kind === "message",
   });
 
   // GET /api/inbox/messages/:id marks the viewer's unread messages in that
@@ -69,12 +72,16 @@ export function InboxPanel({ initialItems }: { initialItems: InboxListItem[] }) 
         <InboxList items={items} selectedId={selectedId} onSelect={setSelectedId} />
       </div>
       <div className={cn("min-w-0 flex-1 flex-col sm:flex", selectedId ? "flex" : "hidden")}>
-        <InboxDetail
-          thread={thread}
-          isLoading={threadLoading}
-          onBack={() => setSelectedId(null)}
-          onReplySent={refresh}
-        />
+        {selectedItem?.kind === "meeting_request" ? (
+          <MeetingRequestDetail item={selectedItem} onBack={() => setSelectedId(null)} onUpdated={refresh} />
+        ) : (
+          <InboxDetail
+            thread={thread}
+            isLoading={threadLoading}
+            onBack={() => setSelectedId(null)}
+            onReplySent={refresh}
+          />
+        )}
       </div>
     </Card>
   );

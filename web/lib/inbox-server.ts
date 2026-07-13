@@ -14,18 +14,32 @@ const MESSAGE_INCLUDE = {
   recipient: { select: { id: true, name: true } },
 } as const;
 
+const MEETING_REQUEST_INCLUDE = {
+  sender: { select: { id: true, name: true } },
+  recipient: { select: { id: true, name: true } },
+} as const;
+
 /**
  * Every thread is strictly two-party and directory-originated (§4.7) — a
  * reply's parentId is always resolved to the thread's root before it's
  * stored (see resolveThreadRoot), so grouping by `parentId ?? id` is enough
- * to reconstruct threads without a recursive parent-chain walk.
+ * to reconstruct threads without a recursive parent-chain walk. Meeting
+ * requests carry their own status/detail inline (no threading), and are
+ * merged into the same most-recent-activity-sorted list per §4.7.
  */
 export async function getInboxList(userId: string): Promise<InboxListItem[]> {
-  const messages = await db.inboxMessage.findMany({
-    where: { OR: [{ senderId: userId }, { recipientId: userId }] },
-    include: MESSAGE_INCLUDE,
-    orderBy: { createdAt: "asc" },
-  });
+  const [messages, meetingRequests] = await Promise.all([
+    db.inboxMessage.findMany({
+      where: { OR: [{ senderId: userId }, { recipientId: userId }] },
+      include: MESSAGE_INCLUDE,
+      orderBy: { createdAt: "asc" },
+    }),
+    db.meetingRequest.findMany({
+      where: { OR: [{ senderId: userId }, { recipientId: userId }] },
+      include: MEETING_REQUEST_INCLUDE,
+      orderBy: { updatedAt: "desc" },
+    }),
+  ]);
 
   type Message = (typeof messages)[number];
   const threads = new Map<string, Message[]>();
@@ -46,6 +60,7 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
     const unread = group.some((message) => message.recipientId === userId && message.readAt === null);
 
     items.push({
+      kind: "message",
       id: rootId,
       otherPartyId: otherParty.id,
       otherPartyName: otherParty.name ?? "Nasiha Member",
@@ -53,6 +68,24 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
       snippet: truncate(latest.body),
       unread,
       lastActivityAt: latest.createdAt.toISOString(),
+    });
+  }
+
+  for (const meetingRequest of meetingRequests) {
+    const direction = meetingRequest.senderId === userId ? "sent" : "received";
+    const otherParty = direction === "sent" ? meetingRequest.recipient : meetingRequest.sender;
+
+    items.push({
+      kind: "meeting_request",
+      id: meetingRequest.id,
+      otherPartyId: otherParty.id,
+      otherPartyName: otherParty.name ?? "Nasiha Member",
+      direction,
+      topic: meetingRequest.topic,
+      message: meetingRequest.message,
+      proposedTimes: meetingRequest.proposedTimes.map((time) => time.toISOString()),
+      status: meetingRequest.status,
+      lastActivityAt: meetingRequest.updatedAt.toISOString(),
     });
   }
 
