@@ -49,3 +49,16 @@ export type EventWithRsvp = PublicEvent & {
 export type MemberEvent = EventWithRsvp & {
   meetingUrl: string | null;
 };
+
+// /admin/events (§4.4/§4.6) — a past event awaiting (or already past) its
+// host attendance-recording action, the trigger for the auto-earn ledger
+// transaction.
+export type PastEventForAttendance = {
+  id: string;
+  title: string;
+  type: EventType;
+  startsAt: string;
+  hostId: string;
+  hostName: string | null;
+  attendanceRecorded: boolean;
+};

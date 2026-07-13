@@ -44,6 +44,9 @@ export default async function AdminPage() {
             <Link href="/admin/ledger">Knowledge Hours Ledger</Link>
           </Button>
           <Button asChild variant="outline">
+            <Link href="/admin/events">Event Attendance</Link>
+          </Button>
+          <Button asChild variant="outline">
             <Link href="/admin/team">Our Team</Link>
           </Button>
           <Button asChild variant="outline">

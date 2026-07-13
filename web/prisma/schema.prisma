@@ -295,10 +295,10 @@ enum LedgerStatus {
 }
 
 // Where a ContributionEvent originated (§4.4's hybrid auto/self-report
-// model). Phase 4's Event/Attendance models (below) now exist, but wiring
-// the auto-earn trigger off a host's recorded Attendance is a separate
-// objective; no FK to Attendance is added yet, so this stays a plain tag
-// until then.
+// model). `event_attendance` rows also carry a real FK via
+// ContributionEvent.attendanceId (added once the auto-earn trigger was
+// wired up), so this tag is redundant with that link for those rows but
+// stays as the uniform discriminator across all sources.
 enum ContributionSource {
   event_attendance
   meeting_request
@@ -342,6 +342,13 @@ model ContributionEvent {
   source        ContributionSource
   occurredAt    DateTime           @default(now())
   createdAt     DateTime           @default(now())
+
+  // Set only for source = event_attendance: the host's Attendance row that
+  // triggered this auto-earn (§4.4/§4.6). The audit-trail link back to the
+  // originating Event/Attendance record, one-to-one since a given Attendance
+  // row can only ever produce a single earn transaction.
+  attendanceId String?     @unique
+  attendance   Attendance? @relation(fields: [attendanceId], references: [id])
 
   ledgerEntries ContributionLedger[]
 
@@ -592,8 +599,7 @@ model RSVP {
 
 // Records that a user actually attended (vs. merely RSVP'd). A `host`-role
 // row is the trigger for the §4.4 auto-posted Knowledge Hours earn
-// transaction once that wiring lands; `attendee`-role rows are just a
-// record for now.
+// transaction; `attendee`-role rows are just a record.
 model Attendance {
   id          String         @id @default(cuid())
   eventId     String
@@ -603,6 +609,10 @@ model Attendance {
   role        AttendanceRole @default(attendee)
   checkedInAt DateTime       @default(now())
   createdAt   DateTime       @default(now())
+
+  // Set only for a host-role row, once the auto-earn transaction has been
+  // posted (§4.4/§4.6). The other direction of ContributionEvent.attendanceId.
+  contributionEvent ContributionEvent?
 
   @@unique([eventId, userId])
   @@index([eventId])
