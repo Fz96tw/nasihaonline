@@ -26,3 +26,19 @@ export type PublicEvent = {
   icon: string | null;
   hostName: string | null;
 };
+
+// /events for a signed-in viewer (§4.6): same shape the public listing gets
+// (meetingUrl deliberately still excluded — it never reaches this page, per
+// §4.6's explicit "not on the public /events listing" rule, even for a
+// member who's RSVP'd) plus whether *this* viewer is RSVP'd, so the
+// members-only card's CTA can render as an RSVP toggle instead of "Join to
+// RSVP".
+export type EventWithRsvp = PublicEvent & {
+  rsvped: boolean;
+};
+
+// /calendar (member-only route, §4.6) — the one place meetingUrl is ever
+// exposed, and only when `rsvped` is true for this viewer.
+export type MemberEvent = EventWithRsvp & {
+  meetingUrl: string | null;
+};

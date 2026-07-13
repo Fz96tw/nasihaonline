@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { getPublicUpcomingEvents } from "@/lib/events-server";
+import { getMemberUpcomingEvents } from "@/lib/events-server";
 import { CalendarView } from "@/components/calendar/calendar-view";
 
 export const metadata: Metadata = {
@@ -12,7 +12,7 @@ export default async function CalendarPage() {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const events = await getPublicUpcomingEvents();
+  const events = await getMemberUpcomingEvents(user.id);
 
   return (
     <main className="mx-auto flex max-w-[1120px] flex-col gap-8 p-8">

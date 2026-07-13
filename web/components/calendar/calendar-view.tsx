@@ -7,9 +7,9 @@ import type { EventContentArg, EventInput } from "@fullcalendar/core";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EventListItem } from "@/components/calendar/event-list-item";
-import type { PublicEvent } from "@/lib/events";
+import type { MemberEvent } from "@/lib/events";
 
-function toFullCalendarEvents(events: PublicEvent[]): EventInput[] {
+function toFullCalendarEvents(events: MemberEvent[]): EventInput[] {
   return events.map((event) => ({
     id: event.id,
     title: event.title,
@@ -34,7 +34,7 @@ function renderEventContent(arg: EventContentArg) {
   );
 }
 
-export function CalendarView({ events }: { events: PublicEvent[] }) {
+export function CalendarView({ events }: { events: MemberEvent[] }) {
   const fcEvents = useMemo(() => toFullCalendarEvents(events), [events]);
   const upcoming = useMemo(
     () => [...events].sort((a, b) => a.startsAt.localeCompare(b.startsAt)),

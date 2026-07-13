@@ -1,8 +1,12 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { EVENT_TYPE_LABELS, type PublicEvent } from "@/lib/events";
+import { RsvpButton } from "@/components/calendar/rsvp-button";
+import { EVENT_TYPE_LABELS, type EventWithRsvp } from "@/lib/events";
 
 function formatEventDate(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
@@ -14,7 +18,13 @@ function formatEventDate(iso: string) {
   });
 }
 
-export function EventCard({ event }: { event: PublicEvent }) {
+// For a members-only event, the "Join to RSVP" CTA is driven by RSVP state
+// once the visitor is actually signed in (§4.6) — same RsvpButton /calendar
+// uses, just fed from getEventsForViewer's EventWithRsvp (no meetingUrl:
+// that stays hidden on this public page even after RSVP'ing, per §4.6).
+export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSignedIn: boolean }) {
+  const [rsvped, setRsvped] = useState(event.rsvped);
+
   return (
     <Card className="flex flex-col">
       <CardHeader>
@@ -37,9 +47,13 @@ export function EventCard({ event }: { event: PublicEvent }) {
       ) : null}
       {!event.open ? (
         <CardFooter className="mt-auto pt-0">
-          <Button size="sm" asChild>
-            <Link href="/join">Join to RSVP</Link>
-          </Button>
+          {isSignedIn ? (
+            <RsvpButton eventId={event.id} rsvped={rsvped} onToggled={(result) => setRsvped(result.rsvped)} />
+          ) : (
+            <Button size="sm" asChild>
+              <Link href="/join">Join to RSVP</Link>
+            </Button>
+          )}
         </CardFooter>
       ) : null}
     </Card>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { getPublicUpcomingEvents } from "@/lib/events-server";
+import { getSessionUser } from "@/lib/auth";
+import { getEventsForViewer } from "@/lib/events-server";
 import { EventCard } from "@/components/events/event-card";
 
 export const metadata: Metadata = {
@@ -7,7 +8,9 @@ export const metadata: Metadata = {
 };
 
 export default async function EventsPage() {
-  const events = await getPublicUpcomingEvents();
+  const user = await getSessionUser();
+  const events = await getEventsForViewer(user?.id ?? null);
+  const isSignedIn = Boolean(user);
 
   return (
     <main className="min-h-screen">
@@ -30,7 +33,7 @@ export default async function EventsPage() {
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {events.map((event) => (
-              <EventCard key={event.id} event={event} />
+              <EventCard key={event.id} event={event} isSignedIn={isSignedIn} />
             ))}
           </div>
         )}
