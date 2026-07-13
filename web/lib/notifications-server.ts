@@ -72,3 +72,11 @@ export async function markNotificationRead(id: string, userId: string): Promise<
 
   return { id: notification.id, link: notification.link ?? "/inbox" };
 }
+
+/** Marks every unread notification for this user read in one shot ("mark all read"). */
+export async function markAllNotificationsRead(userId: string): Promise<void> {
+  await db.notification.updateMany({
+    where: { recipientId: userId, readAt: null },
+    data: { readAt: new Date() },
+  });
+}

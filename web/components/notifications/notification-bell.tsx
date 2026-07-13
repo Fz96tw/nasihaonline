@@ -33,6 +33,15 @@ async function markRead(id: string): Promise<void> {
   if (!response.ok) throw new Error("Failed to mark notification read");
 }
 
+async function markAllRead(): Promise<void> {
+  const csrfToken = await getCsrfToken();
+  const response = await fetch("/api/notifications/read-all", {
+    method: "POST",
+    headers: { "x-csrf-token": csrfToken },
+  });
+  if (!response.ok) throw new Error("Failed to mark all notifications read");
+}
+
 /**
  * Homegrown in-app notification bell (§4.10, §8 — request/response polling,
  * no socket). Self-contained (fetch + setInterval) rather than react-query:
@@ -73,6 +82,19 @@ export function NotificationBell() {
     router.push(notification.link);
   }
 
+  async function handleMarkAllRead() {
+    const previousItems = items;
+    const previousUnreadCount = unreadCount;
+    setItems((prev) => prev.map((item) => ({ ...item, unread: false })));
+    setUnreadCount(0);
+    try {
+      await markAllRead();
+    } catch {
+      setItems(previousItems);
+      setUnreadCount(previousUnreadCount);
+    }
+  }
+
   return (
     <DropdownMenu onOpenChange={(open) => open && refresh()}>
       <DropdownMenuTrigger asChild>
@@ -90,7 +112,21 @@ export function NotificationBell() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80">
-        <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+        <div className="flex items-center justify-between px-2 py-1.5">
+          <DropdownMenuLabel className="p-0">Notifications</DropdownMenuLabel>
+          {unreadCount > 0 ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                handleMarkAllRead();
+              }}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Mark all read
+            </button>
+          ) : null}
+        </div>
         <DropdownMenuSeparator />
         {items.length === 0 ? (
           <div className="px-2 py-6 text-center text-sm text-muted-foreground">No notifications yet.</div>
