@@ -3,8 +3,10 @@ import { db } from "@/lib/db";
 import { ContributionSource, LedgerStatus, LedgerTransactionType, MeetingRequestStatus } from "@/lib/generated/prisma/enums";
 import type { MeetingRequestModel } from "@/lib/generated/prisma/models/MeetingRequest";
 
-/** The rate-card key that prices an accepted meeting request (§4.4's spend table, seeded in prisma/seed.ts). */
+/** The rate-card key that prices an accepted meeting request's spend side (§4.4, seeded in prisma/seed.ts). */
 const EXPERT_CONSULTATION_ACTIVITY_KEY = "expert_consultation";
+/** The rate-card key for the recipient's system-generated earn side (§11's resolved open question #12). */
+const KNOWLEDGE_DISCUSSION_ACTIVITY_KEY = "knowledge_discussion";
 
 export class MeetingRequestError extends Error {
   constructor(
@@ -62,11 +64,17 @@ type ResolveAction =
  * accept, decline, or propose a new time. Only the recipient may act — the
  * requester just watches the status change.
  *
- * Accepting is the ledger's auto-spend trigger (§4.4): it posts an already-
- * `confirmed` (no separate confirmation step) `spent` ContributionLedger row
- * for the requester at the Expert Consultation rate, linked back via
- * `contributionLedgerId`, in the same transaction as the status flip so the
- * two can never diverge.
+ * Accepting posts two ledger rows (§4.4/§11's resolved open question #12):
+ * an already-`confirmed` `spent` row for the requester at the Expert
+ * Consultation rate (no separate confirmation step — the system has full
+ * ground truth here), and a system-generated but still `pending` `earned`
+ * row for the recipient at the Knowledge discussion rate, naming the
+ * requester as counterpart. The recipient doesn't type anything to create
+ * their entry, but it still needs the requester's peer confirmation before
+ * counting toward the recipient's balance — a deliberate anti-fraud check
+ * so the recipient can't unilaterally credit themselves for a meeting.
+ * Both links are set in the same transaction as the status flip so none of
+ * the three can diverge.
  */
 export async function resolveMeetingRequest(
   meetingRequestId: string,
@@ -97,15 +105,21 @@ export async function resolveMeetingRequest(
     });
   }
 
-  const rule = await db.contributionRule.findUnique({ where: { activityKey: EXPERT_CONSULTATION_ACTIVITY_KEY } });
-  if (!rule || !rule.active || rule.type !== LedgerTransactionType.spent) {
+  const [spendRule, earnRule] = await Promise.all([
+    db.contributionRule.findUnique({ where: { activityKey: EXPERT_CONSULTATION_ACTIVITY_KEY } }),
+    db.contributionRule.findUnique({ where: { activityKey: KNOWLEDGE_DISCUSSION_ACTIVITY_KEY } }),
+  ]);
+  if (!spendRule || !spendRule.active || spendRule.type !== LedgerTransactionType.spent) {
     throw new MeetingRequestError(409, "Expert Consultation rate isn't configured.");
+  }
+  if (!earnRule || !earnRule.active || earnRule.type !== LedgerTransactionType.earned) {
+    throw new MeetingRequestError(409, "Knowledge discussion rate isn't configured.");
   }
 
   return db.$transaction(async (tx) => {
-    const event = await tx.contributionEvent.create({
+    const spendEvent = await tx.contributionEvent.create({
       data: {
-        ruleId: rule.id,
+        ruleId: spendRule.id,
         actorId: meetingRequest.senderId,
         counterpartId: meetingRequest.recipientId,
         note: `Meeting: ${meetingRequest.topic}`,
@@ -113,19 +127,46 @@ export async function resolveMeetingRequest(
       },
     });
 
-    const ledgerEntry = await tx.contributionLedger.create({
+    const spendLedgerEntry = await tx.contributionLedger.create({
       data: {
         userId: meetingRequest.senderId,
-        eventId: event.id,
+        eventId: spendEvent.id,
         type: LedgerTransactionType.spent,
         status: LedgerStatus.confirmed,
-        hours: rule.hours.negated(),
+        hours: spendRule.hours.negated(),
+      },
+    });
+
+    // Recipient's earn — system-generated, naming the requester as the
+    // counterpart who must confirm it (same pending -> confirmed|rejected
+    // path any other counterpart-confirmed entry follows, per §4.4).
+    const earnEvent = await tx.contributionEvent.create({
+      data: {
+        ruleId: earnRule.id,
+        actorId: meetingRequest.recipientId,
+        counterpartId: meetingRequest.senderId,
+        note: `Meeting: ${meetingRequest.topic}`,
+        source: ContributionSource.meeting_request,
+      },
+    });
+
+    const earnLedgerEntry = await tx.contributionLedger.create({
+      data: {
+        userId: meetingRequest.recipientId,
+        eventId: earnEvent.id,
+        type: LedgerTransactionType.earned,
+        status: LedgerStatus.pending,
+        hours: earnRule.hours,
       },
     });
 
     return tx.meetingRequest.update({
       where: { id: meetingRequestId },
-      data: { status: MeetingRequestStatus.accepted, contributionLedgerId: ledgerEntry.id },
+      data: {
+        status: MeetingRequestStatus.accepted,
+        contributionLedgerId: spendLedgerEntry.id,
+        recipientContributionLedgerId: earnLedgerEntry.id,
+      },
     });
   });
 }

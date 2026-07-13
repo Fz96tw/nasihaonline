@@ -241,7 +241,13 @@ export function MeetingRequestDetail({
 
         {item.status === "accepted" && (
           <p className="text-sm text-muted-foreground">
-            Accepted — a confirmed Knowledge Hours spend entry was posted automatically.
+            {item.direction === "sent"
+              ? "Accepted — a confirmed Knowledge Hours spend entry was posted automatically. A pending earn entry for " +
+                item.otherPartyName +
+                " is waiting in your Contributions for you to confirm."
+              : "Accepted — a pending Knowledge Hours earn entry was created for you automatically. It'll count toward your balance once " +
+                item.otherPartyName +
+                " confirms it."}
           </p>
         )}
 

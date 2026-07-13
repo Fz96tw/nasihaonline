@@ -377,7 +377,8 @@ model ContributionLedger {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  meetingRequest MeetingRequest?
+  meetingRequestAsRequesterSpend MeetingRequest? @relation("MeetingRequestRequesterLedger")
+  meetingRequestAsRecipientEarn  MeetingRequest? @relation("MeetingRequestRecipientLedger")
 
   @@index([userId, status])
   @@map("contribution_ledger")
@@ -391,9 +392,15 @@ enum MeetingRequestStatus {
 }
 
 // Directory-originated meeting request (§4.7) — always two-party, no
-// conversation/participant join tables needed. Accepting one is the
-// trigger for an auto-spend ledger transaction (§4.4); that transaction
-// is linked back here once posted.
+// conversation/participant join tables needed. Accepting one posts two
+// ledger rows (§4.4/§11's resolved open question #12): an auto-confirmed
+// spend for the requester (system has full ground truth — both parties
+// already interacted to reach acceptance), and a system-generated but
+// still `pending` earn for the recipient, naming the requester as
+// counterpart. The recipient's earn isn't auto-confirmed like the spend
+// side — requiring the requester's peer confirmation is a deliberate
+// anti-fraud check, so the recipient can't unilaterally credit
+// themselves for a meeting.
 model MeetingRequest {
   id            String               @id @default(cuid())
   senderId      String
@@ -405,11 +412,17 @@ model MeetingRequest {
   status        MeetingRequestStatus @default(pending)
   message       String?
 
-  // Set on acceptance — the auto-spend ContributionLedger row this
-  // meeting produced. Null until accepted (declined/rescheduled requests
-  // never get one).
+  // Set on acceptance — the requester's auto-confirmed spend row. Null
+  // until accepted (declined/rescheduled requests never get one).
   contributionLedgerId String?             @unique
-  contributionLedger   ContributionLedger? @relation(fields: [contributionLedgerId], references: [id])
+  contributionLedger   ContributionLedger? @relation("MeetingRequestRequesterLedger", fields: [contributionLedgerId], references: [id])
+
+  // Set on acceptance — the recipient's system-generated, pending-until-
+  // the-requester-confirms earn row. Same lifecycle as any other
+  // counterpart-confirmed entry (§4.4) once created; only its *creation*
+  // is automatic here, not its confirmation.
+  recipientContributionLedgerId String?             @unique
+  recipientContributionLedger   ContributionLedger? @relation("MeetingRequestRecipientLedger", fields: [recipientContributionLedgerId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
