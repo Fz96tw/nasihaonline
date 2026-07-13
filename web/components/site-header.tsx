@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { UserMenu } from "@/components/user-menu";
 import { getSessionUser } from "@/lib/auth";
 import { getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
@@ -47,6 +48,7 @@ export async function SiteHeader() {
             <Button variant="ghost" size="sm" asChild>
               <Link href="/settings">Settings</Link>
             </Button>
+            <NotificationBell />
             <UserMenu name={user.name ?? user.email} avatarUrl={profile?.avatarUrl ?? null} />
           </>
         ) : (

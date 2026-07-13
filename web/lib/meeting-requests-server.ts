@@ -1,7 +1,14 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { ContributionSource, LedgerStatus, LedgerTransactionType, MeetingRequestStatus } from "@/lib/generated/prisma/enums";
+import {
+  ContributionSource,
+  LedgerStatus,
+  LedgerTransactionType,
+  MeetingRequestStatus,
+  NotificationType,
+} from "@/lib/generated/prisma/enums";
 import type { MeetingRequestModel } from "@/lib/generated/prisma/models/MeetingRequest";
+import { createNotification } from "@/lib/notifications-server";
 
 /** The rate-card key that prices an accepted meeting request's spend side (§4.4, seeded in prisma/seed.ts). */
 const EXPERT_CONSULTATION_ACTIVITY_KEY = "expert_consultation";
@@ -38,12 +45,15 @@ export async function createMeetingRequest(
     throw new MeetingRequestError(400, "You can't request a meeting with yourself.");
   }
 
-  const recipient = await db.user.findUnique({ where: { id: input.recipientId } });
+  const [recipient, sender] = await Promise.all([
+    db.user.findUnique({ where: { id: input.recipientId } }),
+    db.user.findUnique({ where: { id: senderId }, select: { name: true } }),
+  ]);
   if (!recipient) throw new MeetingRequestError(404, "Recipient not found.");
 
   const proposedTimes = parseProposedTimes(input.proposedTimes);
 
-  return db.meetingRequest.create({
+  const meetingRequest = await db.meetingRequest.create({
     data: {
       senderId,
       recipientId: input.recipientId,
@@ -52,6 +62,15 @@ export async function createMeetingRequest(
       message: input.message,
     },
   });
+
+  await createNotification({
+    recipientId: input.recipientId,
+    type: NotificationType.meeting_request_received,
+    message: `${sender?.name ?? "A member"} requested a meeting: "${input.topic}"`,
+    link: `/inbox?item=${meetingRequest.id}`,
+  });
+
+  return meetingRequest;
 }
 
 type ResolveAction =
@@ -90,18 +109,45 @@ export async function resolveMeetingRequest(
     throw new MeetingRequestError(409, `This meeting request is already ${meetingRequest.status}.`);
   }
 
+  const actor = await db.user.findUnique({ where: { id: actingUserId }, select: { name: true } });
+  const actorName = actor?.name ?? "A member";
+
   if (action.action === "decline") {
-    return db.meetingRequest.update({
-      where: { id: meetingRequestId },
-      data: { status: MeetingRequestStatus.declined },
+    return db.$transaction(async (tx) => {
+      const updated = await tx.meetingRequest.update({
+        where: { id: meetingRequestId },
+        data: { status: MeetingRequestStatus.declined },
+      });
+      await createNotification(
+        {
+          recipientId: meetingRequest.senderId,
+          type: NotificationType.meeting_request_declined,
+          message: `${actorName} declined your meeting request: "${meetingRequest.topic}"`,
+          link: `/inbox?item=${meetingRequestId}`,
+        },
+        tx,
+      );
+      return updated;
     });
   }
 
   if (action.action === "reschedule") {
     const proposedTimes = parseProposedTimes(action.proposedTimes);
-    return db.meetingRequest.update({
-      where: { id: meetingRequestId },
-      data: { status: MeetingRequestStatus.rescheduled, proposedTimes, message: action.message },
+    return db.$transaction(async (tx) => {
+      const updated = await tx.meetingRequest.update({
+        where: { id: meetingRequestId },
+        data: { status: MeetingRequestStatus.rescheduled, proposedTimes, message: action.message },
+      });
+      await createNotification(
+        {
+          recipientId: meetingRequest.senderId,
+          type: NotificationType.meeting_request_rescheduled,
+          message: `${actorName} proposed a new time for: "${meetingRequest.topic}"`,
+          link: `/inbox?item=${meetingRequestId}`,
+        },
+        tx,
+      );
+      return updated;
     });
   }
 
@@ -160,7 +206,7 @@ export async function resolveMeetingRequest(
       },
     });
 
-    return tx.meetingRequest.update({
+    const updated = await tx.meetingRequest.update({
       where: { id: meetingRequestId },
       data: {
         status: MeetingRequestStatus.accepted,
@@ -168,5 +214,17 @@ export async function resolveMeetingRequest(
         recipientContributionLedgerId: earnLedgerEntry.id,
       },
     });
+
+    await createNotification(
+      {
+        recipientId: meetingRequest.senderId,
+        type: NotificationType.meeting_request_accepted,
+        message: `${actorName} accepted your meeting request: "${meetingRequest.topic}"`,
+        link: `/inbox?item=${meetingRequestId}`,
+      },
+      tx,
+    );
+
+    return updated;
   });
 }

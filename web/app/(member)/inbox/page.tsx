@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getInboxList } from "@/lib/inbox-server";
@@ -23,7 +24,9 @@ export default async function InboxPage() {
         </p>
       </div>
 
-      <InboxPanel initialItems={items} />
+      <Suspense fallback={null}>
+        <InboxPanel initialItems={items} />
+      </Suspense>
     </main>
   );
 }

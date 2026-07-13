@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { InboxList } from "@/components/inbox/inbox-list";
@@ -29,7 +30,9 @@ async function fetchThread(id: string): Promise<InboxThread> {
  * both side by side.
  */
 export function InboxPanel({ initialItems }: { initialItems: InboxListItem[] }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  // Seeds the selected thread/request from a notification link (`/inbox?item=<id>`, §4.10).
+  const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("item"));
   const queryClient = useQueryClient();
 
   const { data: items = [] } = useQuery({

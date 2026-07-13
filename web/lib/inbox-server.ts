@@ -1,6 +1,8 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { NotificationType } from "@/lib/generated/prisma/enums";
 import type { InboxListItem, InboxThread } from "@/lib/inbox";
+import { createNotification } from "@/lib/notifications-server";
 
 const SNIPPET_LENGTH = 140;
 
@@ -160,6 +162,9 @@ export async function sendMessage(
   senderId: string,
   input: { recipientId: string | null; subject: string | null; body: string; parentId: string | null },
 ): Promise<{ id: string; threadId: string }> {
+  const sender = await db.user.findUnique({ where: { id: senderId }, select: { name: true } });
+  const senderName = sender?.name ?? "A member";
+
   if (input.parentId === null) {
     const recipientId = input.recipientId;
     if (!recipientId) throw new SendMessageError(400, "Select a recipient");
@@ -170,6 +175,12 @@ export async function sendMessage(
 
     const message = await db.inboxMessage.create({
       data: { senderId, recipientId, subject: input.subject, body: input.body, parentId: null },
+    });
+    await createNotification({
+      recipientId,
+      type: NotificationType.inbox_message,
+      message: input.subject ? `${senderName} sent you a message: "${input.subject}"` : `${senderName} sent you a message`,
+      link: `/inbox?item=${message.id}`,
     });
     return { id: message.id, threadId: message.id };
   }
@@ -187,6 +198,12 @@ export async function sendMessage(
 
   const message = await db.inboxMessage.create({
     data: { senderId, recipientId, subject: null, body: input.body, parentId: rootId },
+  });
+  await createNotification({
+    recipientId,
+    type: NotificationType.inbox_message,
+    message: `${senderName} replied${root.subject ? ` to "${root.subject}"` : ""}`,
+    link: `/inbox?item=${rootId}`,
   });
   return { id: message.id, threadId: rootId };
 }
