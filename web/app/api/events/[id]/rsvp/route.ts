@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
-import { EventRsvpError, rsvpToEvent } from "@/lib/events-server";
+import { EventError, rsvpToEvent } from "@/lib/events-server";
 
 /**
  * POST /api/events/:id/rsvp — toggles the current member's RSVP for an
@@ -24,7 +24,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const result = await rsvpToEvent(user.id, id);
     return NextResponse.json(result);
   } catch (error) {
-    if (error instanceof EventRsvpError) {
+    if (error instanceof EventError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     throw error;

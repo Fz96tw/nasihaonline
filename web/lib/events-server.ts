@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { RSVPStatus } from "@/lib/generated/prisma/enums";
+import { EventType, RSVPStatus } from "@/lib/generated/prisma/enums";
 import type { EventWithRsvp, MemberEvent, PublicEvent } from "@/lib/events";
 
 // The server-side enforcement point for public event visibility (§4.6):
@@ -118,13 +118,77 @@ export async function getMemberUpcomingEvents(userId: string): Promise<MemberEve
   });
 }
 
-export class EventRsvpError extends Error {
+export class EventError extends Error {
   constructor(
-    public readonly status: 404,
+    public readonly status: 400 | 403 | 404,
     message: string,
   ) {
     super(message);
   }
+}
+
+/**
+ * Creates an Event from a member's "Submit Event" action (§4.6), gated to
+ * EVENT_SUBMISSION_TIERS by the caller. The submitting member always
+ * becomes the host — there's no host picker — since `Event.host` is also
+ * the auto-earn Knowledge Hours trigger on Attendance (§4.4), and letting a
+ * submitter name someone else as host would let them credit that person's
+ * hours without their involvement.
+ */
+export async function createEvent(
+  hostId: string,
+  input: {
+    title: string;
+    description: string | null;
+    type: EventType;
+    startsAt: string;
+    endsAt: string | null;
+    open: boolean;
+    icon: string | null;
+    meetingUrl: string | null;
+    deidentificationConfirmed: boolean;
+  },
+): Promise<{ id: string }> {
+  const startsAt = new Date(input.startsAt);
+  if (Number.isNaN(startsAt.getTime())) {
+    throw new EventError(400, "Start date and time isn't valid.");
+  }
+
+  let endsAt: Date | null = null;
+  if (input.endsAt) {
+    endsAt = new Date(input.endsAt);
+    if (Number.isNaN(endsAt.getTime())) {
+      throw new EventError(400, "End date and time isn't valid.");
+    }
+    if (endsAt <= startsAt) {
+      throw new EventError(400, "End time must be after the start time.");
+    }
+  }
+
+  // Belt-and-suspenders: createEventSchema already blocks an unconfirmed
+  // Case Discussion client- and server-side, but this is the one place no
+  // caller of createEvent — schema-validated or not — can bypass it.
+  if (input.type === EventType.case_discussion && !input.deidentificationConfirmed) {
+    throw new EventError(400, "Case Discussion events require the de-identification confirmation.");
+  }
+
+  const event = await db.event.create({
+    data: {
+      title: input.title,
+      description: input.description,
+      type: input.type,
+      hostId,
+      startsAt,
+      endsAt,
+      open: input.open,
+      icon: input.icon,
+      meetingUrl: input.meetingUrl,
+      deidentificationConfirmed: input.deidentificationConfirmed,
+    },
+    select: { id: true },
+  });
+
+  return { id: event.id };
 }
 
 /**
@@ -140,7 +204,7 @@ export async function rsvpToEvent(
   eventId: string,
 ): Promise<{ rsvped: boolean; meetingUrl: string | null }> {
   const event = await db.event.findUnique({ where: { id: eventId }, select: { meetingUrl: true } });
-  if (!event) throw new EventRsvpError(404, "Event not found.");
+  if (!event) throw new EventError(404, "Event not found.");
 
   const existing = await db.rSVP.findUnique({
     where: { eventId_userId: { eventId, userId } },

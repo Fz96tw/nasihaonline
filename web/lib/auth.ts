@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { syncUserFromClerk } from "@/lib/clerk-sync";
-import type { Role } from "@/lib/generated/prisma/enums";
+import type { Role, Tier } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 
 /**
@@ -47,6 +47,17 @@ export async function requireUser(): Promise<UserModel> {
 export async function requireRole(roles: Role[]): Promise<UserModel> {
   const user = await requireUser();
   if (!roles.includes(user.role)) throw new AuthError(403);
+  return user;
+}
+
+/**
+ * Throws AuthError(401) if unauthenticated, AuthError(403) if authenticated
+ * but the user has no tier or their tier isn't in `tiers` — the gate for
+ * tier-restricted member actions like Submit Event (§4.6).
+ */
+export async function requireTier(tiers: Tier[]): Promise<UserModel> {
+  const user = await requireUser();
+  if (!user.tier || !tiers.includes(user.tier)) throw new AuthError(403);
   return user;
 }
 

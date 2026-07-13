@@ -1,7 +1,14 @@
 // Client-safe Events types/constants (PRD §4.6) — kept separate from
 // events-server.ts so client components can import them without pulling
 // in the "server-only" query logic.
-import { EventType } from "@/lib/generated/prisma/enums";
+import { EventType, Tier } from "@/lib/generated/prisma/enums";
+
+// §11 open question #2 ("which tiers can submit events — Active only, or
+// Active + Associate? Not specified") — defaulted to Active tier per this
+// objective's build instruction. Active is already §2.2's top tier (nothing
+// ranks above it), so "Active and above" resolves to just this one tier.
+// Revisit if the org confirms Associate should also be able to submit.
+export const EVENT_SUBMISSION_TIERS: Tier[] = [Tier.active];
 
 export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   [EventType.webinar]: "Webinar",
