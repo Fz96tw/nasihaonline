@@ -12,6 +12,10 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+function formatMeetingTime(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 /**
  * Peer confirmation UI for pending contributions naming the current member as
  * counterpart (§4.4). Shares the ["contributions-history"] query with the
@@ -69,7 +73,15 @@ export function PendingConfirmations({ entries }: { entries: ContributionPending
             {entries.map((entry) => (
               <TableRow key={entry.id}>
                 <TableCell>{formatDate(entry.date)}</TableCell>
-                <TableCell>{entry.activity}</TableCell>
+                <TableCell>
+                  {entry.activity}
+                  {entry.meetingRequest && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Meeting: {entry.meetingRequest.topic} · proposed for{" "}
+                      {formatMeetingTime(entry.meetingRequest.proposedTime)}
+                    </p>
+                  )}
+                </TableCell>
                 <TableCell>{entry.actorName}</TableCell>
                 <TableCell className="text-right font-medium tabular-nums">{entry.hours}</TableCell>
                 <TableCell className="flex justify-end gap-2">

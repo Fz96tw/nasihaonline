@@ -3,11 +3,30 @@ import { db } from "@/lib/db";
 import { LedgerStatus, LedgerTransactionType, Role } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import type {
+  ContributionMeetingRef,
   ContributionPendingEntry,
   ContributionRuleOption,
   ContributionSummary,
   ContributionTransaction,
 } from "@/lib/contributions";
+
+/**
+ * A ledger row is linked to at most one MeetingRequest, from either side of
+ * the two relations added for §11's resolved open question #12 (requester's
+ * spend, recipient's earn) — never both, since each relation is 1:1 on a
+ * distinct FK. Surfacing the meeting's own topic/proposed time here is what
+ * lets a ledger row be told apart from a different meeting between the same
+ * two people, since the row's own `date` is when it was *posted*, not the
+ * meeting's date.
+ */
+function meetingRequestRef(row: {
+  meetingRequestAsRequesterSpend: { topic: string; proposedTimes: Date[] } | null;
+  meetingRequestAsRecipientEarn: { topic: string; proposedTimes: Date[] } | null;
+}): ContributionMeetingRef | null {
+  const meeting = row.meetingRequestAsRequesterSpend ?? row.meetingRequestAsRecipientEarn;
+  if (!meeting || meeting.proposedTimes.length === 0) return null;
+  return { topic: meeting.topic, proposedTime: meeting.proposedTimes[0].toISOString() };
+}
 
 /** Activities selectable from the "Log Contribution" form (§4.4) — active, earn-type rules only. */
 export async function getActiveEarnRules(): Promise<ContributionRuleOption[]> {
@@ -57,7 +76,11 @@ export async function getContributionHistory(userId: string): Promise<Contributi
   const rows = await db.contributionLedger.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
-    include: { event: { include: { rule: true, counterpart: { select: { name: true } } } } },
+    include: {
+      event: { include: { rule: true, counterpart: { select: { name: true } } } },
+      meetingRequestAsRequesterSpend: { select: { topic: true, proposedTimes: true } },
+      meetingRequestAsRecipientEarn: { select: { topic: true, proposedTimes: true } },
+    },
   });
 
   return rows.map((row) => ({
@@ -71,6 +94,7 @@ export async function getContributionHistory(userId: string): Promise<Contributi
     status: row.status,
     hours: row.hours.toNumber(),
     reason: row.status === LedgerStatus.rejected ? row.reason : null,
+    meetingRequest: meetingRequestRef(row),
   }));
 }
 
@@ -95,7 +119,11 @@ export async function getPendingConfirmationsForCounterpart(
   const rows = await db.contributionLedger.findMany({
     where: { status: LedgerStatus.pending, event: { counterpartId: userId } },
     orderBy: { createdAt: "asc" },
-    include: { event: { include: { rule: true, actor: { select: { name: true } } } } },
+    include: {
+      event: { include: { rule: true, actor: { select: { name: true } } } },
+      meetingRequestAsRequesterSpend: { select: { topic: true, proposedTimes: true } },
+      meetingRequestAsRecipientEarn: { select: { topic: true, proposedTimes: true } },
+    },
   });
 
   return rows.map((row) => ({
@@ -105,6 +133,7 @@ export async function getPendingConfirmationsForCounterpart(
     actorName: row.event?.actor.name ?? "Unknown",
     counterpartName: null,
     hours: row.hours.toNumber(),
+    meetingRequest: meetingRequestRef(row),
   }));
 }
 
@@ -122,6 +151,8 @@ export async function getPendingLedgerEntriesForAdmin(): Promise<ContributionPen
       event: {
         include: { rule: true, actor: { select: { name: true } }, counterpart: { select: { name: true } } },
       },
+      meetingRequestAsRequesterSpend: { select: { topic: true, proposedTimes: true } },
+      meetingRequestAsRecipientEarn: { select: { topic: true, proposedTimes: true } },
     },
   });
 
@@ -132,6 +163,7 @@ export async function getPendingLedgerEntriesForAdmin(): Promise<ContributionPen
     actorName: row.event?.actor.name ?? "Unknown",
     counterpartName: row.event?.counterpart?.name ?? null,
     hours: row.hours.toNumber(),
+    meetingRequest: meetingRequestRef(row),
   }));
 }
 

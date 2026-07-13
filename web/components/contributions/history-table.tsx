@@ -12,6 +12,10 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+function formatMeetingTime(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 function formatSignedHours(hours: number): string {
   const sign = hours > 0 ? "+" : "";
   const rounded = Math.abs(hours) % 1 === 0 ? Math.abs(hours) : Math.abs(hours).toFixed(1);
@@ -47,6 +51,12 @@ export function ContributionsHistoryTable({ transactions }: { transactions: Cont
                 <TableCell>{formatDate(transaction.date)}</TableCell>
                 <TableCell>
                   {transaction.activity}
+                  {transaction.meetingRequest && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Meeting: {transaction.meetingRequest.topic} · proposed for{" "}
+                      {formatMeetingTime(transaction.meetingRequest.proposedTime)}
+                    </p>
+                  )}
                   {transaction.status === LedgerStatus.rejected && transaction.reason && (
                     <p className="mt-1 text-xs text-muted-foreground">Reason: {transaction.reason}</p>
                   )}

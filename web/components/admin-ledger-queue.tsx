@@ -20,6 +20,10 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+function formatMeetingTime(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 /**
  * Admin review queue for pending contributions (§4.4, /admin/ledger). Admins
  * can confirm/reject any pending entry, but the ones with no
@@ -114,7 +118,15 @@ export function AdminLedgerQueue({ initialEntries }: { initialEntries: Contribut
           {entries.map((entry) => (
             <TableRow key={entry.id}>
               <TableCell>{formatDate(entry.date)}</TableCell>
-              <TableCell>{entry.activity}</TableCell>
+              <TableCell>
+                {entry.activity}
+                {entry.meetingRequest && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Meeting: {entry.meetingRequest.topic} · proposed for{" "}
+                    {formatMeetingTime(entry.meetingRequest.proposedTime)}
+                  </p>
+                )}
+              </TableCell>
               <TableCell>{entry.actorName}</TableCell>
               <TableCell className="text-muted-foreground">
                 {entry.counterpartName ?? "— (admin required)"}

@@ -16,6 +16,19 @@ export type ContributionSummary = {
   lifetimeSpent: number;
 };
 
+/**
+ * The meeting a ledger row is tied to, when its source is an accepted
+ * meeting request (§4.4/§11 #12) — surfaced so a row can't be confused with
+ * a different meeting between the same two people. `date` is the *ledger
+ * posting* timestamp elsewhere on the entry, which is deliberately not the
+ * same thing as the meeting's own proposed time shown here.
+ */
+export type ContributionMeetingRef = {
+  topic: string;
+  /** First proposed time, ISO — a meeting can carry more than one, but only the first is shown here. */
+  proposedTime: string;
+};
+
 export type ContributionTransaction = {
   id: string;
   date: string;
@@ -27,6 +40,7 @@ export type ContributionTransaction = {
   hours: number;
   /** Admin's rejection reason, when status is rejected and one was given (§4.4). */
   reason: string | null;
+  meetingRequest: ContributionMeetingRef | null;
 };
 
 /**
@@ -43,6 +57,7 @@ export type ContributionPendingEntry = {
   actorName: string;
   counterpartName: string | null;
   hours: number;
+  meetingRequest: ContributionMeetingRef | null;
 };
 
 export const LEDGER_STATUS_LABELS: Record<LedgerStatus, string> = {
