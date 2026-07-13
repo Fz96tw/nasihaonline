@@ -34,6 +34,9 @@ export async function SiteHeader() {
         <Link href="/our-team">Our Team</Link>
       </Button>
       <Button variant="ghost" size="sm" asChild>
+        <Link href="/events">Events</Link>
+      </Button>
+      <Button variant="ghost" size="sm" asChild>
         <Link href="/donate">Donate</Link>
       </Button>
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
