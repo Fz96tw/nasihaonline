@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import type { EventContentArg, EventInput } from "@fullcalendar/core";
@@ -8,6 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EventListItem } from "@/components/calendar/event-list-item";
 import type { MemberEvent } from "@/lib/events";
+
+type RsvpState = { rsvped: boolean; meetingUrl: string | null };
 
 function toFullCalendarEvents(events: MemberEvent[]): EventInput[] {
   return events.map((event) => ({
@@ -35,11 +37,27 @@ function renderEventContent(arg: EventContentArg) {
 }
 
 export function CalendarView({ events }: { events: MemberEvent[] }) {
-  const fcEvents = useMemo(() => toFullCalendarEvents(events), [events]);
-  const upcoming = useMemo(
-    () => [...events].sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
-    [events],
+  // Radix's TabsContent unmounts the inactive panel by default, so RSVP
+  // state can't live in EventListItem's own useState — switching to Month
+  // and back would remount it from the original (now-stale) `events` prop
+  // and the toggle would appear to "forget" itself. Keeping it here instead
+  // means it survives regardless of which tab is mounted.
+  const [rsvpState, setRsvpState] = useState<Record<string, RsvpState>>({});
+
+  const resolvedEvents = useMemo(
+    () => events.map((event) => ({ ...event, ...rsvpState[event.id] })),
+    [events, rsvpState],
   );
+
+  const fcEvents = useMemo(() => toFullCalendarEvents(resolvedEvents), [resolvedEvents]);
+  const upcoming = useMemo(
+    () => [...resolvedEvents].sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
+    [resolvedEvents],
+  );
+
+  function handleRsvpToggled(eventId: string, result: RsvpState) {
+    setRsvpState((prev) => ({ ...prev, [eventId]: result }));
+  }
 
   return (
     <Tabs defaultValue="month">
@@ -73,7 +91,11 @@ export function CalendarView({ events }: { events: MemberEvent[] }) {
             ) : (
               <ul>
                 {upcoming.map((event) => (
-                  <EventListItem key={event.id} event={event} />
+                  <EventListItem
+                    key={event.id}
+                    event={event}
+                    onRsvpToggled={(result) => handleRsvpToggled(event.id, result)}
+                  />
                 ))}
               </ul>
             )}

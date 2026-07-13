@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { RsvpButton } from "@/components/calendar/rsvp-button";
 import { AddToCalendarButton } from "@/components/calendar/add-to-calendar-button";
@@ -16,9 +15,17 @@ function formatEventDateTime(iso: string) {
   });
 }
 
-export function EventListItem({ event }: { event: MemberEvent }) {
-  const [rsvped, setRsvped] = useState(event.rsvped);
-  const [meetingUrl, setMeetingUrl] = useState(event.meetingUrl);
+// RSVP/meetingUrl are controlled by the parent CalendarView (not local
+// state here) so they survive the "Upcoming List" tab panel being
+// unmounted and remounted when the user switches to Month and back.
+export function EventListItem({
+  event,
+  onRsvpToggled,
+}: {
+  event: MemberEvent;
+  onRsvpToggled: (result: { rsvped: boolean; meetingUrl: string | null }) => void;
+}) {
+  const { rsvped, meetingUrl } = event;
 
   return (
     <li className="flex flex-col gap-3 border-b py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
@@ -46,14 +53,7 @@ export function EventListItem({ event }: { event: MemberEvent }) {
         ) : null}
       </div>
       <div className="flex flex-shrink-0 flex-col items-start gap-2 sm:items-end">
-        <RsvpButton
-          eventId={event.id}
-          rsvped={rsvped}
-          onToggled={(result) => {
-            setRsvped(result.rsvped);
-            setMeetingUrl(result.meetingUrl);
-          }}
-        />
+        <RsvpButton eventId={event.id} rsvped={rsvped} onToggled={onRsvpToggled} />
         <AddToCalendarButton eventId={event.id} />
       </div>
     </li>
