@@ -1,10 +1,6 @@
 import { StatCard } from "@/components/dashboard/stat-card";
 import { LogContributionDialog } from "@/components/contributions/log-contribution-dialog";
-import { type ContributionRuleOption, type ContributionSummary } from "@/lib/contributions";
-
-function formatHours(hours: number): string {
-  return `${hours % 1 === 0 ? hours : hours.toFixed(1)}`;
-}
+import { formatHours, type ContributionRuleOption, type ContributionSummary } from "@/lib/contributions";
 
 export function ContributionsSummaryBar({
   summary,

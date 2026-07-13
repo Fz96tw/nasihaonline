@@ -60,6 +60,11 @@ export type ContributionPendingEntry = {
   meetingRequest: ContributionMeetingRef | null;
 };
 
+/** Trims a trailing ".0" so whole-hour balances read as e.g. "3" rather than "3.0". */
+export function formatHours(hours: number): string {
+  return `${hours % 1 === 0 ? hours : hours.toFixed(1)}`;
+}
+
 export const LEDGER_STATUS_LABELS: Record<LedgerStatus, string> = {
   [LedgerStatus.pending]: "Pending",
   [LedgerStatus.confirmed]: "Confirmed",

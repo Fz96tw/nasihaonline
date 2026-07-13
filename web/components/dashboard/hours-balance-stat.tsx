@@ -1,0 +1,19 @@
+import { getContributionSummary } from "@/lib/contributions-server";
+import { formatHours } from "@/lib/contributions";
+import { StatCard } from "@/components/dashboard/stat-card";
+
+// Live confirmed balance from the Contribution Ledger, replacing the
+// zero-state placeholder now that 3.1-3.5 have landed (PRD §10 Phase 3).
+export async function HoursBalanceStat({ userId }: { userId: string }) {
+  const { balance } = await getContributionSummary(userId);
+
+  return (
+    <StatCard
+      label="Hours balance"
+      value={formatHours(balance)}
+      sublabel="Knowledge Hours"
+      href="/contributions"
+      linkLabel="View history"
+    />
+  );
+}
