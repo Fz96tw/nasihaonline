@@ -11,6 +11,7 @@ import {
   MessageSquare,
   PenLine,
   Settings,
+  Shield,
   User,
   Users,
   type LucideIcon,
@@ -59,7 +60,7 @@ const NAV_SECTIONS: NavSection[] = [
 const linkClasses =
   "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors sm:justify-center lg:justify-start";
 
-export function MemberSidebar() {
+export function MemberSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -115,6 +116,22 @@ export function MemberSidebar() {
       ))}
 
       <div className="mt-auto pt-4">
+        {isAdmin && (
+          <Link
+            href="/admin"
+            title="Admin"
+            aria-current={pathname.startsWith("/admin") ? "page" : undefined}
+            className={cn(
+              linkClasses,
+              pathname.startsWith("/admin")
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+            )}
+          >
+            <Shield className="h-[18px] w-[18px] flex-shrink-0" />
+            <span className="hidden truncate lg:inline">Admin</span>
+          </Link>
+        )}
         <Link
           href="/settings"
           title="Settings"
