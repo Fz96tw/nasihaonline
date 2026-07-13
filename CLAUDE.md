@@ -14,6 +14,10 @@ This repo has two parts: the **planning docs** at the root, and a **live Next.js
 
 Work happening in `web/` should follow the conventions in `system-design.md` and `ui-system.md` (domain boundaries, Prisma schema shape, RHF+Zod forms, shadcn primitives) and implement the behavior specified in `PRD.md`.
 
+## Planwright
+
+The canonical GitHub repo for this project is `Fz96tw/nasihaonline` (Planwright project id `6b2046b5-5198-4802-a53c-484d80b80c33`, workspace `cloudcurio`). Always call `planwright_set_repo` with this exact `githubRepo` value. Verify against `git remote -v` if in doubt — do not guess the owner from the git commit author/user.name (e.g. do not use `nadeem/nasihaonline`); that has previously auto-created a spurious duplicate empty project.
+
 ## Editing conventions
 
 - PRD.md uses `§N` cross-references between sections (e.g. "(§4.14)"). When editing content that other sections cross-reference, update the cross-references too.
