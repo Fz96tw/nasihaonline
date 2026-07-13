@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { getCsrfToken } from "@/lib/csrf-client";
 import type { NotificationListItem } from "@/lib/notifications";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +22,15 @@ async function fetchNotifications(): Promise<{ items: NotificationListItem[]; un
   const response = await fetch("/api/notifications");
   if (!response.ok) throw new Error("Failed to load notifications");
   return response.json();
+}
+
+async function markRead(id: string): Promise<void> {
+  const csrfToken = await getCsrfToken();
+  const response = await fetch(`/api/notifications/${id}`, {
+    method: "PATCH",
+    headers: { "x-csrf-token": csrfToken },
+  });
+  if (!response.ok) throw new Error("Failed to mark notification read");
 }
 
 /**
@@ -53,7 +63,12 @@ export function NotificationBell() {
     if (notification.unread) {
       setItems((prev) => prev.map((item) => (item.id === notification.id ? { ...item, unread: false } : item)));
       setUnreadCount((count) => Math.max(0, count - 1));
-      await fetch(`/api/notifications/${notification.id}`, { method: "PATCH" }).catch(() => {});
+      try {
+        await markRead(notification.id);
+      } catch {
+        // Resync with the server rather than leaving the badge permanently wrong.
+        await refresh();
+      }
     }
     router.push(notification.link);
   }
