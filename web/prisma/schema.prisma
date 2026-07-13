@@ -59,6 +59,13 @@ model User {
 
   notifications Notification[]
 
+  // Events (§4.6) — hostId is required and un-cascaded on delete, same
+  // convention as ContributionEvent.actorId, since a host's past events
+  // are historical record even if their account is later removed.
+  hostedEvents     Event[]      @relation("EventHost")
+  eventRsvps       RSVP[]       @relation("EventRsvp")
+  eventAttendances Attendance[] @relation("EventAttendance")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -288,8 +295,10 @@ enum LedgerStatus {
 }
 
 // Where a ContributionEvent originated (§4.4's hybrid auto/self-report
-// model). No FK to a calendar Event/Attendance row yet — those models
-// don't exist until Phase 4; this stays a plain tag until then.
+// model). Phase 4's Event/Attendance models (below) now exist, but wiring
+// the auto-earn trigger off a host's recorded Attendance is a separate
+// objective; no FK to Attendance is added yet, so this stays a plain tag
+// until then.
 enum ContributionSource {
   event_attendance
   meeting_request
@@ -483,4 +492,119 @@ model Notification {
 
   @@index([recipientId, readAt])
   @@map("notifications")
+}
+
+// Phase 4 data model — Events & Calendar (PRD §4.6). Data foundation only;
+// FullCalendar rendering, "Submit Event," and RSVP UI land in later
+// objectives. Extensible enum per §4.6 (new types can be added later).
+enum EventType {
+  webinar
+  workshop
+  case_discussion
+  student_event
+  roundtable
+  lecture
+}
+
+enum RecurrenceFrequency {
+  daily
+  weekly
+  monthly
+}
+
+enum RSVPStatus {
+  going
+  cancelled
+}
+
+// Distinguishes a host's attendance (the §4.4/§4.6 auto-earn trigger) from
+// a regular attendee's attendance record within the same table.
+enum AttendanceRole {
+  host
+  attendee
+}
+
+// Event listing/calendar entry (§4.6). `open` gates public (§4.5 unauthenticated
+// /events) vs. members-only visibility; `meetingUrl` is stored regardless but
+// only ever served to RSVP'd members (enforced in API routes, not here) — the
+// public listing never gets it. `deidentificationConfirmed` must be true
+// before a case_discussion event can be published — also app-enforced (same
+// pattern as MembershipApplication's phase-conditional required fields),
+// since the rule depends on `type` and isn't expressible as a DB constraint.
+model Event {
+  id                        String    @id @default(cuid())
+  title                     String
+  description               String?
+  type                      EventType
+  hostId                    String
+  host                      User      @relation("EventHost", fields: [hostId], references: [id])
+  startsAt                  DateTime
+  endsAt                    DateTime?
+  open                      Boolean   @default(false)
+  icon                      String?
+  meetingUrl                String?
+  deidentificationConfirmed Boolean   @default(false)
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+
+  recurrence  EventRecurrence?
+  rsvps       RSVP[]
+  attendances Attendance[]
+
+  @@index([startsAt])
+  @@map("events")
+}
+
+// Recurrence rule for a recurring Event (§4.6's "recurring events" feature).
+// One row per recurring master; individual occurrences aren't materialized
+// as separate Event rows — the calendar renderer (a later objective) expands
+// them from this rule at render time.
+model EventRecurrence {
+  id        String              @id @default(cuid())
+  eventId   String              @unique
+  event     Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  frequency RecurrenceFrequency
+  interval  Int                 @default(1)
+  // Days of week the recurrence repeats on (0 = Sunday .. 6 = Saturday),
+  // for weekly frequency only; ignored for daily/monthly.
+  byWeekday Int[]               @default([])
+  until     DateTime?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  @@map("event_recurrences")
+}
+
+model RSVP {
+  id        String     @id @default(cuid())
+  eventId   String
+  event     Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation("EventRsvp", fields: [userId], references: [id], onDelete: Cascade)
+  status    RSVPStatus @default(going)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@unique([eventId, userId])
+  @@index([userId])
+  @@map("rsvps")
+}
+
+// Records that a user actually attended (vs. merely RSVP'd). A `host`-role
+// row is the trigger for the §4.4 auto-posted Knowledge Hours earn
+// transaction once that wiring lands; `attendee`-role rows are just a
+// record for now.
+model Attendance {
+  id          String         @id @default(cuid())
+  eventId     String
+  event       Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User           @relation("EventAttendance", fields: [userId], references: [id], onDelete: Cascade)
+  role        AttendanceRole @default(attendee)
+  checkedInAt DateTime       @default(now())
+  createdAt   DateTime       @default(now())
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@map("attendance")
 }
