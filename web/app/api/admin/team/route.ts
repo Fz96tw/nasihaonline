@@ -59,7 +59,15 @@ export async function POST(request: Request) {
   const displayOrder = (last?.displayOrder ?? -1) + 1;
 
   const member = await db.teamMember.create({
-    data: { ...parsed.data, photoUrl, displayOrder },
+    data: {
+      name: parsed.data.name,
+      roleBadge: parsed.data.roleBadge,
+      title: parsed.data.title,
+      bio: parsed.data.bio,
+      active: parsed.data.active,
+      photoUrl,
+      displayOrder,
+    },
   });
 
   // The public page and any already-visited client-side navigation cache
