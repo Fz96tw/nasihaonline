@@ -50,6 +50,18 @@ export type MemberEvent = EventWithRsvp & {
   meetingUrl: string | null;
 };
 
+// Dashboard's upcoming-events widget (§10 Phase 4 capstone) — a trimmed-down
+// event shape for a small at-a-glance list, not the full calendar. Includes
+// both this member's RSVP'd events and open events they haven't RSVP'd to
+// yet, per the objective's "RSVP'd events, and/or upcoming open events".
+export type DashboardUpcomingEvent = {
+  id: string;
+  title: string;
+  type: EventType;
+  startsAt: string;
+  rsvped: boolean;
+};
+
 // /admin/events (§4.4/§4.6) — a past event awaiting (or already past) its
 // host attendance-recording action, the trigger for the auto-earn ledger
 // transaction.

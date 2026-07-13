@@ -1,8 +1,11 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { StatsRow } from "@/components/dashboard/stats-row";
 import { UpcomingEventsWidget } from "@/components/dashboard/upcoming-events-widget";
 import { RecentLibraryWidget } from "@/components/dashboard/recent-library-widget";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default async function DashboardPage() {
   const user = await getSessionUser();
@@ -20,9 +23,25 @@ export default async function DashboardPage() {
       <StatsRow userId={user.id} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <UpcomingEventsWidget />
+        <Suspense fallback={<UpcomingEventsWidgetSkeleton />}>
+          <UpcomingEventsWidget userId={user.id} />
+        </Suspense>
         <RecentLibraryWidget />
       </div>
     </main>
+  );
+}
+
+function UpcomingEventsWidgetSkeleton() {
+  return (
+    <Card>
+      <CardHeader>
+        <Skeleton className="h-6 w-40" />
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </CardContent>
+    </Card>
   );
 }

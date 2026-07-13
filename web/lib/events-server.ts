@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { EventType, RSVPStatus } from "@/lib/generated/prisma/enums";
-import type { EventWithRsvp, MemberEvent, PublicEvent } from "@/lib/events";
+import type { DashboardUpcomingEvent, EventWithRsvp, MemberEvent, PublicEvent } from "@/lib/events";
 
 // The server-side enforcement point for public event visibility (§4.6):
 // meetingUrl and deidentificationConfirmed are never selected here, so no
@@ -116,6 +116,38 @@ export async function getMemberUpcomingEvents(userId: string): Promise<MemberEve
       meetingUrl: rsvped ? event.meetingUrl : null,
     };
   });
+}
+
+// Dashboard's upcoming-events widget (§10 Phase 4 capstone): this member's
+// RSVP'd-going events plus any open events they haven't RSVP'd to, capped to
+// a short at-a-glance list rather than the full /calendar view.
+export async function getDashboardUpcomingEvents(
+  userId: string,
+  limit = 3,
+): Promise<DashboardUpcomingEvent[]> {
+  const events = await db.event.findMany({
+    where: {
+      startsAt: { gte: new Date() },
+      OR: [{ open: true }, { rsvps: { some: { userId, status: RSVPStatus.going } } }],
+    },
+    select: {
+      id: true,
+      title: true,
+      type: true,
+      startsAt: true,
+      rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
+    },
+    orderBy: { startsAt: "asc" },
+    take: limit,
+  });
+
+  return events.map((event) => ({
+    id: event.id,
+    title: event.title,
+    type: event.type,
+    startsAt: event.startsAt.toISOString(),
+    rsvped: event.rsvps.length > 0,
+  }));
 }
 
 export class EventError extends Error {
