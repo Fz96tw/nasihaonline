@@ -7,6 +7,11 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 
 const ADMIN_SECTIONS = [
   {
+    href: "/admin/users",
+    title: "Users",
+    description: "Manage roles, tiers, and account suspensions.",
+  },
+  {
     href: "/admin/applications",
     title: "Review Applications",
     description: "Approve or reject pending membership applications.",

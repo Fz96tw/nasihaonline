@@ -37,6 +37,10 @@ export class AuthError extends Error {
 export async function requireUser(): Promise<UserModel> {
   const user = await getSessionUser();
   if (!user) throw new AuthError(401);
+  // Suspension (§4.15) is a login/access gate, not a role change — block it
+  // here so every caller of requireUser/requireRole/requireTier inherits the
+  // check uniformly, without touching each protected route individually.
+  if (user.suspended) throw new AuthError(403);
   return user;
 }
 
