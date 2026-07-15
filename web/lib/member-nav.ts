@@ -63,7 +63,10 @@ export function memberFooterItems({
   canReviewLibrary: boolean;
 }): NavLink[] {
   const items: NavLink[] = [];
-  if (canReviewLibrary) {
+  // Admins reach Library Review from the Admin dashboard's own nav card
+  // instead — this link is only needed for moderators, who can't see
+  // /admin itself (it's gated to role === "admin", see app/admin/page.tsx).
+  if (canReviewLibrary && !isAdmin) {
     items.push({ label: "Library Review", href: "/admin/library/review-queue", icon: ClipboardCheck });
   }
   if (isAdmin) {
