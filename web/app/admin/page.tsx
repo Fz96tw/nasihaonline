@@ -52,6 +52,9 @@ export default async function AdminPage() {
           <Button asChild variant="outline">
             <Link href="/admin/donations">Donations</Link>
           </Button>
+          <Button asChild variant="outline">
+            <Link href="/admin/library/review-queue">Library Review Queue</Link>
+          </Button>
         </div>
       </div>
       <AdminPhaseForm currentPhase={admissionPhase} />

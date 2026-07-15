@@ -6,6 +6,7 @@ import {
   Award,
   BookOpen,
   CalendarDays,
+  ClipboardCheck,
   Inbox,
   LayoutDashboard,
   MessageSquare,
@@ -29,9 +30,11 @@ type NavSection = {
   items: NavItem[];
 };
 
-// Forums/Library ship in later phases (PRD §10, Phase 5) — listed here per
-// ui-system.md's Member Navigation spec so the IA is visible early, but
-// disabled until their routes exist. Blogs (§4.8) went live in this phase.
+// Forums ship in a later Phase 5 objective — listed here per ui-system.md's
+// Member Navigation spec so the IA is visible early, but disabled until its
+// routes exist. Blogs (§4.8) and Library submission (§4.9) are both live;
+// Library's full search/browse landing (5.5) hasn't shipped yet, so this
+// points at "My Submissions" in the meantime.
 const NAV_SECTIONS: NavSection[] = [
   {
     title: "Main",
@@ -53,14 +56,20 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     title: "Knowledge",
-    items: [{ label: "Library", icon: BookOpen, soon: true }],
+    items: [{ label: "Library", href: "/library/mine", icon: BookOpen }],
   },
 ];
 
 const linkClasses =
   "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors sm:justify-center lg:justify-start";
 
-export function MemberSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
+export function MemberSidebar({
+  isAdmin = false,
+  canReviewLibrary = false,
+}: {
+  isAdmin?: boolean;
+  canReviewLibrary?: boolean;
+}) {
   const pathname = usePathname();
 
   return (
@@ -116,6 +125,22 @@ export function MemberSidebar({ isAdmin = false }: { isAdmin?: boolean }) {
       ))}
 
       <div className="mt-auto pt-4">
+        {canReviewLibrary && (
+          <Link
+            href="/admin/library/review-queue"
+            title="Library Review"
+            aria-current={pathname.startsWith("/admin/library") ? "page" : undefined}
+            className={cn(
+              linkClasses,
+              pathname.startsWith("/admin/library")
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+            )}
+          >
+            <ClipboardCheck className="h-[18px] w-[18px] flex-shrink-0" />
+            <span className="hidden truncate lg:inline">Library Review</span>
+          </Link>
+        )}
         {isAdmin && (
           <Link
             href="/admin"

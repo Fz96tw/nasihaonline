@@ -220,6 +220,25 @@ export function getKnowledgeDocumentUrl(objectKey: string): string {
   return `/api/library/document/${objectKey}`;
 }
 
+/**
+ * Fetches a stored Knowledge Library document (documents/ bucket) for
+ * streaming through the /api/library/document proxy — same shape/rationale
+ * as getAttachmentObject/getAvatarObject, just the documents bucket.
+ */
+export async function getKnowledgeDocumentObject(
+  objectKey: string,
+): Promise<{ stream: NodeJS.ReadableStream; contentType: string } | null> {
+  await ensureBucket(BUCKET_DOCUMENTS);
+  const minio = getClient();
+  try {
+    const stat = await minio.statObject(BUCKET_DOCUMENTS, objectKey);
+    const stream = await minio.getObject(BUCKET_DOCUMENTS, objectKey);
+    return { stream, contentType: stat.metaData["content-type"] || "application/octet-stream" };
+  } catch {
+    return null;
+  }
+}
+
 export async function deleteKnowledgeDocument(objectKey: string | null): Promise<void> {
   if (!objectKey) return;
   await ensureBucket(BUCKET_DOCUMENTS);

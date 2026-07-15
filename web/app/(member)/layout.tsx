@@ -8,7 +8,10 @@ export default async function MemberLayout({ children }: { children: React.React
   return (
     <QueryProvider>
       <div className="flex flex-1">
-        <MemberSidebar isAdmin={user?.role === "admin"} />
+        <MemberSidebar
+          isAdmin={user?.role === "admin"}
+          canReviewLibrary={user?.role === "moderator" || user?.role === "admin"}
+        />
         <div className="min-w-0 flex-1">{children}</div>
       </div>
     </QueryProvider>
