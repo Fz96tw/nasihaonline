@@ -23,7 +23,7 @@ const publicLinks = [
 ];
 const publicHrefs = new Set(publicLinks.map((link) => link.href));
 
-const linkClasses = "rounded-md px-3 py-2 text-sm font-medium hover:bg-accent";
+const linkClasses = "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-accent";
 
 export function MobileNav({
   signedIn,
@@ -66,33 +66,40 @@ export function MobileNav({
                   </div>
                   {section.items
                     .filter((item) => item.soon || !publicHrefs.has(item.href))
-                    .map((item) =>
-                      item.soon ? (
+                    .map((item) => {
+                      const Icon = item.icon;
+                      return item.soon ? (
                         <div
                           key={item.label}
                           aria-disabled="true"
-                          className="cursor-not-allowed rounded-md px-3 py-2 text-sm font-medium text-muted-foreground/50"
+                          className={`${linkClasses} cursor-not-allowed text-muted-foreground/50`}
                         >
-                          {item.label} · Soon
+                          <Icon className="h-[18px] w-[18px] flex-shrink-0" />
+                          <span className="truncate">{item.label} · Soon</span>
                         </div>
                       ) : (
                         <SheetClose asChild key={item.label}>
                           <Link href={item.href} className={linkClasses}>
-                            {item.label}
+                            <Icon className="h-[18px] w-[18px] flex-shrink-0" />
+                            <span className="truncate">{item.label}</span>
                           </Link>
                         </SheetClose>
-                      ),
-                    )}
+                      );
+                    })}
                 </div>
               ))}
               <div className="my-2 border-t" />
-              {memberFooterItems({ isAdmin, canModerate }).map((item) => (
-                <SheetClose asChild key={item.label}>
-                  <Link href={item.href} className={linkClasses}>
-                    {item.label}
-                  </Link>
-                </SheetClose>
-              ))}
+              {memberFooterItems({ isAdmin, canModerate }).map((item) => {
+                const Icon = item.icon;
+                return (
+                  <SheetClose asChild key={item.label}>
+                    <Link href={item.href} className={linkClasses}>
+                      <Icon className="h-[18px] w-[18px] flex-shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </Link>
+                  </SheetClose>
+                );
+              })}
             </>
           ) : (
             <>
