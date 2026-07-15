@@ -8,7 +8,8 @@ export const SEARCH_INDEX_QUEUE_NAME = "search-index-sync";
 export type SearchIndexSyncJob =
   | { type: "profile"; userId: string }
   | { type: "post"; postId: string }
-  | { type: "knowledge"; knowledgeItemId: string };
+  | { type: "knowledge"; knowledgeItemId: string }
+  | { type: "forum"; threadId: string };
 
 const globalForSearchIndexQueue = globalThis as unknown as {
   searchIndexQueue: Queue<SearchIndexSyncJob> | undefined;
@@ -56,6 +57,21 @@ export async function enqueueKnowledgeItemIndexSync(knowledgeItemId: string): Pr
   await searchIndexQueue.add(
     "knowledge-sync",
     { type: "knowledge", knowledgeItemId },
+    { removeOnComplete: true, removeOnFail: 50 },
+  );
+}
+
+/**
+ * Called from POST /api/forums/:forumId/threads and POST /api/forums/threads/:threadId/posts
+ * (§4.13) so the Meilisearch index (§7.2) never drifts from Postgres — same
+ * DB-write → BullMQ → index-sync pattern as enqueueKnowledgeItemIndexSync.
+ * A new reply re-syncs the same thread document rather than adding a
+ * separate one, since ForumSearchDocument is one-per-thread.
+ */
+export async function enqueueForumThreadIndexSync(threadId: string): Promise<void> {
+  await searchIndexQueue.add(
+    "forum-sync",
+    { type: "forum", threadId },
     { removeOnComplete: true, removeOnFail: 50 },
   );
 }

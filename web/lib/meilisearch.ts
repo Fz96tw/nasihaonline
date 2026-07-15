@@ -8,6 +8,7 @@ import type { Tier, KnowledgeContentType, KnowledgeLevel } from "@/lib/generated
 export const PROFILES_INDEX_NAME = "profiles";
 export const POSTS_INDEX_NAME = "posts";
 export const LIBRARY_INDEX_NAME = "knowledge_items";
+export const FORUMS_INDEX_NAME = "forum_threads";
 
 export type ProfileSearchDocument = {
   id: string; // userId
@@ -53,6 +54,23 @@ export type LibrarySearchDocument = {
   tagNames: string[];
 };
 
+// Forum search document (§4.13/§7.2) — one document per thread, rather
+// than one per post like PostSearchDocument's per-Post shape, since a
+// thread's replies are all part of the same conversation a search hit
+// should land on; `body` concatenates the opening post and every reply so
+// a search matching only a reply's text still surfaces the thread.
+// Written for every thread (no publish/review gate unlike LibrarySearchDocument
+// — all forum content is visible to the full membership as soon as it's
+// posted), and re-synced on every new reply so search never goes stale.
+export type ForumSearchDocument = {
+  id: string; // threadId
+  title: string;
+  body: string;
+  authorName: string | null;
+  forumName: string;
+  forumSlug: string;
+};
+
 const globalForMeilisearch = globalThis as unknown as {
   meilisearch: Meilisearch | undefined;
 };
@@ -77,6 +95,10 @@ function getPostsIndex() {
 
 function getLibraryIndex() {
   return getClient().index<LibrarySearchDocument>(LIBRARY_INDEX_NAME);
+}
+
+function getForumsIndex() {
+  return getClient().index<ForumSearchDocument>(FORUMS_INDEX_NAME);
 }
 
 /**
@@ -169,6 +191,34 @@ export async function searchLibraryDocuments(
   const result = await getLibraryIndex().search(query, {
     limit: options.limit ?? 50,
     filter: filters.length > 0 ? filters.join(" AND ") : undefined,
+  });
+  return result.hits;
+}
+
+/** Same idempotent-settings rationale as ensureProfilesIndexConfigured. */
+export async function ensureForumsIndexConfigured(): Promise<void> {
+  const client = getClient();
+  await client.createIndex(FORUMS_INDEX_NAME, { primaryKey: "id" }).catch(() => undefined);
+  const index = getForumsIndex();
+  await index.updateSearchableAttributes(["title", "body", "authorName", "forumName"]);
+  await index.updateFilterableAttributes(["forumSlug"]);
+}
+
+export async function upsertForumDocument(document: ForumSearchDocument): Promise<void> {
+  await getForumsIndex().addDocuments([document]);
+}
+
+export async function deleteForumDocument(threadId: string): Promise<void> {
+  await getForumsIndex().deleteDocument(threadId);
+}
+
+export async function searchForumDocuments(
+  query: string,
+  options: { forumSlug?: string; limit?: number } = {},
+): Promise<ForumSearchDocument[]> {
+  const result = await getForumsIndex().search(query, {
+    limit: options.limit ?? 50,
+    filter: options.forumSlug ? `forumSlug = "${options.forumSlug}"` : undefined,
   });
   return result.hits;
 }

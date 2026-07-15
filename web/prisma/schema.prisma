@@ -72,6 +72,7 @@ model User {
   knowledgeItemsContributed KnowledgeItem[] @relation("KnowledgeContributor")
   forumThreads              ForumThread[]   @relation("ForumThreadAuthor")
   forumPosts                ForumPost[]     @relation("ForumPostAuthor")
+  forumFollows              ForumFollow[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -851,8 +852,26 @@ model Forum {
   updatedAt    DateTime @updatedAt
 
   threads ForumThread[]
+  follows ForumFollow[]
 
   @@map("forums")
+}
+
+// Follow toggle for a Forum (§4.13) — following suppresses per-post
+// forum_reply_mention notifications in favor of future digest batching
+// (§4.10, Phase 6); digest delivery itself isn't built yet, this only
+// persists the toggle so createForumPost can check it.
+model ForumFollow {
+  id        String   @id @default(cuid())
+  forumId   String
+  forum     Forum    @relation(fields: [forumId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([forumId, userId])
+  @@index([userId])
+  @@map("forum_follows")
 }
 
 model ForumThread {
@@ -875,7 +894,12 @@ model ForumThread {
 
 // Top-level posts and replies are the same entity, threaded by
 // `parentPostId` (§4.13) — same self-relation convention as PostComment/
-// InboxMessage.
+// InboxMessage. `deidentificationConfirmed` mirrors KnowledgeItem/Event's
+// app-enforced gate, only meaningful (and only enforced) for posts in the
+// Clinical Discussions forum. `flagged` routes into the same shared
+// moderation model as flagged Library content (§4.9/§4.13) — a boolean
+// rather than a status enum since, unlike KnowledgeItem, a forum post has
+// no publish workflow to also encode.
 model ForumPost {
   id       String      @id @default(cuid())
   threadId String
@@ -887,6 +911,9 @@ model ForumPost {
   parentPostId String?
   parentPost   ForumPost?  @relation("ForumPostThread", fields: [parentPostId], references: [id])
   replies      ForumPost[] @relation("ForumPostThread")
+
+  deidentificationConfirmed Boolean @default(false)
+  flagged                   Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

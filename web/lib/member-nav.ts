@@ -28,10 +28,8 @@ export type NavSection = {
   items: NavItem[];
 };
 
-// Forums ship in a later Phase 5 objective — listed here per ui-system.md's
-// Member Navigation spec so the IA is visible early, but disabled until its
-// routes exist. Blogs (§4.8) and the full Knowledge Library (§4.9,
-// including 5.5's search/browse landing) are both live.
+// Blogs (§4.8), the full Knowledge Library (§4.9, including 5.5's
+// search/browse landing), and Forums (§4.13, live as of 5.6) are all live.
 export const MEMBER_NAV_SECTIONS: NavSection[] = [
   {
     title: "Main",
@@ -47,7 +45,7 @@ export const MEMBER_NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Member Directory", href: "/members", icon: Users },
       { label: "Calendar", href: "/calendar", icon: CalendarDays },
-      { label: "Forums", icon: MessageSquare, soon: true },
+      { label: "Forums", href: "/forums", icon: MessageSquare },
       { label: "Blogs", href: "/blog", icon: PenLine },
     ],
   },

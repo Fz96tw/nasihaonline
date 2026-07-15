@@ -5,9 +5,11 @@ import {
   deleteProfileDocument,
   deletePostDocument,
   deleteLibraryDocument,
+  deleteForumDocument,
   upsertPostDocument,
   upsertProfileDocument,
   upsertLibraryDocument,
+  upsertForumDocument,
 } from "@/lib/meilisearch";
 import { DIRECTORY_TIERS } from "@/lib/members";
 import { excerptFromHtml } from "@/lib/blog";
@@ -123,5 +125,41 @@ export async function syncKnowledgeItemToIndex(knowledgeItemId: string): Promise
     contentType: item.contentType,
     level: item.level,
     tagNames: item.tags.map(({ tag }) => tag.name),
+  });
+}
+
+/**
+ * Re-derives the thread's full text from the DB rather than trusting the
+ * caller — called from both createForumThread and createForumPost so a new
+ * reply's text is reflected the next time the thread is re-synced, same
+ * "re-derive, don't trust" rule as syncPostToIndex/syncKnowledgeItemToIndex.
+ * All forum content is visible to the full membership as soon as it's
+ * posted (no publish/review gate), so the only "not eligible" case is the
+ * thread no longer existing.
+ */
+export async function syncForumThreadToIndex(threadId: string): Promise<void> {
+  const thread = await db.forumThread.findUnique({
+    where: { id: threadId },
+    select: {
+      id: true,
+      title: true,
+      author: { select: { name: true } },
+      forum: { select: { name: true, slug: true } },
+      posts: { select: { body: true }, orderBy: { createdAt: "asc" } },
+    },
+  });
+
+  if (!thread) {
+    await deleteForumDocument(threadId);
+    return;
+  }
+
+  await upsertForumDocument({
+    id: thread.id,
+    title: thread.title,
+    body: thread.posts.map((post) => post.body).join("\n\n"),
+    authorName: thread.author.name,
+    forumName: thread.forum.name,
+    forumSlug: thread.forum.slug,
   });
 }
