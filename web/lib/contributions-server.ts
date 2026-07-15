@@ -167,6 +167,11 @@ export async function getPendingLedgerEntriesForAdmin(): Promise<ContributionPen
   }));
 }
 
+/** Cheap count for the `/admin` dashboard badge — mirrors getPendingLedgerEntriesForAdmin's filter. */
+export async function getPendingLedgerCountForAdmin(): Promise<number> {
+  return db.contributionLedger.count({ where: { status: LedgerStatus.pending } });
+}
+
 export class ContributionResolutionError extends Error {
   constructor(
     public readonly status: 400 | 403 | 404 | 409,

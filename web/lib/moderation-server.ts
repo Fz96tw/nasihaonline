@@ -80,3 +80,14 @@ export async function getFlaggedContent(): Promise<ModerationItem[]> {
 
   return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
+
+/** Cheap count for the `/admin` dashboard badge — avoids fetching full rows just to size the queue. */
+export async function getFlaggedContentCount(): Promise<number> {
+  const [posts, knowledgeItems, forumPosts] = await Promise.all([
+    db.post.count({ where: { flagged: true } }),
+    db.knowledgeItem.count({ where: { status: KnowledgeStatus.flagged } }),
+    db.forumPost.count({ where: { flagged: true } }),
+  ]);
+
+  return posts + knowledgeItems + forumPosts;
+}

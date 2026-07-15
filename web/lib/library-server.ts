@@ -252,6 +252,11 @@ export async function getReviewQueue(): Promise<ReviewQueueItem[]> {
   return items.map((item) => ({ ...item, createdAt: item.createdAt.toISOString() }));
 }
 
+/** Cheap count for the `/admin` dashboard badge — mirrors getReviewQueue's filter. */
+export async function getReviewQueueCount(): Promise<number> {
+  return db.knowledgeItem.count({ where: { status: KnowledgeStatus.pending_review } });
+}
+
 /**
  * POST /api/admin/library/:id/publish (§4.9) — transitions a pending_review
  * item to published or rejected and notifies the submitter

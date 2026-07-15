@@ -2,8 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getAdmissionPhase } from "@/lib/settings";
+import { getFlaggedContentCount } from "@/lib/moderation-server";
+import { getPendingLedgerCountForAdmin } from "@/lib/contributions-server";
+import { getReviewQueueCount } from "@/lib/library-server";
+import { db } from "@/lib/db";
+import { ApplicationStatus } from "@/lib/generated/prisma/enums";
 import { AdminPhaseForm } from "@/components/admin-phase-form";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 const ADMIN_SECTIONS = [
   {
@@ -15,16 +21,19 @@ const ADMIN_SECTIONS = [
     href: "/admin/applications",
     title: "Review Applications",
     description: "Approve or reject pending membership applications.",
+    countKey: "applications",
   },
   {
     href: "/admin/content",
     title: "Content Moderation",
     description: "Review flagged Blog posts, Library items, and Forum posts.",
+    countKey: "content",
   },
   {
     href: "/admin/ledger",
     title: "Knowledge Hours Ledger",
     description: "View and adjust member Knowledge Hours credits.",
+    countKey: "ledger",
   },
   {
     href: "/admin/events",
@@ -45,6 +54,7 @@ const ADMIN_SECTIONS = [
     href: "/admin/library/review-queue",
     title: "Library Review Queue",
     description: "Approve or reject submitted library content.",
+    countKey: "libraryReview",
   },
 ] as const;
 
@@ -70,7 +80,22 @@ export default async function AdminPage() {
     );
   }
 
-  const admissionPhase = await getAdmissionPhase();
+  const [admissionPhase, applicationsCount, contentCount, ledgerCount, libraryReviewCount] = await Promise.all([
+    getAdmissionPhase(),
+    db.membershipApplication.count({
+      where: { status: { in: [ApplicationStatus.submitted, ApplicationStatus.under_review] } },
+    }),
+    getFlaggedContentCount(),
+    getPendingLedgerCountForAdmin(),
+    getReviewQueueCount(),
+  ]);
+
+  const counts: Record<string, number> = {
+    applications: applicationsCount,
+    content: contentCount,
+    ledger: ledgerCount,
+    libraryReview: libraryReviewCount,
+  };
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 p-8">
@@ -79,16 +104,22 @@ export default async function AdminPage() {
         <p className="text-muted-foreground">Signed in as {user.email} (admin)</p>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {ADMIN_SECTIONS.map((section) => (
-          <Link key={section.href} href={section.href}>
-            <Card className="h-full transition-colors hover:bg-accent">
-              <CardHeader>
-                <CardTitle className="text-lg">{section.title}</CardTitle>
-                <CardDescription>{section.description}</CardDescription>
-              </CardHeader>
-            </Card>
-          </Link>
-        ))}
+        {ADMIN_SECTIONS.map((section) => {
+          const count = "countKey" in section ? counts[section.countKey] : undefined;
+          return (
+            <Link key={section.href} href={section.href}>
+              <Card className="h-full transition-colors hover:bg-accent">
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-2">
+                    <CardTitle className="text-lg">{section.title}</CardTitle>
+                    {!!count && <Badge variant="warning">{count} pending</Badge>}
+                  </div>
+                  <CardDescription>{section.description}</CardDescription>
+                </CardHeader>
+              </Card>
+            </Link>
+          );
+        })}
       </div>
       <AdminPhaseForm currentPhase={admissionPhase} />
     </main>
