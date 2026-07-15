@@ -147,6 +147,7 @@ export async function getForumThreadDetail(forumSlug: string, threadId: string):
           parentPostId: true,
           createdAt: true,
           flagged: true,
+          removed: true,
         },
         orderBy: { createdAt: "asc" },
       },
@@ -159,11 +160,15 @@ export async function getForumThreadDetail(forumSlug: string, threadId: string):
       post.id,
       {
         id: post.id,
-        body: post.body,
+        // A removed post keeps its row (and its replies' threading) but
+        // never shows its real body again — same "takedown, not deletion"
+        // rule as Post.publishedAt=null for a removed blog post.
+        body: post.removed ? "[Removed by a moderator]" : post.body,
         authorId: post.authorId,
         authorName: post.author.name,
         createdAt: post.createdAt.toISOString(),
         flagged: post.flagged,
+        removed: post.removed,
         replies: [],
       },
     ]),
@@ -337,4 +342,26 @@ export async function flagForumPost(id: string): Promise<{ id: string; flagged: 
   if (post.flagged) throw new ForumError(400, "This post has already been flagged.");
 
   return db.forumPost.update({ where: { id }, data: { flagged: true }, select: { id: true, flagged: true } });
+}
+
+/**
+ * PATCH /api/admin/content (§4.11) — a moderator/admin resolving a flagged
+ * post from the shared moderation queue: "dismiss" clears the flag (post
+ * stays visible, unchanged), "remove" takes it down (body replaced with a
+ * placeholder in getForumThreadDetail) without deleting the row, so any
+ * replies threaded under it keep their parentPostId intact.
+ */
+export async function resolveForumPostFlag(
+  id: string,
+  action: "dismiss" | "remove",
+): Promise<{ id: string; flagged: boolean; removed: boolean; threadId: string }> {
+  const post = await db.forumPost.findUnique({ where: { id }, select: { id: true, flagged: true } });
+  if (!post) throw new ForumError(404, "Post not found.");
+  if (!post.flagged) throw new ForumError(400, "This post is not currently flagged.");
+
+  return db.forumPost.update({
+    where: { id },
+    data: action === "remove" ? { flagged: false, removed: true } : { flagged: false },
+    select: { id: true, flagged: true, removed: true, threadId: true },
+  });
 }

@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { CommentThread } from "@/components/blog/comment-thread";
+import { PostFlagButton } from "@/components/blog/post-flag-button";
 
 function formatPostDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
@@ -45,6 +46,12 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
       </div>
 
       <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: post.body }} />
+
+      {sessionUser && (
+        <div className="mt-6">
+          <PostFlagButton slug={post.slug} initialFlagged={post.flagged} />
+        </div>
+      )}
 
       {post.tags.length > 0 && (
         <div className="mt-8 flex flex-wrap gap-2">

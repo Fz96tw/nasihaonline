@@ -108,11 +108,11 @@ export async function getRecentlyPublishedPosts(limit = 5): Promise<PostCard[]> 
 export async function getPublishedPostBySlug(slug: string): Promise<PostDetail | null> {
   const post = await db.post.findFirst({
     where: { slug, publishedAt: { not: null } },
-    select: { ...CARD_SELECT, tags: { select: { tag: { select: { name: true, slug: true } } } } },
+    select: { ...CARD_SELECT, flagged: true, tags: { select: { tag: { select: { name: true, slug: true } } } } },
   });
   if (!post) return null;
 
-  return { ...toCard(post), body: post.body, tags: post.tags.map(({ tag }) => tag) };
+  return { ...toCard(post), body: post.body, tags: post.tags.map(({ tag }) => tag), flagged: post.flagged };
 }
 
 export async function getPostCategories(): Promise<PostCategoryOption[]> {
@@ -312,4 +312,47 @@ export async function createPostComment(
   }
 
   return { id: comment.id, createdAt: comment.createdAt.toISOString() };
+}
+
+/**
+ * POST /api/blog/:slug/flag (§4.8) — community flagging, same "routes into
+ * the shared moderation model, stays visible" rule as flagKnowledgeItem/
+ * flagForumPost. Only a currently published post can be flagged, and not a
+ * second time while already flagged.
+ */
+export async function flagPost(id: string): Promise<{ id: string; flagged: boolean }> {
+  const post = await db.post.findUnique({ where: { id }, select: { id: true, flagged: true, publishedAt: true } });
+  if (!post || !post.publishedAt) throw new PostError(404, "Post not found.");
+  if (post.flagged) throw new PostError(400, "This post has already been flagged.");
+
+  return db.post.update({
+    where: { id },
+    data: { flagged: true, flagReason: null },
+    select: { id: true, flagged: true },
+  });
+}
+
+/**
+ * PATCH /api/admin/content (§4.11) — a moderator/admin resolving a flagged
+ * post from the shared moderation queue: "dismiss" clears the flag (post
+ * stays published, unchanged), "remove" unpublishes it (publishedAt: null),
+ * the same "takedown, not deletion" convention as ForumPost.removed —
+ * getPublishedPosts/getPublishedPostBySlug already exclude unpublished rows.
+ */
+export async function resolvePostFlag(
+  id: string,
+  action: "dismiss" | "remove",
+): Promise<{ id: string; flagged: boolean; publishedAt: Date | null }> {
+  const post = await db.post.findUnique({ where: { id }, select: { id: true, flagged: true } });
+  if (!post) throw new PostError(404, "Post not found.");
+  if (!post.flagged) throw new PostError(400, "This post is not currently flagged.");
+
+  return db.post.update({
+    where: { id },
+    data:
+      action === "remove"
+        ? { flagged: false, flagReason: null, publishedAt: null }
+        : { flagged: false, flagReason: null },
+    select: { id: true, flagged: true, publishedAt: true },
+  });
 }

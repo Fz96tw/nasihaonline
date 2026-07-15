@@ -17,6 +17,11 @@ const ADMIN_SECTIONS = [
     description: "Approve or reject pending membership applications.",
   },
   {
+    href: "/admin/content",
+    title: "Content Moderation",
+    description: "Review flagged Blog posts, Library items, and Forum posts.",
+  },
+  {
     href: "/admin/ledger",
     title: "Knowledge Hours Ledger",
     description: "View and adjust member Knowledge Hours credits.",

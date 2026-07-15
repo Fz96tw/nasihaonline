@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import type { ForumPostNode } from "@/lib/forums";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { cn } from "@/lib/utils";
 
 function formatTimestamp(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -144,11 +145,14 @@ function PostNode({
         <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-2">
             <span className="font-medium text-foreground">{post.authorName ?? "Nasiha Member"}</span>
-            {flagged && <Badge variant="danger">Flagged</Badge>}
+            {post.removed && <Badge variant="neutral">Removed</Badge>}
+            {!post.removed && flagged && <Badge variant="danger">Flagged</Badge>}
           </span>
           <span>{formatTimestamp(post.createdAt)}</span>
         </div>
-        <p className="whitespace-pre-wrap text-sm">{post.body}</p>
+        <p className={cn("whitespace-pre-wrap text-sm", post.removed && "italic text-muted-foreground")}>
+          {post.body}
+        </p>
         <div className="mt-2 flex items-center gap-3">
           <button
             type="button"
@@ -157,7 +161,7 @@ function PostNode({
           >
             {replying ? "Cancel" : "Reply"}
           </button>
-          {!flagged && (
+          {!post.removed && !flagged && (
             <button
               type="button"
               disabled={flagging}

@@ -83,7 +83,7 @@ export async function SiteHeader() {
         <MobileNav
           signedIn={Boolean(user)}
           isAdmin={user?.role === "admin"}
-          canReviewLibrary={user?.role === "moderator" || user?.role === "admin"}
+          canModerate={user?.role === "moderator" || user?.role === "admin"}
         />
       </div>
     </header>

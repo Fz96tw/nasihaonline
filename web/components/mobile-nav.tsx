@@ -28,11 +28,11 @@ const linkClasses = "rounded-md px-3 py-2 text-sm font-medium hover:bg-accent";
 export function MobileNav({
   signedIn,
   isAdmin = false,
-  canReviewLibrary = false,
+  canModerate = false,
 }: {
   signedIn: boolean;
   isAdmin?: boolean;
-  canReviewLibrary?: boolean;
+  canModerate?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -86,7 +86,7 @@ export function MobileNav({
                 </div>
               ))}
               <div className="my-2 border-t" />
-              {memberFooterItems({ isAdmin, canReviewLibrary }).map((item) => (
+              {memberFooterItems({ isAdmin, canModerate }).map((item) => (
                 <SheetClose asChild key={item.label}>
                   <Link href={item.href} className={linkClasses}>
                     {item.label}

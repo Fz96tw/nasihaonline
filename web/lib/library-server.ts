@@ -309,3 +309,27 @@ export async function flagKnowledgeItem(id: string): Promise<{ id: string; statu
     select: { id: true, status: true },
   });
 }
+
+/**
+ * PATCH /api/admin/content (§4.11) — a Steward/admin resolving a flagged
+ * item from the shared moderation queue: "dismiss" returns it to published
+ * (stays visible, unchanged), "remove" rejects it, the same status Library
+ * items already use to mean "not visible" (getPublishedKnowledgeItems only
+ * shows published/flagged).
+ */
+export async function resolveFlaggedKnowledgeItem(
+  id: string,
+  action: "dismiss" | "remove",
+): Promise<{ id: string; status: KnowledgeStatus }> {
+  const item = await db.knowledgeItem.findUnique({ where: { id }, select: { id: true, status: true } });
+  if (!item) throw new KnowledgeItemError(404, "Resource not found.");
+  if (item.status !== KnowledgeStatus.flagged) {
+    throw new KnowledgeItemError(400, "This resource is not currently flagged.");
+  }
+
+  return db.knowledgeItem.update({
+    where: { id },
+    data: { status: action === "remove" ? KnowledgeStatus.rejected : KnowledgeStatus.published },
+    select: { id: true, status: true },
+  });
+}

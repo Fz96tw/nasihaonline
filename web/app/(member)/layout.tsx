@@ -14,7 +14,7 @@ export default async function MemberLayout({ children }: { children: React.React
       <div className="flex flex-1">
         <MemberSidebar
           isAdmin={user?.role === "admin"}
-          canReviewLibrary={user?.role === "moderator" || user?.role === "admin"}
+          canModerate={user?.role === "moderator" || user?.role === "admin"}
         />
         <div className="min-w-0 flex-1">{children}</div>
       </div>

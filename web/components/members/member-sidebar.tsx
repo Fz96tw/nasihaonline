@@ -11,13 +11,13 @@ const linkClasses =
 
 export function MemberSidebar({
   isAdmin = false,
-  canReviewLibrary = false,
+  canModerate = false,
 }: {
   isAdmin?: boolean;
-  canReviewLibrary?: boolean;
+  canModerate?: boolean;
 }) {
   const pathname = usePathname();
-  const footerItems = memberFooterItems({ isAdmin, canReviewLibrary });
+  const footerItems = memberFooterItems({ isAdmin, canModerate });
 
   return (
     <aside className="sticky top-[62px] hidden h-[calc(100vh-62px)] w-[280px] flex-shrink-0 flex-col gap-1 overflow-y-auto border-r bg-background px-3 py-6 lg:flex">

@@ -27,6 +27,7 @@ export type PostCard = {
 export type PostDetail = PostCard & {
   body: string;
   tags: { name: string; slug: string }[];
+  flagged: boolean;
 };
 
 /** A comment on a Post (§4.8), nested by `parentId` into a reply tree. */

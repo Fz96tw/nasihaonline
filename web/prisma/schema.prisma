@@ -944,6 +944,11 @@ model ForumPost {
 
   deidentificationConfirmed Boolean @default(false)
   flagged                   Boolean @default(false)
+  // Set by a moderator/admin resolving a flagged post from /admin/content
+  // (§4.11/§4.13). The row itself is kept (never deleted) so parentPostId
+  // threading on any replies stays intact — the UI swaps in a placeholder
+  // for a removed post's body instead.
+  removed                   Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

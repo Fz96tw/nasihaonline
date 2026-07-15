@@ -32,6 +32,7 @@ export type ForumPostNode = {
   authorName: string | null;
   createdAt: string;
   flagged: boolean;
+  removed: boolean;
   replies: ForumPostNode[];
 };
 

@@ -3,6 +3,7 @@ import {
   BookOpen,
   CalendarDays,
   ClipboardCheck,
+  Flag,
   Inbox,
   LayoutDashboard,
   MessageSquare,
@@ -57,17 +58,18 @@ export const MEMBER_NAV_SECTIONS: NavSection[] = [
 
 export function memberFooterItems({
   isAdmin,
-  canReviewLibrary,
+  canModerate,
 }: {
   isAdmin: boolean;
-  canReviewLibrary: boolean;
+  canModerate: boolean;
 }): NavLink[] {
   const items: NavLink[] = [];
   // Admins reach Library Review from the Admin dashboard's own nav card
   // instead — this link is only needed for moderators, who can't see
   // /admin itself (it's gated to role === "admin", see app/admin/page.tsx).
-  if (canReviewLibrary && !isAdmin) {
+  if (canModerate && !isAdmin) {
     items.push({ label: "Library Review", href: "/admin/library/review-queue", icon: ClipboardCheck });
+    items.push({ label: "Content Moderation", href: "/admin/content", icon: Flag });
   }
   if (isAdmin) {
     items.push({ label: "Admin", href: "/admin", icon: Shield });
