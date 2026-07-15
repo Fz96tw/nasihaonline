@@ -11,7 +11,7 @@ export async function SiteHeader() {
   const profile = user ? withResolvedAvatarUrl(await getOrCreateProfile(user.id)) : null;
 
   return (
-    <header className="sticky top-0 z-50 flex h-[62px] items-center gap-6 border-b bg-background px-4 shadow-sm md:px-8">
+    <header className="sticky top-0 z-50 flex h-[62px] items-center gap-6 border-b bg-background px-4 shadow-sm lg:px-8">
       <Link href="/" className="flex flex-shrink-0 items-center gap-[.65rem]">
         <span className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-primary">
           <span className="text-lg font-black italic tracking-[-.05em] text-primary-foreground">
@@ -28,7 +28,7 @@ export async function SiteHeader() {
           </span>
         </span>
       </Link>
-      <div className="hidden items-center gap-6 md:flex">
+      <div className="hidden items-center gap-6 lg:flex">
         <Button variant="ghost" size="sm" asChild>
           <Link href="/about">About</Link>
         </Button>
@@ -48,7 +48,7 @@ export async function SiteHeader() {
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
         {user ? (
           <>
-            <div className="hidden items-center gap-2 md:flex">
+            <div className="hidden items-center gap-2 lg:flex">
               <Button variant="ghost" size="sm" asChild>
                 <Link href="/dashboard">Dashboard</Link>
               </Button>
@@ -64,7 +64,7 @@ export async function SiteHeader() {
           </>
         ) : (
           <>
-            <Button variant="ghost" size="sm" className="hidden md:inline-flex" asChild>
+            <Button variant="ghost" size="sm" className="hidden lg:inline-flex" asChild>
               <Link href="/sign-in">Log in</Link>
             </Button>
             <Button size="sm" asChild>
@@ -72,7 +72,11 @@ export async function SiteHeader() {
             </Button>
           </>
         )}
-        <MobileNav signedIn={Boolean(user)} />
+        <MobileNav
+          signedIn={Boolean(user)}
+          isAdmin={user?.role === "admin"}
+          canReviewLibrary={user?.role === "moderator" || user?.role === "admin"}
+        />
       </div>
     </header>
   );
