@@ -44,6 +44,7 @@ const CONTRIBUTION_RULES: {
   { activityKey: "lecture_webinar", label: "Lecture / webinar delivered", type: "earned", hours: 1.0 },
   { activityKey: "knowledge_discussion", label: "Knowledge discussion", type: "earned", hours: 0.5 },
   { activityKey: "curate_resource", label: "Curate a resource", type: "earned", hours: 0.5 },
+  { activityKey: "write_post", label: "Write a blog post", type: "earned", hours: 0.5 },
   // "variable (seen: 2.0)" per §4.4 — 2.0 is the default rate; an admin
   // can override the hours on an individual ledger entry when logging.
   { activityKey: "admin_volunteer_work", label: "Administrative volunteer work", type: "earned", hours: 2.0 },

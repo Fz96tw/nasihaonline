@@ -2,7 +2,12 @@ import "server-only";
 import { db } from "@/lib/db";
 import { getProfileAvatarUrl, getPostHeroImageUrl, uploadPostHeroImage, UploadValidationError } from "@/lib/storage";
 import { searchPostDocuments } from "@/lib/meilisearch";
-import { NotificationType } from "@/lib/generated/prisma/enums";
+import {
+  ContributionSource,
+  LedgerStatus,
+  LedgerTransactionType,
+  NotificationType,
+} from "@/lib/generated/prisma/enums";
 import { createNotification } from "@/lib/notifications-server";
 import type { PostCard, PostDetail, PostCategoryOption, PostTagOption, PostCommentNode } from "@/lib/blog";
 import { excerptFromHtml } from "@/lib/blog";
@@ -116,6 +121,8 @@ export class PostError extends Error {
   }
 }
 
+const WRITE_POST_ACTIVITY_KEY = "write_post";
+
 /**
  * "Write a Post" (§4.8) — a single-step create-and-publish action gated on
  * the licensing-consent checkbox (§4.15): there is no separate draft/publish
@@ -157,22 +164,53 @@ export async function createPost(
   }
 
   const slug = await uniqueSlug(input.title);
-  const post = await db.post.create({
-    data: {
-      title: input.title,
-      slug,
-      body: input.body,
-      authorId,
-      categoryId: input.categoryId,
-      heroImageUrl,
-      licenseConsented: true,
-      publishedAt: new Date(),
-      tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
-    },
-    select: { id: true, slug: true },
+  const writePostRule = await db.contributionRule.findUnique({ where: { activityKey: WRITE_POST_ACTIVITY_KEY } });
+
+  const post = await db.$transaction(async (tx) => {
+    const created = await tx.post.create({
+      data: {
+        title: input.title,
+        slug,
+        body: input.body,
+        authorId,
+        categoryId: input.categoryId,
+        heroImageUrl,
+        licenseConsented: true,
+        publishedAt: new Date(),
+        tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
+      },
+      select: { id: true, slug: true, title: true },
+    });
+
+    // Auto-credit Knowledge Hours (§4.4/§4.8) — best-effort: publishing must
+    // still succeed if the rule is missing/inactive, since blog authorship
+    // has no natural counterpart to name and therefore always lands in the
+    // admin's counterpart-less confirmation queue (resolveContribution).
+    if (writePostRule && writePostRule.active && writePostRule.type === LedgerTransactionType.earned) {
+      const event = await tx.contributionEvent.create({
+        data: {
+          ruleId: writePostRule.id,
+          actorId: authorId,
+          note: `Blog post: ${created.title}`,
+          source: ContributionSource.blog_post,
+        },
+      });
+
+      await tx.contributionLedger.create({
+        data: {
+          userId: authorId,
+          eventId: event.id,
+          type: LedgerTransactionType.earned,
+          status: LedgerStatus.pending,
+          hours: writePostRule.hours,
+        },
+      });
+    }
+
+    return created;
   });
 
-  return post;
+  return { id: post.id, slug: post.slug };
 }
 
 /**

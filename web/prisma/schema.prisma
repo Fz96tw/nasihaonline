@@ -311,6 +311,7 @@ enum ContributionSource {
   event_attendance
   meeting_request
   self_reported
+  blog_post
 }
 
 // Configurable earn/spend rate card (§4.4) — not hardcoded, so rates can
