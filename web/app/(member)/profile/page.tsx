@@ -5,6 +5,8 @@ import { getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server"
 import { getAllSkills } from "@/lib/skills-server";
 import { ProfileForm } from "@/components/profile/profile-form";
 import { joinList } from "@/lib/validation/profile";
+import { Badge } from "@/components/ui/badge";
+import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
 
 export const metadata: Metadata = {
   title: "My Profile — Nasiha",
@@ -20,7 +22,12 @@ export default async function ProfilePage() {
   return (
     <main className="mx-auto flex max-w-[960px] flex-col gap-8 p-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">My Profile</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold tracking-tight">My Profile</h1>
+          {user.tier && (
+            <Badge variant={TIER_BADGE_VARIANT[user.tier]}>{DIRECTORY_TIER_LABELS[user.tier]}</Badge>
+          )}
+        </div>
         <p className="text-muted-foreground">
           This information appears wherever your identity shows up across Nasiha.
         </p>
