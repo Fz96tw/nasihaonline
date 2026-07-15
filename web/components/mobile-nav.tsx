@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu } from "lucide-react";
+import { CalendarDays, Heart, Info, LogIn, Menu, PenLine, UserPlus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -15,11 +15,11 @@ import {
 import { MEMBER_NAV_SECTIONS, memberFooterItems } from "@/lib/member-nav";
 
 const publicLinks = [
-  { href: "/about", label: "About" },
-  { href: "/our-team", label: "Our Team" },
-  { href: "/events", label: "Events" },
-  { href: "/blog", label: "Blog" },
-  { href: "/donate", label: "Donate" },
+  { href: "/about", label: "About", icon: Info },
+  { href: "/our-team", label: "Our Team", icon: Users },
+  { href: "/events", label: "Events", icon: CalendarDays },
+  { href: "/blog", label: "Blog", icon: PenLine },
+  { href: "/donate", label: "Donate", icon: Heart },
 ];
 const publicHrefs = new Set(publicLinks.map((link) => link.href));
 
@@ -51,7 +51,8 @@ export function MobileNav({
           {publicLinks.map((link) => (
             <SheetClose asChild key={link.href}>
               <Link href={link.href} className={linkClasses}>
-                {link.label}
+                <link.icon className="h-[18px] w-[18px] flex-shrink-0" />
+                <span className="truncate">{link.label}</span>
               </Link>
             </SheetClose>
           ))}
@@ -106,12 +107,14 @@ export function MobileNav({
               <div className="my-2 border-t" />
               <SheetClose asChild>
                 <Link href="/sign-in" className={linkClasses}>
-                  Log in
+                  <LogIn className="h-[18px] w-[18px] flex-shrink-0" />
+                  <span className="truncate">Log in</span>
                 </Link>
               </SheetClose>
               <SheetClose asChild>
                 <Link href="/join" className={`${linkClasses} text-primary`}>
-                  Join NASIHA
+                  <UserPlus className="h-[18px] w-[18px] flex-shrink-0" />
+                  <span className="truncate">Join NASIHA</span>
                 </Link>
               </SheetClose>
             </>
