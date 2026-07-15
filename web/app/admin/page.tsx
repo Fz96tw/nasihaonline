@@ -103,7 +103,7 @@ export default async function AdminPage() {
         <h1 className="text-3xl font-bold tracking-tight">Admin</h1>
         <p className="text-muted-foreground">Signed in as {user.email} (admin)</p>
       </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {ADMIN_SECTIONS.map((section) => {
           const count = "countKey" in section ? counts[section.countKey] : undefined;
           return (
@@ -111,8 +111,12 @@ export default async function AdminPage() {
               <Card className="h-full transition-colors hover:bg-accent">
                 <CardHeader>
                   <div className="flex items-center justify-between gap-2">
-                    <CardTitle className="text-lg">{section.title}</CardTitle>
-                    {!!count && <Badge variant="warning">{count} pending</Badge>}
+                    <CardTitle className="min-w-0 truncate text-lg">{section.title}</CardTitle>
+                    {!!count && (
+                      <Badge variant="warning" className="shrink-0 whitespace-nowrap">
+                        {count} pending
+                      </Badge>
+                    )}
                   </div>
                   <CardDescription>{section.description}</CardDescription>
                 </CardHeader>
