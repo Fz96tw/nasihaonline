@@ -239,6 +239,317 @@ async function seedEvents() {
   console.log(`Seeded ${created} sample event(s) (${SAMPLE_EVENTS.length - created} already present).`);
 }
 
+// Managed blog taxonomy (§4.8 — "should be a managed taxonomy, not hardcoded").
+const POST_CATEGORIES = ["Cardiology", "Education", "Research", "Global Health", "Oncology", "Mental Health"];
+const POST_TAGS = ["guidelines", "case-study", "career-advice", "research-methods"];
+
+// Same taxonomy reused for the Knowledge Library so Blog and Library filters
+// stay aligned; not mandated as identical by the PRD but a reasonable shared
+// default an admin can diverge later via /admin CRUD (not yet built).
+const KNOWLEDGE_CATEGORIES = ["Cardiology", "Education", "Research", "Global Health", "Oncology", "Mental Health"];
+const KNOWLEDGE_TAGS = ["guidelines", "review-article", "recorded-lecture", "case-study"];
+
+// Six seeded forum categories, per Member_Communications.md's table (§4.13).
+const FORUMS: { name: string; description: string; displayOrder: number }[] = [
+  { name: "General", description: "Community announcements, introductions, open discussion.", displayOrder: 0 },
+  {
+    name: "Clinical Discussions",
+    description: "Case-based learning, diagnostic questions, treatment approaches.",
+    displayOrder: 1,
+  },
+  {
+    name: "Research & Resources",
+    description: "Sharing articles, tools, guidelines, curated learning materials.",
+    displayOrder: 2,
+  },
+  {
+    name: "Teaching & Mentorship",
+    description: "Advice on teaching, mentorship requests, pedagogical discussion.",
+    displayOrder: 3,
+  },
+  { name: "Students & Trainees", description: "Dedicated space for early-career members.", displayOrder: 4 },
+  {
+    name: "Organizational",
+    description: "Board updates, policy discussions, credit system questions.",
+    displayOrder: 5,
+  },
+];
+
+// Sample blog posts (mixed draft/published, PRD §4.8) so 5.2+ has real data
+// to render immediately. Hosts/authors assigned round-robin from real
+// (Clerk-synced) members — same rationale as SAMPLE_EVENTS.
+const SAMPLE_POSTS: { title: string; body: string; category: string; published: boolean; tags: string[] }[] = [
+  {
+    title: "Heart Failure Guidelines: What Changed in the Latest Update",
+    body: "A summary of the key changes clinicians should know about in the latest heart failure management guidelines.",
+    category: "Cardiology",
+    published: true,
+    tags: ["guidelines"],
+  },
+  {
+    title: "Navigating Your First Year as an Early-Career Researcher",
+    body: "Practical advice for early-career members starting out in clinical research, from finding a mentor to publishing your first paper.",
+    category: "Research",
+    published: true,
+    tags: ["career-advice", "research-methods"],
+  },
+  {
+    title: "A De-Identified Case Discussion Worth Revisiting",
+    body: "Draft notes on a complex oncology case discussed at a recent roundtable — still being written up.",
+    category: "Oncology",
+    published: false,
+    tags: ["case-study"],
+  },
+];
+
+async function seedBlog() {
+  const categoriesByName = new Map<string, { id: string }>();
+  for (const name of POST_CATEGORIES) {
+    const category = await db.postCategory.upsert({
+      where: { name },
+      update: {},
+      create: { name, slug: slugify(name) },
+    });
+    categoriesByName.set(name, category);
+  }
+  console.log(`Seeded ${POST_CATEGORIES.length} post categories.`);
+
+  const tagsByName = new Map<string, { id: string }>();
+  for (const name of POST_TAGS) {
+    const tag = await db.postTag.upsert({
+      where: { name },
+      update: {},
+      create: { name, slug: slugify(name) },
+    });
+    tagsByName.set(name, tag);
+  }
+  console.log(`Seeded ${POST_TAGS.length} post tags.`);
+
+  const authors = await db.user.findMany({
+    where: { role: { in: ["member", "moderator", "admin"] } },
+    orderBy: { createdAt: "asc" },
+  });
+  if (authors.length === 0) {
+    console.log("No members found yet — skipping blog seed (run again once at least one member exists).");
+    return;
+  }
+
+  let created = 0;
+  for (let i = 0; i < SAMPLE_POSTS.length; i++) {
+    const sample = SAMPLE_POSTS[i];
+    const existing = await db.post.findFirst({ where: { title: sample.title } });
+    if (existing) continue;
+
+    const category = categoriesByName.get(sample.category)!;
+    const post = await db.post.create({
+      data: {
+        title: sample.title,
+        slug: slugify(sample.title),
+        body: sample.body,
+        authorId: authors[i % authors.length].id,
+        categoryId: category.id,
+        licenseConsented: true,
+        publishedAt: sample.published ? new Date() : null,
+        tags: { create: sample.tags.map((name) => ({ tagId: tagsByName.get(name)!.id })) },
+      },
+    });
+
+    // Demonstrate the threaded PostComment self-relation on the first
+    // published post: a top-level comment plus a reply.
+    if (sample.published && created === 0) {
+      const topLevel = await db.postComment.create({
+        data: { postId: post.id, authorId: authors[(i + 1) % authors.length].id, body: "Great summary, thank you!" },
+      });
+      await db.postComment.create({
+        data: {
+          postId: post.id,
+          authorId: authors[i % authors.length].id,
+          body: "Glad it was helpful!",
+          parentId: topLevel.id,
+        },
+      });
+    }
+
+    created += 1;
+  }
+  console.log(`Seeded ${created} sample post(s) (${SAMPLE_POSTS.length - created} already present).`);
+}
+
+// Sample Knowledge Library items covering the review workflow (§4.9): a
+// published article with an attachment, a pending_review case study, and a
+// published recorded lecture (youtubeUrl, no attachment).
+const SAMPLE_KNOWLEDGE_ITEMS: {
+  title: string;
+  description: string;
+  contentType: "recorded_lecture" | "article" | "case_study" | "guideline";
+  status: "pending_review" | "published" | "flagged" | "rejected";
+  level: "student_friendly" | "early_career" | "advanced" | "all_levels";
+  category: string;
+  youtubeUrl?: string;
+  attachment?: boolean;
+  deidentificationConfirmed?: boolean;
+}[] = [
+  {
+    title: "Reviewing the 2026 Global Health Equity Report",
+    description: "A summary article on this year's global health equity findings and their implications for practice.",
+    contentType: "article",
+    status: "published",
+    level: "all_levels",
+    category: "Global Health",
+    attachment: true,
+  },
+  {
+    title: "Case Study: Atypical Presentation in Pediatric Oncology",
+    description: "A de-identified case study submitted for Steward review, covering an atypical diagnostic pathway.",
+    contentType: "case_study",
+    status: "pending_review",
+    level: "advanced",
+    category: "Oncology",
+    deidentificationConfirmed: true,
+  },
+  {
+    title: "Recorded Lecture: Foundations of Clinical Research Methodology",
+    description: "An introductory recorded lecture on clinical research methodology for early-career members.",
+    contentType: "recorded_lecture",
+    status: "published",
+    level: "early_career",
+    category: "Research",
+    youtubeUrl: "https://www.youtube.com/watch?v=nasiha-sample-lecture",
+  },
+];
+
+async function seedKnowledgeLibrary() {
+  const categoriesByName = new Map<string, { id: string }>();
+  for (const name of KNOWLEDGE_CATEGORIES) {
+    const category = await db.knowledgeCategory.upsert({
+      where: { name },
+      update: {},
+      create: { name, slug: slugify(name) },
+    });
+    categoriesByName.set(name, category);
+  }
+  console.log(`Seeded ${KNOWLEDGE_CATEGORIES.length} knowledge categories.`);
+
+  const tagsByName = new Map<string, { id: string }>();
+  for (const name of KNOWLEDGE_TAGS) {
+    const tag = await db.knowledgeTag.upsert({
+      where: { name },
+      update: {},
+      create: { name, slug: slugify(name) },
+    });
+    tagsByName.set(name, tag);
+  }
+  console.log(`Seeded ${KNOWLEDGE_TAGS.length} knowledge tags.`);
+
+  const contributors = await db.user.findMany({
+    where: { role: { in: ["member", "moderator", "admin"] } },
+    orderBy: { createdAt: "asc" },
+  });
+  if (contributors.length === 0) {
+    console.log("No members found yet — skipping library seed (run again once at least one member exists).");
+    return;
+  }
+
+  let created = 0;
+  for (let i = 0; i < SAMPLE_KNOWLEDGE_ITEMS.length; i++) {
+    const sample = SAMPLE_KNOWLEDGE_ITEMS[i];
+    const existing = await db.knowledgeItem.findFirst({ where: { title: sample.title } });
+    if (existing) continue;
+
+    const category = categoriesByName.get(sample.category)!;
+    await db.knowledgeItem.create({
+      data: {
+        title: sample.title,
+        description: sample.description,
+        contentType: sample.contentType,
+        status: sample.status,
+        level: sample.level,
+        contributorId: contributors[i % contributors.length].id,
+        categoryId: category.id,
+        youtubeUrl: sample.youtubeUrl,
+        deidentificationConfirmed: sample.deidentificationConfirmed ?? false,
+        licenseConsented: true,
+        tags: { create: [{ tagId: tagsByName.get(KNOWLEDGE_TAGS[i % KNOWLEDGE_TAGS.length])!.id }] },
+        attachments: sample.attachment
+          ? {
+              create: {
+                objectKey: `library/sample-${slugify(sample.title)}.pdf`,
+                fileName: `${slugify(sample.title)}.pdf`,
+                mimeType: "application/pdf",
+                sizeBytes: 245_000,
+              },
+            }
+          : undefined,
+      },
+    });
+
+    created += 1;
+  }
+  console.log(
+    `Seeded ${created} sample knowledge item(s) (${SAMPLE_KNOWLEDGE_ITEMS.length - created} already present).`,
+  );
+}
+
+// Sample threads/posts in two of the six forums (§4.13), demonstrating the
+// pinned flag and the ForumPost parentPostId self-relation for replies.
+async function seedForums() {
+  const forumsByName = new Map<string, { id: string }>();
+  for (const sample of FORUMS) {
+    const forum = await db.forum.upsert({
+      where: { name: sample.name },
+      update: {},
+      create: { name: sample.name, slug: slugify(sample.name), description: sample.description, displayOrder: sample.displayOrder },
+    });
+    forumsByName.set(sample.name, forum);
+  }
+  console.log(`Seeded ${FORUMS.length} forums.`);
+
+  const members = await db.user.findMany({
+    where: { role: { in: ["member", "moderator", "admin"] } },
+    orderBy: { createdAt: "asc" },
+  });
+  if (members.length === 0) {
+    console.log("No members found yet — skipping forum thread seed (run again once at least one member exists).");
+    return;
+  }
+
+  const general = forumsByName.get("General")!;
+  const existingWelcome = await db.forumThread.findFirst({ where: { title: "Welcome to the Nasiha Forums!" } });
+  if (!existingWelcome) {
+    const thread = await db.forumThread.create({
+      data: { forumId: general.id, authorId: members[0].id, title: "Welcome to the Nasiha Forums!", pinned: true },
+    });
+    const topLevel = await db.forumPost.create({
+      data: { threadId: thread.id, authorId: members[0].id, body: "Welcome everyone — introduce yourself here!" },
+    });
+    await db.forumPost.create({
+      data: {
+        threadId: thread.id,
+        authorId: members[members.length > 1 ? 1 : 0].id,
+        body: "Excited to be here, thanks for setting this up.",
+        parentPostId: topLevel.id,
+      },
+    });
+    console.log("Seeded 1 sample forum thread in General.");
+  }
+
+  const clinical = forumsByName.get("Clinical Discussions")!;
+  const existingCase = await db.forumThread.findFirst({ where: { title: "De-identified case: unusual ECG pattern" } });
+  if (!existingCase) {
+    const thread = await db.forumThread.create({
+      data: { forumId: clinical.id, authorId: members[0].id, title: "De-identified case: unusual ECG pattern" },
+    });
+    await db.forumPost.create({
+      data: {
+        threadId: thread.id,
+        authorId: members[0].id,
+        body: "Sharing a de-identified ECG pattern I'd like the group's thoughts on.",
+      },
+    });
+    console.log("Seeded 1 sample forum thread in Clinical Discussions.");
+  }
+}
+
 async function main() {
   for (const name of SKILLS) {
     await db.skill.upsert({
@@ -261,6 +572,9 @@ async function main() {
   console.log(`Seeded ${CONTRIBUTION_RULES.length} contribution rules.`);
 
   await seedEvents();
+  await seedBlog();
+  await seedKnowledgeLibrary();
+  await seedForums();
 }
 
 main()

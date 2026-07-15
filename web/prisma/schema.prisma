@@ -66,6 +66,13 @@ model User {
   eventRsvps       RSVP[]       @relation("EventRsvp")
   eventAttendances Attendance[] @relation("EventAttendance")
 
+  // Blog / Knowledge Library / Forums (§4.8/§4.9/§4.13).
+  postsAuthored             Post[]          @relation("PostAuthor")
+  postComments              PostComment[]   @relation("PostCommentAuthor")
+  knowledgeItemsContributed KnowledgeItem[] @relation("KnowledgeContributor")
+  forumThreads              ForumThread[]   @relation("ForumThreadAuthor")
+  forumPosts                ForumPost[]     @relation("ForumPostAuthor")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -473,8 +480,10 @@ model InboxMessage {
 }
 
 // §4.10's notification types this objective's entities can produce
-// directly; the remaining types (event/blog/forum/library/digest/board
-// announcement) get added when those domains land in later phases.
+// directly; the remaining types (event/digest/board announcement) get
+// added when those domains land in later phases. blog_comment/
+// forum_reply_mention/resource_review_update were added once Blog,
+// Knowledge Library, and Forums (§4.8/§4.9/§4.13) landed in Phase 5.
 enum NotificationType {
   inbox_message
   meeting_request_received
@@ -482,6 +491,9 @@ enum NotificationType {
   meeting_request_declined
   meeting_request_rescheduled
   contribution_awarded
+  blog_comment
+  forum_reply_mention
+  resource_review_update
 }
 
 // Homegrown in-app notification feed (§4.10) — no third-party vendor.
@@ -617,4 +629,270 @@ model Attendance {
   @@unique([eventId, userId])
   @@index([eventId])
   @@map("attendance")
+}
+
+// Phase 5 data model — Blog, Knowledge Library & Forums (PRD §4.8/§4.9/§4.13).
+// Data foundation only; editors, review-queue UI, and search indexing land
+// in later 5.x objectives.
+
+// ===== Blog (§4.8) =====
+
+// Managed taxonomy for blog topic chips (§4.8 — "should be a managed
+// taxonomy, not hardcoded"), same rationale as Skill.
+model PostCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  posts Post[]
+
+  @@map("post_categories")
+}
+
+model PostTag {
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
+
+  posts PostTagOnPost[]
+
+  @@map("post_tags")
+}
+
+model PostTagOnPost {
+  postId String
+  post   Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tagId  String
+  tag    PostTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+  @@index([tagId])
+  @@map("post_tags_on_posts")
+}
+
+// Member-authored blog post (§4.8). `publishedAt` null = draft, set = live.
+// `licenseConsented` gates publish per the Risk_and_Liability.md content-terms
+// requirement (§4.15) — author retains IP, Nasiha gets a non-exclusive
+// display right. `heroImageUrl` is a MinIO object key (attachments/ bucket),
+// same "not a servable URL" convention as Profile.avatarUrl.
+model Post {
+  id               String       @id @default(cuid())
+  title            String
+  slug             String       @unique
+  body             String
+  authorId         String
+  author           User         @relation("PostAuthor", fields: [authorId], references: [id])
+  categoryId       String
+  category         PostCategory @relation(fields: [categoryId], references: [id])
+  heroImageUrl     String?
+  licenseConsented Boolean      @default(false)
+  publishedAt      DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  tags     PostTagOnPost[]
+  comments PostComment[]
+
+  @@index([authorId])
+  @@index([categoryId])
+  @@index([publishedAt])
+  @@map("posts")
+}
+
+// Threaded comment on a Post (§4.8), mirroring InboxMessage's parentId
+// self-relation convention for replies.
+model PostComment {
+  id       String @id @default(cuid())
+  postId   String
+  post     Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId String
+  author   User   @relation("PostCommentAuthor", fields: [authorId], references: [id])
+  body     String
+
+  parentId String?
+  parent   PostComment?  @relation("PostCommentThread", fields: [parentId], references: [id])
+  replies  PostComment[] @relation("PostCommentThread")
+
+  createdAt DateTime @default(now())
+
+  @@index([postId])
+  @@index([parentId])
+  @@map("post_comments")
+}
+
+// ===== Knowledge Library (§4.9) =====
+
+// Library Steward review workflow (§4.9) — only `published` items are
+// searchable/browsable; `pending_review` is visible to the submitter and to
+// Stewards/admins; `flagged` items stay visible per the "community flagging,
+// not formal peer review" model until a Steward removes them.
+enum KnowledgeStatus {
+  pending_review
+  published
+  flagged
+  rejected
+}
+
+// Drives the "recorded lecture uses youtubeUrl instead of a
+// KnowledgeAttachment" rule (§4.9) and the Library's content-type filter.
+enum KnowledgeContentType {
+  recorded_lecture
+  article
+  case_study
+  guideline
+}
+
+// "Career-stage level" filter (§4.9) — the level *the content targets*, not
+// the contributor's own career stage (see the existing CareerStage enum),
+// and includes an "all levels" option that enum has no equivalent for.
+enum KnowledgeLevel {
+  student_friendly
+  early_career
+  advanced
+  all_levels
+}
+
+model KnowledgeCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  items KnowledgeItem[]
+
+  @@map("knowledge_categories")
+}
+
+model KnowledgeTag {
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
+
+  items KnowledgeItemTag[]
+
+  @@map("knowledge_tags")
+}
+
+model KnowledgeItemTag {
+  knowledgeItemId String
+  knowledgeItem   KnowledgeItem @relation(fields: [knowledgeItemId], references: [id], onDelete: Cascade)
+  tagId           String
+  tag             KnowledgeTag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([knowledgeItemId, tagId])
+  @@index([tagId])
+  @@map("knowledge_item_tags")
+}
+
+// Searchable/filterable resource repository entry (§4.9). `deidentificationConfirmed`
+// is required (app-enforced, same pattern as MembershipApplication/Event)
+// before a case_study item can leave pending_review. recorded_lecture items
+// store `youtubeUrl` instead of a KnowledgeAttachment — Nasiha hosts the
+// listing, not the media, mirroring Event.meetingUrl's Zoom/Meet pattern.
+model KnowledgeItem {
+  id                        String               @id @default(cuid())
+  title                     String
+  description               String
+  contentType               KnowledgeContentType
+  status                    KnowledgeStatus      @default(pending_review)
+  level                     KnowledgeLevel
+  contributorId             String
+  contributor               User                 @relation("KnowledgeContributor", fields: [contributorId], references: [id])
+  categoryId                String
+  category                  KnowledgeCategory    @relation(fields: [categoryId], references: [id])
+  youtubeUrl                String?
+  deidentificationConfirmed Boolean              @default(false)
+  licenseConsented          Boolean              @default(false)
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+
+  tags        KnowledgeItemTag[]
+  attachments KnowledgeAttachment[]
+
+  @@index([contributorId])
+  @@index([categoryId])
+  @@index([status])
+  @@map("knowledge_items")
+}
+
+// Document/article/case-study binary only — never video (recorded lectures
+// use KnowledgeItem.youtubeUrl instead, §4.9). `objectKey` is a MinIO key in
+// the documents/ bucket, same "not a servable URL" convention as
+// Profile.avatarUrl.
+model KnowledgeAttachment {
+  id              String        @id @default(cuid())
+  knowledgeItemId String
+  knowledgeItem   KnowledgeItem @relation(fields: [knowledgeItemId], references: [id], onDelete: Cascade)
+  objectKey       String
+  fileName        String
+  mimeType        String
+  sizeBytes       Int
+  createdAt       DateTime      @default(now())
+
+  @@index([knowledgeItemId])
+  @@map("knowledge_attachments")
+}
+
+// ===== Discussion Forums (§4.13) =====
+
+// Admin-manageable forum category (§4.13) — seeded with six categories from
+// Member_Communications.md; `active`/`displayOrder` follow the same
+// retire-without-delete + explicit-ordering convention as TeamMember (§4.12),
+// since the org is expected to add/retire categories over time.
+model Forum {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  slug         String   @unique
+  description  String?
+  displayOrder Int      @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  threads ForumThread[]
+
+  @@map("forums")
+}
+
+model ForumThread {
+  id        String   @id @default(cuid())
+  forumId   String
+  forum     Forum    @relation(fields: [forumId], references: [id])
+  authorId  String
+  author    User     @relation("ForumThreadAuthor", fields: [authorId], references: [id])
+  title     String
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  posts ForumPost[]
+
+  @@index([forumId])
+  @@index([authorId])
+  @@map("forum_threads")
+}
+
+// Top-level posts and replies are the same entity, threaded by
+// `parentPostId` (§4.13) — same self-relation convention as PostComment/
+// InboxMessage.
+model ForumPost {
+  id       String      @id @default(cuid())
+  threadId String
+  thread   ForumThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  authorId String
+  author   User        @relation("ForumPostAuthor", fields: [authorId], references: [id])
+  body     String
+
+  parentPostId String?
+  parentPost   ForumPost?  @relation("ForumPostThread", fields: [parentPostId], references: [id])
+  replies      ForumPost[] @relation("ForumPostThread")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([threadId])
+  @@index([authorId])
+  @@index([parentPostId])
+  @@map("forum_posts")
 }

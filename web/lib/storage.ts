@@ -3,7 +3,12 @@ import { Client as MinioClient } from "minio";
 import sharp from "sharp";
 
 const BUCKET_AVATARS = process.env.MINIO_BUCKET_AVATARS || "avatars";
+// Knowledge Library document/article/case-study binaries (§4.9) — never video.
+const BUCKET_DOCUMENTS = process.env.MINIO_BUCKET_DOCUMENTS || "documents";
+// Blog post hero images (§4.8) and other non-avatar image attachments.
+const BUCKET_ATTACHMENTS = process.env.MINIO_BUCKET_ATTACHMENTS || "attachments";
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB
+const MAX_DOCUMENT_UPLOAD_BYTES = 20 * 1024 * 1024; // 20MB
 
 // Profile avatars are always resized/cropped to this square thumbnail before
 // storage — the original upload is never persisted or served at avatar size
@@ -25,14 +30,16 @@ function getClient(): MinioClient {
   return client;
 }
 
-let bucketEnsured = false;
+// Tracked per-bucket-name — a single shared flag would short-circuit and
+// never create the second bucket once any one bucket had been ensured.
+const ensuredBuckets = new Set<string>();
 
 async function ensureBucket(bucket: string) {
-  if (bucketEnsured) return;
+  if (ensuredBuckets.has(bucket)) return;
   const minio = getClient();
   const exists = await minio.bucketExists(bucket).catch(() => false);
   if (!exists) await minio.makeBucket(bucket);
-  bucketEnsured = true;
+  ensuredBuckets.add(bucket);
 }
 
 // Signature bytes, not the browser-supplied Content-Type, are the source of
@@ -167,4 +174,85 @@ export async function deleteAvatarObject(key: string | null): Promise<void> {
   await ensureBucket(BUCKET_AVATARS);
   const minio = getClient();
   await minio.removeObject(BUCKET_AVATARS, key).catch(() => undefined);
+}
+
+// KnowledgeAttachment binaries are "document/article/case-study only —
+// never for video" (§4.9). Unlike avatar uploads, documents come in many
+// legitimate formats (pdf/doc/docx/ppt/pptx/txt/images of scanned pages),
+// so there's no fixed magic-byte allowlist to check against — instead this
+// rejects the one disallowed category (video) by extension and declared
+// MIME type, rather than allowlisting every acceptable format.
+const VIDEO_EXTENSIONS = ["mp4", "mov", "avi", "mkv", "webm", "wmv", "flv", "m4v"];
+
+/**
+ * Validates a Knowledge Library document upload (size + not-a-video check),
+ * then stores it in the documents/ bucket. Returns the fields needed to
+ * populate a KnowledgeAttachment row — objectKey is not a servable URL, same
+ * convention as Profile.avatarUrl.
+ */
+export async function uploadKnowledgeDocument(
+  file: File,
+): Promise<{ objectKey: string; fileName: string; mimeType: string; sizeBytes: number }> {
+  if (file.size > MAX_DOCUMENT_UPLOAD_BYTES) {
+    throw new UploadValidationError("File exceeds the 20MB size limit.");
+  }
+
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  if (file.type.startsWith("video/") || VIDEO_EXTENSIONS.includes(ext)) {
+    throw new UploadValidationError(
+      "Video files are not accepted here — submit a recorded lecture as a YouTube link instead.",
+    );
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  await ensureBucket(BUCKET_DOCUMENTS);
+  const objectKey = `library/${crypto.randomUUID()}${ext ? `.${ext}` : ""}`;
+  const minio = getClient();
+  const mimeType = file.type || "application/octet-stream";
+  await minio.putObject(BUCKET_DOCUMENTS, objectKey, buffer, buffer.length, {
+    "Content-Type": mimeType,
+  });
+  return { objectKey, fileName: file.name, mimeType, sizeBytes: file.size };
+}
+
+/** Proxy URL rationale matches getSignedPhotoUrl — keeps MinIO off the public internet. */
+export function getKnowledgeDocumentUrl(objectKey: string): string {
+  return `/api/library/document/${objectKey}`;
+}
+
+export async function deleteKnowledgeDocument(objectKey: string | null): Promise<void> {
+  if (!objectKey) return;
+  await ensureBucket(BUCKET_DOCUMENTS);
+  const minio = getClient();
+  await minio.removeObject(BUCKET_DOCUMENTS, objectKey).catch(() => undefined);
+}
+
+/**
+ * Validates and stores a blog post's hero image in the attachments/ bucket.
+ * Reuses the same size + magic-byte image validation as avatar uploads —
+ * hero images are ordinary web images, just not the avatars/-bucket kind.
+ * Returns the object key to persist on Post.heroImageUrl.
+ */
+export async function uploadPostHeroImage(file: File): Promise<string> {
+  const { buffer, ext, mime } = await validateImageUpload(file);
+
+  await ensureBucket(BUCKET_ATTACHMENTS);
+  const key = `blog-hero/${crypto.randomUUID()}.${ext}`;
+  const minio = getClient();
+  await minio.putObject(BUCKET_ATTACHMENTS, key, buffer, buffer.length, {
+    "Content-Type": mime,
+  });
+  return key;
+}
+
+export function getPostHeroImageUrl(key: string | null): string | null {
+  if (!key) return null;
+  return `/api/blog/hero/${key}`;
+}
+
+export async function deletePostHeroImage(key: string | null): Promise<void> {
+  if (!key) return;
+  await ensureBucket(BUCKET_ATTACHMENTS);
+  const minio = getClient();
+  await minio.removeObject(BUCKET_ATTACHMENTS, key).catch(() => undefined);
 }
