@@ -973,24 +973,28 @@ enum ConductActionTaken {
 }
 
 // Code of Conduct enforcement record (§4.15). `reporterId` is nullable for
-// system-flagged violations (no named reporter); `handledByUserId` is the
-// admin who recorded the action. Never publicly visible — visible only to
-// the affected member and to admins (app-enforced, same as other
-// visibility rules in this schema). `suspension`/`removal` actions are
-// expected to also set User.suspended/suspendedAt, but that's an app-code
-// side effect, not a DB constraint.
+// system-flagged violations (no named reporter). A row starts as an open
+// report (`actionTaken`/`handledByUserId`/`actionTakenAt` all null) created
+// by a member's report (6.3); an admin reviewing it in /admin/conduct sets
+// those three fields together once they record a warning/suspension/removal.
+// Never publicly visible — visible only to the affected member (once
+// actioned) and to admins (app-enforced, same as other visibility rules in
+// this schema). `suspension`/`removal` actions are expected to also set
+// User.suspended/suspendedAt, but that's an app-code side effect, not a DB
+// constraint.
 model CodeOfConductViolation {
-  id              String             @id @default(cuid())
+  id              String              @id @default(cuid())
   reportedUserId  String
-  reportedUser    User               @relation("ConductViolationReported", fields: [reportedUserId], references: [id])
+  reportedUser    User                @relation("ConductViolationReported", fields: [reportedUserId], references: [id])
   reporterId      String?
-  reporter        User?              @relation("ConductViolationReporter", fields: [reporterId], references: [id])
+  reporter        User?               @relation("ConductViolationReporter", fields: [reporterId], references: [id])
   description     String
-  actionTaken     ConductActionTaken
-  handledByUserId String
-  handledByUser   User               @relation("ConductViolationHandledBy", fields: [handledByUserId], references: [id])
-  occurredAt      DateTime           @default(now())
-  createdAt       DateTime           @default(now())
+  actionTaken     ConductActionTaken?
+  handledByUserId String?
+  handledByUser   User?               @relation("ConductViolationHandledBy", fields: [handledByUserId], references: [id])
+  actionTakenAt   DateTime?
+  occurredAt      DateTime            @default(now())
+  createdAt       DateTime            @default(now())
 
   @@index([reportedUserId])
   @@map("code_of_conduct_violations")

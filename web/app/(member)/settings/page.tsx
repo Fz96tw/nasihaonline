@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
+import { getConductNoticesForUser } from "@/lib/conduct-server";
+import { CONDUCT_ACTION_LABELS } from "@/lib/conduct";
+import { Badge } from "@/components/ui/badge";
 import { PasswordChangeForm } from "@/components/settings/password-change-form";
 
 export const metadata: Metadata = {
@@ -10,6 +13,8 @@ export const metadata: Metadata = {
 export default async function SettingsPage() {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
+
+  const notices = await getConductNoticesForUser(user.id);
 
   return (
     <main className="mx-auto flex max-w-[640px] flex-col gap-8 p-8">
@@ -30,6 +35,36 @@ export default async function SettingsPage() {
         </div>
         <PasswordChangeForm />
       </section>
+
+      {notices.length > 0 && (
+        <section className="flex flex-col gap-4 rounded-[10px] border bg-card p-6 shadow-sm">
+          <div>
+            <h2 className="text-lg font-semibold">Conduct notices</h2>
+            <p className="text-sm text-muted-foreground">
+              Visible only to you and to admins — never shown to other members.
+            </p>
+          </div>
+          <ul className="flex flex-col gap-3">
+            {notices.map((notice) => (
+              <li key={notice.id} className="flex flex-col gap-1 rounded-[10px] border p-4">
+                <div className="flex items-center gap-2">
+                  <Badge variant={notice.actionTaken === "warning" ? "warning" : "danger"}>
+                    {CONDUCT_ACTION_LABELS[notice.actionTaken!]}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {notice.actionTakenAt!.toLocaleDateString(undefined, {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">{notice.description}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </main>
   );
 }

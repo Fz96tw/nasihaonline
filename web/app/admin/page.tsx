@@ -5,6 +5,7 @@ import { getAdmissionPhase } from "@/lib/settings";
 import { getFlaggedContentCount } from "@/lib/moderation-server";
 import { getPendingLedgerCountForAdmin } from "@/lib/contributions-server";
 import { getReviewQueueCount } from "@/lib/library-server";
+import { getOpenConductReportCount } from "@/lib/conduct-server";
 import { db } from "@/lib/db";
 import { ApplicationStatus } from "@/lib/generated/prisma/enums";
 import { AdminPhaseForm } from "@/components/admin-phase-form";
@@ -56,6 +57,12 @@ const ADMIN_SECTIONS = [
     description: "Approve or reject submitted library content.",
     countKey: "libraryReview",
   },
+  {
+    href: "/admin/conduct",
+    title: "Conduct",
+    description: "Review member-reported conduct concerns and record enforcement actions.",
+    countKey: "conduct",
+  },
 ] as const;
 
 /**
@@ -80,21 +87,24 @@ export default async function AdminPage() {
     );
   }
 
-  const [admissionPhase, applicationsCount, contentCount, ledgerCount, libraryReviewCount] = await Promise.all([
-    getAdmissionPhase(),
-    db.membershipApplication.count({
-      where: { status: { in: [ApplicationStatus.submitted, ApplicationStatus.under_review] } },
-    }),
-    getFlaggedContentCount(),
-    getPendingLedgerCountForAdmin(),
-    getReviewQueueCount(),
-  ]);
+  const [admissionPhase, applicationsCount, contentCount, ledgerCount, libraryReviewCount, conductCount] =
+    await Promise.all([
+      getAdmissionPhase(),
+      db.membershipApplication.count({
+        where: { status: { in: [ApplicationStatus.submitted, ApplicationStatus.under_review] } },
+      }),
+      getFlaggedContentCount(),
+      getPendingLedgerCountForAdmin(),
+      getReviewQueueCount(),
+      getOpenConductReportCount(),
+    ]);
 
   const counts: Record<string, number> = {
     applications: applicationsCount,
     content: contentCount,
     ledger: ledgerCount,
     libraryReview: libraryReviewCount,
+    conduct: conductCount,
   };
 
   return (
