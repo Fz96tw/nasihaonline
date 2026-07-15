@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getPublishedPostBySlug } from "@/lib/blog-server";
+import { getPublishedPostBySlug, getPostComments } from "@/lib/blog-server";
+import { getSessionUser } from "@/lib/auth";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { CommentThread } from "@/components/blog/comment-thread";
 
 function formatPostDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
@@ -19,6 +21,8 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 export default async function BlogPostPage({ params }: { params: { slug: string } }) {
   const post = await getPublishedPostBySlug(params.slug);
   if (!post) notFound();
+
+  const [comments, sessionUser] = await Promise.all([getPostComments(post.id), getSessionUser()]);
 
   return (
     <main className="mx-auto max-w-3xl px-8 py-16">
@@ -51,6 +55,8 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
           ))}
         </div>
       )}
+
+      <CommentThread slug={post.slug} comments={comments} canComment={sessionUser !== null} />
     </main>
   );
 }

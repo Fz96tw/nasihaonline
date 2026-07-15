@@ -29,6 +29,16 @@ export type PostDetail = PostCard & {
   tags: { name: string; slug: string }[];
 };
 
+/** A comment on a Post (§4.8), nested by `parentId` into a reply tree. */
+export type PostCommentNode = {
+  id: string;
+  body: string;
+  authorId: string;
+  authorName: string | null;
+  createdAt: string;
+  replies: PostCommentNode[];
+};
+
 // Plain-text excerpt from Tiptap-authored HTML — strips tags rather than
 // rendering, so /blog cards never leak unclosed markup from a truncation
 // cut mid-tag.

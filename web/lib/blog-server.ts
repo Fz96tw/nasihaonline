@@ -2,7 +2,9 @@ import "server-only";
 import { db } from "@/lib/db";
 import { getProfileAvatarUrl, getPostHeroImageUrl, uploadPostHeroImage, UploadValidationError } from "@/lib/storage";
 import { searchPostDocuments } from "@/lib/meilisearch";
-import type { PostCard, PostDetail, PostCategoryOption, PostTagOption } from "@/lib/blog";
+import { NotificationType } from "@/lib/generated/prisma/enums";
+import { createNotification } from "@/lib/notifications-server";
+import type { PostCard, PostDetail, PostCategoryOption, PostTagOption, PostCommentNode } from "@/lib/blog";
 import { excerptFromHtml } from "@/lib/blog";
 
 const CARD_SELECT = {
@@ -171,4 +173,94 @@ export async function createPost(
   });
 
   return post;
+}
+
+/**
+ * Threaded comments on a Post (§4.8) — fetched flat (cheap for a single
+ * post's volume) and assembled into a reply tree by `parentId`, unlike
+ * InboxMessage's root-flattened threads: comments are multi-author, so
+ * "who's the other party" doesn't apply and a real nested tree is the
+ * natural shape.
+ */
+export async function getPostComments(postId: string): Promise<PostCommentNode[]> {
+  const comments = await db.postComment.findMany({
+    where: { postId },
+    include: { author: { select: { name: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const nodes = new Map<string, PostCommentNode>(
+    comments.map((comment) => [
+      comment.id,
+      {
+        id: comment.id,
+        body: comment.body,
+        authorId: comment.authorId,
+        authorName: comment.author.name,
+        createdAt: comment.createdAt.toISOString(),
+        replies: [],
+      },
+    ]),
+  );
+
+  const roots: PostCommentNode[] = [];
+  for (const comment of comments) {
+    const node = nodes.get(comment.id)!;
+    const parent = comment.parentId ? nodes.get(comment.parentId) : undefined;
+    if (parent) parent.replies.push(node);
+    else roots.push(node);
+  }
+
+  return roots;
+}
+
+export class PostCommentError extends Error {
+  constructor(
+    public readonly status: 400 | 404,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Posts a comment (or threaded reply) on a published post and notifies the
+ * post's author (§4.10's blog_comment type), unless the commenter is the
+ * author — same "don't notify yourself" rule as sendMessage's self-message
+ * guard.
+ */
+export async function createPostComment(
+  postId: string,
+  authorId: string,
+  input: { body: string; parentId: string | null },
+): Promise<{ id: string; createdAt: string }> {
+  const post = await db.post.findUnique({
+    where: { id: postId },
+    select: { slug: true, title: true, authorId: true },
+  });
+  if (!post) throw new PostCommentError(404, "Post not found.");
+
+  if (input.parentId) {
+    const parent = await db.postComment.findUnique({ where: { id: input.parentId }, select: { postId: true } });
+    if (!parent || parent.postId !== postId) {
+      throw new PostCommentError(400, "That comment no longer exists.");
+    }
+  }
+
+  const commenter = await db.user.findUnique({ where: { id: authorId }, select: { name: true } });
+
+  const comment = await db.postComment.create({
+    data: { postId, authorId, body: input.body, parentId: input.parentId },
+  });
+
+  if (authorId !== post.authorId) {
+    await createNotification({
+      recipientId: post.authorId,
+      type: NotificationType.blog_comment,
+      message: `${commenter?.name ?? "A member"} commented on your post "${post.title}"`,
+      link: `/blog/${post.slug}#comment-${comment.id}`,
+    });
+  }
+
+  return { id: comment.id, createdAt: comment.createdAt.toISOString() };
 }
