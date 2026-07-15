@@ -3,10 +3,11 @@
 // scripts/reindex-profiles.ts) that run outside Next's server runtime, same
 // reason lib/db.ts and lib/clerk-admin.ts omit it.
 import { Meilisearch } from "meilisearch";
-import type { Tier } from "@/lib/generated/prisma/enums";
+import type { Tier, KnowledgeContentType, KnowledgeLevel } from "@/lib/generated/prisma/enums";
 
 export const PROFILES_INDEX_NAME = "profiles";
 export const POSTS_INDEX_NAME = "posts";
+export const LIBRARY_INDEX_NAME = "knowledge_items";
 
 export type ProfileSearchDocument = {
   id: string; // userId
@@ -35,6 +36,23 @@ export type PostSearchDocument = {
   tagNames: string[];
 };
 
+// Library search document (§4.9/§7.2) — written for both `published` and
+// `flagged` items (see syncKnowledgeItemToIndex — flagged items "stay
+// visible," including in search, per the community-flagging model);
+// `pending_review`/`rejected` items are removed rather than left stale,
+// same rule as PostSearchDocument.
+export type LibrarySearchDocument = {
+  id: string; // knowledgeItemId
+  title: string;
+  description: string;
+  contributorName: string | null;
+  categoryName: string;
+  categorySlug: string;
+  contentType: KnowledgeContentType;
+  level: KnowledgeLevel;
+  tagNames: string[];
+};
+
 const globalForMeilisearch = globalThis as unknown as {
   meilisearch: Meilisearch | undefined;
 };
@@ -55,6 +73,10 @@ function getProfilesIndex() {
 
 function getPostsIndex() {
   return getClient().index<PostSearchDocument>(POSTS_INDEX_NAME);
+}
+
+function getLibraryIndex() {
+  return getClient().index<LibrarySearchDocument>(LIBRARY_INDEX_NAME);
 }
 
 /**
@@ -113,6 +135,40 @@ export async function searchPostDocuments(
   const result = await getPostsIndex().search(query, {
     limit: options.limit ?? 50,
     filter: options.categorySlug ? `categorySlug = "${options.categorySlug}"` : undefined,
+  });
+  return result.hits;
+}
+
+/** Same idempotent-settings rationale as ensureProfilesIndexConfigured. */
+export async function ensureLibraryIndexConfigured(): Promise<void> {
+  const client = getClient();
+  await client.createIndex(LIBRARY_INDEX_NAME, { primaryKey: "id" }).catch(() => undefined);
+  const index = getLibraryIndex();
+  await index.updateSearchableAttributes(["title", "description", "contributorName", "categoryName", "tagNames"]);
+  await index.updateFilterableAttributes(["contentType", "level", "categorySlug"]);
+}
+
+export async function upsertLibraryDocument(document: LibrarySearchDocument): Promise<void> {
+  await getLibraryIndex().addDocuments([document]);
+}
+
+export async function deleteLibraryDocument(knowledgeItemId: string): Promise<void> {
+  await getLibraryIndex().deleteDocument(knowledgeItemId);
+}
+
+export async function searchLibraryDocuments(
+  query: string,
+  options: { contentType?: string; level?: string; categorySlug?: string; limit?: number } = {},
+): Promise<LibrarySearchDocument[]> {
+  const filters = [
+    options.contentType ? `contentType = "${options.contentType}"` : null,
+    options.level ? `level = "${options.level}"` : null,
+    options.categorySlug ? `categorySlug = "${options.categorySlug}"` : null,
+  ].filter((clause): clause is string => clause != null);
+
+  const result = await getLibraryIndex().search(query, {
+    limit: options.limit ?? 50,
+    filter: filters.length > 0 ? filters.join(" AND ") : undefined,
   });
   return result.hits;
 }

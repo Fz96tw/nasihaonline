@@ -4,11 +4,14 @@ import { db } from "@/lib/db";
 import {
   deleteProfileDocument,
   deletePostDocument,
+  deleteLibraryDocument,
   upsertPostDocument,
   upsertProfileDocument,
+  upsertLibraryDocument,
 } from "@/lib/meilisearch";
 import { DIRECTORY_TIERS } from "@/lib/members";
 import { excerptFromHtml } from "@/lib/blog";
+import { KnowledgeStatus } from "@/lib/generated/prisma/enums";
 
 /**
  * Re-derives directory eligibility from the DB rather than trusting the
@@ -78,5 +81,47 @@ export async function syncPostToIndex(postId: string): Promise<void> {
     categoryName: post.category.name,
     categorySlug: post.category.slug,
     tagNames: post.tags.map(({ tag }) => tag.name),
+  });
+}
+
+/**
+ * Re-derives search eligibility from the DB rather than trusting the
+ * caller, same "re-derive, don't trust" rule as syncProfileToIndex/
+ * syncPostToIndex. `published` and `flagged` are both eligible — flagged
+ * items "stay visible" per the community-flagging model (§4.9), including
+ * in search; `pending_review`/`rejected` are removed.
+ */
+export async function syncKnowledgeItemToIndex(knowledgeItemId: string): Promise<void> {
+  const item = await db.knowledgeItem.findUnique({
+    where: { id: knowledgeItemId },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      status: true,
+      contentType: true,
+      level: true,
+      contributor: { select: { name: true } },
+      category: { select: { name: true, slug: true } },
+      tags: { select: { tag: { select: { name: true } } } },
+    },
+  });
+
+  const eligible = item && (item.status === KnowledgeStatus.published || item.status === KnowledgeStatus.flagged);
+  if (!eligible) {
+    await deleteLibraryDocument(knowledgeItemId);
+    return;
+  }
+
+  await upsertLibraryDocument({
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    contributorName: item.contributor.name,
+    categoryName: item.category.name,
+    categorySlug: item.category.slug,
+    contentType: item.contentType,
+    level: item.level,
+    tagNames: item.tags.map(({ tag }) => tag.name),
   });
 }

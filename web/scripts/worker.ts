@@ -2,8 +2,8 @@ import "dotenv/config";
 import { Worker } from "bullmq";
 import { queueConnection } from "@/lib/queues/connection";
 import { SEARCH_INDEX_QUEUE_NAME, type SearchIndexSyncJob } from "@/lib/queues/search-index-queue";
-import { ensurePostsIndexConfigured, ensureProfilesIndexConfigured } from "@/lib/meilisearch";
-import { syncPostToIndex, syncProfileToIndex } from "@/lib/search-index-sync";
+import { ensureLibraryIndexConfigured, ensurePostsIndexConfigured, ensureProfilesIndexConfigured } from "@/lib/meilisearch";
+import { syncKnowledgeItemToIndex, syncPostToIndex, syncProfileToIndex } from "@/lib/search-index-sync";
 
 /**
  * Standalone process (`npm run worker`, docker-compose "worker" service) —
@@ -14,6 +14,7 @@ import { syncPostToIndex, syncProfileToIndex } from "@/lib/search-index-sync";
 async function main() {
   await ensureProfilesIndexConfigured();
   await ensurePostsIndexConfigured();
+  await ensureLibraryIndexConfigured();
 
   const worker = new Worker<SearchIndexSyncJob>(
     SEARCH_INDEX_QUEUE_NAME,
@@ -22,13 +23,15 @@ async function main() {
         await syncProfileToIndex(job.data.userId);
       } else if (job.data.type === "post") {
         await syncPostToIndex(job.data.postId);
+      } else if (job.data.type === "knowledge") {
+        await syncKnowledgeItemToIndex(job.data.knowledgeItemId);
       }
     },
     { connection: queueConnection },
   );
 
   worker.on("completed", (job) => {
-    const id = job.data.type === "profile" ? job.data.userId : job.data.postId;
+    const id = job.data.type === "profile" ? job.data.userId : job.data.type === "post" ? job.data.postId : job.data.knowledgeItemId;
     console.log(`[search-index-worker] synced ${job.data.type} ${id}`);
   });
   worker.on("failed", (job, error) => {

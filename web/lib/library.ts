@@ -53,6 +53,32 @@ export type MySubmission = {
   createdAt: string;
 };
 
+/** /library browse card (§4.9) — published or flagged items only. */
+export type LibraryCard = {
+  id: string;
+  title: string;
+  description: string;
+  contentType: KnowledgeContentType;
+  level: KnowledgeLevel;
+  status: KnowledgeStatus;
+  category: { name: string; slug: string };
+  contributor: { name: string | null };
+  createdAt: string;
+  youtubeUrl: string | null;
+  // url is pre-resolved server-side (getKnowledgeDocumentUrl lives in the
+  // server-only lib/storage.ts) so client components never need to import
+  // that module themselves.
+  attachment: { fileName: string; mimeType: string; url: string } | null;
+};
+
+/** Dashboard "recently added to the library" widget row (§4.10). */
+export type RecentLibraryItem = {
+  id: string;
+  title: string;
+  contentType: KnowledgeContentType;
+  createdAt: string;
+};
+
 /** /admin/library/review-queue row (§4.9) — Steward/admin only. */
 export type ReviewQueueItem = {
   id: string;

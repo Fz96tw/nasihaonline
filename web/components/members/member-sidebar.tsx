@@ -32,9 +32,8 @@ type NavSection = {
 
 // Forums ship in a later Phase 5 objective — listed here per ui-system.md's
 // Member Navigation spec so the IA is visible early, but disabled until its
-// routes exist. Blogs (§4.8) and Library submission (§4.9) are both live;
-// Library's full search/browse landing (5.5) hasn't shipped yet, so this
-// points at "My Submissions" in the meantime.
+// routes exist. Blogs (§4.8) and the full Knowledge Library (§4.9,
+// including 5.5's search/browse landing) are both live.
 const NAV_SECTIONS: NavSection[] = [
   {
     title: "Main",
@@ -56,7 +55,7 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     title: "Knowledge",
-    items: [{ label: "Library", href: "/library/mine", icon: BookOpen }],
+    items: [{ label: "Library", href: "/library", icon: BookOpen }],
   },
 ];
 

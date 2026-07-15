@@ -3,6 +3,7 @@ import { AuthError, authErrorResponse, requireRole } from "@/lib/auth";
 import { Role } from "@/lib/generated/prisma/enums";
 import { KnowledgeItemError, reviewKnowledgeItem } from "@/lib/library-server";
 import { knowledgeReviewActionSchema } from "@/lib/validation/knowledge-review";
+import { enqueueKnowledgeItemIndexSync } from "@/lib/queues/search-index-queue";
 
 /**
  * POST /api/admin/library/:id/publish (§4.9) — Steward/admin publish-or-
@@ -23,6 +24,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   try {
     const item = await reviewKnowledgeItem(params.id, parsed.data.action);
+    await enqueueKnowledgeItemIndexSync(item.id);
     return NextResponse.json({ item });
   } catch (error) {
     if (error instanceof KnowledgeItemError) {

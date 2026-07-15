@@ -23,16 +23,18 @@ export default async function DashboardPage() {
       <StatsRow userId={user.id} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Suspense fallback={<UpcomingEventsWidgetSkeleton />}>
+        <Suspense fallback={<WidgetSkeleton />}>
           <UpcomingEventsWidget userId={user.id} />
         </Suspense>
-        <RecentLibraryWidget />
+        <Suspense fallback={<WidgetSkeleton />}>
+          <RecentLibraryWidget />
+        </Suspense>
       </div>
     </main>
   );
 }
 
-function UpcomingEventsWidgetSkeleton() {
+function WidgetSkeleton() {
   return (
     <Card>
       <CardHeader>
