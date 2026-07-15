@@ -55,9 +55,6 @@ export async function SiteHeader() {
               <Button variant="ghost" size="sm" asChild>
                 <Link href="/members">Members</Link>
               </Button>
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/settings">Settings</Link>
-              </Button>
             </div>
             <NotificationBell />
             <UserMenu name={user.name ?? user.email} avatarUrl={profile?.avatarUrl ?? null} />
