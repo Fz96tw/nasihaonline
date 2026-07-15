@@ -36,6 +36,11 @@ model User {
   name        String?
   role        Role       @default(applicant)
   tier        Tier?
+  // Trust & Safety state (§4.15) — deliberately separate from role/tier: a
+  // suspended member is blocked from login/member routes (enforced in app
+  // code, not here) but their historical ledger/content rows are untouched.
+  suspended   Boolean    @default(false)
+  suspendedAt DateTime?
   profile     Profile?
   // Denormalized donation attribution only (§4.14) — never joined against
   // for Knowledge Hours/tier logic. See Donation model for the guarantee.
@@ -73,6 +78,19 @@ model User {
   forumThreads              ForumThread[]   @relation("ForumThreadAuthor")
   forumPosts                ForumPost[]     @relation("ForumPostAuthor")
   forumFollows              ForumFollow[]
+
+  // Trust & Safety / Compliance / Notifications (§4.10/§4.15) — a member can
+  // appear on either side of a conduct report (reported or reporting) and
+  // only admins handle reports/requests, so each role gets its own named
+  // relation, same multi-role convention as ContributionLedger's User
+  // relations above.
+  conductViolationsReported  CodeOfConductViolation[] @relation("ConductViolationReported")
+  conductViolationsFiled     CodeOfConductViolation[] @relation("ConductViolationReporter")
+  conductViolationsHandled   CodeOfConductViolation[] @relation("ConductViolationHandledBy")
+  privacyDataRequests        PrivacyDataRequest[]     @relation("PrivacyRequestUser")
+  privacyDataRequestsHandled PrivacyDataRequest[]     @relation("PrivacyRequestHandledBy")
+  notificationPreferences    NotificationPreference[]
+  announcementsAuthored      Announcement[]           @relation("AnnouncementAuthor")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -486,6 +504,9 @@ model InboxMessage {
 // added when those domains land in later phases. blog_comment/
 // forum_reply_mention/resource_review_update were added once Blog,
 // Knowledge Library, and Forums (§4.8/§4.9/§4.13) landed in Phase 5.
+// digest/board_announcement added in Phase 6 (§4.10) — digest batching and
+// announcement-sending jobs are separate later objectives; this only adds
+// the enum values NotificationPreference/Announcement need to reference.
 enum NotificationType {
   inbox_message
   meeting_request_received
@@ -496,11 +517,13 @@ enum NotificationType {
   blog_comment
   forum_reply_mention
   resource_review_update
+  digest
+  board_announcement
 }
 
 // Homegrown in-app notification feed (§4.10) — no third-party vendor.
-// NotificationPreference/Announcement are out of scope for this
-// objective (not part of Phase 3.1's entity list).
+// NotificationPreference/Announcement (opt-out prefs + board broadcasts)
+// were out of scope for Phase 3.1's entity list and landed in Phase 6.
 model Notification {
   id          String           @id @default(cuid())
   recipientId String
@@ -677,7 +700,11 @@ model PostTagOnPost {
 // `licenseConsented` gates publish per the Risk_and_Liability.md content-terms
 // requirement (§4.15) — author retains IP, Nasiha gets a non-exclusive
 // display right. `heroImageUrl` is a MinIO object key (attachments/ bucket),
-// same "not a servable URL" convention as Profile.avatarUrl.
+// same "not a servable URL" convention as Profile.avatarUrl. `flagged`/
+// `flagReason` (added Phase 6, §4.11) give Blog the same post-publish
+// flaggability Library/Forums already had — a boolean + reason rather than
+// KnowledgeItem's status enum, since a Post's publish state is already
+// carried by `publishedAt` and doesn't need a combined enum.
 model Post {
   id               String       @id @default(cuid())
   title            String
@@ -690,6 +717,8 @@ model Post {
   heroImageUrl     String?
   licenseConsented Boolean      @default(false)
   publishedAt      DateTime?
+  flagged          Boolean      @default(false)
+  flagReason       String?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
@@ -923,4 +952,110 @@ model ForumPost {
   @@index([authorId])
   @@index([parentPostId])
   @@map("forum_posts")
+}
+
+// Phase 6 data model — Trust & Safety, Notification digests & Admin (PRD
+// §4.10/§4.11/§4.15). Data foundation only; /admin/conduct,
+// /admin/privacy-requests UI, the digest-batching job, and announcement
+// send flow are later 6.x objectives.
+
+// ===== Trust & Safety / Compliance (§4.15) =====
+
+enum ConductActionTaken {
+  warning
+  suspension
+  removal
+}
+
+// Code of Conduct enforcement record (§4.15). `reporterId` is nullable for
+// system-flagged violations (no named reporter); `handledByUserId` is the
+// admin who recorded the action. Never publicly visible — visible only to
+// the affected member and to admins (app-enforced, same as other
+// visibility rules in this schema). `suspension`/`removal` actions are
+// expected to also set User.suspended/suspendedAt, but that's an app-code
+// side effect, not a DB constraint.
+model CodeOfConductViolation {
+  id              String             @id @default(cuid())
+  reportedUserId  String
+  reportedUser    User               @relation("ConductViolationReported", fields: [reportedUserId], references: [id])
+  reporterId      String?
+  reporter        User?              @relation("ConductViolationReporter", fields: [reporterId], references: [id])
+  description     String
+  actionTaken     ConductActionTaken
+  handledByUserId String
+  handledByUser   User               @relation("ConductViolationHandledBy", fields: [handledByUserId], references: [id])
+  occurredAt      DateTime           @default(now())
+  createdAt       DateTime           @default(now())
+
+  @@index([reportedUserId])
+  @@map("code_of_conduct_violations")
+}
+
+enum PrivacyRequestType {
+  export
+  deletion
+}
+
+// Same pending/confirmed-style lifecycle convention as LedgerStatus, applied
+// to §4.15's export/deletion fulfillment workflow.
+enum PrivacyRequestStatus {
+  pending
+  fulfilled
+  rejected
+}
+
+// GDPR-style data export/deletion request (§4.15), fulfilled from
+// /admin/privacy-requests. `handledByUserId` is null until an admin picks
+// it up; `fulfilledAt` is set once the export/deletion has actually been
+// carried out, not merely acknowledged.
+model PrivacyDataRequest {
+  id              String                @id @default(cuid())
+  userId          String
+  user            User                  @relation("PrivacyRequestUser", fields: [userId], references: [id])
+  type            PrivacyRequestType
+  status          PrivacyRequestStatus  @default(pending)
+  requestedAt     DateTime              @default(now())
+  fulfilledAt     DateTime?
+  handledByUserId String?
+  handledByUser   User?                 @relation("PrivacyRequestHandledBy", fields: [handledByUserId], references: [id])
+
+  @@index([userId])
+  @@map("privacy_data_requests")
+}
+
+// ===== Notifications (§4.10) =====
+
+// Per-type opt-out (§4.10) — one row per (user, type) the member has
+// explicitly opted out of; absence of a row means the default (opted in).
+// `board_announcement` is deliberately excluded from being creatable for
+// that type in app code — the Board's broadcast channel cannot be muted.
+model NotificationPreference {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  optedOut  Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([userId, type])
+  @@map("notification_preferences")
+}
+
+// Board-authored broadcast (§4.10) — fans out to every member's
+// notification feed (+ email) as a `board_announcement` Notification once
+// sent; the sending job itself is a later objective. `sentAt` null = draft,
+// set = sent, same nullable-timestamp-as-status convention as
+// Post.publishedAt.
+model Announcement {
+  id        String    @id @default(cuid())
+  title     String
+  body      String
+  authorId  String
+  author    User      @relation("AnnouncementAuthor", fields: [authorId], references: [id])
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("announcements")
 }
