@@ -91,7 +91,8 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
         <h1 className="text-2xl font-bold tracking-tight">Application submitted</h1>
         <p className="mt-2 text-muted-foreground">
           Application submitted — the Board will review within 7 days. Check your email
-          for a confirmation.
+          for a confirmation. If approved, you&rsquo;ll be notified of the membership tier
+          you&rsquo;ve been assigned.
         </p>
       </div>
     );
@@ -109,6 +110,11 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
           <p className="text-sm text-muted-foreground">
             Current Phase:{" "}
             <span className="font-medium text-foreground">{ADMISSION_PHASE_LABELS[phase]}</span>
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            There&rsquo;s no tier to choose here — if approved, the Board assigns you a
+            membership tier (Active, Associate, Student/Trainee, or Friend of Nasiha) based on
+            your experience and availability.
           </p>
         </div>
 

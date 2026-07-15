@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 import { StatsRow } from "@/components/dashboard/stats-row";
 import { UpcomingEventsWidget } from "@/components/dashboard/upcoming-events-widget";
 import { RecentLibraryWidget } from "@/components/dashboard/recent-library-widget";
+import { RecentBlogWidget } from "@/components/dashboard/recent-blog-widget";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -22,12 +23,15 @@ export default async function DashboardPage() {
 
       <StatsRow userId={user.id} />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Suspense fallback={<WidgetSkeleton />}>
           <UpcomingEventsWidget userId={user.id} />
         </Suspense>
         <Suspense fallback={<WidgetSkeleton />}>
           <RecentLibraryWidget />
+        </Suspense>
+        <Suspense fallback={<WidgetSkeleton />}>
+          <RecentBlogWidget />
         </Suspense>
       </div>
     </main>

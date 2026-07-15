@@ -33,7 +33,7 @@ export function PostCard({ post }: { post: PostCardData }) {
         <Badge variant="info" className="mb-1 w-fit">
           {post.category.name}
         </Badge>
-        <CardTitle className="text-xl">
+        <CardTitle className="line-clamp-2 break-words text-xl">
           <Link href={`/blog/${post.slug}`} className="hover:underline">
             {post.title}
           </Link>

@@ -1,54 +1,12 @@
 import Link from "next/link";
-import {
-  Mic,
-  MessageSquare,
-  BookOpen,
-  PenLine,
-  Stethoscope,
-  ClipboardList,
-  MonitorPlay,
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { ContributionWorkflowAccordion } from "@/components/home/contribution-workflow-accordion";
-
-const EARN_ITEMS = [
-  { icon: Mic, label: "Lecture / webinar", value: "1 hr" },
-  { icon: MessageSquare, label: "Knowledge discussion", value: "0.5 hrs" },
-  { icon: BookOpen, label: "Curate resource", value: "0.5 hrs" },
-  { icon: PenLine, label: "Write a blog post", value: "0.5 hrs" },
-];
-
-const SPEND_ITEMS = [
-  { icon: Stethoscope, label: "Expert consultation", value: "1 hr" },
-  { icon: ClipboardList, label: "Research resource", value: "0.5 hrs" },
-  { icon: MonitorPlay, label: "Attend webinar", value: "Always free" },
-];
-
-function ExchangeRow({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof Mic;
-  label: string;
-  value: string;
-}) {
-  return (
-    <Card className="flex items-center gap-2 p-3 text-xs">
-      <Icon className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-      <span>
-        {label} · <strong className="font-semibold">{value}</strong>
-      </span>
-    </Card>
-  );
-}
+import { KnowledgeExchangeTable } from "@/components/home/knowledge-exchange-table";
 
 export function KnowledgeExchangeSection() {
   return (
     <section className="px-8 py-16">
-      <div className="mx-auto grid max-w-[960px] grid-cols-1 items-start gap-12 lg:grid-cols-2">
-        <div>
+      <div className="mx-auto max-w-[960px]">
+        <div className="max-w-[640px]">
           <p className="text-sm font-semibold uppercase tracking-wide text-primary">
             Our Currency
           </p>
@@ -68,34 +26,8 @@ export function KnowledgeExchangeSection() {
             <Link href="/join">See How to Join →</Link>
           </Button>
         </div>
-        <div className="flex flex-col gap-4">
-          <Card className="border-primary/15 bg-primary/5 p-5">
-            <p className="text-sm font-semibold">How the Knowledge Exchange Works</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              How members earn and spend Knowledge Hours
-            </p>
-            <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
-              <div>
-                <p className="mb-3 text-sm font-semibold text-primary">
-                  Earn by Teaching
-                </p>
-                <div className="space-y-2">
-                  {EARN_ITEMS.map((item) => (
-                    <ExchangeRow key={item.label} {...item} />
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="mb-3 text-sm font-semibold text-accent">Spend to Learn</p>
-                <div className="space-y-2">
-                  {SPEND_ITEMS.map((item) => (
-                    <ExchangeRow key={item.label} {...item} />
-                  ))}
-                </div>
-              </div>
-            </div>
-          </Card>
-          <ContributionWorkflowAccordion />
+        <div className="mt-10">
+          <KnowledgeExchangeTable />
         </div>
       </div>
     </section>

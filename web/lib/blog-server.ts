@@ -94,6 +94,17 @@ export async function getPublishedPosts(params: { categorySlug?: string; q?: str
   return posts.map(toCard);
 }
 
+/** Dashboard's recently-added-blog widget (§5/§10 Phase 5) — newest published posts, plain Postgres query. */
+export async function getRecentlyPublishedPosts(limit = 5): Promise<PostCard[]> {
+  const posts = await db.post.findMany({
+    where: { publishedAt: { not: null } },
+    select: CARD_SELECT,
+    orderBy: { publishedAt: "desc" },
+    take: limit,
+  });
+  return posts.map(toCard);
+}
+
 export async function getPublishedPostBySlug(slug: string): Promise<PostDetail | null> {
   const post = await db.post.findFirst({
     where: { slug, publishedAt: { not: null } },

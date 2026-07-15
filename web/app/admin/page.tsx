@@ -3,7 +3,40 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getAdmissionPhase } from "@/lib/settings";
 import { AdminPhaseForm } from "@/components/admin-phase-form";
-import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+
+const ADMIN_SECTIONS = [
+  {
+    href: "/admin/applications",
+    title: "Review Applications",
+    description: "Approve or reject pending membership applications.",
+  },
+  {
+    href: "/admin/ledger",
+    title: "Knowledge Hours Ledger",
+    description: "View and adjust member Knowledge Hours credits.",
+  },
+  {
+    href: "/admin/events",
+    title: "Event Attendance",
+    description: "Track and record attendance for events.",
+  },
+  {
+    href: "/admin/team",
+    title: "Our Team",
+    description: "Manage team member profiles shown on the site.",
+  },
+  {
+    href: "/admin/donations",
+    title: "Donations",
+    description: "Review donation records.",
+  },
+  {
+    href: "/admin/library/review-queue",
+    title: "Library Review Queue",
+    description: "Approve or reject submitted library content.",
+  },
+] as const;
 
 /**
  * Role-gated at the Node.js runtime (not middleware — see middleware.ts):
@@ -30,32 +63,22 @@ export default async function AdminPage() {
   const admissionPhase = await getAdmissionPhase();
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-6 p-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Admin</h1>
-          <p className="text-muted-foreground">Signed in as {user.email} (admin)</p>
-        </div>
-        <div className="flex gap-2">
-          <Button asChild variant="outline">
-            <Link href="/admin/applications">Review Applications</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/admin/ledger">Knowledge Hours Ledger</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/admin/events">Event Attendance</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/admin/team">Our Team</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/admin/donations">Donations</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/admin/library/review-queue">Library Review Queue</Link>
-          </Button>
-        </div>
+    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 p-8">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Admin</h1>
+        <p className="text-muted-foreground">Signed in as {user.email} (admin)</p>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {ADMIN_SECTIONS.map((section) => (
+          <Link key={section.href} href={section.href}>
+            <Card className="h-full transition-colors hover:bg-accent">
+              <CardHeader>
+                <CardTitle className="text-lg">{section.title}</CardTitle>
+                <CardDescription>{section.description}</CardDescription>
+              </CardHeader>
+            </Card>
+          </Link>
+        ))}
       </div>
       <AdminPhaseForm currentPhase={admissionPhase} />
     </main>

@@ -44,10 +44,10 @@ export async function HeroSection() {
           knowledge exchange — because every person who learns becomes a person who can
           teach.
         </p>
-        <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+        <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
           <Button
             size="lg"
-            className="shadow-[0_4px_14px_rgba(37,99,235,0.5)]"
+            className="w-full shadow-[0_4px_14px_rgba(37,99,235,0.5)] sm:w-auto"
             asChild
           >
             <Link href="/join">Join NASIHA</Link>
@@ -55,10 +55,18 @@ export async function HeroSection() {
           <Button
             size="lg"
             variant="outline"
-            className="border-primary-foreground/45 bg-primary-foreground/10 text-primary-foreground hover:bg-primary-foreground/20 hover:text-primary-foreground"
+            className="w-full border-primary-foreground/45 bg-primary-foreground/10 text-primary-foreground hover:bg-primary-foreground/20 hover:text-primary-foreground sm:w-auto"
             asChild
           >
             <a href="#how-it-works">See How It Works</a>
+          </Button>
+          <Button
+            size="lg"
+            variant="outline"
+            className="w-full border-primary-foreground/45 bg-primary-foreground/10 text-primary-foreground hover:bg-primary-foreground/20 hover:text-primary-foreground sm:w-auto"
+            asChild
+          >
+            <Link href="/donate">Donate</Link>
           </Button>
         </div>
         <div className="mt-14 flex flex-wrap justify-center gap-12 border-t border-primary-foreground/20 pt-8">

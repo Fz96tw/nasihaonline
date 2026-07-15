@@ -49,7 +49,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       },
     });
 
-    await sendWelcomeEmail(application.email, application.firstName);
+    await sendWelcomeEmail(application.email, application.firstName, parsed.data.tier);
 
     return NextResponse.json({ application: updated });
   }
