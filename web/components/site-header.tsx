@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { UserMenu } from "@/components/user-menu";
+import { MobileNav } from "@/components/mobile-nav";
 import { getSessionUser } from "@/lib/auth";
 import { getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
 
@@ -27,39 +28,43 @@ export async function SiteHeader() {
           </span>
         </span>
       </Link>
-      <Button variant="ghost" size="sm" asChild>
-        <Link href="/about">About</Link>
-      </Button>
-      <Button variant="ghost" size="sm" asChild>
-        <Link href="/our-team">Our Team</Link>
-      </Button>
-      <Button variant="ghost" size="sm" asChild>
-        <Link href="/events">Events</Link>
-      </Button>
-      <Button variant="ghost" size="sm" asChild>
-        <Link href="/blog">Blog</Link>
-      </Button>
-      <Button variant="ghost" size="sm" asChild>
-        <Link href="/donate">Donate</Link>
-      </Button>
+      <div className="hidden items-center gap-6 md:flex">
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/about">About</Link>
+        </Button>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/our-team">Our Team</Link>
+        </Button>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/events">Events</Link>
+        </Button>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/blog">Blog</Link>
+        </Button>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/donate">Donate</Link>
+        </Button>
+      </div>
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
         {user ? (
           <>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/dashboard">Dashboard</Link>
-            </Button>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/members">Members</Link>
-            </Button>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/settings">Settings</Link>
-            </Button>
+            <div className="hidden items-center gap-2 md:flex">
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/dashboard">Dashboard</Link>
+              </Button>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/members">Members</Link>
+              </Button>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/settings">Settings</Link>
+              </Button>
+            </div>
             <NotificationBell />
             <UserMenu name={user.name ?? user.email} avatarUrl={profile?.avatarUrl ?? null} />
           </>
         ) : (
           <>
-            <Button variant="ghost" size="sm" asChild>
+            <Button variant="ghost" size="sm" className="hidden md:inline-flex" asChild>
               <Link href="/sign-in">Log in</Link>
             </Button>
             <Button size="sm" asChild>
@@ -67,6 +72,7 @@ export async function SiteHeader() {
             </Button>
           </>
         )}
+        <MobileNav signedIn={Boolean(user)} />
       </div>
     </header>
   );
