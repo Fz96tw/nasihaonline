@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireRole } from "@/lib/auth";
 import { Role } from "@/lib/generated/prisma/enums";
 import { db } from "@/lib/db";
+import { syncUserRoleTierToClerk } from "@/lib/clerk-admin";
 import { userAdminActionSchema } from "@/lib/validation/user-admin";
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
@@ -46,6 +47,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     });
     return NextResponse.json({ user: updated });
   }
+
+  // Clerk-first, same convention as the application-approval route: if
+  // Clerk's metadata write fails, the DB never diverges from what Clerk
+  // will re-sync on the next webhook.
+  await syncUserRoleTierToClerk(target.clerkUserId, parsed.data.role, parsed.data.tier);
 
   const updated = await db.user.update({
     where: { id: target.id },

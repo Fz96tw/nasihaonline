@@ -32,3 +32,17 @@ export async function provisionMemberAccount(email: string, role: Role, tier?: T
     redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL}/accept-invite`,
   });
 }
+
+/**
+ * Role/tier is sourced from Clerk's publicMetadata on every user.updated
+ * webhook (lib/clerk-sync.ts's roleFromMetadata/tierFromMetadata) — a role
+ * change written only to Postgres would get silently overwritten by the
+ * next such webhook. This keeps the two in sync whenever an admin edits
+ * role/tier from /admin/users, the same way provisionMemberAccount already
+ * does for a brand-new invitation.
+ */
+export async function syncUserRoleTierToClerk(clerkUserId: string, role: Role, tier: Tier | null) {
+  await clerk.users.updateUserMetadata(clerkUserId, {
+    publicMetadata: tier ? { role, tier } : { role, tier: null },
+  });
+}
