@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { TeamMemberForm } from "@/components/admin/team-member-form";
@@ -18,7 +19,10 @@ export default async function NewTeamMemberPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-6 p-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Add Team Member</h1>
+        <Link href="/admin/team" className="text-sm text-muted-foreground hover:underline">
+          ← Back to Our Team
+        </Link>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">Add Team Member</h1>
         <p className="text-muted-foreground">
           New members are added to the end of the public page; use reorder from the list to move them.
         </p>

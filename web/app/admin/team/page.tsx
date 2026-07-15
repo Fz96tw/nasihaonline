@@ -25,7 +25,10 @@ export default async function AdminTeamPage() {
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 p-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Our Team</h1>
+          <Link href="/admin" className="text-sm text-muted-foreground hover:underline">
+            ← Back to Admin
+          </Link>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight">Our Team</h1>
           <p className="text-muted-foreground">
             Manage the public Our Team page — add, edit, reorder, or remove members.
           </p>

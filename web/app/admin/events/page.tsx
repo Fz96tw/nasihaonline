@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getPastEventsForAttendance } from "@/lib/attendance-server";
@@ -26,7 +27,10 @@ export default async function AdminEventsPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 p-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Event Attendance</h1>
+        <Link href="/admin" className="text-sm text-muted-foreground hover:underline">
+          ← Back to Admin
+        </Link>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">Event Attendance</h1>
         <p className="text-muted-foreground">
           Record a host&apos;s attendance for a past event to auto-post their Knowledge Hours earn transaction.
         </p>

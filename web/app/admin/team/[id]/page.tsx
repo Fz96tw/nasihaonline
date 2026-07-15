@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -25,7 +26,10 @@ export default async function EditTeamMemberPage({ params }: { params: { id: str
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-6 p-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Edit Team Member</h1>
+        <Link href="/admin/team" className="text-sm text-muted-foreground hover:underline">
+          ← Back to Our Team
+        </Link>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">Edit Team Member</h1>
       </div>
       <TeamMemberForm member={withPhoto} />
     </main>

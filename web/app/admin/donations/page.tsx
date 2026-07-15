@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -37,7 +38,10 @@ export default async function AdminDonationsPage() {
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 p-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Donations</h1>
+          <Link href="/admin" className="text-sm text-muted-foreground hover:underline">
+            ← Back to Admin
+          </Link>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight">Donations</h1>
           <p className="text-muted-foreground">
             {donations.length} donation{donations.length === 1 ? "" : "s"} · $
             {(totalCents / 100).toFixed(2)} total. Read-only with respect to Knowledge Hours and

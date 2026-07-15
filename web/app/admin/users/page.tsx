@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getAdminUsers } from "@/lib/users-server";
@@ -21,7 +22,10 @@ export default async function AdminUsersPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 p-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Users</h1>
+        <Link href="/admin" className="text-sm text-muted-foreground hover:underline">
+          ← Back to Admin
+        </Link>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">Users</h1>
         <p className="text-muted-foreground">
           Search and manage member accounts — role, tier, and suspension status.
         </p>

@@ -49,7 +49,10 @@ export default async function AdminApplicationsPage({
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 p-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Applications</h1>
+        <Link href="/admin" className="text-sm text-muted-foreground hover:underline">
+          ← Back to Admin
+        </Link>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">Applications</h1>
         <p className="text-muted-foreground">Review, approve, or reject membership applications.</p>
       </div>
 
