@@ -6,6 +6,7 @@ import { Meilisearch } from "meilisearch";
 import type { Tier } from "@/lib/generated/prisma/enums";
 
 export const PROFILES_INDEX_NAME = "profiles";
+export const POSTS_INDEX_NAME = "posts";
 
 export type ProfileSearchDocument = {
   id: string; // userId
@@ -18,6 +19,20 @@ export type ProfileSearchDocument = {
   skillNames: string[];
   titleSpecialty: string | null;
   countryRegion: string | null;
+};
+
+// Blog search document (§4.8/§7.2) — only ever written for published Posts
+// (see syncPostToIndex); a post that reverts to unpublished is removed
+// rather than left stale, same "re-derive eligibility, don't trust the
+// caller" rule as ProfileSearchDocument.
+export type PostSearchDocument = {
+  id: string; // postId
+  title: string;
+  excerpt: string;
+  authorName: string | null;
+  categoryName: string;
+  categorySlug: string;
+  tagNames: string[];
 };
 
 const globalForMeilisearch = globalThis as unknown as {
@@ -36,6 +51,10 @@ function getClient(): Meilisearch {
 
 function getProfilesIndex() {
   return getClient().index<ProfileSearchDocument>(PROFILES_INDEX_NAME);
+}
+
+function getPostsIndex() {
+  return getClient().index<PostSearchDocument>(POSTS_INDEX_NAME);
 }
 
 /**
@@ -67,5 +86,33 @@ export async function deleteProfileDocument(userId: string): Promise<void> {
 
 export async function searchProfileDocuments(query: string, limit = 50): Promise<ProfileSearchDocument[]> {
   const result = await getProfilesIndex().search(query, { limit });
+  return result.hits;
+}
+
+/** Same idempotent-settings rationale as ensureProfilesIndexConfigured. */
+export async function ensurePostsIndexConfigured(): Promise<void> {
+  const client = getClient();
+  await client.createIndex(POSTS_INDEX_NAME, { primaryKey: "id" }).catch(() => undefined);
+  const index = getPostsIndex();
+  await index.updateSearchableAttributes(["title", "excerpt", "authorName", "categoryName", "tagNames"]);
+  await index.updateFilterableAttributes(["categorySlug"]);
+}
+
+export async function upsertPostDocument(document: PostSearchDocument): Promise<void> {
+  await getPostsIndex().addDocuments([document]);
+}
+
+export async function deletePostDocument(postId: string): Promise<void> {
+  await getPostsIndex().deleteDocument(postId);
+}
+
+export async function searchPostDocuments(
+  query: string,
+  options: { categorySlug?: string; limit?: number } = {},
+): Promise<PostSearchDocument[]> {
+  const result = await getPostsIndex().search(query, {
+    limit: options.limit ?? 50,
+    filter: options.categorySlug ? `categorySlug = "${options.categorySlug}"` : undefined,
+  });
   return result.hits;
 }

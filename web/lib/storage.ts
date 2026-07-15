@@ -250,6 +250,25 @@ export function getPostHeroImageUrl(key: string | null): string | null {
   return `/api/blog/hero/${key}`;
 }
 
+/**
+ * Fetches a stored blog hero image (attachments/ bucket) for streaming
+ * through the /api/blog/hero proxy — same shape/rationale as
+ * getAvatarObject, just the other bucket.
+ */
+export async function getAttachmentObject(
+  key: string,
+): Promise<{ stream: NodeJS.ReadableStream; contentType: string } | null> {
+  await ensureBucket(BUCKET_ATTACHMENTS);
+  const minio = getClient();
+  try {
+    const stat = await minio.statObject(BUCKET_ATTACHMENTS, key);
+    const stream = await minio.getObject(BUCKET_ATTACHMENTS, key);
+    return { stream, contentType: stat.metaData["content-type"] || "application/octet-stream" };
+  } catch {
+    return null;
+  }
+}
+
 export async function deletePostHeroImage(key: string | null): Promise<void> {
   if (!key) return;
   await ensureBucket(BUCKET_ATTACHMENTS);

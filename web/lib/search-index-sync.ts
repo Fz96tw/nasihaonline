@@ -1,8 +1,14 @@
 // No "server-only" guard: imported directly by scripts/worker.ts and
 // scripts/reindex-profiles.ts, which run outside Next's server runtime.
 import { db } from "@/lib/db";
-import { deleteProfileDocument, upsertProfileDocument } from "@/lib/meilisearch";
+import {
+  deleteProfileDocument,
+  deletePostDocument,
+  upsertPostDocument,
+  upsertProfileDocument,
+} from "@/lib/meilisearch";
 import { DIRECTORY_TIERS } from "@/lib/members";
+import { excerptFromHtml } from "@/lib/blog";
 
 /**
  * Re-derives directory eligibility from the DB rather than trusting the
@@ -36,5 +42,41 @@ export async function syncProfileToIndex(userId: string): Promise<void> {
     skillNames: profile.skills.map(({ skill }) => skill.name),
     titleSpecialty: profile.showSpecialtyLocation ? profile.titleSpecialty : null,
     countryRegion: profile.showSpecialtyLocation ? profile.countryRegion : null,
+  });
+}
+
+/**
+ * Re-derives publish state from the DB rather than trusting the caller,
+ * same rationale as syncProfileToIndex — a post that's since been
+ * unpublished (a future editing objective) is removed from the index
+ * rather than left stale (§4.8/§7.2).
+ */
+export async function syncPostToIndex(postId: string): Promise<void> {
+  const post = await db.post.findUnique({
+    where: { id: postId },
+    select: {
+      id: true,
+      title: true,
+      body: true,
+      publishedAt: true,
+      author: { select: { name: true } },
+      category: { select: { name: true, slug: true } },
+      tags: { select: { tag: { select: { name: true } } } },
+    },
+  });
+
+  if (!post || !post.publishedAt) {
+    await deletePostDocument(postId);
+    return;
+  }
+
+  await upsertPostDocument({
+    id: post.id,
+    title: post.title,
+    excerpt: excerptFromHtml(post.body),
+    authorName: post.author.name,
+    categoryName: post.category.name,
+    categorySlug: post.category.slug,
+    tagNames: post.tags.map(({ tag }) => tag.name),
   });
 }

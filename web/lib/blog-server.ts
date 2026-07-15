@@ -1,0 +1,174 @@
+import "server-only";
+import { db } from "@/lib/db";
+import { getProfileAvatarUrl, getPostHeroImageUrl, uploadPostHeroImage, UploadValidationError } from "@/lib/storage";
+import { searchPostDocuments } from "@/lib/meilisearch";
+import type { PostCard, PostDetail, PostCategoryOption, PostTagOption } from "@/lib/blog";
+import { excerptFromHtml } from "@/lib/blog";
+
+const CARD_SELECT = {
+  id: true,
+  title: true,
+  slug: true,
+  body: true,
+  heroImageUrl: true,
+  publishedAt: true,
+  author: { select: { name: true, profile: { select: { avatarUrl: true } } } },
+  category: { select: { name: true, slug: true } },
+} as const;
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+async function uniqueSlug(title: string): Promise<string> {
+  const base = slugify(title) || "post";
+  let candidate = base;
+  let suffix = 2;
+  while (await db.post.findUnique({ where: { slug: candidate }, select: { id: true } })) {
+    candidate = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
+}
+
+function toCard(post: {
+  id: string;
+  title: string;
+  slug: string;
+  body: string;
+  heroImageUrl: string | null;
+  publishedAt: Date | null;
+  author: { name: string | null; profile: { avatarUrl: string | null } | null };
+  category: { name: string; slug: string };
+}): PostCard {
+  return {
+    id: post.id,
+    title: post.title,
+    slug: post.slug,
+    excerpt: excerptFromHtml(post.body),
+    heroImageUrl: getPostHeroImageUrl(post.heroImageUrl),
+    // Callers only ever pass published rows in (see getPublishedPosts/getPostBySlug's
+    // where clauses) so publishedAt is never actually null here.
+    publishedAt: (post.publishedAt ?? new Date()).toISOString(),
+    author: { name: post.author.name, avatarUrl: getProfileAvatarUrl(post.author.profile?.avatarUrl ?? null) },
+    category: post.category,
+  };
+}
+
+/**
+ * /blog listing (§4.8) — plain Postgres query filtered/sorted by
+ * publishedAt for a browse view (`q` absent), or a Meilisearch-backed query
+ * for `q` present (§7.2/§9), same "real query goes to Meilisearch, browse
+ * stays on Postgres" split as getDirectoryMembers/searchDirectoryMembers.
+ */
+export async function getPublishedPosts(params: { categorySlug?: string; q?: string }): Promise<PostCard[]> {
+  const categoryFilter = params.categorySlug ? { category: { slug: params.categorySlug } } : {};
+
+  if (params.q?.trim()) {
+    const hits = await searchPostDocuments(params.q.trim(), { categorySlug: params.categorySlug });
+    if (hits.length === 0) return [];
+
+    const posts = await db.post.findMany({
+      where: { id: { in: hits.map((hit) => hit.id) }, publishedAt: { not: null } },
+      select: CARD_SELECT,
+    });
+    const byId = new Map(posts.map((post) => [post.id, post]));
+    return hits.map((hit) => byId.get(hit.id)).filter((post) => post != null).map(toCard);
+  }
+
+  const posts = await db.post.findMany({
+    where: { publishedAt: { not: null }, ...categoryFilter },
+    select: CARD_SELECT,
+    orderBy: { publishedAt: "desc" },
+  });
+  return posts.map(toCard);
+}
+
+export async function getPublishedPostBySlug(slug: string): Promise<PostDetail | null> {
+  const post = await db.post.findFirst({
+    where: { slug, publishedAt: { not: null } },
+    select: { ...CARD_SELECT, tags: { select: { tag: { select: { name: true, slug: true } } } } },
+  });
+  if (!post) return null;
+
+  return { ...toCard(post), body: post.body, tags: post.tags.map(({ tag }) => tag) };
+}
+
+export async function getPostCategories(): Promise<PostCategoryOption[]> {
+  return db.postCategory.findMany({ orderBy: { name: "asc" } });
+}
+
+export async function getPostTags(): Promise<PostTagOption[]> {
+  return db.postTag.findMany({ orderBy: { name: "asc" } });
+}
+
+export class PostError extends Error {
+  constructor(
+    public readonly status: 400 | 404,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * "Write a Post" (§4.8) — a single-step create-and-publish action gated on
+ * the licensing-consent checkbox (§4.15): there is no separate draft/publish
+ * flow in this objective's UI, so licenseConsented=true always means
+ * publishedAt is set in the same write. The `Post.publishedAt: null` "draft"
+ * state the data model supports (§5.1) is left for a future editing
+ * objective to expose.
+ */
+export async function createPost(
+  authorId: string,
+  input: {
+    title: string;
+    body: string;
+    categoryId: string;
+    tagIds: string[];
+    licenseConsented: boolean;
+    heroImage: File | null;
+  },
+): Promise<{ id: string; slug: string }> {
+  if (!input.licenseConsented) {
+    throw new PostError(400, "You must acknowledge the content licensing terms to publish.");
+  }
+
+  const category = await db.postCategory.findUnique({ where: { id: input.categoryId }, select: { id: true } });
+  if (!category) {
+    throw new PostError(400, "Select a valid category.");
+  }
+
+  let heroImageUrl: string | null = null;
+  if (input.heroImage) {
+    try {
+      heroImageUrl = await uploadPostHeroImage(input.heroImage);
+    } catch (error) {
+      if (error instanceof UploadValidationError) {
+        throw new PostError(400, error.message);
+      }
+      throw error;
+    }
+  }
+
+  const slug = await uniqueSlug(input.title);
+  const post = await db.post.create({
+    data: {
+      title: input.title,
+      slug,
+      body: input.body,
+      authorId,
+      categoryId: input.categoryId,
+      heroImageUrl,
+      licenseConsented: true,
+      publishedAt: new Date(),
+      tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
+    },
+    select: { id: true, slug: true },
+  });
+
+  return post;
+}

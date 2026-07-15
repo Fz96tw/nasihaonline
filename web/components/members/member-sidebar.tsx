@@ -29,9 +29,9 @@ type NavSection = {
   items: NavItem[];
 };
 
-// Forums/Blogs/Library ship in later phases (PRD §10, Phases 4-5) — listed
-// here per ui-system.md's Member Navigation spec so the IA is visible
-// early, but disabled until their routes exist.
+// Forums/Library ship in later phases (PRD §10, Phase 5) — listed here per
+// ui-system.md's Member Navigation spec so the IA is visible early, but
+// disabled until their routes exist. Blogs (§4.8) went live in this phase.
 const NAV_SECTIONS: NavSection[] = [
   {
     title: "Main",
@@ -48,7 +48,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Member Directory", href: "/members", icon: Users },
       { label: "Calendar", href: "/calendar", icon: CalendarDays },
       { label: "Forums", icon: MessageSquare, soon: true },
-      { label: "Blogs", icon: PenLine, soon: true },
+      { label: "Blogs", href: "/blog", icon: PenLine },
     ],
   },
   {
