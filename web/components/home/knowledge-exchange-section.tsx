@@ -1,12 +1,22 @@
 import Link from "next/link";
-import { Mic, MessageSquare, BookOpen, Stethoscope, ClipboardList, MonitorPlay } from "lucide-react";
+import {
+  Mic,
+  MessageSquare,
+  BookOpen,
+  PenLine,
+  Stethoscope,
+  ClipboardList,
+  MonitorPlay,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ContributionWorkflowAccordion } from "@/components/home/contribution-workflow-accordion";
 
 const EARN_ITEMS = [
   { icon: Mic, label: "Lecture / webinar", value: "1 hr" },
   { icon: MessageSquare, label: "Knowledge discussion", value: "0.5 hrs" },
   { icon: BookOpen, label: "Curate resource", value: "0.5 hrs" },
+  { icon: PenLine, label: "Write a blog post", value: "0.5 hrs" },
 ];
 
 const SPEND_ITEMS = [
@@ -58,32 +68,35 @@ export function KnowledgeExchangeSection() {
             <Link href="/join">See How to Join →</Link>
           </Button>
         </div>
-        <Card className="border-primary/15 bg-primary/5 p-5">
-          <p className="text-sm font-semibold">How the Knowledge Exchange Works</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            How members earn and spend Knowledge Hours
-          </p>
-          <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <div>
-              <p className="mb-3 text-sm font-semibold text-primary">
-                Earn by Teaching
-              </p>
-              <div className="space-y-2">
-                {EARN_ITEMS.map((item) => (
-                  <ExchangeRow key={item.label} {...item} />
-                ))}
+        <div className="flex flex-col gap-4">
+          <Card className="border-primary/15 bg-primary/5 p-5">
+            <p className="text-sm font-semibold">How the Knowledge Exchange Works</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              How members earn and spend Knowledge Hours
+            </p>
+            <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <div>
+                <p className="mb-3 text-sm font-semibold text-primary">
+                  Earn by Teaching
+                </p>
+                <div className="space-y-2">
+                  {EARN_ITEMS.map((item) => (
+                    <ExchangeRow key={item.label} {...item} />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="mb-3 text-sm font-semibold text-accent">Spend to Learn</p>
+                <div className="space-y-2">
+                  {SPEND_ITEMS.map((item) => (
+                    <ExchangeRow key={item.label} {...item} />
+                  ))}
+                </div>
               </div>
             </div>
-            <div>
-              <p className="mb-3 text-sm font-semibold text-accent">Spend to Learn</p>
-              <div className="space-y-2">
-                {SPEND_ITEMS.map((item) => (
-                  <ExchangeRow key={item.label} {...item} />
-                ))}
-              </div>
-            </div>
-          </div>
-        </Card>
+          </Card>
+          <ContributionWorkflowAccordion />
+        </div>
       </div>
     </section>
   );
