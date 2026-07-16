@@ -40,6 +40,14 @@ export async function getPrivacyRequestsForUser(userId: string): Promise<Privacy
   });
 }
 
+/** The Dashboard's account-notices widget — only the still-open requests, so a fulfilled request doesn't linger as a "notice". */
+export async function getPendingPrivacyRequestsForUser(userId: string): Promise<PrivacyDataRequestModel[]> {
+  return db.privacyDataRequest.findMany({
+    where: { userId, status: PrivacyRequestStatus.pending },
+    orderBy: { requestedAt: "desc" },
+  });
+}
+
 export type OpenPrivacyRequest = PrivacyDataRequestModel & {
   user: { id: string; name: string | null; email: string };
   hasRetainedHistory: boolean;

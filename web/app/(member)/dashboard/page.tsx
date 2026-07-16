@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { StatsRow } from "@/components/dashboard/stats-row";
+import { AccountNoticesWidget } from "@/components/dashboard/account-notices-widget";
 import { UpcomingEventsWidget } from "@/components/dashboard/upcoming-events-widget";
 import { RecentLibraryWidget } from "@/components/dashboard/recent-library-widget";
 import { RecentBlogWidget } from "@/components/dashboard/recent-blog-widget";
@@ -20,6 +21,10 @@ export default async function DashboardPage() {
           Welcome back, {user.name ?? user.email}
         </p>
       </div>
+
+      <Suspense fallback={null}>
+        <AccountNoticesWidget userId={user.id} />
+      </Suspense>
 
       <StatsRow userId={user.id} />
 

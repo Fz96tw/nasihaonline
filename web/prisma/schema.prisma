@@ -993,6 +993,10 @@ model CodeOfConductViolation {
   handledByUserId String?
   handledByUser   User?               @relation("ConductViolationHandledBy", fields: [handledByUserId], references: [id])
   actionTakenAt   DateTime?
+  // Set when the reported member dismisses the notice from Settings/Dashboard
+  // (self-service, not admin-controlled) — null means it's still an
+  // outstanding "needs attention" item on the Dashboard.
+  acknowledgedAt  DateTime?
   occurredAt      DateTime            @default(now())
   createdAt       DateTime            @default(now())
 

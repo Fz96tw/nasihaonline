@@ -5,7 +5,7 @@ import type { CodeOfConductViolationModel } from "@/lib/generated/prisma/models/
 
 export class ConductError extends Error {
   constructor(
-    public readonly status: 400 | 404 | 409,
+    public readonly status: 400 | 403 | 404 | 409,
     message: string,
   ) {
     super(message);
@@ -118,5 +118,36 @@ export async function getConductNoticesForUser(userId: string): Promise<CodeOfCo
   return db.codeOfConductViolation.findMany({
     where: { reportedUserId: userId, actionTaken: { not: null } },
     orderBy: { actionTakenAt: "desc" },
+  });
+}
+
+/** The Dashboard's account-notices widget — only notices the member hasn't dismissed yet. */
+export async function getUnacknowledgedConductNoticesForUser(
+  userId: string,
+): Promise<CodeOfConductViolationModel[]> {
+  return db.codeOfConductViolation.findMany({
+    where: { reportedUserId: userId, actionTaken: { not: null }, acknowledgedAt: null },
+    orderBy: { actionTakenAt: "desc" },
+  });
+}
+
+/**
+ * Self-service dismissal (Settings/Dashboard) — distinct from admin
+ * fulfillment. Acknowledging only clears the "needs attention" badge/widget
+ * entry; the notice itself stays in the member's Settings history, same as
+ * before.
+ */
+export async function acknowledgeConductNotice(
+  id: string,
+  userId: string,
+): Promise<CodeOfConductViolationModel> {
+  const notice = await db.codeOfConductViolation.findUnique({ where: { id } });
+  if (!notice) throw new ConductError(404, "Notice not found.");
+  if (notice.reportedUserId !== userId) throw new ConductError(403, "This notice isn't yours to acknowledge.");
+  if (notice.acknowledgedAt) throw new ConductError(409, "This notice has already been acknowledged.");
+
+  return db.codeOfConductViolation.update({
+    where: { id },
+    data: { acknowledgedAt: new Date() },
   });
 }

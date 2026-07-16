@@ -16,6 +16,7 @@ export type ConductNoticeView = {
   description: string;
   actionTaken: ConductAction;
   actionTakenAt: string;
+  acknowledgedAt: string | null;
 };
 
 export type OpenConductReportView = {

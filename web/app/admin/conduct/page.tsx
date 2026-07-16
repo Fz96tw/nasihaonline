@@ -35,6 +35,7 @@ export default async function AdminConductPage() {
       description: violation.description,
       actionTaken: violation.actionTaken!,
       actionTakenAt: violation.actionTakenAt!.toISOString(),
+      acknowledgedAt: violation.acknowledgedAt ? violation.acknowledgedAt.toISOString() : null,
     })),
   }));
 
