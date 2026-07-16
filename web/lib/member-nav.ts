@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   MessageSquare,
   PenLine,
-  Settings,
   Shield,
   User,
   Users,
@@ -48,11 +47,8 @@ export const MEMBER_NAV_SECTIONS: NavSection[] = [
       { label: "Calendar", href: "/calendar", icon: CalendarDays },
       { label: "Forums", href: "/forums", icon: MessageSquare },
       { label: "Blogs", href: "/blog", icon: PenLine },
+      { label: "Library", href: "/library", icon: BookOpen },
     ],
-  },
-  {
-    title: "Knowledge",
-    items: [{ label: "Library", href: "/library", icon: BookOpen }],
   },
 ];
 
@@ -74,6 +70,5 @@ export function memberFooterItems({
   if (isAdmin) {
     items.push({ label: "Admin", href: "/admin", icon: Shield });
   }
-  items.push({ label: "Settings", href: "/settings", icon: Settings });
   return items;
 }

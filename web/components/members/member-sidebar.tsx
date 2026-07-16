@@ -72,6 +72,11 @@ export function MemberSidebar({
       ))}
 
       <div className="mt-auto pt-4">
+        {canModerate && !isAdmin && (
+          <div className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Action Needed
+          </div>
+        )}
         {footerItems.map((item) => {
           const isActive = item.href != null && pathname.startsWith(item.href);
           const Icon = item.icon;
