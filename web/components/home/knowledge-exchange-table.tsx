@@ -127,7 +127,7 @@ export function KnowledgeExchangeTable() {
           <WorkflowAccordion items={EARN_ITEMS} />
         </div>
         <div>
-          <p className="mb-2 text-sm font-semibold text-accent">Spend to Learn</p>
+          <p className="mb-2 text-sm font-semibold text-brand-accent">Spend to Learn</p>
           <WorkflowAccordion items={SPEND_ITEMS} />
         </div>
       </div>
