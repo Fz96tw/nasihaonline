@@ -71,6 +71,19 @@ export async function getContributionSummary(userId: string): Promise<Contributi
   return { balance, lifetimeEarned, lifetimeSpent };
 }
 
+/**
+ * Count of confirmed, earned-type ledger rows for a member (§4.4) — one per
+ * logged contribution (mentorship session, event hosted, case discussion,
+ * etc.), for the dashboard's "Sessions contributed" stat. Same confirmed-only
+ * filter as getContributionSummary's lifetimeEarned, just counted rather than
+ * summed.
+ */
+export async function getConfirmedEarnedSessionCount(userId: string): Promise<number> {
+  return db.contributionLedger.count({
+    where: { userId, status: LedgerStatus.confirmed, type: LedgerTransactionType.earned },
+  });
+}
+
 /** Full transaction history for a member, newest first (§4.4). */
 export async function getContributionHistory(userId: string): Promise<ContributionTransaction[]> {
   const rows = await db.contributionLedger.findMany({

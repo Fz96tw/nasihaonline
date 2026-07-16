@@ -1,19 +1,24 @@
 import { Suspense } from "react";
-import { StatCard } from "@/components/dashboard/stat-card";
 import { MemberCountStat } from "@/components/dashboard/member-count-stat";
 import { HoursBalanceStat } from "@/components/dashboard/hours-balance-stat";
+import { LifetimeEarnedStat } from "@/components/dashboard/lifetime-earned-stat";
+import { SessionsContributedStat } from "@/components/dashboard/sessions-contributed-stat";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// Lifetime-earned and sessions-contributed are still static placeholders;
-// Hours-balance now goes live from the Contribution Ledger (PRD §10 Phase 3).
+// All four stats now go live from the Contribution Ledger / member roster
+// (PRD §10 Phase 3).
 export function StatsRow({ userId }: { userId: string }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <Suspense fallback={<StatCardSkeleton />}>
         <HoursBalanceStat userId={userId} />
       </Suspense>
-      <StatCard label="Lifetime earned" value="—" sublabel="Coming soon" />
-      <StatCard label="Sessions contributed" value="—" sublabel="Coming soon" />
+      <Suspense fallback={<StatCardSkeleton />}>
+        <LifetimeEarnedStat userId={userId} />
+      </Suspense>
+      <Suspense fallback={<StatCardSkeleton />}>
+        <SessionsContributedStat userId={userId} />
+      </Suspense>
       <Suspense fallback={<StatCardSkeleton />}>
         <MemberCountStat />
       </Suspense>
