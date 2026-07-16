@@ -26,6 +26,9 @@ export type PostCard = {
 
 export type PostDetail = PostCard & {
   body: string;
+  authorId: string;
+  categoryId: string;
+  tagIds: string[];
   tags: { name: string; slug: string }[];
   flagged: boolean;
 };

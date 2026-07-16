@@ -19,3 +19,12 @@ export const createPostSchema = z.object({
 });
 
 export type CreatePostValues = z.infer<typeof createPostSchema>;
+
+/**
+ * PATCH /api/blog/:slug body shape (§4.8, §11.12) — same fields as
+ * createPostSchema minus licenseConsented, since editing doesn't re-trigger
+ * the one-time content-licensing consent from the original publish.
+ */
+export const updatePostSchema = createPostSchema.omit({ licenseConsented: true });
+
+export type UpdatePostValues = z.infer<typeof updatePostSchema>;

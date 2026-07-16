@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPublishedPostBySlug, getPostComments } from "@/lib/blog-server";
 import { getSessionUser } from "@/lib/auth";
+import { Role } from "@/lib/generated/prisma/enums";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { CommentThread } from "@/components/blog/comment-thread";
 import { PostFlagButton } from "@/components/blog/post-flag-button";
 
@@ -48,7 +51,12 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
       <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: post.body }} />
 
       {sessionUser && (
-        <div className="mt-6">
+        <div className="mt-6 flex items-center gap-3">
+          {(sessionUser.id === post.authorId || sessionUser.role === Role.admin) && (
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/blog/${post.slug}/edit`}>Edit Post</Link>
+            </Button>
+          )}
           <PostFlagButton slug={post.slug} initialFlagged={post.flagged} />
         </div>
       )}

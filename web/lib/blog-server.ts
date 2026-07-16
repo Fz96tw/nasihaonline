@@ -1,13 +1,21 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { getProfileAvatarUrl, getPostHeroImageUrl, uploadPostHeroImage, UploadValidationError } from "@/lib/storage";
+import {
+  getProfileAvatarUrl,
+  getPostHeroImageUrl,
+  uploadPostHeroImage,
+  deletePostHeroImage,
+  UploadValidationError,
+} from "@/lib/storage";
 import { searchPostDocuments } from "@/lib/meilisearch";
 import {
   ContributionSource,
   LedgerStatus,
   LedgerTransactionType,
   NotificationType,
+  Role,
 } from "@/lib/generated/prisma/enums";
+import type { UserModel } from "@/lib/generated/prisma/models/User";
 import { createNotification } from "@/lib/notifications-server";
 import type { PostCard, PostDetail, PostCategoryOption, PostTagOption, PostCommentNode } from "@/lib/blog";
 import { excerptFromHtml } from "@/lib/blog";
@@ -108,11 +116,25 @@ export async function getRecentlyPublishedPosts(limit = 5): Promise<PostCard[]> 
 export async function getPublishedPostBySlug(slug: string): Promise<PostDetail | null> {
   const post = await db.post.findFirst({
     where: { slug, publishedAt: { not: null } },
-    select: { ...CARD_SELECT, flagged: true, tags: { select: { tag: { select: { name: true, slug: true } } } } },
+    select: {
+      ...CARD_SELECT,
+      authorId: true,
+      categoryId: true,
+      flagged: true,
+      tags: { select: { tagId: true, tag: { select: { name: true, slug: true } } } },
+    },
   });
   if (!post) return null;
 
-  return { ...toCard(post), body: post.body, tags: post.tags.map(({ tag }) => tag), flagged: post.flagged };
+  return {
+    ...toCard(post),
+    body: post.body,
+    authorId: post.authorId,
+    categoryId: post.categoryId,
+    tagIds: post.tags.map(({ tagId }) => tagId),
+    tags: post.tags.map(({ tag }) => tag),
+    flagged: post.flagged,
+  };
 }
 
 export async function getPostCategories(): Promise<PostCategoryOption[]> {
@@ -125,7 +147,7 @@ export async function getPostTags(): Promise<PostTagOption[]> {
 
 export class PostError extends Error {
   constructor(
-    public readonly status: 400 | 404,
+    public readonly status: 400 | 403 | 404,
     message: string,
   ) {
     super(message);
@@ -222,6 +244,76 @@ export async function createPost(
   });
 
   return { id: post.id, slug: post.slug };
+}
+
+/**
+ * PATCH /api/blog/:slug (§4.8, §11.12) — the author or an admin revising a
+ * published post's title/body/category/tags/hero image. Slug and
+ * publishedAt are deliberately left untouched (only `updatedAt` moves),
+ * same "admin has the author's authority" precedent as resolvePostFlag's
+ * takedown path, and the same isAdmin/isAuthor authorization shape as
+ * recordHostAttendance's host-or-admin check.
+ */
+export async function updatePost(
+  slug: string,
+  actingUser: UserModel,
+  input: {
+    title: string;
+    body: string;
+    categoryId: string;
+    tagIds: string[];
+    heroImage: File | null;
+  },
+): Promise<{ id: string; slug: string }> {
+  const post = await db.post.findUnique({
+    where: { slug },
+    select: { id: true, authorId: true, heroImageUrl: true, publishedAt: true },
+  });
+  if (!post || !post.publishedAt) throw new PostError(404, "Post not found.");
+
+  const isAdmin = actingUser.role === Role.admin;
+  const isAuthor = post.authorId === actingUser.id;
+  if (!isAdmin && !isAuthor) {
+    throw new PostError(403, "Only the post's author or an admin can edit it.");
+  }
+
+  const category = await db.postCategory.findUnique({ where: { id: input.categoryId }, select: { id: true } });
+  if (!category) {
+    throw new PostError(400, "Select a valid category.");
+  }
+
+  let heroImageUrl = post.heroImageUrl;
+  if (input.heroImage) {
+    try {
+      heroImageUrl = await uploadPostHeroImage(input.heroImage);
+    } catch (error) {
+      if (error instanceof UploadValidationError) {
+        throw new PostError(400, error.message);
+      }
+      throw error;
+    }
+  }
+
+  const updated = await db.$transaction(async (tx) => {
+    await tx.postTagOnPost.deleteMany({ where: { postId: post.id } });
+    return tx.post.update({
+      where: { id: post.id },
+      data: {
+        title: input.title,
+        body: input.body,
+        categoryId: input.categoryId,
+        heroImageUrl,
+        tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
+      },
+      select: { id: true, slug: true },
+    });
+  });
+
+  if (input.heroImage && post.heroImageUrl) {
+    await deletePostHeroImage(post.heroImageUrl);
+  }
+
+  return updated;
 }
 
 /**
