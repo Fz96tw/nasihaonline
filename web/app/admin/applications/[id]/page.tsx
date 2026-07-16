@@ -66,6 +66,10 @@ export default async function AdminApplicationDetailPage({
           <dl className="grid gap-4 sm:grid-cols-2">
             <Field label="Email" value={application.email} />
             <Field label="Professional title / Specialty" value={application.professionalTitle} />
+            <Field
+              label="Requested tier"
+              value={application.requestedTier ? TIER_LABELS[application.requestedTier] : "No preference"}
+            />
             <Field label="Career stage" value={CAREER_STAGE_LABELS[application.careerStage]} />
             <Field label="Availability" value={AVAILABILITY_LABELS[application.availability]} />
             <Field label="Area of interest" value={AREA_OF_INTEREST_LABELS[application.areaOfInterest]} />
@@ -94,7 +98,10 @@ export default async function AdminApplicationDetailPage({
       </Card>
 
       {isPending ? (
-        <AdminApplicationReviewForm applicationId={application.id} />
+        <AdminApplicationReviewForm
+          applicationId={application.id}
+          requestedTier={application.requestedTier}
+        />
       ) : (
         <Card>
           <CardHeader>

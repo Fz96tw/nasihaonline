@@ -4,6 +4,7 @@ import {
   CareerStage,
   ApplicationAvailability,
   AreaOfInterest,
+  Tier,
 } from "@/lib/generated/prisma/enums";
 import { professionalReferenceRequired } from "@/lib/admission-phase";
 
@@ -32,6 +33,12 @@ const baseApplicationSchema = z.object({
   lastName: z.string().trim().min(1, "Last name is required"),
   email: z.string().trim().email("Enter a valid email address"),
   professionalTitle: z.string().trim().min(1, "Professional title / specialty is required"),
+  // Applicant's own tier preference — a non-binding hint only (see
+  // requestedTier on MembershipApplication). Optional, so "" (unselected)
+  // must be a valid value alongside the real Tier enum members; kept as a
+  // plain union rather than z.optional() to match the RHF Select's string
+  // value type, same rationale as `referral` above.
+  requestedTier: z.union([z.nativeEnum(Tier), z.literal("")]),
   careerStage: z.nativeEnum(CareerStage, { message: "Select a career stage" }),
   availability: z.nativeEnum(ApplicationAvailability, {
     message: "Select your availability",

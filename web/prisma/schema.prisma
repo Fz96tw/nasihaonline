@@ -307,6 +307,12 @@ model MembershipApplication {
   codeOfConductAcceptedAt      DateTime
   status                       ApplicationStatus       @default(submitted)
 
+  // Applicant's own tier preference (e.g. "just want Friend of Nasiha access")
+  // — a non-binding hint only. It pre-fills the admin's assignedTier selector
+  // at review time but the admin can freely override it; assignedTier below
+  // remains the sole source of truth for what tier is actually granted.
+  requestedTier                Tier?
+
   // Review outcome (PRD §3.3/§4.11). Set once by the admin review action;
   // the application row itself is the audit trail — never deleted, so these
   // stay populated permanently once a decision is made. reviewedByEmail is

@@ -10,9 +10,17 @@ import { Tier } from "@/lib/generated/prisma/enums";
 import { TIER_LABELS } from "@/lib/validation/application-review";
 import { getCsrfToken } from "@/lib/csrf-client";
 
-export function AdminApplicationReviewForm({ applicationId }: { applicationId: string }) {
+export function AdminApplicationReviewForm({
+  applicationId,
+  requestedTier,
+}: {
+  applicationId: string;
+  requestedTier: Tier | null;
+}) {
   const router = useRouter();
-  const [tier, setTier] = useState<Tier | "">("");
+  // Pre-filled from the applicant's own (non-binding) preference — the admin
+  // can still change it before approving.
+  const [tier, setTier] = useState<Tier | "">(requestedTier ?? "");
   const [adminNote, setAdminNote] = useState("");
   const [visibleToApplicant, setVisibleToApplicant] = useState(false);
   const [pending, setPending] = useState<"approve" | "reject" | null>(null);

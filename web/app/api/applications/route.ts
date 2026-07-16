@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { codeOfConductAccepted, ...applicationFields } = parsed.data;
+  const { codeOfConductAccepted, requestedTier, ...applicationFields } = parsed.data;
   if (!codeOfConductAccepted) {
     return NextResponse.json({ error: "Code of Conduct acceptance is required" }, { status: 400 });
   }
@@ -32,6 +32,7 @@ export async function POST(request: Request) {
   const application = await db.membershipApplication.create({
     data: {
       ...applicationFields,
+      requestedTier: requestedTier || null,
       codeOfConductAcceptedAt: new Date(),
     },
   });

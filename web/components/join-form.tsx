@@ -17,6 +17,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -28,9 +29,11 @@ import {
   CareerStage,
   ApplicationAvailability,
   AreaOfInterest,
+  Tier,
 } from "@/lib/generated/prisma/enums";
 import { ADMISSION_PHASE_LABELS, professionalReferenceRequired } from "@/lib/admission-phase";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { TIER_LABELS } from "@/lib/validation/application-review";
 import {
   applicationSchema,
   type ApplicationFormValues,
@@ -44,6 +47,7 @@ const emptyValues: ApplicationFormValues = {
   lastName: "",
   email: "",
   professionalTitle: "",
+  requestedTier: "",
   careerStage: "" as CareerStage,
   availability: "" as ApplicationAvailability,
   areaOfInterest: "" as AreaOfInterest,
@@ -112,9 +116,10 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
             <span className="font-medium text-foreground">{ADMISSION_PHASE_LABELS[phase]}</span>
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
-            There&rsquo;s no tier to choose here — if approved, the Board assigns you a
-            membership tier (Active, Associate, Student/Trainee, or Friend of Nasiha) based on
-            your experience and availability.
+            You can tell us which membership tier you&rsquo;re hoping for below, but it&rsquo;s
+            only a preference — if approved, the Board makes the final call on your membership
+            tier (Active, Associate, Student/Trainee, or Friend of Nasiha) based on your
+            experience and availability.
           </p>
         </div>
 
@@ -173,6 +178,34 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
                   {...field}
                 />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="requestedTier"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Which tier are you hoping for? (optional)</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="No preference" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {Object.values(Tier).map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {TIER_LABELS[value]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Just a preference to help the Board — it doesn&rsquo;t guarantee that tier.
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
