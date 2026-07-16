@@ -8,6 +8,8 @@ import { RecentLibraryWidget } from "@/components/dashboard/recent-library-widge
 import { RecentBlogWidget } from "@/components/dashboard/recent-blog-widget";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
 
 export default async function DashboardPage() {
   const user = await getSessionUser();
@@ -17,9 +19,14 @@ export default async function DashboardPage() {
     <main className="mx-auto flex max-w-[1280px] flex-col gap-8 p-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Welcome back, {user.name ?? user.email}
-        </p>
+        <div className="flex items-center gap-2">
+          <p className="text-muted-foreground">
+            Welcome back, {user.name ?? user.email}
+          </p>
+          {user.tier && (
+            <Badge variant={TIER_BADGE_VARIANT[user.tier]}>{DIRECTORY_TIER_LABELS[user.tier]}</Badge>
+          )}
+        </div>
       </div>
 
       <Suspense fallback={null}>
