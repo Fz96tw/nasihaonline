@@ -10,15 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import type { ForumPostNode } from "@/lib/forums";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { cn } from "@/lib/utils";
-
-function formatTimestamp(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
+import { formatTimestamp } from "@/lib/format-date";
 
 function ReplyForm({
   threadId,

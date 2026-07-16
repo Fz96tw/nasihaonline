@@ -7,15 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { PostCommentNode } from "@/lib/blog";
 import { getCsrfToken } from "@/lib/csrf-client";
-
-function formatTimestamp(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
+import { formatTimestamp } from "@/lib/format-date";
 
 function CommentForm({
   slug,
