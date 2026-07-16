@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notifications/notification-bell";
@@ -13,12 +14,14 @@ export async function SiteHeader() {
   return (
     <header className="sticky top-0 z-50 flex h-[62px] items-center gap-6 border-b bg-background px-4 shadow-sm lg:px-8">
       <Link href="/" className="flex flex-shrink-0 items-center gap-[.65rem]">
-        <span className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-primary">
-          <span className="text-lg font-black italic tracking-[-.05em] text-primary-foreground">
-            N
-          </span>
-          <span className="absolute bottom-0 right-0 h-[3px] w-4 rounded-tl-sm bg-primary-foreground/40" />
-        </span>
+        <Image
+          src="/images/nasihalogo-cropped.png"
+          alt="Nasiha"
+          width={296}
+          height={334}
+          priority
+          className="h-9 w-auto shrink-0"
+        />
         <span className="flex flex-col leading-none">
           <span className="text-xl font-black uppercase leading-none tracking-[.14em] text-primary">
             Nasiha
