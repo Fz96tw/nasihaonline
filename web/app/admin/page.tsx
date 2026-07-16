@@ -6,6 +6,7 @@ import { getFlaggedContentCount } from "@/lib/moderation-server";
 import { getPendingLedgerCountForAdmin } from "@/lib/contributions-server";
 import { getReviewQueueCount } from "@/lib/library-server";
 import { getOpenConductReportCount } from "@/lib/conduct-server";
+import { getOpenPrivacyRequestCount } from "@/lib/privacy-server";
 import { db } from "@/lib/db";
 import { ApplicationStatus } from "@/lib/generated/prisma/enums";
 import { AdminPhaseForm } from "@/components/admin-phase-form";
@@ -63,6 +64,12 @@ const ADMIN_SECTIONS = [
     description: "Review member-reported conduct concerns and record enforcement actions.",
     countKey: "conduct",
   },
+  {
+    href: "/admin/privacy-requests",
+    title: "Privacy Requests",
+    description: "Fulfill member data export and deletion requests.",
+    countKey: "privacy",
+  },
 ] as const;
 
 /**
@@ -87,17 +94,25 @@ export default async function AdminPage() {
     );
   }
 
-  const [admissionPhase, applicationsCount, contentCount, ledgerCount, libraryReviewCount, conductCount] =
-    await Promise.all([
-      getAdmissionPhase(),
-      db.membershipApplication.count({
-        where: { status: { in: [ApplicationStatus.submitted, ApplicationStatus.under_review] } },
-      }),
-      getFlaggedContentCount(),
-      getPendingLedgerCountForAdmin(),
-      getReviewQueueCount(),
-      getOpenConductReportCount(),
-    ]);
+  const [
+    admissionPhase,
+    applicationsCount,
+    contentCount,
+    ledgerCount,
+    libraryReviewCount,
+    conductCount,
+    privacyCount,
+  ] = await Promise.all([
+    getAdmissionPhase(),
+    db.membershipApplication.count({
+      where: { status: { in: [ApplicationStatus.submitted, ApplicationStatus.under_review] } },
+    }),
+    getFlaggedContentCount(),
+    getPendingLedgerCountForAdmin(),
+    getReviewQueueCount(),
+    getOpenConductReportCount(),
+    getOpenPrivacyRequestCount(),
+  ]);
 
   const counts: Record<string, number> = {
     applications: applicationsCount,
@@ -105,6 +120,7 @@ export default async function AdminPage() {
     ledger: ledgerCount,
     libraryReview: libraryReviewCount,
     conduct: conductCount,
+    privacy: privacyCount,
   };
 
   return (

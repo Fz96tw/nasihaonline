@@ -3,8 +3,11 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getConductNoticesForUser } from "@/lib/conduct-server";
 import { CONDUCT_ACTION_LABELS } from "@/lib/conduct";
+import { getPrivacyRequestsForUser } from "@/lib/privacy-server";
+import type { PrivacyRequestView } from "@/lib/privacy";
 import { Badge } from "@/components/ui/badge";
 import { PasswordChangeForm } from "@/components/settings/password-change-form";
+import { PrivacyRequestsSection } from "@/components/settings/privacy-requests-section";
 
 export const metadata: Metadata = {
   title: "Settings — Nasiha",
@@ -15,14 +18,22 @@ export default async function SettingsPage() {
   if (!user) redirect("/sign-in");
 
   const notices = await getConductNoticesForUser(user.id);
+  const privacyRequests = await getPrivacyRequestsForUser(user.id);
+  const privacyRequestViews: PrivacyRequestView[] = privacyRequests.map((request) => ({
+    id: request.id,
+    type: request.type,
+    status: request.status,
+    requestedAt: request.requestedAt.toISOString(),
+    fulfilledAt: request.fulfilledAt ? request.fulfilledAt.toISOString() : null,
+  }));
 
   return (
     <main className="mx-auto flex max-w-[640px] flex-col gap-8 p-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">
-          Manage your account security. Notification, digest, and privacy
-          preferences arrive in a later phase.
+          Manage your account security and privacy. Notification and digest preferences arrive in a
+          later phase.
         </p>
       </div>
 
@@ -34,6 +45,16 @@ export default async function SettingsPage() {
           </p>
         </div>
         <PasswordChangeForm />
+      </section>
+
+      <section className="flex flex-col gap-4 rounded-[10px] border bg-card p-6 shadow-sm">
+        <div>
+          <h2 className="text-lg font-semibold">Privacy</h2>
+          <p className="text-sm text-muted-foreground">
+            Request access to or deletion of your personal data.
+          </p>
+        </div>
+        <PrivacyRequestsSection initialRequests={privacyRequestViews} />
       </section>
 
       {notices.length > 0 && (

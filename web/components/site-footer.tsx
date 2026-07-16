@@ -10,6 +10,7 @@ const COMMUNITY_LINKS = [
 const MEMBER_LINKS = [
   { label: "Log In", href: "/sign-in" },
   { label: "Dashboard", href: "/dashboard" },
+  { label: "Privacy Policy", href: "/privacy" },
 ];
 
 export function SiteFooter() {
