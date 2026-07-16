@@ -65,19 +65,23 @@ export function DirectoryGrid({
     );
   }
 
-  if (filtered.length === 0) {
-    return (
-      <p className="py-16 text-center text-muted-foreground">
-        No members match your search and filter.
-      </p>
-    );
-  }
-
   return (
-    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-      {filtered.map((member) => (
-        <MemberCard key={member.id} member={member} currentUserId={currentUserId} />
-      ))}
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        {filtered.length} {filtered.length === 1 ? "member" : "members"} found
+      </p>
+
+      {filtered.length === 0 ? (
+        <p className="py-16 text-center text-muted-foreground">
+          No members match your search and filter.
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((member) => (
+            <MemberCard key={member.id} member={member} currentUserId={currentUserId} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

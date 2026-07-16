@@ -65,7 +65,7 @@ export function ProfileForm({
           careerStage: values.careerStage,
           skillIds: values.skillIds,
           expertiseAreas: splitList(values.expertiseAreas),
-          learningTopics: splitList(values.learningTopics),
+          learningTopics: values.learningTopics,
           listInDirectory: values.listInDirectory,
           showSpecialtyLocation: values.showSpecialtyLocation,
         }),
@@ -216,9 +216,8 @@ export function ProfileForm({
                 <FormItem>
                   <FormLabel>Topics I Want to Learn</FormLabel>
                   <FormControl>
-                    <Textarea rows={3} placeholder="e.g. Oncology, Palliative Care" {...field} />
+                    <Textarea rows={3} placeholder="e.g. Oncology, palliative care, healthcare leadership…" {...field} />
                   </FormControl>
-                  <FormDescription>Separate with commas.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

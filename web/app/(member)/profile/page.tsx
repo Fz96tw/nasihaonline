@@ -45,7 +45,7 @@ export default async function ProfilePage() {
           careerStage: profile.careerStage ?? "",
           skillIds: profile.skills.map(({ skill }) => skill.id),
           expertiseAreas: joinList(profile.expertiseAreas),
-          learningTopics: joinList(profile.learningTopics),
+          learningTopics: profile.learningTopics ?? "",
           listInDirectory: profile.listInDirectory,
           showSpecialtyLocation: profile.showSpecialtyLocation,
         }}

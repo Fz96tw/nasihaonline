@@ -20,6 +20,9 @@ export type DirectoryMember = {
   expertiseAreas: string[];
   titleSpecialty: string | null;
   countryRegion: string | null;
+  careerStage: string | null;
+  learningTopics: string | null;
+  bio: string | null;
 };
 
 export const DIRECTORY_TIER_LABELS: Record<Tier, string> = TIER_LABELS;

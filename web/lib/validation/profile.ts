@@ -1,12 +1,10 @@
 import { z } from "zod";
 
 /**
- * Client-facing form shape: learningTopics is still edited as a single
- * comma-separated free-text field (matching the §4.3 prototype), not the
- * string[] shape it's persisted as — see splitList/joinList. expertiseAreas
- * is now split between tagged `skillIds` (selected from the Skill catalog)
- * and a comma-separated free-text fallback for anything not in that list
- * (§4.3/§7.3).
+ * Client-facing form shape: expertiseAreas is split between tagged
+ * `skillIds` (selected from the Skill catalog) and a comma-separated
+ * free-text fallback for anything not in that list (§4.3/§7.3).
+ * learningTopics is free text, same shape as bio.
  */
 export const profileFormSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
@@ -16,7 +14,7 @@ export const profileFormSchema = z.object({
   careerStage: z.string().trim().max(120),
   skillIds: z.array(z.string()).max(30),
   expertiseAreas: z.string().trim().max(500),
-  learningTopics: z.string().trim().max(500),
+  learningTopics: z.string().trim().max(2000),
   listInDirectory: z.boolean(),
   showSpecialtyLocation: z.boolean(),
 });
@@ -38,9 +36,9 @@ export function joinList(values: string[]): string {
 }
 
 /**
- * PATCH /api/profile body shape — expertiseAreas/learningTopics as arrays.
- * expertiseAreas here is the free-text fallback only; tagged expertise is
- * skillIds, validated against the real Skill catalog server-side.
+ * PATCH /api/profile body shape — expertiseAreas is an array (free-text
+ * fallback only; tagged expertise is skillIds, validated against the real
+ * Skill catalog server-side). learningTopics is free text, same shape as bio.
  */
 export const profilePatchSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
@@ -50,7 +48,7 @@ export const profilePatchSchema = z.object({
   careerStage: z.string().trim().max(120),
   skillIds: z.array(z.string()).max(30),
   expertiseAreas: z.array(z.string().trim().min(1).max(80)).max(30),
-  learningTopics: z.array(z.string().trim().min(1).max(80)).max(30),
+  learningTopics: z.string().trim().max(2000),
   listInDirectory: z.boolean(),
   showSpecialtyLocation: z.boolean(),
 });

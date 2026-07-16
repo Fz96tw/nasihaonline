@@ -34,6 +34,9 @@ function toDirectoryMember(profile: ProfileWithUser): DirectoryMember {
     expertiseAreas: profile.expertiseAreas,
     titleSpecialty: profile.showSpecialtyLocation ? profile.titleSpecialty : null,
     countryRegion: profile.showSpecialtyLocation ? profile.countryRegion : null,
+    careerStage: profile.careerStage,
+    learningTopics: profile.learningTopics,
+    bio: profile.bio,
   };
 }
 
