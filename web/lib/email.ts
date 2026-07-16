@@ -3,7 +3,7 @@ import { Tier } from "@/lib/generated/prisma/enums";
 import { TIER_LABELS } from "@/lib/validation/application-review";
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "Nasiha <no-reply@nasihaonline.org>";
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "NASIHA <no-reply@nasihaonline.org>";
 
 /**
  * Best-effort: a failed/unconfigured email send must not fail application
@@ -20,8 +20,8 @@ export async function sendApplicationConfirmationEmail(to: string, firstName: st
     await resend.emails.send({
       from: FROM_EMAIL,
       to,
-      subject: "Your Nasiha membership application was received",
-      text: `Hi ${firstName},\n\nThank you for applying to Nasiha. The Board will review your application and be in touch within 7 days.\n\n— The Nasiha Team`,
+      subject: "Your NASIHA membership application was received",
+      text: `Hi ${firstName},\n\nThank you for applying to NASIHA. The Board will review your application and be in touch within 7 days.\n\n— The NASIHA Team`,
     });
   } catch (error) {
     console.error("[email] Failed to send application confirmation email", error);
@@ -43,8 +43,8 @@ export async function sendWelcomeEmail(to: string, firstName: string, tier: Tier
     await resend.emails.send({
       from: FROM_EMAIL,
       to,
-      subject: "Welcome to Nasiha!",
-      text: `Hi ${firstName},\n\nYour Nasiha membership application has been approved, and you've been welcomed as a(n) ${TIER_LABELS[tier]}. Check your inbox for a separate invitation email to set up your account and log in.\n\n— The Nasiha Team`,
+      subject: "Welcome to NASIHA!",
+      text: `Hi ${firstName},\n\nYour NASIHA membership application has been approved, and you've been welcomed as a(n) ${TIER_LABELS[tier]}. Check your inbox for a separate invitation email to set up your account and log in.\n\n— The NASIHA Team`,
     });
   } catch (error) {
     console.error("[email] Failed to send welcome email", error);

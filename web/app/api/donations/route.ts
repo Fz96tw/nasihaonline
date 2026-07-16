@@ -60,7 +60,7 @@ export async function POST(request: Request) {
         price_data: {
           currency: "usd",
           unit_amount: amountCents,
-          product_data: { name: isRecurring ? "Nasiha recurring donation" : "Nasiha donation" },
+          product_data: { name: isRecurring ? "NASIHA recurring donation" : "NASIHA donation" },
           ...(isRecurring ? { recurring: { interval: "month" as const } } : {}),
         },
       },
