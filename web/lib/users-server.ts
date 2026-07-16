@@ -24,6 +24,12 @@ export async function getAdminUsers() {
 export async function getAdminUserDetail(id: string) {
   return db.user.findUnique({
     where: { id },
-    include: { profile: true },
+    include: {
+      profile: true,
+      tierHistoryEntries: {
+        orderBy: { createdAt: "desc" },
+        include: { changedByUser: { select: { id: true, name: true, email: true } } },
+      },
+    },
   });
 }

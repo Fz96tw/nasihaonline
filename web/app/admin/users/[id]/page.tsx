@@ -80,6 +80,34 @@ export default async function AdminUserDetailPage({ params }: { params: { id: st
         suspended={user.suspended}
         isSelf={user.id === admin.id}
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Tier history</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {user.tierHistoryEntries.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No tier changes recorded yet.</p>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {user.tierHistoryEntries.map((entry) => (
+                <li key={entry.id} className="flex flex-col gap-0.5 border-b pb-3 text-sm last:border-b-0 last:pb-0">
+                  <span>
+                    {entry.fromTier ? TIER_LABELS[entry.fromTier] : "No tier"}
+                    {" → "}
+                    {entry.toTier ? TIER_LABELS[entry.toTier] : "No tier"}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {entry.createdAt.toLocaleString()} by{" "}
+                    {entry.changedByUser.name ?? entry.changedByUser.email}
+                    {entry.reason ? ` — ${entry.reason}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </main>
   );
 }

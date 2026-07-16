@@ -21,6 +21,9 @@ export const updateRoleTierActionSchema = z.object({
   action: z.literal("update_role_tier"),
   role: z.nativeEnum(Role),
   tier: z.nativeEnum(Tier).nullable(),
+  // Optional context for the tier-history audit row (§7.3) — only
+  // meaningful when tier actually changes; ignored otherwise.
+  reason: z.string().trim().max(500).optional(),
 });
 
 export const suspendActionSchema = z.object({ action: z.literal("suspend") });

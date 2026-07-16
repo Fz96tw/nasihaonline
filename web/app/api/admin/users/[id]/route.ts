@@ -48,14 +48,34 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ user: updated });
   }
 
+  const { role, tier, reason } = parsed.data;
+
   // Clerk-first, same convention as the application-approval route: if
   // Clerk's metadata write fails, the DB never diverges from what Clerk
   // will re-sync on the next webhook.
-  await syncUserRoleTierToClerk(target.clerkUserId, parsed.data.role, parsed.data.tier);
+  await syncUserRoleTierToClerk(target.clerkUserId, role, tier);
 
-  const updated = await db.user.update({
-    where: { id: target.id },
-    data: { role: parsed.data.role, tier: parsed.data.tier },
+  const tierChanged = tier !== target.tier;
+
+  const updated = await db.$transaction(async (tx) => {
+    const user = await tx.user.update({
+      where: { id: target.id },
+      data: { role, tier },
+    });
+    // Audit trail only on an actual tier change (§7.3) — a role-only edit
+    // that leaves tier untouched shouldn't add a no-op history row.
+    if (tierChanged) {
+      await tx.tierHistory.create({
+        data: {
+          userId: target.id,
+          fromTier: target.tier,
+          toTier: tier,
+          changedByUserId: admin.id,
+          reason: reason || null,
+        },
+      });
+    }
+    return user;
   });
   return NextResponse.json({ user: updated });
 }

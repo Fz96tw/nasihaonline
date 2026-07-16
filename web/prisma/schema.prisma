@@ -92,10 +92,37 @@ model User {
   notificationPreferences    NotificationPreference[]
   announcementsAuthored      Announcement[]           @relation("AnnouncementAuthor")
 
+  // Tier-promotion audit trail (§7.3) — a user accrues entries as the
+  // subject of a change and, separately, as the admin who made one.
+  tierHistoryEntries    TierHistory[] @relation("TierHistorySubject")
+  tierChangesMade       TierHistory[] @relation("TierHistoryActor")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("users")
+}
+
+// Append-only audit trail for admin-driven tier changes (§7.3, §11) —
+// written whenever an admin edit actually changes User.tier, independent
+// of the once-only tier assignment made at application approval.
+model TierHistory {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("TierHistorySubject", fields: [userId], references: [id])
+
+  fromTier Tier?
+  toTier   Tier?
+
+  changedByUserId String
+  changedByUser   User   @relation("TierHistoryActor", fields: [changedByUserId], references: [id])
+
+  reason String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("tier_history")
 }
 
 // Minimal seed row created alongside every new User (lib/clerk-sync.ts) so

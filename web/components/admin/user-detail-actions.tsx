@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Role, Tier } from "@/lib/generated/prisma/enums";
 import { ROLE_LABELS } from "@/lib/validation/user-admin";
@@ -27,8 +28,10 @@ export function UserDetailActions({
   const router = useRouter();
   const [role, setRole] = useState<Role>(initialRole);
   const [tier, setTier] = useState<Tier | typeof NO_TIER>(initialTier ?? NO_TIER);
+  const [reason, setReason] = useState("");
   const [pending, setPending] = useState<"save" | "suspend" | "reinstate" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const tierWillChange = tier !== (initialTier ?? NO_TIER);
 
   async function submit(body: Record<string, unknown>, kind: "save" | "suspend" | "reinstate") {
     setPending(kind);
@@ -44,6 +47,7 @@ export function UserDetailActions({
         const payload = await res.json().catch(() => null);
         throw new Error(typeof payload?.error === "string" ? payload.error : "Request failed");
       }
+      if (kind === "save") setReason("");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
@@ -54,7 +58,12 @@ export function UserDetailActions({
 
   function saveRoleTier() {
     void submit(
-      { action: "update_role_tier", role, tier: tier === NO_TIER ? null : tier },
+      {
+        action: "update_role_tier",
+        role,
+        tier: tier === NO_TIER ? null : tier,
+        reason: reason.trim() || undefined,
+      },
       "save",
     );
   }
@@ -97,6 +106,15 @@ export function UserDetailActions({
             ))}
           </SelectContent>
         </Select>
+        {tierWillChange && (
+          <Input
+            aria-label="Reason for tier change"
+            placeholder="Reason for tier change (optional)"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            maxLength={500}
+          />
+        )}
         <Button disabled={pending !== null} onClick={saveRoleTier}>
           {pending === "save" ? "Saving…" : "Save role & tier"}
         </Button>
