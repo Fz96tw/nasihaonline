@@ -1,19 +1,14 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { UserMenu } from "@/components/user-menu";
 import { MobileNav } from "@/components/mobile-nav";
 import { getSessionUser } from "@/lib/auth";
 import { getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
-import { getContributionSummary } from "@/lib/contributions-server";
-import { formatHours } from "@/lib/contributions";
-import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
 
 export async function SiteHeader() {
   const user = await getSessionUser();
   const profile = user ? withResolvedAvatarUrl(await getOrCreateProfile(user.id)) : null;
-  const balance = user ? (await getContributionSummary(user.id)).balance : null;
 
   return (
     <header className="sticky top-0 z-50 flex h-[62px] items-center gap-6 border-b bg-background px-4 shadow-sm lg:px-8">
@@ -60,12 +55,6 @@ export async function SiteHeader() {
               <Button variant="ghost" size="sm" asChild>
                 <Link href="/members">Members</Link>
               </Button>
-            </div>
-            <div className="hidden items-center gap-2 sm:flex">
-              <Badge variant="warning">{formatHours(balance ?? 0)} Knowledge Hours</Badge>
-              {user.tier && (
-                <Badge variant={TIER_BADGE_VARIANT[user.tier]}>{DIRECTORY_TIER_LABELS[user.tier]}</Badge>
-              )}
             </div>
             <NotificationBell />
             <UserMenu name={user.name ?? user.email} avatarUrl={profile?.avatarUrl ?? null} />
