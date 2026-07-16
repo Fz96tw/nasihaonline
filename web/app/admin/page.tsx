@@ -70,6 +70,11 @@ const ADMIN_SECTIONS = [
     description: "Fulfill member data export and deletion requests.",
     countKey: "privacy",
   },
+  {
+    href: "/admin/reports",
+    title: "Reports",
+    description: "Community, engagement, and organizational KPIs.",
+  },
 ] as const;
 
 /**

@@ -2,7 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getPendingLedgerEntriesForAdmin } from "@/lib/contributions-server";
+import { getAdminUsers } from "@/lib/users-server";
 import { AdminLedgerQueue } from "@/components/admin-ledger-queue";
+import { AdminLedgerAdjustmentDialog } from "@/components/admin-ledger-adjustment-dialog";
 
 /**
  * Role-gated the same way as /admin (see that page's comment): the Forbidden
@@ -22,18 +24,21 @@ export default async function AdminLedgerPage() {
     );
   }
 
-  const entries = await getPendingLedgerEntriesForAdmin();
+  const [entries, users] = await Promise.all([getPendingLedgerEntriesForAdmin(), getAdminUsers()]);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 p-8">
-      <div>
-        <Link href="/admin" className="text-sm text-muted-foreground hover:underline">
-          ← Back to Admin
-        </Link>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">Knowledge Hours Ledger</h1>
-        <p className="text-muted-foreground">
-          Review and resolve pending contributions, including those with no named counterpart.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <Link href="/admin" className="text-sm text-muted-foreground hover:underline">
+            ← Back to Admin
+          </Link>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight">Knowledge Hours Ledger</h1>
+          <p className="text-muted-foreground">
+            Review and resolve pending contributions, including those with no named counterpart.
+          </p>
+        </div>
+        <AdminLedgerAdjustmentDialog users={users} />
       </div>
 
       <AdminLedgerQueue initialEntries={entries} />

@@ -237,3 +237,42 @@ export async function resolveContribution(
     },
   });
 }
+
+export class LedgerAdjustmentError extends Error {
+  constructor(
+    public readonly status: 404,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Manual balance correction (§4.4/§4.11 "ledger auditing") — the only way a
+ * balance changes outside normal earn/spend. Posted `confirmed` by
+ * construction (it's an admin action, not a peer-confirmed self-report), so
+ * it has no `eventId` (no originating ContributionEvent) and is both
+ * created and resolved by the same admin.
+ */
+export async function createLedgerAdjustment(
+  admin: UserModel,
+  targetUserId: string,
+  hours: number,
+  reason: string,
+) {
+  const target = await db.user.findUnique({ where: { id: targetUserId } });
+  if (!target) throw new LedgerAdjustmentError(404, "Member not found.");
+
+  return db.contributionLedger.create({
+    data: {
+      userId: targetUserId,
+      type: LedgerTransactionType.adjusted,
+      status: LedgerStatus.confirmed,
+      hours,
+      reason: reason.trim(),
+      createdByUserId: admin.id,
+      resolvedByUserId: admin.id,
+      resolvedAt: new Date(),
+    },
+  });
+}
