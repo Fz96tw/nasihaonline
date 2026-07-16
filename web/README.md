@@ -4,9 +4,9 @@ Nasiha web app — Next.js 14 (App Router), TypeScript, TailwindCSS, shadcn/ui, 
 
 Login/logout, sessions, password reset, and email verification are handled by [Clerk](https://dashboard.clerk.com) — there is no self-hosted credential storage. Registration is **not** self-serve: Clerk accounts are only ever created server-side (`lib/clerk-admin.ts`), triggered by admin approval (a later objective) or, for local testing, the script below.
 
-1. Create a Clerk application (or use an existing dev instance) and copy the API keys into `.env` (see `.env.example`): `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`. Set `NEXT_PUBLIC_APP_URL` to wherever the app is actually reachable (`http://localhost:3000` for local dev) — it's used to build the invitation redirect URL below.
+1. Create a Clerk application (or use an existing dev instance) and copy the API keys into `.env` (see `.env.example`): `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`. Set `NEXT_PUBLIC_APP_URL` to wherever the app is actually reachable (`http://localhost:3010` for local docker-compose, or your public domain e.g. `https://nasihaforyou.org`) — it's used to build the invitation redirect URL below.
 2. **Required manual step — disable public sign-up:** in the Clerk Dashboard, go to **User & Authentication → Restrictions** and enable **Restricted** sign-up mode. This isn't automatable via Clerk's API; it must be set per Clerk project. With this enabled, `/accept-invite` (see below) still works for invited users — Clerk validates the invitation ticket regardless of this setting — but nobody can complete sign-up without one.
-3. Register a webhook endpoint in the Clerk Dashboard pointing at `<your-app-url>/api/webhooks/clerk`, subscribed to `user.created`, `user.updated`, `user.deleted`. Copy its signing secret into `.env` as `CLERK_WEBHOOK_SIGNING_SECRET`. (For local dev, use the Clerk CLI or a tunnel like ngrok to receive webhooks.)
+3. Register a webhook endpoint in the Clerk Dashboard pointing at `<your-app-url>/api/webhooks/clerk`, subscribed to `user.created`, `user.updated`, `user.deleted`. Copy its signing secret into `.env` as `CLERK_WEBHOOK_SIGNING_SECRET`. (Clerk's servers need a publicly reachable HTTPS URL to deliver this — a reverse proxy such as nginx proxy manager or Caddy fronting your public domain works, or for ad hoc local dev, a tunnel like ngrok.)
 4. Provision a test user (stands in for the admin-approval flow, which doesn't exist yet):
    ```bash
    npx tsx scripts/create-test-user.ts you@example.com member
@@ -33,7 +33,7 @@ Every protected route/page does its own server-side check via `requireUser()`/`r
 2. Register a webhook endpoint pointing at `<your-app-url>/api/webhooks/stripe`, subscribed to `checkout.session.completed`. Copy its signing secret into `.env` as `STRIPE_WEBHOOK_SIGNING_SECRET`.
 3. For local dev, instead of a dashboard endpoint, use the [Stripe CLI](https://stripe.com/docs/stripe-cli) to forward events and print a local webhook secret:
    ```bash
-   stripe listen --forward-to localhost:3000/api/webhooks/stripe
+   stripe listen --forward-to localhost:3010/api/webhooks/stripe
    ```
 4. Test a donation with Stripe's test card `4242 4242 4242 4242`, any future expiry date, any CVC, any ZIP.
 
@@ -54,7 +54,7 @@ From the repo root:
 docker compose up
 ```
 
-This starts the Next.js app, PostgreSQL, Redis, MinIO, Meilisearch, and the search-index worker together. On startup the app container generates the Prisma client and applies any pending migrations automatically. Once ready, open [http://localhost:3000](http://localhost:3000).
+This starts the Next.js app, PostgreSQL, Redis, MinIO, Meilisearch, and the search-index worker together. On startup the app container generates the Prisma client and applies any pending migrations automatically. Once ready, open [http://localhost:3010](http://localhost:3010) (the app container's port 3000 is published as 3010 on the host).
 
 ## Getting Started (local, without Docker)
 
