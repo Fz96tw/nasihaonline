@@ -23,7 +23,7 @@ function HeroImage({ src, title }: { src: string | null; title: string }) {
   );
 }
 
-export function PostCard({ post }: { post: PostCardData }) {
+export function PostCard({ post, showExcerpt = true }: { post: PostCardData; showExcerpt?: boolean }) {
   return (
     <Card className="flex flex-col overflow-hidden">
       <Link href={`/blog/${post.slug}`}>
@@ -45,7 +45,9 @@ export function PostCard({ post }: { post: PostCardData }) {
           </span>
         </div>
       </CardHeader>
-      <CardContent className="pt-0 text-sm leading-relaxed text-muted-foreground">{post.excerpt}</CardContent>
+      {showExcerpt && (
+        <CardContent className="pt-0 text-sm leading-relaxed text-muted-foreground">{post.excerpt}</CardContent>
+      )}
     </Card>
   );
 }

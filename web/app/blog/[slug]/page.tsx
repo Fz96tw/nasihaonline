@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getPublishedPostBySlug, getPostComments } from "@/lib/blog-server";
+import { getPublishedPostBySlug, getPostComments, getPostsByAuthor } from "@/lib/blog-server";
 import { getSessionUser } from "@/lib/auth";
 import { Role } from "@/lib/generated/prisma/enums";
 import { Avatar } from "@/components/ui/avatar";
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CommentThread } from "@/components/blog/comment-thread";
 import { PostFlagButton } from "@/components/blog/post-flag-button";
+import { PostCard } from "@/components/blog/post-card";
 
 function formatPostDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
@@ -26,10 +27,18 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
   const post = await getPublishedPostBySlug(params.slug);
   if (!post) notFound();
 
-  const [comments, sessionUser] = await Promise.all([getPostComments(post.id), getSessionUser()]);
+  const [comments, sessionUser, moreFromAuthor] = await Promise.all([
+    getPostComments(post.id),
+    getSessionUser(),
+    getPostsByAuthor(post.authorId, post.id),
+  ]);
 
   return (
     <main className="mx-auto max-w-3xl px-8 py-16">
+      <Link href="/blog" className="mb-6 inline-block text-sm text-muted-foreground hover:underline">
+        ← Back to Blog
+      </Link>
+
       {post.heroImageUrl && (
         // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
         <img src={post.heroImageUrl} alt={post.title} className="mb-8 h-72 w-full rounded-lg object-cover" />
@@ -68,6 +77,17 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
               {tag.name}
             </Badge>
           ))}
+        </div>
+      )}
+
+      {moreFromAuthor.length > 0 && (
+        <div className="mt-12">
+          <h2 className="mb-4 text-xl font-bold tracking-tight">More from {post.author.name ?? "this author"}</h2>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {moreFromAuthor.map((otherPost) => (
+              <PostCard key={otherPost.id} post={otherPost} showExcerpt={false} />
+            ))}
+          </div>
         </div>
       )}
 

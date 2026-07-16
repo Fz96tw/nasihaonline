@@ -113,6 +113,17 @@ export async function getRecentlyPublishedPosts(limit = 5): Promise<PostCard[]> 
   return posts.map(toCard);
 }
 
+/** "More from this author" on the post detail page — plain Postgres query, same shape as getRecentlyPublishedPosts. */
+export async function getPostsByAuthor(authorId: string, excludePostId: string, limit = 3): Promise<PostCard[]> {
+  const posts = await db.post.findMany({
+    where: { publishedAt: { not: null }, authorId, id: { not: excludePostId } },
+    select: CARD_SELECT,
+    orderBy: { publishedAt: "desc" },
+    take: limit,
+  });
+  return posts.map(toCard);
+}
+
 export async function getPublishedPostBySlug(slug: string): Promise<PostDetail | null> {
   const post = await db.post.findFirst({
     where: { slug, publishedAt: { not: null } },
