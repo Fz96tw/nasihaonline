@@ -16,7 +16,7 @@ export async function SiteHeader() {
       <Link href="/" className="flex flex-shrink-0 items-center gap-[.65rem]">
         <Image
           src="/images/nasihalogo-cropped.png"
-          alt="Nasiha"
+          alt="NASIHA"
           width={296}
           height={334}
           priority
@@ -24,7 +24,7 @@ export async function SiteHeader() {
         />
         <span className="flex flex-col leading-none">
           <span className="text-xl font-black uppercase leading-none tracking-[.14em] text-primary">
-            Nasiha
+            NASIHA
           </span>
           <span className="mt-[.2rem] hidden text-[.58rem] uppercase tracking-[.09em] text-muted-foreground sm:block">
             Knowledge · Community · Growth

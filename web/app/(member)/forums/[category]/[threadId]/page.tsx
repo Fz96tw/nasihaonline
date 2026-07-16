@@ -12,7 +12,7 @@ export async function generateMetadata({
   params: { category: string; threadId: string };
 }): Promise<Metadata> {
   const thread = await getForumThreadDetail(params.category, params.threadId);
-  return { title: thread ? `${thread.title} — Forums — Nasiha` : "Thread not found — Nasiha" };
+  return { title: thread ? `${thread.title} — Forums — NASIHA` : "Thread not found — NASIHA" };
 }
 
 /** /forums/[category]/[threadId] (§4.13) — thread detail with threaded replies. */

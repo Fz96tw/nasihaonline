@@ -8,7 +8,7 @@ import { CalendarView } from "@/components/calendar/calendar-view";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
-  title: "Calendar — Nasiha",
+  title: "Calendar — NASIHA",
 };
 
 export default async function CalendarPage() {

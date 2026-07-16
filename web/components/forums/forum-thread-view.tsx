@@ -136,7 +136,7 @@ function PostNode({
       <div className="rounded-[10px] border bg-muted/40 p-3">
         <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-2">
-            <span className="font-medium text-foreground">{post.authorName ?? "Nasiha Member"}</span>
+            <span className="font-medium text-foreground">{post.authorName ?? "NASIHA Member"}</span>
             {post.removed && <Badge variant="neutral">Removed</Badge>}
             {!post.removed && flagged && <Badge variant="danger">Flagged</Badge>}
           </span>

@@ -9,7 +9,7 @@ import { MemberCardActions } from "@/components/members/member-card-actions";
 import { MemberProfileDialog } from "@/components/members/member-profile-dialog";
 
 export function MemberCard({ member, currentUserId }: { member: DirectoryMember; currentUserId: string }) {
-  const name = member.name ?? "Nasiha Member";
+  const name = member.name ?? "NASIHA Member";
   const [profileOpen, setProfileOpen] = useState(false);
 
   return (

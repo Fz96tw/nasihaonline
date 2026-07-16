@@ -24,7 +24,7 @@ const TIERS = [
     gradient: "from-cyan-600 to-cyan-900",
   },
   {
-    name: "Friend of Nasiha",
+    name: "Friend of NASIHA",
     tagline: "Welcome, no strings",
     description:
       "No contribution obligation. Free/public content only — including the events calendar and recorded webinars.",

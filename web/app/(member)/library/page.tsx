@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
-  title: "Knowledge Library — Nasiha",
+  title: "Knowledge Library — NASIHA",
 };
 
 function CategoryChip({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {

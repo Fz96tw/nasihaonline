@@ -84,7 +84,7 @@ export function DonateForm({
         noValidate
       >
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Support Nasiha</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Support NASIHA</h1>
           <p className="text-sm text-muted-foreground">
             Donations fund the Organization directly and are entirely separate from the
             Knowledge Hours exchange — donating never confers Knowledge Hours or membership

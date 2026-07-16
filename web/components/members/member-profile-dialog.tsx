@@ -19,7 +19,7 @@ export function MemberProfileDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const name = member.name ?? "Nasiha Member";
+  const name = member.name ?? "NASIHA Member";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

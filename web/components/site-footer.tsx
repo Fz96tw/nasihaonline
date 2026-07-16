@@ -61,7 +61,7 @@ export function SiteFooter() {
       </div>
       <div className="mx-auto max-w-[1120px] pt-8">
         <p className="text-sm">
-          © {new Date().getFullYear()} Nasiha — A Non-Profit Organization
+          © {new Date().getFullYear()} NASIHA — A Non-Profit Organization
         </p>
         <p className="mt-4 text-xs text-white/35">{EDUCATIONAL_DISCLAIMER}</p>
       </div>

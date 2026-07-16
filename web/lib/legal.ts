@@ -1,5 +1,5 @@
 export const EDUCATIONAL_DISCLAIMER =
-  "Nasiha is an educational knowledge-sharing community. Content shared by members — including lectures, case discussions, consultations, and forum posts — is intended for professional learning purposes only and does not constitute medical advice. Members are responsible for exercising independent clinical judgment in their own practice. Nasiha and its members accept no liability for clinical decisions made based on content shared within the community.";
+  "NASIHA is an educational knowledge-sharing community. Content shared by members — including lectures, case discussions, consultations, and forum posts — is intended for professional learning purposes only and does not constitute medical advice. Members are responsible for exercising independent clinical judgment in their own practice. NASIHA and its members accept no liability for clinical decisions made based on content shared within the community.";
 
 // Source of truth: docs/Nasiha_Charter.md § Code of Conduct.
 export const CODE_OF_CONDUCT_PRINCIPLES = [
@@ -8,6 +8,6 @@ export const CODE_OF_CONDUCT_PRINCIPLES = [
   "Receive graciously. Acknowledge and credit those who help you. Recognize that someone gave their time.",
   "Engage respectfully. Disagree with ideas, not people. Critique work constructively and with kindness.",
   "Protect privacy. Never share patient information or personal member data outside the community.",
-  "Uphold the mission. Do not use Nasiha for commercial gain, self-promotion, or any purpose at odds with free knowledge sharing.",
+  "Uphold the mission. Do not use NASIHA for commercial gain, self-promotion, or any purpose at odds with free knowledge sharing.",
   "Report concerns. If you witness behavior that violates these principles, bring it to the Board.",
 ];

@@ -5,7 +5,7 @@ import { getKnowledgeCategories, getKnowledgeTags } from "@/lib/library-server";
 import { SubmitResourceForm } from "@/components/library/submit-resource-form";
 
 export const metadata: Metadata = {
-  title: "Submit Resource — Nasiha",
+  title: "Submit Resource — NASIHA",
 };
 
 // "Submit Resource" (§4.9) — member-auth only, no tier gate (same as Write a
@@ -22,7 +22,7 @@ export default async function NewLibraryItemPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Submit Resource</h1>
         <p className="text-muted-foreground">
-          Share a resource with the Nasiha community. A Library Steward reviews every submission before it
+          Share a resource with the NASIHA community. A Library Steward reviews every submission before it
           appears in the Library.
         </p>
       </div>

@@ -31,7 +31,7 @@ export function HowItWorksSection() {
             The Model
           </p>
           <h2 className="mt-2 text-3xl font-semibold tracking-tight">
-            How Nasiha Works
+            How NASIHA Works
           </h2>
           <p className="mt-3 text-muted-foreground">
             A pay-it-forward model where every act of teaching enables an act of

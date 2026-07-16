@@ -4,7 +4,7 @@ import { withSignedPhotoUrls } from "@/lib/team-server";
 import { TeamMemberCard } from "@/components/team/team-member-card";
 
 export const metadata: Metadata = {
-  title: "Our Team — Nasiha",
+  title: "Our Team — NASIHA",
 };
 
 export default async function OurTeamPage() {
@@ -24,7 +24,7 @@ export default async function OurTeamPage() {
         <div className="relative mx-auto max-w-[580px]">
           <h1 className="mb-3 text-[2.4rem] font-extrabold tracking-[-.02em]">Our Team</h1>
           <p className="text-base leading-[1.7] opacity-[.88]">
-            Meet the founders, board members, and partners behind Nasiha.
+            Meet the founders, board members, and partners behind NASIHA.
           </p>
         </div>
       </section>

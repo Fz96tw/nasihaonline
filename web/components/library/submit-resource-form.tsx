@@ -297,7 +297,7 @@ export function SubmitResourceForm({
               </FormControl>
               <div className="space-y-1">
                 <FormLabel className="!mt-0">
-                  I retain ownership of what I submit, and grant Nasiha a non-exclusive right to display it to the
+                  I retain ownership of what I submit, and grant NASIHA a non-exclusive right to display it to the
                   membership.
                 </FormLabel>
                 <FormMessage />

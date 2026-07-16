@@ -197,7 +197,7 @@ export function WritePostForm({
               </FormControl>
               <div className="space-y-1">
                 <FormLabel className="!mt-0">
-                  I retain ownership of what I write, and grant Nasiha a non-exclusive right to
+                  I retain ownership of what I write, and grant NASIHA a non-exclusive right to
                   display this post to the membership and public.
                 </FormLabel>
                 <FormMessage />

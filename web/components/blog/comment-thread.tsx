@@ -91,7 +91,7 @@ function CommentNode({
     <div id={`comment-${comment.id}`} className="flex flex-col gap-3">
       <div className="rounded-[10px] border bg-muted/40 p-3">
         <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">{comment.authorName ?? "Nasiha Member"}</span>
+          <span className="font-medium text-foreground">{comment.authorName ?? "NASIHA Member"}</span>
           <span>{formatTimestamp(comment.createdAt)}</span>
         </div>
         <p className="whitespace-pre-wrap text-sm">{comment.body}</p>

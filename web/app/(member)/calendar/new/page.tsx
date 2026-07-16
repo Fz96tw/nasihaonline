@@ -5,7 +5,7 @@ import { EVENT_SUBMISSION_TIERS } from "@/lib/events";
 import { SubmitEventForm } from "@/components/calendar/submit-event-form";
 
 export const metadata: Metadata = {
-  title: "Submit Event — Nasiha",
+  title: "Submit Event — NASIHA",
 };
 
 // Gated to EVENT_SUBMISSION_TIERS (§4.6, §11 open question #2) — a member

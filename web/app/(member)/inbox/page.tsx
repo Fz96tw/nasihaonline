@@ -6,7 +6,7 @@ import { getInboxList } from "@/lib/inbox-server";
 import { InboxPanel } from "@/components/inbox/inbox-panel";
 
 export const metadata: Metadata = {
-  title: "Inbox — Nasiha",
+  title: "Inbox — NASIHA",
 };
 
 export default async function InboxPage() {

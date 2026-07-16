@@ -5,7 +5,7 @@ export const TIER_LABELS: Record<Tier, string> = {
   [Tier.active]: "Active Member",
   [Tier.associate]: "Associate",
   [Tier.student]: "Student / Trainee",
-  [Tier.friend]: "Friend of Nasiha",
+  [Tier.friend]: "Friend of NASIHA",
 };
 
 export const approveActionSchema = z.object({

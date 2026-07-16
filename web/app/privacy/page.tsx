@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — Nasiha",
+  title: "Privacy Policy — NASIHA",
 };
 
 const SECTIONS = [
@@ -13,8 +13,8 @@ const SECTIONS = [
   },
   {
     eyebrow: "How We Use It",
-    title: "Running Nasiha, Nothing Else",
-    body: "Member data is collected only to operate the community — membership review, the Member Directory, the Knowledge Hours ledger, event RSVPs, content moderation, and community communications. Nasiha never sells, shares, or uses member data for any purpose outside of running the Organization.",
+    title: "Running NASIHA, Nothing Else",
+    body: "Member data is collected only to operate the community — membership review, the Member Directory, the Knowledge Hours ledger, event RSVPs, content moderation, and community communications. NASIHA never sells, shares, or uses member data for any purpose outside of running the Organization.",
   },
   {
     eyebrow: "Your Controls",
@@ -29,12 +29,12 @@ const SECTIONS = [
   {
     eyebrow: "Patient Information",
     title: "Never Shared, Anywhere",
-    body: "Identifiable patient information must never appear in Nasiha — not in case discussions, library submissions, forum posts, or messages. Case-based content requires explicit confirmation that all information has been de-identified before it can be shared.",
+    body: "Identifiable patient information must never appear in NASIHA — not in case discussions, library submissions, forum posts, or messages. Case-based content requires explicit confirmation that all information has been de-identified before it can be shared.",
   },
   {
     eyebrow: "International Operation",
     title: "GDPR & Equivalent Protections",
-    body: "Nasiha operates internationally and is written to meet the most stringent applicable data protection standard, including the EU's General Data Protection Regulation (GDPR), regardless of where a member is located.",
+    body: "NASIHA operates internationally and is written to meet the most stringent applicable data protection standard, including the EU's General Data Protection Regulation (GDPR), regardless of where a member is located.",
   },
 ];
 
@@ -45,7 +45,7 @@ export default function PrivacyPolicyPage() {
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Privacy Policy</h1>
           <p className="mt-2 text-muted-foreground">
-            How Nasiha collects, uses, and protects member information.
+            How NASIHA collects, uses, and protects member information.
           </p>
         </div>
 

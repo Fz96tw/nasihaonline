@@ -3,7 +3,7 @@ import { getAdmissionPhase } from "@/lib/settings";
 import { JoinForm } from "@/components/join-form";
 
 export const metadata: Metadata = {
-  title: "Apply to Join — Nasiha",
+  title: "Apply to Join — NASIHA",
 };
 
 export default async function JoinPage() {

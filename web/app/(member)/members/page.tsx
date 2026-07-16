@@ -7,7 +7,7 @@ import { DirectoryFiltersBar } from "@/components/members/directory-filters-bar"
 import { DirectoryGrid } from "@/components/members/directory-grid";
 
 export const metadata: Metadata = {
-  title: "Member Directory — Nasiha",
+  title: "Member Directory — NASIHA",
 };
 
 export default async function MembersPage() {
@@ -21,7 +21,7 @@ export default async function MembersPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Member Directory</h1>
         <p className="text-muted-foreground">
-          Find and connect with fellow Nasiha members by expertise, title, or country.
+          Find and connect with fellow NASIHA members by expertise, title, or country.
         </p>
       </div>
 

@@ -9,7 +9,7 @@ import { SiteFooter } from "@/components/site-footer";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Nasiha",
+  title: "NASIHA",
   description: "A member-driven community platform for knowledge sharing and expert networking.",
 };
 

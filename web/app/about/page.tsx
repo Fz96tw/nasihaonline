@@ -3,7 +3,7 @@ import Image from "next/image";
 import { Microscope, Eye, GraduationCap } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "About — Nasiha",
+  title: "About — NASIHA",
 };
 
 const VALUES = [
@@ -56,9 +56,9 @@ export default function AboutPage() {
       >
         <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(10,20,60,.75),rgba(10,20,80,.6))]" />
         <div className="relative mx-auto max-w-[580px]">
-          <h1 className="mb-3 text-[2.4rem] font-extrabold tracking-[-.02em]">About Nasiha</h1>
+          <h1 className="mb-3 text-[2.4rem] font-extrabold tracking-[-.02em]">About NASIHA</h1>
           <p className="text-base leading-[1.7] opacity-[.88]">
-            Nasiha — meaning <em className="not-italic text-[#93c5fd]">sincere advice and guidance</em> — was
+            NASIHA — meaning <em className="not-italic text-[#93c5fd]">sincere advice and guidance</em> — was
             founded on the belief that knowledge is a shared resource, not a commodity.
           </p>
         </div>
@@ -96,7 +96,7 @@ export default function AboutPage() {
             <div className="relative mb-8 h-[340px] w-full overflow-hidden rounded-xl shadow-lg">
               <Image
                 src="/images/174733785_orig.jpg"
-                alt="Nasiha community"
+                alt="NASIHA community"
                 fill
                 className="object-cover"
               />

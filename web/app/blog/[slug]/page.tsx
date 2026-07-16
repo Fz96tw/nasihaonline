@@ -13,7 +13,7 @@ function formatPostDate(iso: string) {
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const post = await getPublishedPostBySlug(params.slug);
-  return { title: post ? `${post.title} — Nasiha Blog` : "Post not found — Nasiha" };
+  return { title: post ? `${post.title} — NASIHA Blog` : "Post not found — NASIHA" };
 }
 
 // /blog/[slug] (§4.8) — public-readable, no auth required. Unpublished

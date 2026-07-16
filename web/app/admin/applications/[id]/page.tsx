@@ -90,7 +90,7 @@ export default async function AdminApplicationDetailPage({
             <Field label="Submitted" value={application.createdAt.toLocaleString()} />
           </dl>
           <div className="mt-4 grid gap-4">
-            <Field label="Why do you want to join Nasiha?" value={application.whyJoin} />
+            <Field label="Why do you want to join NASIHA?" value={application.whyJoin} />
             <Field label="Areas of expertise to share" value={application.expertiseToShare} />
             <Field label="Topics most want to learn" value={application.topicsToLearn} />
           </div>

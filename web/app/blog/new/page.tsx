@@ -5,7 +5,7 @@ import { getPostCategories, getPostTags } from "@/lib/blog-server";
 import { WritePostForm } from "@/components/blog/write-post-form";
 
 export const metadata: Metadata = {
-  title: "Write a Post — Nasiha",
+  title: "Write a Post — NASIHA",
 };
 
 // "Write a Post" (§4.8) — member-auth only, no tier gate (unlike Submit
@@ -23,7 +23,7 @@ export default async function NewBlogPostPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Write a Post</h1>
         <p className="text-muted-foreground">
-          Share your knowledge with the Nasiha community. You&apos;ll be listed as the author.
+          Share your knowledge with the NASIHA community. You&apos;ll be listed as the author.
         </p>
       </div>
 

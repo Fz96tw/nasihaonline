@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { FollowForumButton } from "@/components/forums/follow-forum-button";
 
 export const metadata: Metadata = {
-  title: "Forums — Nasiha",
+  title: "Forums — NASIHA",
 };
 
 function formatDate(iso: string) {

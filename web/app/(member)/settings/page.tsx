@@ -11,7 +11,7 @@ import { ConductNoticesSection } from "@/components/settings/conduct-notices-sec
 import { SettingsTabs } from "@/components/settings/settings-tabs";
 
 export const metadata: Metadata = {
-  title: "Settings — Nasiha",
+  title: "Settings — NASIHA",
 };
 
 const TAB_VALUES = ["password", "privacy", "conduct"] as const;

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
 
 export const metadata: Metadata = {
-  title: "My Profile — Nasiha",
+  title: "My Profile — NASIHA",
 };
 
 export default async function ProfilePage() {
@@ -29,7 +29,7 @@ export default async function ProfilePage() {
           )}
         </div>
         <p className="text-muted-foreground">
-          This information appears wherever your identity shows up across Nasiha.
+          This information appears wherever your identity shows up across NASIHA.
         </p>
       </div>
 

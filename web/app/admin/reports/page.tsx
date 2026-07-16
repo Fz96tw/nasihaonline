@@ -119,7 +119,7 @@ export default async function AdminReportsPage() {
       <section className="flex flex-col gap-4">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Organizational Health</h2>
-          <p className="text-sm text-muted-foreground">Whether Nasiha is being run well as an organization.</p>
+          <p className="text-sm text-muted-foreground">Whether NASIHA is being run well as an organization.</p>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <StatCard
@@ -148,7 +148,7 @@ export default async function AdminReportsPage() {
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Impact</h2>
           <p className="text-sm text-muted-foreground">
-            Whether Nasiha is making a real difference — harder to measure, but the most important.
+            Whether NASIHA is making a real difference — harder to measure, but the most important.
           </p>
         </div>
         <Card>

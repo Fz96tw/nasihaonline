@@ -6,7 +6,7 @@ import { NewThreadForm } from "@/components/forums/new-thread-form";
 import { CLINICAL_DISCUSSIONS_SLUG } from "@/lib/forums";
 
 export const metadata: Metadata = {
-  title: "New Thread — Nasiha",
+  title: "New Thread — NASIHA",
 };
 
 /** /forums/[category]/new (§4.13) — "New Thread" form. */

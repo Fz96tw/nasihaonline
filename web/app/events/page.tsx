@@ -4,7 +4,7 @@ import { getEventsForViewer } from "@/lib/events-server";
 import { EventCard } from "@/components/events/event-card";
 
 export const metadata: Metadata = {
-  title: "Events — Nasiha",
+  title: "Events — NASIHA",
 };
 
 export default async function EventsPage() {
@@ -22,7 +22,7 @@ export default async function EventsPage() {
         <div className="relative mx-auto max-w-[580px]">
           <h1 className="mb-3 text-[2.4rem] font-extrabold tracking-[-.02em]">Events</h1>
           <p className="text-base leading-[1.7] opacity-[.88]">
-            Upcoming webinars, workshops, and roundtables from the Nasiha community.
+            Upcoming webinars, workshops, and roundtables from the NASIHA community.
           </p>
         </div>
       </section>

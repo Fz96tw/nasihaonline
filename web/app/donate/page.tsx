@@ -3,7 +3,7 @@ import { getSessionUser } from "@/lib/auth";
 import { DonateForm } from "@/components/donate-form";
 
 export const metadata: Metadata = {
-  title: "Donate — Nasiha",
+  title: "Donate — NASIHA",
 };
 
 /**

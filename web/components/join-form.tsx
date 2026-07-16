@@ -118,7 +118,7 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
           <p className="mt-2 text-sm text-muted-foreground">
             You can tell us which membership tier you&rsquo;re hoping for below, but it&rsquo;s
             only a preference — if approved, the Board makes the final call on your membership
-            tier (Active, Associate, Student/Trainee, or Friend of Nasiha) based on your
+            tier (Active, Associate, Student/Trainee, or Friend of NASIHA) based on your
             experience and availability.
           </p>
         </div>
@@ -307,7 +307,7 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
             <FormItem>
               <FormLabel>Referral (optional)</FormLabel>
               <FormControl>
-                <Input placeholder="Name of the Nasiha member who referred you" {...field} />
+                <Input placeholder="Name of the NASIHA member who referred you" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -319,7 +319,7 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
           name="whyJoin"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Why do you want to join Nasiha?</FormLabel>
+              <FormLabel>Why do you want to join NASIHA?</FormLabel>
               <FormControl>
                 <Textarea
                   placeholder="Tell us about yourself and what you hope to contribute to and learn from the community…"
@@ -420,7 +420,7 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
                   <FormControl>
                     <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                   </FormControl>
-                  <span>I have read and agree to uphold the Nasiha Code of Conduct.</span>
+                  <span>I have read and agree to uphold the NASIHA Code of Conduct.</span>
                 </label>
               </div>
               <FormMessage />
