@@ -41,7 +41,7 @@ export function HowItWorksSection() {
         </Reveal>
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {STEPS.map(({ icon: Icon, title, description }, index) => (
-            <Reveal key={title} index={index}>
+            <Reveal key={title} index={index} hover>
               <Card className="text-center">
                 <CardHeader className="items-center">
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">

@@ -51,7 +51,7 @@ export function MembershipTiersSection() {
         </Reveal>
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {TIERS.map((tier, index) => (
-            <Reveal key={tier.name} index={index}>
+            <Reveal key={tier.name} index={index} hover>
               <Card
                 className={cn(
                   "relative overflow-hidden border-none bg-gradient-to-br text-primary-foreground",

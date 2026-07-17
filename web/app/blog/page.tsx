@@ -6,6 +6,8 @@ import { PostCard } from "@/components/blog/post-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
+import { Reveal } from "@/components/home/reveal";
 
 export const metadata: Metadata = {
   title: "Blog — NASIHA",
@@ -41,11 +43,9 @@ export default async function BlogPage({
 
   return (
     <main className="min-h-screen">
-      <section
-        className="relative overflow-hidden bg-cover bg-center px-8 py-16 text-center text-primary-foreground"
-        style={{ backgroundImage: "url(/images/brick-texture.jpg)" }}
-      >
-        <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(10,20,60,.75),rgba(10,20,80,.6))]" />
+      <section className="relative overflow-hidden px-8 py-16 text-center text-primary-foreground">
+        <ParallaxHeroImage src="/images/brick-texture.jpg" priority />
+        <div className="absolute inset-0 -z-10 bg-[linear-gradient(to_bottom,rgba(10,20,60,.75),rgba(10,20,80,.6))]" />
         <div className="relative mx-auto max-w-[580px]">
           <h1 className="mb-3 text-[2.4rem] font-extrabold tracking-[-.02em]">Blog</h1>
           <p className="text-base leading-[1.7] opacity-[.88]">
@@ -95,8 +95,10 @@ export default async function BlogPage({
           </p>
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {posts.map((post) => (
-              <PostCard key={post.id} post={post} />
+            {posts.map((post, index) => (
+              <Reveal key={post.id} index={index} hover>
+                <PostCard post={post} />
+              </Reveal>
             ))}
           </div>
         )}

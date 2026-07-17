@@ -1,18 +1,12 @@
-import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Reveal } from "@/components/home/reveal";
 
 export function CtaBanner() {
   return (
     <section className="relative overflow-hidden px-8 py-16 text-center text-primary-foreground">
-      <Image
-        src="/images/meadow-morning.jpg"
-        alt=""
-        fill
-        sizes="100vw"
-        className="-z-20 object-cover"
-      />
+      <ParallaxHeroImage src="/images/meadow-morning.jpg" />
       <div className="absolute inset-0 -z-10 bg-[linear-gradient(135deg,rgba(30,58,138,.88),rgba(37,99,235,.75))]" />
       <Reveal className="relative mx-auto max-w-[520px]">
         <h2 className="mb-3 text-[1.9rem] font-extrabold tracking-[-.02em]">

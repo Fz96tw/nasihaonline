@@ -12,10 +12,12 @@ export function Reveal({
   children,
   index = 0,
   className,
+  hover = false,
 }: {
   children: ReactNode;
   index?: number;
   className?: string;
+  hover?: boolean;
 }) {
   const prefersReducedMotion = useReducedMotion();
 
@@ -27,6 +29,16 @@ export function Reveal({
       viewport={{ once: true, amount: 0.2 }}
       variants={REVEAL_VARIANTS}
       transition={{ duration: 0.5, ease: "easeOut", delay: index * 0.08 }}
+      whileHover={
+        hover && !prefersReducedMotion
+          ? { y: -6, transition: { duration: 0.2, ease: "easeOut" } }
+          : undefined
+      }
+      whileTap={
+        hover && !prefersReducedMotion
+          ? { scale: 0.98, transition: { duration: 0.1, ease: "easeOut" } }
+          : undefined
+      }
     >
       {children}
     </motion.div>
