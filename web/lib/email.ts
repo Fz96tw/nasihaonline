@@ -50,3 +50,37 @@ export async function sendWelcomeEmail(to: string, firstName: string, tier: Tier
     console.error("[email] Failed to send welcome email", error);
   }
 }
+
+/**
+ * Sent right after an anonymous visitor registers for an `open` event via
+ * the public /events page. Best-effort, same as above: the EventRegistration
+ * row is already persisted by the time this runs, so a failed/unconfigured
+ * send must not surface as an error to the visitor. No meeting/join link —
+ * that's never exposed on the public page today, for members or otherwise.
+ */
+export async function sendEventRegistrationConfirmationEmail(
+  to: string,
+  name: string,
+  event: { title: string; startsAt: Date },
+) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping event registration email to ${to}`);
+    return;
+  }
+
+  const when = event.startsAt.toLocaleString("en-US", {
+    dateStyle: "full",
+    timeStyle: "short",
+  });
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: `You're registered: ${event.title}`,
+      text: `Hi ${name},\n\nYou're registered for "${event.title}" on ${when}. We'll be in touch with more details closer to the event.\n\n— The NASIHA Team`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send event registration confirmation email", error);
+  }
+}

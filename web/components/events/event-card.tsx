@@ -6,6 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RsvpButton } from "@/components/calendar/rsvp-button";
+import { RegisterButton } from "@/components/events/register-button";
 import { EVENT_TYPE_LABELS, type EventWithRsvp } from "@/lib/events";
 
 function formatEventDate(iso: string) {
@@ -18,10 +19,11 @@ function formatEventDate(iso: string) {
   });
 }
 
-// For a members-only event, the "Join to RSVP" CTA is driven by RSVP state
-// once the visitor is actually signed in (§4.6) — same RsvpButton /calendar
-// uses, just fed from getEventsForViewer's EventWithRsvp (no meetingUrl:
-// that stays hidden on this public page even after RSVP'ing, per §4.6).
+// The footer CTA branches three ways (§4.6): a members-only event drives
+// "Join to RSVP" (signed out) or the RsvpButton /calendar also uses (signed
+// in); an open event lets a signed-in member RSVP the same way, but a
+// signed-out visitor instead gets the anonymous RegisterButton (no
+// meetingUrl either way — that stays hidden on this public page per §4.6).
 export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSignedIn: boolean }) {
   const [rsvped, setRsvped] = useState(event.rsvped);
 
@@ -45,17 +47,17 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
           {event.description}
         </CardContent>
       ) : null}
-      {!event.open ? (
-        <CardFooter className="mt-auto pt-0">
-          {isSignedIn ? (
-            <RsvpButton eventId={event.id} rsvped={rsvped} onToggled={(result) => setRsvped(result.rsvped)} />
-          ) : (
-            <Button size="sm" asChild>
-              <Link href="/join">Join to RSVP</Link>
-            </Button>
-          )}
-        </CardFooter>
-      ) : null}
+      <CardFooter className="mt-auto pt-0">
+        {isSignedIn ? (
+          <RsvpButton eventId={event.id} rsvped={rsvped} onToggled={(result) => setRsvped(result.rsvped)} />
+        ) : event.open ? (
+          <RegisterButton eventId={event.id} eventTitle={event.title} />
+        ) : (
+          <Button size="sm" asChild>
+            <Link href="/join">Join to RSVP</Link>
+          </Button>
+        )}
+      </CardFooter>
     </Card>
   );
 }

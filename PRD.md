@@ -227,11 +227,12 @@ Routes: `POST /api/contributions/earn`, `POST /api/contributions/spend`, `GET /a
 - Event metadata: title, type (Webinar / Workshop / Case Discussion / Student Event / Roundtable / Lecture, extensible enum), host, date/time (must store as UTC + display with locale/timezone conversion — prototype hardcodes "UTC" labels, real system needs proper timezone handling), open/members-only flag, icon/category, **meeting/video link** (new — a URL field for the actual session, e.g. Zoom/Google Meet; per Technology_Roadmap.md the org runs live sessions on Zoom/Meet rather than a built-in video system, so Nasiha's platform hosts the event *listing and RSVP*, not the video call itself; only visible to RSVP'd members, not on the public `/events` listing).
 - Event submission by members ("Submit Event" action — implies an event-creation permission, likely gated to Active tier or above — **needs explicit rule**, see §11).
 - **De-identification confirmation (new):** submitting a **Case Discussion** type event requires an explicit checkbox — "I confirm no identifiable patient information will be shared" — before the event can be published. This mirrors the same requirement on Knowledge Library case-study submissions (§4.9) and is a hard requirement from the Charter's Code of Conduct and Risk_and_Liability.md, not optional guidance.
-- Entities: `Event` (add `meetingUrl`, `deidentificationConfirmed`), `EventRecurrence`, `RSVP`, `Attendance`.
+- **Anonymous registration for open events (new):** an `open` event's card on the public `/events` listing shows a "Register" action to a signed-out visitor (distinct from the members-only "Join to RSVP" CTA) that captures name/email into a new `EventRegistration` record — no account required. This exists to (a) let the public actually register interest in a free/open event, and (b) build a list of non-members who've engaged with an open event, for later membership-campaign outreach. A signed-in member sees the existing RSVP toggle on an open event's card instead (previously this CTA was missing entirely for open events). Registering is unrelated to `RSVP`/`Attendance`/Knowledge Hours — it never creates either.
+- Entities: `Event` (add `meetingUrl`, `deidentificationConfirmed`), `EventRecurrence`, `RSVP`, `Attendance`, `EventRegistration` (new — `eventId`, `email`, `name?`, `createdAt`, unique per `(eventId, email)`; no `userId`, mirroring the nullable-account-capture pattern used by `Donation`/`MembershipApplication`).
 - Recording `Attendance` for an event's host is the trigger for an auto-posted Knowledge Hours earn transaction (§4.4) — no separate manual step needed for hosting. `host` is single-actor only (see §11's open question on multi-host/co-presenter attribution).
 - UI tool: FullCalendar (per system-design.md).
-- Routes: `GET /api/events`, `POST /api/events`, `PATCH /api/events/:id`, `POST /api/events/:id/rsvp`.
-- Public route: `/events`. Member route: `/calendar`.
+- Routes: `GET /api/events`, `POST /api/events`, `PATCH /api/events/:id`, `POST /api/events/:id/rsvp`, `POST /api/events/:id/register` (new — public, unauthenticated, rate-limited; 400s if the target event isn't `open`).
+- Public route: `/events`. Member route: `/calendar`. Admin/moderator route: `/admin/event-registrations` (view/export captured registrations for campaign outreach).
 
 ### 4.7 Inbox (Messages & Meeting Requests)
 
@@ -303,8 +304,8 @@ Not present in the HTML prototype (no `/admin` UI was built), but required per s
 
 - User management, content moderation, event management, contribution ledger auditing (including manual `adjusted` transactions), application review queue.
 - Tool: AdminJS.
-- Routes: `/admin`, `/admin/users`, `/admin/applications`, `/admin/content` (shared flagged-content moderation queue — published Blog posts, published Library items post-publish flags, and Forum posts, per §4.13's "one shared moderation queue, not a separate one per domain"; distinct from `/admin/library/review-queue`, which handles pre-publish review, not post-publish flags), `/admin/events`, `/admin/ledger`, `/admin/team` (§4.12), `/admin/reports`, `/admin/library/review-queue` (§4.9), `/admin/conduct` (§4.15), `/admin/privacy-requests` (§4.15), `/admin/donations` (§4.14 — view/export donation records; read-only with respect to `ContributionLedger`/`users.tier`, preserving the structural separation).
-- Admin nav items (per ui-system.md): Users, Applications, Content, Events, Ledger, Reports. Extend this list with **Team** (§4.12), **Library Review Queue** (§4.9), **Conduct** (§4.15), **Privacy Requests** (§4.15), and **Donations** (§4.14) — all five have dedicated admin routes but were missing from the nav list in earlier drafts.
+- Routes: `/admin`, `/admin/users`, `/admin/applications`, `/admin/content` (shared flagged-content moderation queue — published Blog posts, published Library items post-publish flags, and Forum posts, per §4.13's "one shared moderation queue, not a separate one per domain"; distinct from `/admin/library/review-queue`, which handles pre-publish review, not post-publish flags), `/admin/events`, `/admin/ledger`, `/admin/team` (§4.12), `/admin/reports`, `/admin/library/review-queue` (§4.9), `/admin/conduct` (§4.15), `/admin/privacy-requests` (§4.15), `/admin/donations` (§4.14 — view/export donation records; read-only with respect to `ContributionLedger`/`users.tier`, preserving the structural separation), `/admin/event-registrations` (§4.6 — moderator-or-admin view/export of anonymous open-event registrations, for membership-campaign outreach).
+- Admin nav items (per ui-system.md): Users, Applications, Content, Events, Ledger, Reports. Extend this list with **Team** (§4.12), **Library Review Queue** (§4.9), **Conduct** (§4.15), **Privacy Requests** (§4.15), **Donations** (§4.14), and **Event Registrations** (§4.6) — all six have dedicated admin routes but were missing from the nav list in earlier drafts.
 - **This is a build gap vs. the prototype and should be treated as P0/critical-path** — approvals, tier assignment, and ledger adjustments are impossible without it.
 
 **Reports / KPI dashboard (fleshed out from `Nasiha_KPIs.md`, which previously left the "Reports" nav item unspecified):**
@@ -433,7 +434,7 @@ Not scoped for MVP — tracked here so it isn't lost, and to flag the infrastruc
 /about               Mission, values, vision, dedication, "what we do"
 /our-team            Founders, board members, and partners — combined grid with role badges, photo + bio per person (§4.12)
 /how-to-join         Admission phases, tier explainer, eligibility, CTA
-/events              Public event list (RSVP requires membership)
+/events              Public event list (RSVP requires membership; open events also accept anonymous "Register" — §4.6)
 /blog
 /blog/[slug]
 /join (apply)        Membership application form
@@ -476,6 +477,7 @@ Not scoped for MVP — tracked here so it isn't lost, and to flag the infrastruc
 /admin/conduct         Code of Conduct violation tracking (§4.15)
 /admin/privacy-requests  Data export/deletion request fulfillment (§4.15)
 /admin/donations       Donation records, recognition-consent visibility (§4.14)
+/admin/event-registrations  Anonymous open-event registrations, for membership-campaign outreach (§4.6)
 ```
 
 Note: system-design.md's route list uses `/join` for the application form; the prototype implements this as `/apply` in its JS routing (`navigate('apply')`). **Reconcile naming before implementation** — recommend `/join` to match system-design.md and the "Join NASIHA" CTA copy used everywhere.
@@ -524,7 +526,7 @@ users,
 profiles, skills, profile_skills,
 membership_applications, application_reviews, application_attachments,
 contribution_ledger, contribution_events, contribution_rules,
-events, event_recurrences, rsvps, attendance,
+events, event_recurrences, rsvps, attendance, event_registrations,
 inbox_messages, meeting_requests,
 posts, post_categories, post_tags, post_comments,
 knowledge_items, knowledge_categories, knowledge_tags, knowledge_attachments,
@@ -544,6 +546,7 @@ announcements
 - `contribution_ledger` balance must be derivable via `SUM(transactions WHERE user_id = ? AND status = 'confirmed')`; do not store balance as the sole source of truth. Every row needs a `status` (`pending`/`confirmed`/`rejected`) per the hybrid auto/self-report/confirm model in §4.4 — rejected rows stay for audit but are excluded from the sum.
 - Directory visibility requires two booleans on `profiles` (or a JSON prefs blob): `list_in_directory`, `show_specialty_location`.
 - Event `open` boolean (public/free vs. members-only) is required on `events`.
+- `event_registrations` (§4.6, new) captures a non-member's email/name when they register for an `open` event from the public listing — no `user_id`, unique per `(event_id, email)`. Deliberately not a nullable-`user_id` extension of `rsvps`: RSVP is member-only and feeds `attendance`/Knowledge Hours, while this is a lead-capture record for membership-campaign outreach.
 - `profiles` needs an `avatar_url` field (nullable) pointing to the MinIO-stored profile photo; absence of a value is the signal to render the initials fallback (§4.3) — this is a display rule, not a separate "has photo" flag.
 - `conversations`/`messages` (system-design.md's realtime DM tables) are **replaced** by `inbox_messages` + `meeting_requests` (§4.7) — no participant/conversation join table is needed since every thread is two-party and always originates from the Directory.
 - `team_members` (§4.12) is unlike the rest of the public marketing content (Home/About/How-to-Join copy, which is static): it's admin-CRUD-backed, closer in shape to `events`/`posts`/`knowledge_items` than to hardcoded page copy.
@@ -656,6 +659,7 @@ MVP is considered feature-complete when:
 - [ ] The Member Directory is searchable/filterable, respects each member's visibility preferences, and shows each member's uploaded photo (or initials fallback) as a thumbnail next to their name.
 - [ ] A member can find another member in the Directory and send them a message or request a meeting; the recipient sees it in their Inbox and can respond (including accept/decline/reschedule for meeting requests).
 - [ ] The Calendar shows real events; a member can RSVP and the event's attendee state updates.
+- [ ] On the public `/events` listing, a signed-out visitor sees a "Register" action on `open` events (not on members-only events) that captures their email/name into `event_registrations` without creating an account; a signed-in member sees the RSVP toggle on `open` events instead. An admin or moderator can view/export captured registrations from `/admin/event-registrations`.
 - [ ] A member can write and publish a blog post; other members can read it publicly at `/blog/[slug]`.
 - [ ] Publishing a blog post auto-posts a pending earn transaction (0.5 hr) for the author with no counterpart, requiring admin confirmation from `/admin/ledger` before it counts toward the balance (§4.4).
 - [ ] The post's author, or an admin, can edit a published post's title/body/category/tags/hero image from `/blog/[slug]/edit`; the publish date and slug don't change on edit (§4.8, §11.12).

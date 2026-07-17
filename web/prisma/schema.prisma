@@ -94,8 +94,8 @@ model User {
 
   // Tier-promotion audit trail (§7.3) — a user accrues entries as the
   // subject of a change and, separately, as the admin who made one.
-  tierHistoryEntries    TierHistory[] @relation("TierHistorySubject")
-  tierChangesMade       TierHistory[] @relation("TierHistoryActor")
+  tierHistoryEntries TierHistory[] @relation("TierHistorySubject")
+  tierChangesMade    TierHistory[] @relation("TierHistoryActor")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -311,7 +311,7 @@ model MembershipApplication {
   // — a non-binding hint only. It pre-fills the admin's assignedTier selector
   // at review time but the admin can freely override it; assignedTier below
   // remains the sole source of truth for what tier is actually granted.
-  requestedTier                Tier?
+  requestedTier Tier?
 
   // Review outcome (PRD §3.3/§4.11). Set once by the admin review action;
   // the application row itself is the audit trail — never deleted, so these
@@ -624,9 +624,10 @@ model Event {
   createdAt                 DateTime  @default(now())
   updatedAt                 DateTime  @updatedAt
 
-  recurrence  EventRecurrence?
-  rsvps       RSVP[]
-  attendances Attendance[]
+  recurrence    EventRecurrence?
+  rsvps         RSVP[]
+  attendances   Attendance[]
+  registrations EventRegistration[]
 
   @@index([startsAt])
   @@map("events")
@@ -665,6 +666,25 @@ model RSVP {
   @@unique([eventId, userId])
   @@index([userId])
   @@map("rsvps")
+}
+
+// Captures a non-member's email (and optional name) when they register
+// interest in an `open` event from the public /events page, without
+// requiring a User account. Deliberately separate from RSVP: RSVP is
+// member-only and feeds Attendance/Knowledge Hours, while this is just a
+// lead-capture record for later membership-campaign outreach (no userId —
+// same nullable-account-capture precedent as Donation/MembershipApplication).
+model EventRegistration {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  email     String
+  name      String?
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, email])
+  @@index([email])
+  @@map("event_registrations")
 }
 
 // Records that a user actually attended (vs. merely RSVP'd). A `host`-role
@@ -1055,15 +1075,15 @@ enum PrivacyRequestStatus {
 // it up; `fulfilledAt` is set once the export/deletion has actually been
 // carried out, not merely acknowledged.
 model PrivacyDataRequest {
-  id              String                @id @default(cuid())
+  id              String               @id @default(cuid())
   userId          String
-  user            User                  @relation("PrivacyRequestUser", fields: [userId], references: [id])
+  user            User                 @relation("PrivacyRequestUser", fields: [userId], references: [id])
   type            PrivacyRequestType
-  status          PrivacyRequestStatus  @default(pending)
-  requestedAt     DateTime              @default(now())
+  status          PrivacyRequestStatus @default(pending)
+  requestedAt     DateTime             @default(now())
   fulfilledAt     DateTime?
   handledByUserId String?
-  handledByUser   User?                 @relation("PrivacyRequestHandledBy", fields: [handledByUserId], references: [id])
+  handledByUser   User?                @relation("PrivacyRequestHandledBy", fields: [handledByUserId], references: [id])
 
   @@index([userId])
   @@map("privacy_data_requests")

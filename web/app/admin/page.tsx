@@ -53,6 +53,11 @@ const ADMIN_SECTIONS = [
     description: "Review donation records.",
   },
   {
+    href: "/admin/event-registrations",
+    title: "Event Registrations",
+    description: "Non-members who registered for an open event, for membership campaigns.",
+  },
+  {
     href: "/admin/library/review-queue",
     title: "Library Review Queue",
     description: "Approve or reject submitted library content.",

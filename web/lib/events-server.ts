@@ -150,6 +150,18 @@ export async function getDashboardUpcomingEvents(
   }));
 }
 
+// /admin/event-registrations — every EventRegistration row plus its event's
+// title, for membership-campaign outreach to people who registered for an
+// open event but never signed up (no pagination/date filtering server-side;
+// the admin table filters client-side, same as UserTable, since this data
+// is expected to stay small).
+export async function getEventRegistrationsForAdmin() {
+  return db.eventRegistration.findMany({
+    include: { event: { select: { title: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
 export class EventError extends Error {
   constructor(
     public readonly status: 400 | 403 | 404,
@@ -254,6 +266,33 @@ export async function rsvpToEvent(
 
   const rsvped = nextStatus === RSVPStatus.going;
   return { rsvped, meetingUrl: rsvped ? event.meetingUrl : null };
+}
+
+/**
+ * Captures a non-member's email/name registering interest in an `open`
+ * event from the public /events page — the anonymous counterpart to
+ * rsvpToEvent above, but writing to EventRegistration (no userId) instead
+ * of RSVP. Upserts on the `(eventId, email)` unique key so a repeat
+ * submission from the same visitor is idempotent rather than an error.
+ */
+export async function registerForEvent(
+  eventId: string,
+  input: { email: string; name: string },
+): Promise<{ id: string; title: string; startsAt: Date }> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { id: true, title: true, startsAt: true, open: true },
+  });
+  if (!event) throw new EventError(404, "Event not found.");
+  if (!event.open) throw new EventError(400, "This event isn't open for public registration.");
+
+  await db.eventRegistration.upsert({
+    where: { eventId_email: { eventId, email: input.email } },
+    create: { eventId, email: input.email, name: input.name },
+    update: { name: input.name },
+  });
+
+  return { id: event.id, title: event.title, startsAt: event.startsAt };
 }
 
 function formatIcsDate(date: Date): string {
