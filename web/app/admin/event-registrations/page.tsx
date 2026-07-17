@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { getEventRegistrationsForAdmin } from "@/lib/events-server";
-import { EventRegistrationTable } from "@/components/admin/event-registration-table";
+import { getEventEngagementForAdmin } from "@/lib/events-server";
+import { EventEngagementTable } from "@/components/admin/event-engagement-table";
 import { Button } from "@/components/ui/button";
 
 /**
  * Gated to moderator OR admin, same as /admin/content and
- * /admin/library/review-queue — event registrations feed membership-campaign
+ * /admin/library/review-queue — event engagement feeds membership-campaign
  * outreach, which isn't strictly an admin-only concern.
  */
 export default async function AdminEventRegistrationsPage() {
@@ -23,7 +23,7 @@ export default async function AdminEventRegistrationsPage() {
     );
   }
 
-  const registrations = await getEventRegistrationsForAdmin();
+  const rows = await getEventEngagementForAdmin();
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 p-8">
@@ -37,9 +37,8 @@ export default async function AdminEventRegistrationsPage() {
           </Link>
           <h1 className="mt-2 text-3xl font-bold tracking-tight">Event Registrations</h1>
           <p className="text-muted-foreground">
-            {registrations.length} registration{registrations.length === 1 ? "" : "s"} from
-            non-members who registered for an open event — useful for membership-campaign
-            outreach.
+            {rows.length} {rows.length === 1 ? "person has" : "people have"} registered or RSVP&apos;d
+            for an event — filter by member/non-member for membership-campaign outreach.
           </p>
         </div>
         <Button asChild variant="outline">
@@ -47,7 +46,7 @@ export default async function AdminEventRegistrationsPage() {
         </Button>
       </div>
 
-      <EventRegistrationTable registrations={registrations} />
+      <EventEngagementTable rows={rows} />
     </main>
   );
 }

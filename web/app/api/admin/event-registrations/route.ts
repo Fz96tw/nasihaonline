@@ -1,25 +1,25 @@
 import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireRole } from "@/lib/auth";
 import { Role } from "@/lib/generated/prisma/enums";
-import { getEventRegistrationsForAdmin } from "@/lib/events-server";
+import { getEventEngagementForAdmin } from "@/lib/events-server";
+import { TIER_LABELS } from "@/lib/validation/application-review";
 
-function toCsv(
-  registrations: Awaited<ReturnType<typeof getEventRegistrationsForAdmin>>,
-): string {
-  const header = ["Date", "Event", "Name", "Email"];
-  const rows = registrations.map((r) => [
+function toCsv(rows: Awaited<ReturnType<typeof getEventEngagementForAdmin>>): string {
+  const header = ["Date", "Event", "Name", "Email", "Member"];
+  const csvRows = rows.map((r) => [
     r.createdAt.toISOString(),
-    r.event.title,
+    r.eventTitle,
     r.name ?? "",
     r.email,
+    r.isMember ? (r.tier ? TIER_LABELS[r.tier] : "Member") : "Non-member",
   ]);
   const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
-  return [header, ...rows].map((row) => row.map(escape).join(",")).join("\n");
+  return [header, ...csvRows].map((row) => row.map(escape).join(",")).join("\n");
 }
 
-// Moderator-or-admin view/export of anonymous event registrations, mirroring
-// /api/admin/donations — used to drive membership-campaign outreach to
-// people who attended an open event but never signed up.
+// Moderator-or-admin view/export of event engagement — anonymous
+// EventRegistration rows plus `going` RSVPs from members, mirroring
+// /api/admin/donations — used to drive membership-campaign outreach.
 export async function GET(request: Request) {
   try {
     await requireRole([Role.admin, Role.moderator]);
@@ -28,11 +28,11 @@ export async function GET(request: Request) {
     throw error;
   }
 
-  const registrations = await getEventRegistrationsForAdmin();
+  const rows = await getEventEngagementForAdmin();
 
   const { searchParams } = new URL(request.url);
   if (searchParams.get("export") === "csv") {
-    return new NextResponse(toCsv(registrations), {
+    return new NextResponse(toCsv(rows), {
       headers: {
         "Content-Type": "text/csv",
         "Content-Disposition": `attachment; filename="event-registrations-${Date.now()}.csv"`,
@@ -40,5 +40,5 @@ export async function GET(request: Request) {
     });
   }
 
-  return NextResponse.json({ registrations });
+  return NextResponse.json({ rows });
 }

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -18,31 +19,38 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { getEventRegistrationsForAdmin } from "@/lib/events-server";
+import { TIER_LABELS } from "@/lib/validation/application-review";
+import { TIER_BADGE_VARIANT } from "@/lib/members";
+import type { getEventEngagementForAdmin } from "@/lib/events-server";
 
-type EventRegistration = Awaited<ReturnType<typeof getEventRegistrationsForAdmin>>[number];
+type EventEngagementRow = Awaited<ReturnType<typeof getEventEngagementForAdmin>>[number];
 
-export function EventRegistrationTable({ registrations }: { registrations: EventRegistration[] }) {
+type MemberFilter = "all" | "member" | "non-member";
+
+export function EventEngagementTable({ rows }: { rows: EventEngagementRow[] }) {
   const [search, setSearch] = useState("");
   const [eventFilter, setEventFilter] = useState("all");
+  const [memberFilter, setMemberFilter] = useState<MemberFilter>("all");
 
   const events = useMemo(() => {
     const seen = new Map<string, string>();
-    for (const r of registrations) seen.set(r.eventId, r.event.title);
+    for (const r of rows) seen.set(r.eventId, r.eventTitle);
     return Array.from(seen, ([id, title]) => ({ id, title }));
-  }, [registrations]);
+  }, [rows]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return registrations.filter((r) => {
+    return rows.filter((r) => {
       if (eventFilter !== "all" && r.eventId !== eventFilter) return false;
+      if (memberFilter === "member" && !r.isMember) return false;
+      if (memberFilter === "non-member" && r.isMember) return false;
       if (q) {
         const haystack = `${r.name ?? ""} ${r.email}`.toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
     });
-  }, [registrations, eventFilter, search]);
+  }, [rows, eventFilter, memberFilter, search]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -70,6 +78,16 @@ export function EventRegistrationTable({ registrations }: { registrations: Event
             ))}
           </SelectContent>
         </Select>
+        <Select value={memberFilter} onValueChange={(value) => setMemberFilter(value as MemberFilter)}>
+          <SelectTrigger className="sm:w-44" aria-label="Filter by membership">
+            <SelectValue placeholder="Everyone" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Everyone</SelectItem>
+            <SelectItem value="member">Members</SelectItem>
+            <SelectItem value="non-member">Non-members</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="rounded-[10px] border shadow-sm">
@@ -80,22 +98,34 @@ export function EventRegistrationTable({ registrations }: { registrations: Event
               <TableHead>Event</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
+              <TableHead>Member</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((registration) => (
-              <TableRow key={registration.id}>
+            {filtered.map((row) => (
+              <TableRow key={row.id}>
                 <TableCell className="text-muted-foreground">
-                  {registration.createdAt.toLocaleDateString()}
+                  {row.createdAt.toLocaleDateString()}
                 </TableCell>
-                <TableCell>{registration.event.title}</TableCell>
-                <TableCell>{registration.name ?? "—"}</TableCell>
-                <TableCell className="text-muted-foreground">{registration.email}</TableCell>
+                <TableCell>{row.eventTitle}</TableCell>
+                <TableCell>{row.name ?? "—"}</TableCell>
+                <TableCell className="text-muted-foreground">{row.email}</TableCell>
+                <TableCell>
+                  {row.isMember ? (
+                    row.tier ? (
+                      <Badge variant={TIER_BADGE_VARIANT[row.tier]}>{TIER_LABELS[row.tier]}</Badge>
+                    ) : (
+                      <Badge variant="neutral">Member</Badge>
+                    )
+                  ) : (
+                    <Badge variant="neutral">Non-member</Badge>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
+                <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
                   No registrations match these filters.
                 </TableCell>
               </TableRow>
