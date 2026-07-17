@@ -32,19 +32,19 @@ export async function SiteHeader() {
         </span>
       </Link>
       <div className="hidden items-center gap-6 lg:flex">
-        <Button variant="ghost" size="sm" asChild>
+        <Button variant="ghost" size="sm" className="font-semibold" asChild>
           <Link href="/about">About</Link>
         </Button>
-        <Button variant="ghost" size="sm" asChild>
+        <Button variant="ghost" size="sm" className="font-semibold" asChild>
           <Link href="/our-team">Our Team</Link>
         </Button>
-        <Button variant="ghost" size="sm" asChild>
+        <Button variant="ghost" size="sm" className="font-semibold" asChild>
           <Link href="/events">Events</Link>
         </Button>
-        <Button variant="ghost" size="sm" asChild>
+        <Button variant="ghost" size="sm" className="font-semibold" asChild>
           <Link href="/blog">Blog</Link>
         </Button>
-        <Button variant="ghost" size="sm" asChild>
+        <Button variant="ghost" size="sm" className="font-semibold" asChild>
           <Link href="/donate">Donate</Link>
         </Button>
       </div>
@@ -52,10 +52,10 @@ export async function SiteHeader() {
         {user ? (
           <>
             <div className="hidden items-center gap-2 lg:flex">
-              <Button variant="ghost" size="sm" asChild>
+              <Button variant="ghost" size="sm" className="font-semibold" asChild>
                 <Link href="/dashboard">Dashboard</Link>
               </Button>
-              <Button variant="ghost" size="sm" asChild>
+              <Button variant="ghost" size="sm" className="font-semibold" asChild>
                 <Link href="/members">Members</Link>
               </Button>
             </div>
@@ -64,7 +64,7 @@ export async function SiteHeader() {
           </>
         ) : (
           <>
-            <Button variant="ghost" size="sm" className="hidden lg:inline-flex" asChild>
+            <Button variant="ghost" size="sm" className="hidden font-semibold lg:inline-flex" asChild>
               <Link href="/sign-in">Log in</Link>
             </Button>
             <Button size="sm" asChild>

@@ -26,7 +26,7 @@ const publicLinks = [
 // already live in the member Community section below.
 const memberHiddenHrefs = new Set(["/events", "/blog"]);
 
-const linkClasses = "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-accent";
+const linkClasses = "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold hover:bg-accent";
 
 export function MobileNav({
   signedIn,

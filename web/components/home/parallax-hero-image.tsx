@@ -33,7 +33,14 @@ export function ParallaxHeroImage({
         style={{ y, top: -PARALLAX_RANGE * 2, bottom: -PARALLAX_RANGE * 2 }}
         className="absolute inset-x-0"
       >
-        <Image src={src} alt={alt} fill priority={priority} sizes="100vw" className="object-cover" />
+        <Image
+          src={src}
+          alt={alt}
+          fill
+          priority={priority}
+          sizes="100vw"
+          className="object-cover object-top"
+        />
       </motion.div>
     </div>
   );

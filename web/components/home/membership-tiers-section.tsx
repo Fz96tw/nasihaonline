@@ -35,16 +35,16 @@ const TIERS = [
 
 export function MembershipTiersSection() {
   return (
-    <section className="bg-muted/40 px-8 py-16">
+    <section className="bg-muted/40 px-8 py-20">
       <div className="mx-auto max-w-[960px]">
         <Reveal className="mx-auto max-w-[640px] text-center">
-          <p className="text-sm font-semibold uppercase tracking-wide text-primary">
+          <p className="text-base font-semibold uppercase tracking-wide text-primary">
             Community
           </p>
-          <h2 className="mt-2 text-3xl font-semibold tracking-tight">
+          <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
             Membership Tiers
           </h2>
-          <p className="mt-3 text-muted-foreground">
+          <p className="mt-4 text-lg text-muted-foreground">
             Open to all learners and teachers who share a passion for knowledge
             exchange.
           </p>
@@ -63,12 +63,12 @@ export function MembershipTiersSection() {
                   className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-primary-foreground/10"
                 />
                 <CardHeader className="relative pb-2">
-                  <CardTitle className="text-lg text-primary-foreground">
+                  <CardTitle className="text-xl text-primary-foreground">
                     {tier.name}
                   </CardTitle>
-                  <p className="text-xs text-primary-foreground/75">{tier.tagline}</p>
+                  <p className="text-sm text-primary-foreground/75">{tier.tagline}</p>
                 </CardHeader>
-                <CardContent className="relative pt-0 text-sm leading-relaxed text-primary-foreground/90">
+                <CardContent className="relative pt-0 text-base leading-relaxed text-primary-foreground/90">
                   {tier.description}
                 </CardContent>
               </Card>

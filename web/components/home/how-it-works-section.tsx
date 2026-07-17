@@ -25,16 +25,16 @@ const STEPS = [
 
 export function HowItWorksSection() {
   return (
-    <section id="how-it-works" className="bg-muted/40 px-8 py-16">
+    <section id="how-it-works" className="bg-muted/40 px-8 py-20">
       <div className="mx-auto max-w-[960px]">
         <Reveal className="mx-auto max-w-[640px] text-center">
-          <p className="text-sm font-semibold uppercase tracking-wide text-primary">
+          <p className="text-base font-semibold uppercase tracking-wide text-primary">
             The Model
           </p>
-          <h2 className="mt-2 text-3xl font-semibold tracking-tight">
+          <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
             How NASIHA Works
           </h2>
-          <p className="mt-3 text-muted-foreground">
+          <p className="mt-4 text-lg text-muted-foreground">
             A pay-it-forward model where every act of teaching enables an act of
             learning.
           </p>
@@ -47,9 +47,9 @@ export function HowItWorksSection() {
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
                     <Icon className="h-6 w-6" aria-hidden="true" />
                   </div>
-                  <CardTitle className="text-lg">{title}</CardTitle>
+                  <CardTitle className="text-xl">{title}</CardTitle>
                 </CardHeader>
-                <CardContent className="pt-0 text-sm leading-relaxed text-muted-foreground">
+                <CardContent className="pt-0 text-base leading-relaxed text-muted-foreground">
                   {description}
                 </CardContent>
               </Card>
