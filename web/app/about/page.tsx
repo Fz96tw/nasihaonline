@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { Microscope, Eye, GraduationCap } from "lucide-react";
+import { Reveal } from "@/components/home/reveal";
 
 export const metadata: Metadata = {
   title: "About — NASIHA",
@@ -67,32 +68,35 @@ export default function AboutPage() {
       <section className="mx-auto max-w-[1120px] px-8 py-20">
         <div className="grid grid-cols-1 items-start gap-14 lg:grid-cols-2">
           <div>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[.1em] text-primary">
-              Our Mission
-            </p>
-            <h2 className="mb-3 text-2xl font-extrabold tracking-[-.02em]">Why We Exist</h2>
-            <blockquote className="mb-7 border-l-[3px] border-primary pl-5 text-[1.05rem] italic leading-[1.8] text-foreground/80">
-              &ldquo;NASIHA is dedicated to spreading knowledge by encouraging each one of us to learn
-              and to teach. We exist to create a community of learners focused on knowledge sharing —
-              one that acknowledges the willingness of those around us who help us learn, and that
-              shares knowledge freely with others.&rdquo;
-            </blockquote>
+            <Reveal>
+              <p className="mb-2 text-xs font-bold uppercase tracking-[.1em] text-primary">
+                Our Mission
+              </p>
+              <h2 className="mb-3 text-2xl font-extrabold tracking-[-.02em]">Why We Exist</h2>
+              <blockquote className="mb-7 border-l-[3px] border-primary pl-5 text-[1.05rem] italic leading-[1.8] text-foreground/80">
+                &ldquo;NASIHA is dedicated to spreading knowledge by encouraging each one of us to
+                learn and to teach. We exist to create a community of learners focused on knowledge
+                sharing — one that acknowledges the willingness of those around us who help us
+                learn, and that shares knowledge freely with others.&rdquo;
+              </blockquote>
 
-            <p className="mb-2 text-xs font-bold uppercase tracking-[.1em] text-primary">Values</p>
-            <h3 className="mb-3 text-xl font-extrabold tracking-[-.02em]">Core Principles</h3>
+              <p className="mb-2 text-xs font-bold uppercase tracking-[.1em] text-primary">
+                Values
+              </p>
+              <h3 className="mb-3 text-xl font-extrabold tracking-[-.02em]">Core Principles</h3>
+            </Reveal>
             <div className="flex flex-col gap-3">
-              {VALUES.map((value) => (
-                <div
-                  key={value.title}
-                  className="rounded-[10px] border bg-card px-[1.1rem] py-[.85rem] text-sm shadow-sm"
-                >
-                  <strong className="font-bold">{value.title}</strong> — {value.body}
-                </div>
+              {VALUES.map((value, index) => (
+                <Reveal key={value.title} index={index}>
+                  <div className="rounded-[10px] border bg-card px-[1.1rem] py-[.85rem] text-sm shadow-sm">
+                    <strong className="font-bold">{value.title}</strong> — {value.body}
+                  </div>
+                </Reveal>
               ))}
             </div>
           </div>
 
-          <div>
+          <Reveal>
             <div className="relative mb-8 h-[340px] w-full overflow-hidden rounded-xl shadow-lg">
               <Image
                 src="/images/174733785_orig.jpg"
@@ -116,30 +120,29 @@ export default function AboutPage() {
                 life of learning.
               </p>
             </div>
-          </div>
+          </Reveal>
         </div>
       </section>
 
       <section className="bg-muted px-8 py-20">
         <div className="mx-auto max-w-[1120px]">
-          <div className="mb-10 text-center">
+          <Reveal className="mb-10 text-center">
             <p className="mb-2 text-xs font-bold uppercase tracking-[.1em] text-primary">
               Activities
             </p>
             <h2 className="text-2xl font-extrabold tracking-[-.02em]">What We Do</h2>
-          </div>
+          </Reveal>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-            {ACTIVITIES.map(({ icon: Icon, title, body }) => (
-              <div
-                key={title}
-                className="rounded-xl border bg-card p-6 text-center shadow-sm"
-              >
-                <div className="mx-auto mb-4 flex h-[52px] w-[52px] items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <Icon className="h-[26px] w-[26px]" strokeWidth={1.5} />
+            {ACTIVITIES.map(({ icon: Icon, title, body }, index) => (
+              <Reveal key={title} index={index}>
+                <div className="rounded-xl border bg-card p-6 text-center shadow-sm">
+                  <div className="mx-auto mb-4 flex h-[52px] w-[52px] items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Icon className="h-[26px] w-[26px]" strokeWidth={1.5} />
+                  </div>
+                  <p className="mb-2 font-bold">{title}</p>
+                  <p className="text-sm leading-[1.7] text-muted-foreground">{body}</p>
                 </div>
-                <p className="mb-2 font-bold">{title}</p>
-                <p className="text-sm leading-[1.7] text-muted-foreground">{body}</p>
-              </div>
+              </Reveal>
             ))}
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { Reveal } from "@/components/home/reveal";
 
 const TIERS = [
   {
@@ -36,7 +37,7 @@ export function MembershipTiersSection() {
   return (
     <section className="bg-muted/40 px-8 py-16">
       <div className="mx-auto max-w-[960px]">
-        <div className="mx-auto max-w-[640px] text-center">
+        <Reveal className="mx-auto max-w-[640px] text-center">
           <p className="text-sm font-semibold uppercase tracking-wide text-primary">
             Community
           </p>
@@ -47,30 +48,31 @@ export function MembershipTiersSection() {
             Open to all learners and teachers who share a passion for knowledge
             exchange.
           </p>
-        </div>
+        </Reveal>
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {TIERS.map((tier) => (
-            <Card
-              key={tier.name}
-              className={cn(
-                "relative overflow-hidden border-none bg-gradient-to-br text-primary-foreground",
-                tier.gradient,
-              )}
-            >
-              <div
-                aria-hidden="true"
-                className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-primary-foreground/10"
-              />
-              <CardHeader className="relative pb-2">
-                <CardTitle className="text-lg text-primary-foreground">
-                  {tier.name}
-                </CardTitle>
-                <p className="text-xs text-primary-foreground/75">{tier.tagline}</p>
-              </CardHeader>
-              <CardContent className="relative pt-0 text-sm leading-relaxed text-primary-foreground/90">
-                {tier.description}
-              </CardContent>
-            </Card>
+          {TIERS.map((tier, index) => (
+            <Reveal key={tier.name} index={index}>
+              <Card
+                className={cn(
+                  "relative overflow-hidden border-none bg-gradient-to-br text-primary-foreground",
+                  tier.gradient,
+                )}
+              >
+                <div
+                  aria-hidden="true"
+                  className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-primary-foreground/10"
+                />
+                <CardHeader className="relative pb-2">
+                  <CardTitle className="text-lg text-primary-foreground">
+                    {tier.name}
+                  </CardTitle>
+                  <p className="text-xs text-primary-foreground/75">{tier.tagline}</p>
+                </CardHeader>
+                <CardContent className="relative pt-0 text-sm leading-relaxed text-primary-foreground/90">
+                  {tier.description}
+                </CardContent>
+              </Card>
+            </Reveal>
           ))}
         </div>
       </div>

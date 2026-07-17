@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Reveal } from "@/components/home/reveal";
 
 export function CtaBanner() {
   return (
@@ -13,7 +14,7 @@ export function CtaBanner() {
         className="-z-20 object-cover"
       />
       <div className="absolute inset-0 -z-10 bg-[linear-gradient(135deg,rgba(30,58,138,.88),rgba(37,99,235,.75))]" />
-      <div className="relative mx-auto max-w-[520px]">
+      <Reveal className="relative mx-auto max-w-[520px]">
         <h2 className="mb-3 text-[1.9rem] font-extrabold tracking-[-.02em]">
           Ready to join the community?
         </h2>
@@ -28,7 +29,7 @@ export function CtaBanner() {
         >
           <Link href="/join">Join NASIHA</Link>
         </Button>
-      </div>
+      </Reveal>
     </section>
   );
 }
