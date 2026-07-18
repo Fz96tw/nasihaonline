@@ -44,7 +44,7 @@ export const MEMBER_NAV_SECTIONS: NavSection[] = [
     title: "Community",
     items: [
       { label: "Member Directory", href: "/members", icon: Users },
-      { label: "Calendar", href: "/calendar", icon: CalendarDays },
+      { label: "Events Calendar", href: "/calendar", icon: CalendarDays },
       { label: "Forums", href: "/forums", icon: MessageSquare },
       { label: "Blogs", href: "/blog", icon: PenLine },
       { label: "Library", href: "/library", icon: BookOpen },
