@@ -1,17 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronDown, KeyRound } from "lucide-react";
+import { KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { NavDropdown } from "@/components/nav-dropdown";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { AdminReviewIcon } from "@/components/admin/admin-review-icon";
 import { UserMenu } from "@/components/user-menu";
 import { MobileNav } from "@/components/mobile-nav";
+import { ScrollHeader } from "@/components/scroll-header";
 import { getSessionUser } from "@/lib/auth";
 import { getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
 import { cn } from "@/lib/utils";
@@ -21,7 +18,7 @@ export async function SiteHeader() {
   const profile = user ? withResolvedAvatarUrl(await getOrCreateProfile(user.id)) : null;
 
   return (
-    <header className="sticky top-0 z-50 flex h-[62px] items-center gap-6 border-b bg-background px-4 shadow-sm lg:px-8">
+    <ScrollHeader>
       <Link href="/" className="flex flex-shrink-0 items-center gap-[.65rem]">
         <Image
           src="/images/nasihalogo-cropped.png"
@@ -40,55 +37,39 @@ export async function SiteHeader() {
           </span>
         </span>
       </Link>
-      <div className="hidden items-center gap-6 lg:flex">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-1 font-semibold">
-              Mission
-              <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem asChild>
-              <Link href="/about">About</Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/getinvolved">Get Involved</Link>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-1 font-semibold">
-              Community
-              <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem asChild>
-              <Link href="/events">Events</Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/blog">Blog</Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/library" className={cn("justify-between", !user && "text-muted-foreground")}>
-                Knowledge Library
-                {!user && (
-                  <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
-                )}
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/forums" className={cn("justify-between", !user && "text-muted-foreground")}>
-                Forums
-                {!user && (
-                  <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
-                )}
-              </Link>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      <div className="hidden items-center gap-6 self-stretch lg:flex">
+        <NavDropdown label="Mission">
+          <DropdownMenuItem asChild>
+            <Link href="/about">About</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/getinvolved">Get Involved</Link>
+          </DropdownMenuItem>
+        </NavDropdown>
+        <NavDropdown label="Community">
+          <DropdownMenuItem asChild>
+            <Link href="/events">Events</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/blog">Blog</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/library" className={cn("justify-between", !user && "text-muted-foreground")}>
+              Knowledge Library
+              {!user && (
+                <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
+              )}
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/forums" className={cn("justify-between", !user && "text-muted-foreground")}>
+              Forums
+              {!user && (
+                <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
+              )}
+            </Link>
+          </DropdownMenuItem>
+        </NavDropdown>
         <Button variant="ghost" size="sm" className="font-semibold" asChild>
           <Link href="/our-team">Our Team</Link>
         </Button>
@@ -124,6 +105,6 @@ export async function SiteHeader() {
           canModerate={user?.role === "moderator" || user?.role === "admin"}
         />
       </div>
-    </header>
+    </ScrollHeader>
   );
 }

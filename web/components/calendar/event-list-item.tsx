@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { RsvpButton } from "@/components/calendar/rsvp-button";
 import { AddToCalendarButton } from "@/components/calendar/add-to-calendar-button";
 import { EVENT_TYPE_LABELS, type MemberEvent } from "@/lib/events";
+import { useHasMounted } from "@/lib/use-has-mounted";
 
 function formatEventDateTime(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
@@ -26,6 +27,7 @@ export function EventListItem({
   onRsvpToggled: (result: { rsvped: boolean; meetingUrl: string | null }) => void;
 }) {
   const { rsvped, meetingUrl } = event;
+  const hasMounted = useHasMounted();
 
   return (
     <li className="flex flex-col gap-3 border-b py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
@@ -40,7 +42,9 @@ export function EventListItem({
         {event.hostName ? (
           <p className="text-sm text-muted-foreground">Hosted by {event.hostName}</p>
         ) : null}
-        <p className="text-sm text-muted-foreground">{formatEventDateTime(event.startsAt)}</p>
+        <p className="text-sm text-muted-foreground">
+          {hasMounted ? formatEventDateTime(event.startsAt) : null}
+        </p>
         {rsvped && meetingUrl ? (
           <a
             href={meetingUrl}
