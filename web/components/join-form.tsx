@@ -73,6 +73,8 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
     reValidateMode: "onChange",
   });
 
+  const isFriendTier = form.watch("requestedTier") === Tier.friend;
+
   async function onSubmit(values: ApplicationFormValues) {
     setSubmitError(null);
     try {
@@ -300,53 +302,59 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="referral"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Referral (optional)</FormLabel>
-              <FormControl>
-                <Input placeholder="Name of the NASIHA member who referred you" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {!isFriendTier && (
+          <FormField
+            control={form.control}
+            name="referral"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Referral (optional)</FormLabel>
+                <FormControl>
+                  <Input placeholder="Name of the NASIHA member who referred you" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
-        <FormField
-          control={form.control}
-          name="whyJoin"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Why do you want to join NASIHA?</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="Tell us about yourself and what you hope to contribute to and learn from the community…"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {!isFriendTier && (
+          <FormField
+            control={form.control}
+            name="whyJoin"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Why do you want to join NASIHA?</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Tell us about yourself and what you hope to contribute to and learn from the community…"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
-        <FormField
-          control={form.control}
-          name="expertiseToShare"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Areas of expertise you&rsquo;d like to share</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="e.g. Cardiology, ECG interpretation, clinical research methodology…"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {!isFriendTier && (
+          <FormField
+            control={form.control}
+            name="expertiseToShare"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Areas of expertise you&rsquo;d like to share</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="e.g. Cardiology, ECG interpretation, clinical research methodology…"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         <FormField
           control={form.control}
@@ -365,44 +373,46 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
           )}
         />
 
-        <div className="flex flex-col gap-4 rounded-[10px] border p-4">
-          <div>
-            <p className="text-sm font-medium">
-              Professional reference {referenceRequired ? "" : "(optional for now)"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {referenceRequired
-                ? "Required during the Open Applications phase: name and contact info of someone who can vouch for your professional standing."
-                : "Not required during the current phase, but collected now so it's already on file when Open Applications begins."}
-            </p>
+        {!isFriendTier && (
+          <div className="flex flex-col gap-4 rounded-[10px] border p-4">
+            <div>
+              <p className="text-sm font-medium">
+                Professional reference {referenceRequired ? "" : "(optional for now)"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {referenceRequired
+                  ? "Required during the Open Applications phase: name and contact info of someone who can vouch for your professional standing."
+                  : "Not required during the current phase, but collected now so it's already on file when Open Applications begins."}
+              </p>
+            </div>
+            <FormField
+              control={form.control}
+              name="professionalReferenceName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Reference name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Dr. Jane Doe" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="professionalReferenceContact"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Reference contact info</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Email or phone number" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
-          <FormField
-            control={form.control}
-            name="professionalReferenceName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Reference name</FormLabel>
-                <FormControl>
-                  <Input placeholder="Dr. Jane Doe" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="professionalReferenceContact"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Reference contact info</FormLabel>
-                <FormControl>
-                  <Input placeholder="Email or phone number" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
+        )}
 
         <FormField
           control={form.control}

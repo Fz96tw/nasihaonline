@@ -50,8 +50,12 @@ const baseApplicationSchema = z.object({
   // exactly — required for RHF's zodResolver generic to line up with
   // ApplicationFormValues (see useForm<ApplicationFormValues> in JoinForm).
   referral: z.string().trim(),
-  whyJoin: z.string().trim().min(20, "Tell us a bit more (at least 20 characters)"),
-  expertiseToShare: z.string().trim().min(1, "Let us know what you'd like to share"),
+  // whyJoin/expertiseToShare requiredness (like professionalReference below)
+  // depends on requestedTier — Friend of NASIHA applicants skip these
+  // fields entirely, so the min-length checks live in applicationSchema's
+  // superRefine instead of being baked into the base schema here.
+  whyJoin: z.string().trim(),
+  expertiseToShare: z.string().trim(),
   topicsToLearn: z.string().trim().min(1, "Let us know what you'd like to learn"),
   professionalReferenceName: z.string().trim(),
   professionalReferenceContact: z.string().trim(),
@@ -67,11 +71,34 @@ export type ApplicationFormValues = z.infer<typeof baseApplicationSchema>;
  * admin-configured admission phase reaches Open Applications (PRD §3.1/§3.2)
  * — enforced here via superRefine so the same schema shape (and RHF field
  * types) hold across phases; only the requiredness changes.
+ *
+ * whyJoin/expertiseToShare/professionalReference* are all skipped for
+ * Friend of NASIHA applicants (requestedTier === "friend") — those fields
+ * are hidden in JoinForm for that tier, so they must not be required here.
  */
 export function applicationSchema(phase: AdmissionPhase) {
   const referenceRequired = professionalReferenceRequired(phase);
   return baseApplicationSchema.superRefine((values, ctx) => {
-    if (!referenceRequired) return;
+    const isFriendTier = values.requestedTier === Tier.friend;
+
+    if (!isFriendTier) {
+      if (values.whyJoin.length < 20) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["whyJoin"],
+          message: "Tell us a bit more (at least 20 characters)",
+        });
+      }
+      if (!values.expertiseToShare) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["expertiseToShare"],
+          message: "Let us know what you'd like to share",
+        });
+      }
+    }
+
+    if (!referenceRequired || isFriendTier) return;
     if (!values.professionalReferenceName) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
