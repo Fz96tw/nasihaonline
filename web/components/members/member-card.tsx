@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
+import { Tier } from "@/lib/generated/prisma/enums";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT, type DirectoryMember } from "@/lib/members";
 import { MemberCardActions } from "@/components/members/member-card-actions";
 import { MemberProfileDialog } from "@/components/members/member-profile-dialog";
@@ -40,7 +41,12 @@ export function MemberCard({ member, currentUserId }: { member: DirectoryMember;
       )}
 
       <div className="mt-auto pt-2">
-        <MemberCardActions memberId={member.id} memberName={name} isSelf={member.id === currentUserId} />
+        <MemberCardActions
+          memberId={member.id}
+          memberName={name}
+          isSelf={member.id === currentUserId}
+          isFriendTier={member.tier === Tier.friend}
+        />
       </div>
     </Card>
   );

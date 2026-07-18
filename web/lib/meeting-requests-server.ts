@@ -8,6 +8,7 @@ import {
   NotificationType,
 } from "@/lib/generated/prisma/enums";
 import type { MeetingRequestModel } from "@/lib/generated/prisma/models/MeetingRequest";
+import { INBOX_TIERS } from "@/lib/members";
 import { createNotification } from "@/lib/notifications-server";
 
 /** The rate-card key that prices an accepted meeting request's spend side (§4.4, seeded in prisma/seed.ts). */
@@ -49,7 +50,9 @@ export async function createMeetingRequest(
     db.user.findUnique({ where: { id: input.recipientId } }),
     db.user.findUnique({ where: { id: senderId }, select: { name: true } }),
   ]);
-  if (!recipient) throw new MeetingRequestError(404, "Recipient not found.");
+  if (!recipient || !recipient.tier || !INBOX_TIERS.includes(recipient.tier)) {
+    throw new MeetingRequestError(404, "Recipient not found.");
+  }
 
   const proposedTimes = parseProposedTimes(input.proposedTimes);
 

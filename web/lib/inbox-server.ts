@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { NotificationType } from "@/lib/generated/prisma/enums";
 import type { InboxListItem, InboxThread } from "@/lib/inbox";
+import { INBOX_TIERS } from "@/lib/members";
 import { createNotification } from "@/lib/notifications-server";
 
 const SNIPPET_LENGTH = 140;
@@ -171,7 +172,9 @@ export async function sendMessage(
     if (recipientId === senderId) throw new SendMessageError(400, "You can't message yourself.");
 
     const recipient = await db.user.findUnique({ where: { id: recipientId } });
-    if (!recipient) throw new SendMessageError(404, "Recipient not found.");
+    if (!recipient || !recipient.tier || !INBOX_TIERS.includes(recipient.tier)) {
+      throw new SendMessageError(404, "Recipient not found.");
+    }
 
     const message = await db.inboxMessage.create({
       data: { senderId, recipientId, subject: input.subject, body: input.body, parentId: null },
