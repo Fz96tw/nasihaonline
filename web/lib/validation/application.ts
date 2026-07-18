@@ -40,10 +40,12 @@ const baseApplicationSchema = z.object({
   // value type, same rationale as `referral` above.
   requestedTier: z.union([z.nativeEnum(Tier), z.literal("")]),
   careerStage: z.nativeEnum(CareerStage, { message: "Select a career stage" }),
-  availability: z.nativeEnum(ApplicationAvailability, {
-    message: "Select your availability",
-  }),
-  areaOfInterest: z.nativeEnum(AreaOfInterest, { message: "Select an area of interest" }),
+  availability: z
+    .array(z.nativeEnum(ApplicationAvailability))
+    .min(1, "Select at least one availability option"),
+  areaOfInterest: z
+    .array(z.nativeEnum(AreaOfInterest))
+    .min(1, "Select at least one area of interest"),
   countryRegion: z.string().trim().min(1, "Country / region is required"),
   // Optional field: plain (non-optional-typed) string kept possibly empty,
   // rather than z.optional(), so the schema's input/output types match
@@ -62,6 +64,7 @@ const baseApplicationSchema = z.object({
   codeOfConductAccepted: z
     .boolean()
     .refine((v) => v === true, { message: "You must accept the Code of Conduct to apply" }),
+  emailUpdatesOptIn: z.boolean(),
 });
 
 export type ApplicationFormValues = z.infer<typeof baseApplicationSchema>;

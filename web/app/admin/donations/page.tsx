@@ -62,13 +62,14 @@ export default async function AdminDonationsPage() {
               <TableHead>Amount</TableHead>
               <TableHead>Frequency</TableHead>
               <TableHead>Recognition</TableHead>
+              <TableHead>Email Updates</TableHead>
               <TableHead>Note</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {donations.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
                   No donations yet.
                 </TableCell>
               </TableRow>
@@ -91,6 +92,11 @@ export default async function AdminDonationsPage() {
                 <TableCell>
                   <Badge variant={donation.recognitionConsent ? "success" : "neutral"}>
                     {donation.recognitionConsent ? "Opted in" : "Anonymous"}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant={donation.emailUpdatesOptIn ? "success" : "neutral"}>
+                    {donation.emailUpdatesOptIn ? "Opted in" : "Opted out"}
                   </Badge>
                 </TableCell>
                 <TableCell className="max-w-xs truncate text-muted-foreground">

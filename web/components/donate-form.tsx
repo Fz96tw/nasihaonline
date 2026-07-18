@@ -32,7 +32,7 @@ const FREQUENCY_LABELS: Record<DonationFrequency, string> = {
   [DonationFrequency.recurring]: "Monthly",
 };
 
-const AMOUNT_PRESETS = [25, 50, 100, 250];
+const AMOUNT_PRESETS = [10, 25, 50, 100];
 
 export function DonateForm({
   defaultName,
@@ -53,6 +53,7 @@ export function DonateForm({
       amount: 50,
       frequency: DonationFrequency.one_time,
       recognitionConsent: false,
+      emailUpdatesOptIn: true,
       note: "",
     },
     mode: "onTouched",
@@ -187,6 +188,25 @@ export function DonateForm({
               <FormControl>
                 <Input type="email" placeholder="you@example.com" {...field} />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="emailUpdatesOptIn"
+          render={({ field }) => (
+            <FormItem>
+              <label className="flex items-start gap-2 text-sm">
+                <FormControl>
+                  <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                </FormControl>
+                <span>
+                  Keep me updated with NASIHA news, event announcements, and other important
+                  communications by email.
+                </span>
+              </label>
               <FormMessage />
             </FormItem>
           )}

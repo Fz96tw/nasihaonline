@@ -280,6 +280,7 @@ model Donation {
   currency                String            @default("usd")
   frequency               DonationFrequency
   recognitionConsent      Boolean           @default(false)
+  emailUpdatesOptIn       Boolean           @default(false)
   note                    String?
   stripeCheckoutSessionId String            @unique
   stripeSubscriptionId    String?
@@ -295,8 +296,8 @@ model MembershipApplication {
   email                        String
   professionalTitle            String
   careerStage                  CareerStage
-  availability                 ApplicationAvailability
-  areaOfInterest               AreaOfInterest
+  availability                 ApplicationAvailability[]
+  areaOfInterest               AreaOfInterest[]
   countryRegion                String
   referral                     String?
   whyJoin                      String
@@ -305,6 +306,7 @@ model MembershipApplication {
   professionalReferenceName    String?
   professionalReferenceContact String?
   codeOfConductAcceptedAt      DateTime
+  emailUpdatesOptIn            Boolean                 @default(false)
   status                       ApplicationStatus       @default(submitted)
 
   // Applicant's own tier preference (e.g. "just want Friend of Nasiha access")

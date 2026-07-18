@@ -14,6 +14,7 @@ export const donationSchema = z.object({
   amount: z.number().min(1, "Minimum donation is $1").max(100000, "Amount is too large"),
   frequency: z.nativeEnum(DonationFrequency, { message: "Select one-time or recurring" }),
   recognitionConsent: z.boolean(),
+  emailUpdatesOptIn: z.boolean(),
   // Kept non-optional (possibly empty) rather than z.optional() so the
   // schema's input/output types match exactly for RHF's zodResolver
   // generic — same rationale as ApplicationFormValues.referral.

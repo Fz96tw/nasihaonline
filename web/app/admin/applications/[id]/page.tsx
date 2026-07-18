@@ -71,8 +71,14 @@ export default async function AdminApplicationDetailPage({
               value={application.requestedTier ? TIER_LABELS[application.requestedTier] : "No preference"}
             />
             <Field label="Career stage" value={CAREER_STAGE_LABELS[application.careerStage]} />
-            <Field label="Availability" value={AVAILABILITY_LABELS[application.availability]} />
-            <Field label="Area of interest" value={AREA_OF_INTEREST_LABELS[application.areaOfInterest]} />
+            <Field
+              label="Availability"
+              value={application.availability.map((v) => AVAILABILITY_LABELS[v]).join(", ")}
+            />
+            <Field
+              label="Area of interest"
+              value={application.areaOfInterest.map((v) => AREA_OF_INTEREST_LABELS[v]).join(", ")}
+            />
             <Field label="Country / Region" value={application.countryRegion} />
             <Field label="Referral" value={application.referral} />
             <Field
@@ -88,6 +94,7 @@ export default async function AdminApplicationDetailPage({
               }
             />
             <Field label="Submitted" value={application.createdAt.toLocaleString()} />
+            <Field label="Email updates opt-in" value={application.emailUpdatesOptIn ? "Yes" : "No"} />
           </dl>
           <div className="mt-4 grid gap-4">
             <Field label="Why do you want to join NASIHA?" value={application.whyJoin} />

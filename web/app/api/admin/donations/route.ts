@@ -15,6 +15,7 @@ function toCsv(
     "Currency",
     "Frequency",
     "Recognition Consent",
+    "Email Updates Opt-In",
     "Note",
   ];
   const rows = donations.map((d) => [
@@ -26,6 +27,7 @@ function toCsv(
     d.currency,
     d.frequency,
     d.recognitionConsent ? "yes" : "no",
+    d.emailUpdatesOptIn ? "yes" : "no",
     d.note ?? "",
   ]);
   const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;

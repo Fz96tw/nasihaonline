@@ -31,7 +31,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { donorName, donorEmail, amount, frequency, recognitionConsent, note } = parsed.data;
+  const { donorName, donorEmail, amount, frequency, recognitionConsent, emailUpdatesOptIn, note } =
+    parsed.data;
 
   // Best-effort attribution only — a logged-in donor's userId rides along
   // in metadata purely so /admin/donations can show "linked member", never
@@ -47,6 +48,7 @@ export async function POST(request: Request) {
     donorEmail,
     frequency,
     recognitionConsent: String(recognitionConsent),
+    emailUpdatesOptIn: String(emailUpdatesOptIn),
     note,
     userId: sessionUser?.id ?? "",
   };

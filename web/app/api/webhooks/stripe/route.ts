@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
             currency: session.currency ?? "usd",
             frequency,
             recognitionConsent: metadata.recognitionConsent === "true",
+            emailUpdatesOptIn: metadata.emailUpdatesOptIn === "true",
             note: metadata.note || null,
             stripeCheckoutSessionId: session.id,
             stripeSubscriptionId:
