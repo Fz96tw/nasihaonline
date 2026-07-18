@@ -66,7 +66,7 @@ services:
     environment:
       DATABASE_URL: postgresql://nasiha:nasiha@postgres:5432/nasiha?schema=public
       REDIS_URL: redis://redis:6379
-      NODE_ENV: development
+      NODE_ENV: production
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
       CLERK_WEBHOOK_SIGNING_SECRET: ${CLERK_WEBHOOK_SIGNING_SECRET}
@@ -76,7 +76,7 @@ services:
       NEXT_PUBLIC_CLERK_AFTER_SIGN_OUT_URL: /sign-in
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3010}
       RESEND_API_KEY: ${RESEND_API_KEY}
-      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Nasiha <no-reply@nasihaonline.org>}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-NASIHA <no-reply@mail.nasihaforyou.org>}
       MINIO_ENDPOINT: minio
       MINIO_PORT: "9000"
       MINIO_USE_SSL: "false"
@@ -109,7 +109,7 @@ services:
     environment:
       DATABASE_URL: postgresql://nasiha:nasiha@postgres:5432/nasiha?schema=public
       REDIS_URL: redis://redis:6379
-      NODE_ENV: development
+      NODE_ENV: production
       MEILI_HOST: http://meilisearch:7700
       MEILI_MASTER_KEY: nasiha-dev-master-key
     volumes:
