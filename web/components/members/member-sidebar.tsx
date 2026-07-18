@@ -50,7 +50,7 @@ export function MemberSidebar({
         // FullCalendar's internal grid uses z-index:1/3) — regardless of the
         // z-30 set on the <aside> below, since that's scoped inside this context.
         "sticky top-[var(--header-height)] z-40 hidden h-[calc(100vh-var(--header-height))] flex-shrink-0 transition-[width,top,height] duration-300 ease-in-out lg:block",
-        pinned ? "w-[280px]" : "w-16",
+        pinned ? "w-[240px]" : "w-16",
       )}
     >
       {/*
@@ -64,12 +64,12 @@ export function MemberSidebar({
       <div
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
-        className={cn("absolute left-0 top-0 h-full", expanded ? "w-[280px]" : "w-16")}
+        className={cn("absolute left-0 top-0 h-full", expanded ? "w-[240px]" : "w-16")}
       >
         <aside
           className={cn(
             "absolute left-0 top-0 z-30 flex h-full flex-col gap-1 overflow-y-auto border-r bg-background py-6 transition-[width,box-shadow] duration-200 ease-in-out",
-            expanded ? "w-[280px] px-3" : "w-16 px-2",
+            expanded ? "w-[240px] px-3" : "w-16 px-2",
             !pinned && expanded && "shadow-lg",
           )}
         >
