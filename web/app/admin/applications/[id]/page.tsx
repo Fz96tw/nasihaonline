@@ -55,6 +55,11 @@ export default async function AdminApplicationDetailPage({
           <Badge variant={STATUS_BADGE_VARIANT[application.status]}>
             {STATUS_LABELS[application.status]}
           </Badge>
+          {application.sourcedFromDonation && (
+            <Badge variant="info" title="Auto-submitted from the donate form's Friend of NASIHA checkbox — career/interest fields below were never collected.">
+              From donation
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -70,7 +75,10 @@ export default async function AdminApplicationDetailPage({
               label="Requested tier"
               value={application.requestedTier ? TIER_LABELS[application.requestedTier] : "No preference"}
             />
-            <Field label="Career stage" value={CAREER_STAGE_LABELS[application.careerStage]} />
+            <Field
+              label="Career stage"
+              value={application.careerStage ? CAREER_STAGE_LABELS[application.careerStage] : null}
+            />
             <Field
               label="Availability"
               value={application.availability.map((v) => AVAILABILITY_LABELS[v]).join(", ")}

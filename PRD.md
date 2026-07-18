@@ -102,6 +102,8 @@ Application form fields (from prototype, `/apply`):
 
 On submit: confirmation toast/state ("Application submitted, Board will review within 7 days") + application enters admin review queue. No email verification loop is shown in the prototype for applicants, but system-design.md requires email verification for the general Authentication Domain — apply it at account-creation time post-approval.
 
+A second entry point exists for Friend-tier applications only: the `/donate` opt-in checkbox described in §4.14, which auto-submits a minimal application (name/email only, `sourcedFromDonation: true`) directly into this same review queue rather than requiring a separate `/join` visit.
+
 ### 3.2 Admission Phases (product-level rollout, must be reflected in copy/config, not hardcoded)
 
 1. **Founding Cohort — Invite Only** (complete): personally selected by founding members to establish culture/standards.
@@ -387,6 +389,8 @@ Categories should be admin-manageable (not hardcoded), same rationale as Our Tea
 
 **Entity:** `Donation` — donor name/email (or linked `User` if the donor is a member), amount, date, one-time vs. recurring, `recognitionConsent` (boolean), optional note (e.g., "in honor of..."). Institutional/sponsor-tier partnerships (Community/Supporting/Founding Partner, per Funding.md) are a related but distinct concept from an individual donation and from the Our Team "Partner" role badge (§4.12) — **not resolved in this pass** (flagged separately, out of scope for this round of changes); this section covers individual/one-off donations only.
 
+**Frictionless Friend-tier conversion:** the donate form has an opt-in checkbox (checked by default), "Also apply to become a Friend of NASIHA member," that folds Code of Conduct agreement into the same click. Checking it auto-submits a `MembershipApplication` (`requestedTier: friend`, `sourcedFromDonation: true`) using only the donor's name/email — it still enters the normal admin review queue and normal approve/reject flow (§3.1/§3.3); this does **not** bypass admin review or grant tier from the donation itself, so it doesn't conflict with the hard rule above. Fields the donate form never collects (career stage, availability, area of interest, country/region, why-join, expertise, topics-to-learn) are left blank rather than fabricated; `sourcedFromDonation` flags this for the reviewing admin. Skipped silently if the donor's email already has a pending/approved application or an existing member account, so recurring-donation renewals never create duplicates.
+
 **New infrastructure requirement:** none of the existing tech stack (§8) includes a payment processor. A donation page needs one (e.g., Stripe) added to the stack — this is a new dependency, not something covered by the current architecture.
 
 **Routes:** `POST /api/donations` (public), `GET /api/admin/donations` (admin — list/export donation records with recognition-consent flag visible; no write path back into `ContributionLedger` or `users.tier`). **IA:** `/donate` (public), `/admin/donations` (admin, §4.11) — without this, a donation is a write into a black hole nobody on the org side can see.
@@ -666,6 +670,7 @@ MVP is considered feature-complete when:
 - [ ] A member can submit a resource to the Knowledge Library with metadata and a file upload (MinIO-backed); it enters `pending_review` and only appears in search/browse after a Library Steward publishes it from `/admin/library/review-queue`.
 - [ ] A member can browse and post in Discussion Forums (all six seeded categories); posts are visible to the full membership, and a member can follow a forum to receive digest updates instead of per-post notifications.
 - [ ] A visitor or member can make a donation from `/donate`; the donation record has no relationship to Knowledge Hours balance or membership tier anywhere in the system.
+- [ ] Checking the "Also apply to become a Friend of NASIHA member" checkbox on `/donate` auto-submits a Friend-tier `MembershipApplication` into the same `/admin/applications` review queue as `/join`, without granting tier automatically; a duplicate is never created for a donor with an existing pending/approved application or member account.
 - [ ] The Code of Conduct disclaimer and acceptance checkbox appear at application/first-login; a member can report a Code of Conduct concern; an admin can log a warning or suspension from `/admin/conduct`, and a suspended user cannot log in while their historical content/ledger entries remain intact.
 - [ ] The standard educational disclaimer renders on every public/member page footer and on Library case studies, Case Discussion events, and Clinical Discussions forum posts.
 - [ ] Case Discussion events and Library case-study submissions cannot be published without an explicit de-identification confirmation checkbox.

@@ -295,7 +295,11 @@ model MembershipApplication {
   lastName                     String
   email                        String
   professionalTitle            String
-  careerStage                  CareerStage
+  // Nullable only because donation-triggered auto-applications (see
+  // sourcedFromDonation below) don't collect it — a manually-submitted
+  // application always has this required by applicationSchema's Zod
+  // validation regardless of DB nullability.
+  careerStage                  CareerStage?
   availability                 ApplicationAvailability[]
   areaOfInterest               AreaOfInterest[]
   countryRegion                String
@@ -308,6 +312,14 @@ model MembershipApplication {
   codeOfConductAcceptedAt      DateTime
   emailUpdatesOptIn            Boolean                 @default(false)
   status                       ApplicationStatus       @default(submitted)
+
+  // True when this application was auto-submitted from the donate form's
+  // "also apply as a Friend" checkbox (PRD §4.14) rather than filled out
+  // directly on /join — still goes through the same admin review queue,
+  // just pre-fills only the fields a donation checkout actually has
+  // (name/email), leaving career/interest fields blank for the admin to
+  // see as unanswered rather than fabricated.
+  sourcedFromDonation          Boolean                 @default(false)
 
   // Applicant's own tier preference (e.g. "just want Friend of Nasiha access")
   // — a non-binding hint only. It pre-fills the admin's assignedTier selector

@@ -15,6 +15,10 @@ export const donationSchema = z.object({
   frequency: z.nativeEnum(DonationFrequency, { message: "Select one-time or recurring" }),
   recognitionConsent: z.boolean(),
   emailUpdatesOptIn: z.boolean(),
+  // Auto-submits a Friend of NASIHA membership application (still reviewed
+  // by an admin like any other application — see
+  // lib/friend-application.ts) using the donorName/donorEmail above.
+  friendApplicationOptIn: z.boolean(),
   // Kept non-optional (possibly empty) rather than z.optional() so the
   // schema's input/output types match exactly for RHF's zodResolver
   // generic — same rationale as ApplicationFormValues.referral.
