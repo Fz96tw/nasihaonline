@@ -38,22 +38,28 @@ export async function SiteHeader() {
         </span>
       </Link>
       <div className="hidden items-center gap-6 self-stretch lg:flex">
-        <NavDropdown label="Mission">
-          <DropdownMenuItem asChild>
+        <NavDropdown label="Our Mission">
+          <DropdownMenuItem className="text-base" asChild>
             <Link href="/about">About</Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
+          <DropdownMenuItem className="text-base" asChild>
             <Link href="/getinvolved">Get Involved</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-base" asChild>
+            <Link href="/our-team">Our Team</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-base" asChild>
+            <Link href="/contact">Contact Us</Link>
           </DropdownMenuItem>
         </NavDropdown>
         <NavDropdown label="Community">
-          <DropdownMenuItem asChild>
+          <DropdownMenuItem className="text-base" asChild>
             <Link href="/events">Events</Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href="/blog">Blog</Link>
+          <DropdownMenuItem className="text-base" asChild>
+            <Link href="/blog">Blogs</Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
+          <DropdownMenuItem className="text-base" asChild>
             <Link href="/library" className={cn("justify-between", !user && "text-muted-foreground")}>
               Knowledge Library
               {!user && (
@@ -61,7 +67,7 @@ export async function SiteHeader() {
               )}
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
+          <DropdownMenuItem className="text-base" asChild>
             <Link href="/forums" className={cn("justify-between", !user && "text-muted-foreground")}>
               Forums
               {!user && (
@@ -69,7 +75,7 @@ export async function SiteHeader() {
               )}
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
+          <DropdownMenuItem className="text-base" asChild>
             <Link href="/members" className={cn("justify-between", !user && "text-muted-foreground")}>
               Member Directory
               {!user && (
@@ -78,10 +84,7 @@ export async function SiteHeader() {
             </Link>
           </DropdownMenuItem>
         </NavDropdown>
-        <Button variant="ghost" size="sm" className="font-semibold" asChild>
-          <Link href="/our-team">Our Team</Link>
-        </Button>
-        <Button variant="ghost" size="sm" className="font-semibold" asChild>
+        <Button variant="ghost" size="sm" className="text-base font-semibold" asChild>
           <Link href="/donate">Support Us</Link>
         </Button>
       </div>
@@ -89,7 +92,7 @@ export async function SiteHeader() {
         {user ? (
           <>
             <div className="hidden items-center gap-2 lg:flex">
-              <Button variant="ghost" size="sm" className="font-semibold" asChild>
+              <Button variant="ghost" size="sm" className="text-base font-semibold" asChild>
                 <Link href="/dashboard">Dashboard</Link>
               </Button>
             </div>
@@ -99,10 +102,10 @@ export async function SiteHeader() {
           </>
         ) : (
           <>
-            <Button variant="ghost" size="sm" className="hidden font-semibold lg:inline-flex" asChild>
+            <Button variant="ghost" size="sm" className="hidden text-base font-semibold lg:inline-flex" asChild>
               <Link href="/sign-in">Log in</Link>
             </Button>
-            <Button size="sm" asChild>
+            <Button size="sm" className="text-base" asChild>
               <Link href="/join">Join NASIHA</Link>
             </Button>
           </>

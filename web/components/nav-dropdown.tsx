@@ -32,7 +32,7 @@ export function NavDropdown({
             closedViaPointerRef.current = false;
           }}
         >
-          <span className="flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-bold uppercase tracking-wide transition-colors group-hover:bg-muted group-hover:text-foreground group-data-[state=open]:bg-muted group-data-[state=open]:text-foreground group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2">
+          <span className="flex items-center gap-1 rounded-md px-3 py-1.5 text-base font-bold uppercase tracking-wide transition-colors group-hover:bg-muted group-hover:text-foreground group-data-[state=open]:bg-muted group-data-[state=open]:text-foreground group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2">
             {label}
             <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
           </span>

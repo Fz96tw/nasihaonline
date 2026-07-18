@@ -4,6 +4,7 @@ import { TIER_LABELS } from "@/lib/validation/application-review";
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "NASIHA <no-reply@nasihaonline.org>";
+const CONTACT_EMAIL = process.env.CONTACT_INBOX_EMAIL ?? "info@nasihaforyou.org";
 
 /**
  * Best-effort: a failed/unconfigured email send must not fail application
@@ -82,5 +83,36 @@ export async function sendEventRegistrationConfirmationEmail(
     });
   } catch (error) {
     console.error("[email] Failed to send event registration confirmation email", error);
+  }
+}
+
+/**
+ * Notifies the org's contact inbox of a new /contact form submission.
+ * Best-effort, same as above: the ContactMessage row is already persisted
+ * by the time this runs, so it's the fallback if this send fails or
+ * RESEND_API_KEY isn't configured. replyTo is set to the submitter's
+ * address so the org can reply directly from their inbox.
+ */
+export async function sendContactMessageEmail(message: {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+}) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping contact notification from ${message.email}`);
+    return;
+  }
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: CONTACT_EMAIL,
+      replyTo: message.email,
+      subject: `[Contact form] ${message.subject}`,
+      text: `From: ${message.name} <${message.email}>\n\n${message.message}`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send contact notification email", error);
   }
 }

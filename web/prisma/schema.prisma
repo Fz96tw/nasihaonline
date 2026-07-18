@@ -289,6 +289,21 @@ model Donation {
   @@map("donations")
 }
 
+// A public /contact form submission (PRD §5 IA). Persisted as a durable
+// record so a submission survives even if the notification email below
+// fails or RESEND_API_KEY isn't configured — the email is the fast path,
+// this row is the fallback so nothing is silently lost.
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String
+  message   String
+  createdAt DateTime @default(now())
+
+  @@map("contact_messages")
+}
+
 model MembershipApplication {
   id                           String                  @id @default(cuid())
   firstName                    String

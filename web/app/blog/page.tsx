@@ -47,7 +47,7 @@ export default async function BlogPage({
         <ParallaxHeroImage src="/images/blog.jpg" priority objectPosition="object-[center_62%]" />
         <div className="absolute inset-0 -z-10 bg-[rgba(10,20,70,.65)]" />
         <div className="relative mx-auto max-w-[580px]">
-          <h1 className="mb-3 text-[2.4rem] font-extrabold tracking-[-.02em] [text-shadow:0_2px_16px_rgba(0,10,40,.55)]">Blog</h1>
+          <h1 className="mb-3 text-[2.5rem] font-extrabold leading-[1.1] tracking-[-.02em] [text-shadow:0_2px_16px_rgba(0,10,40,.55)] md:text-[3.5rem]">Blogs</h1>
           <p className="text-lg leading-[1.7] opacity-[.88] [text-shadow:0_1px_10px_rgba(0,10,40,.6)]">
             Member-written posts on clinical practice, research, and community life.
           </p>

@@ -9,6 +9,7 @@ import {
   Info,
   KeyRound,
   LogIn,
+  Mail,
   Menu,
   MessageSquare,
   PenLine,
@@ -35,6 +36,7 @@ const publicLinks = [
   { href: "/library", label: "Knowledge Library", icon: BookOpen, restricted: true },
   { href: "/forums", label: "Forums", icon: MessageSquare, restricted: true },
   { href: "/donate", label: "Support Us", icon: Heart },
+  { href: "/contact", label: "Contact", icon: Mail },
 ];
 // For signed-in members, Events, Blog, Library, and Forums are dropped from
 // the top-level links to cut clutter — Calendar (which supersedes Events),

@@ -52,6 +52,11 @@ const ADMIN_SECTIONS = [
     description: "Review donation records.",
   },
   {
+    href: "/admin/contact-messages",
+    title: "Contact Messages",
+    description: "Review messages submitted via the public contact form.",
+  },
+  {
     href: "/admin/event-registrations",
     title: "Event Registrations",
     description: "Non-members who registered for an open event, for membership campaigns.",
@@ -144,7 +149,7 @@ export default async function AdminPage() {
           const count = "countKey" in section ? counts[section.countKey] : undefined;
           return (
             <Link key={section.href} href={section.href}>
-              <Card className="h-full transition-colors hover:bg-accent">
+              <Card className="h-full">
                 <CardHeader>
                   <div className="flex items-center justify-between gap-2">
                     <CardTitle className="min-w-0 truncate text-lg">{section.title}</CardTitle>

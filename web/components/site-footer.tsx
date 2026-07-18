@@ -6,6 +6,7 @@ const COMMUNITY_LINKS = [
   { label: "Our Team", href: "/our-team" },
   { label: "Join NASIHA", href: "/join" },
   { label: "Support Us", href: "/donate" },
+  { label: "Contact Us", href: "/contact" },
 ];
 
 const MEMBER_LINKS = [
