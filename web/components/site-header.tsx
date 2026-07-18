@@ -69,6 +69,14 @@ export async function SiteHeader() {
               )}
             </Link>
           </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/members" className={cn("justify-between", !user && "text-muted-foreground")}>
+              Member Directory
+              {!user && (
+                <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
+              )}
+            </Link>
+          </DropdownMenuItem>
         </NavDropdown>
         <Button variant="ghost" size="sm" className="font-semibold" asChild>
           <Link href="/our-team">Our Team</Link>
