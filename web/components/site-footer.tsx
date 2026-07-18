@@ -2,9 +2,11 @@ import Link from "next/link";
 import { EDUCATIONAL_DISCLAIMER } from "@/lib/legal";
 
 const COMMUNITY_LINKS = [
-  { label: "About", href: "/about" },
+  { label: "Our Mission", href: "/about" },
   { label: "Our Team", href: "/our-team" },
   { label: "Join NASIHA", href: "/join" },
+  { label: "Support Us", href: "/donate" },
+  { label: "Contact Us", href: "/contact" },
 ];
 
 const MEMBER_LINKS = [

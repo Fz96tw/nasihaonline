@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Montserrat, Mulish } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+const montserrat = Montserrat({ subsets: ["latin"], variable: "--font-sans" });
+const mulish = Mulish({ subsets: ["latin"], variable: "--font-heading" });
 
 export const metadata: Metadata = {
   title: "NASIHA",
@@ -26,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <ClerkProvider signInUrl="/sign-in" signUpUrl="/accept-invite">
-      <html lang="en" className={cn("font-sans", inter.variable)}>
+      <html lang="en" className={cn("font-sans", montserrat.variable, mulish.variable)}>
         <body className="flex min-h-screen flex-col antialiased">
           <SiteHeader />
           <div className="flex-1">{children}</div>

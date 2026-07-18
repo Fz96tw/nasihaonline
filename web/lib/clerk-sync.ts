@@ -18,11 +18,20 @@ function tierFromMetadata(publicMetadata: Record<string, unknown>): Tier | undef
   return typeof tier === "string" && KNOWN_TIERS.has(tier) ? (tier as Tier) : undefined;
 }
 
+function nameFromMetadata(publicMetadata: Record<string, unknown>): string | undefined {
+  const name = publicMetadata.name;
+  return typeof name === "string" && name.trim() ? name : undefined;
+}
+
 /**
  * The Profile row is only nested-created on first insert (the `create`
  * branch below), never touched on `update` — later Clerk metadata syncs
  * (e.g. a role/tier change) shouldn't reset profile fields a member has
- * since filled in via the (future) Profile domain UI, §4.3.
+ * since filled in via the (future) Profile domain UI, §4.3. `name` follows
+ * the same rule: it's seeded from the invitation's metadata (see
+ * provisionMemberAccount) only on creation, then owned entirely by the
+ * member via PATCH /api/profile — a later metadata sync must not clobber
+ * an edit they've made there.
  */
 export async function upsertUserFromClerkData(
   clerkUserId: string,
@@ -34,6 +43,7 @@ export async function upsertUserFromClerkData(
     create: {
       clerkUserId,
       email,
+      name: nameFromMetadata(publicMetadata),
       role: roleFromMetadata(publicMetadata),
       tier: tierFromMetadata(publicMetadata),
       profile: { create: {} },

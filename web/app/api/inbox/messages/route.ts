@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
-import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
+import { AuthError, authErrorResponse, requireTier } from "@/lib/auth";
 import { SendMessageError, sendMessage } from "@/lib/inbox-server";
+import { INBOX_TIERS } from "@/lib/members";
 import { sendMessageSchema } from "@/lib/validation/inbox";
 
 /**
  * POST /api/inbox/messages — new top-level message (from a Directory card's
  * "Send Message") or a reply (parentId set) that threads under the
- * original item (§4.7).
+ * original item (§4.7). Gated to INBOX_TIERS — Friend tier has no Inbox
+ * access (§2.2).
  */
 export async function POST(request: Request) {
   let user;
   try {
-    user = await requireUser();
+    user = await requireTier(INBOX_TIERS);
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
     throw error;

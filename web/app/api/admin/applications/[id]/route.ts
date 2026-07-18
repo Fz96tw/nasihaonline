@@ -37,7 +37,13 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     // Clerk provisioning happens before the DB write: if it fails, the
     // application stays in the pending queue for retry rather than being
     // marked approved with no account behind it.
-    await provisionMemberAccount(application.email, Role.member, parsed.data.tier);
+    const invitation = await provisionMemberAccount(
+      application.email,
+      Role.member,
+      parsed.data.tier,
+      application.firstName,
+      application.lastName,
+    );
 
     const updated = await db.membershipApplication.update({
       where: { id: application.id },
@@ -49,7 +55,13 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       },
     });
 
-    await sendWelcomeEmail(application.email, application.firstName, parsed.data.tier);
+    if (invitation.url) {
+      await sendWelcomeEmail(application.email, application.firstName, parsed.data.tier, invitation.url);
+    } else {
+      console.error(
+        `[email] Clerk invitation ${invitation.id} for ${application.email} has no url — skipping welcome email`,
+      );
+    }
 
     return NextResponse.json({ application: updated });
   }

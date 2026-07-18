@@ -19,8 +19,8 @@ import { KnowledgeStatus } from "@/lib/generated/prisma/enums";
  * Re-derives directory eligibility from the DB rather than trusting the
  * caller, so this stays correct regardless of which write path triggered it
  * (profile edit, avatar change, preference toggle, §4.3/§7.2). Ineligible
- * profiles (not listed, or a tier the Directory excludes — Friend, §4.5) are
- * removed from the index rather than left stale.
+ * profiles (not listed in the Directory, §4.3) are removed from the index
+ * rather than left stale.
  */
 export async function syncProfileToIndex(userId: string): Promise<void> {
   const profile = await db.profile.findUnique({

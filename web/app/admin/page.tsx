@@ -7,8 +7,7 @@ import { getPendingLedgerCountForAdmin } from "@/lib/contributions-server";
 import { getReviewQueueCount } from "@/lib/library-server";
 import { getOpenConductReportCount } from "@/lib/conduct-server";
 import { getOpenPrivacyRequestCount } from "@/lib/privacy-server";
-import { db } from "@/lib/db";
-import { ApplicationStatus } from "@/lib/generated/prisma/enums";
+import { getPendingApplicationsCount } from "@/lib/admin-review-server";
 import { AdminPhaseForm } from "@/components/admin-phase-form";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +50,16 @@ const ADMIN_SECTIONS = [
     href: "/admin/donations",
     title: "Donations",
     description: "Review donation records.",
+  },
+  {
+    href: "/admin/contact-messages",
+    title: "Contact Messages",
+    description: "Review messages submitted via the public contact form.",
+  },
+  {
+    href: "/admin/event-registrations",
+    title: "Event Registrations",
+    description: "Non-members who registered for an open event, for membership campaigns.",
   },
   {
     href: "/admin/library/review-queue",
@@ -109,9 +118,7 @@ export default async function AdminPage() {
     privacyCount,
   ] = await Promise.all([
     getAdmissionPhase(),
-    db.membershipApplication.count({
-      where: { status: { in: [ApplicationStatus.submitted, ApplicationStatus.under_review] } },
-    }),
+    getPendingApplicationsCount(),
     getFlaggedContentCount(),
     getPendingLedgerCountForAdmin(),
     getReviewQueueCount(),
@@ -142,7 +149,7 @@ export default async function AdminPage() {
           const count = "countKey" in section ? counts[section.countKey] : undefined;
           return (
             <Link key={section.href} href={section.href}>
-              <Card className="h-full transition-colors hover:bg-accent">
+              <Card className="h-full">
                 <CardHeader>
                   <div className="flex items-center justify-between gap-2">
                     <CardTitle className="min-w-0 truncate text-lg">{section.title}</CardTitle>

@@ -1,0 +1,61 @@
+/* Maps FullCalendar's default look to the app's shadcn/Tailwind theme
+   tokens (app/globals.css) — otherwise it renders with its own generic
+   borders/fonts that clash with the rest of the UI. */
+.nasiha-calendar {
+  --fc-border-color: hsl(var(--border));
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: hsl(var(--muted));
+  --fc-neutral-text-color: hsl(var(--muted-foreground));
+  --fc-today-bg-color: hsl(var(--primary) / 0.06);
+  --fc-event-bg-color: hsl(var(--primary));
+  --fc-event-border-color: hsl(var(--primary));
+  --fc-event-text-color: hsl(var(--primary-foreground));
+  --fc-list-event-hover-bg-color: hsl(var(--muted));
+  --fc-highlight-color: hsl(var(--primary) / 0.12);
+
+  font-family: var(--font-sans);
+}
+
+.nasiha-calendar .fc-scrollgrid {
+  border-radius: calc(var(--radius) - 2px);
+  overflow: hidden;
+}
+
+.nasiha-calendar .fc-col-header-cell {
+  background: hsl(var(--muted) / 0.5);
+}
+
+.nasiha-calendar .fc-col-header-cell-cushion {
+  padding: 0.6rem 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: hsl(var(--muted-foreground));
+}
+
+.nasiha-calendar .fc-daygrid-day-number {
+  padding: 0.4rem;
+  font-size: 0.8rem;
+  color: hsl(var(--foreground));
+}
+
+.nasiha-calendar .fc-day-today .fc-daygrid-day-number {
+  font-weight: 700;
+  color: hsl(var(--primary));
+}
+
+.nasiha-calendar .fc-daygrid-day-frame {
+  min-height: 6.5rem;
+}
+
+.nasiha-calendar .fc-daygrid-event {
+  border-radius: calc(var(--radius) - 6px);
+  padding: 1px 4px;
+  margin-top: 2px;
+  border: none;
+}
+
+.nasiha-calendar .fc-daygrid-day.fc-day-other .fc-daygrid-day-number {
+  color: hsl(var(--muted-foreground) / 0.5);
+}

@@ -56,14 +56,14 @@ admin       — full administrative access
 
 ### 2.2 Membership Tiers (member-facing classification, distinct from system role)
 
-Every `member` belongs to exactly one tier, which drives directory badges, contribution expectations, and (for Friend) content scope:
+Every `member` belongs to exactly one tier, which drives directory badges, contribution expectations, and (for Friend) Inbox exclusion:
 
 | Tier | Label | Description | Access |
 |---|---|---|---|
 | `active` | Active Member | Regular contributors via teaching, reviewing, or research | Full access + governance voting rights |
 | `associate` | Associate | Newer members establishing footing, growing toward Active | Full community access |
 | `student` | Student / Trainee | Students/trainees; lighter contribution expectations | Full community access |
-| `friend` | Friend of Nasiha | No contribution obligation | Free/public content only (events calendar, recorded webinars) — **not** full member access |
+| `friend` | Friend of Nasiha | No contribution obligation | Full member access to every feature (Dashboard, Library, Blog, Forums, Contributions, Calendar, etc.), **including** being listed/searchable/filterable in the Member Directory with its own "Friend" tier badge (§4.5) — the only exception is the Inbox (§4.7): a Friend-tier member's card shows no "Send Message"/"Request Meeting" actions, and Friend-tier accounts can't send or receive Inbox messages/meeting requests at all |
 
 Tier is set by admin review (initial) and should later support admin-driven promotion (e.g., Associate → Active) based on contribution history — promotion workflow is out of scope for v1 but the data model must support it (see §7.3).
 
@@ -72,7 +72,7 @@ Tier is set by admin review (initial) and should later support admin-driven prom
 - **The Practicing Expert** (e.g., physician, 10+ yrs experience) — teaches via lectures/webinars, reviews others' work, occasionally spends hours for cross-specialty consultation. Cares about signal quality of the directory and low-friction content submission.
 - **The Early-Career Professional** (Associate) — building reputation, consuming more than teaching initially, motivated by mentorship access and visibility in the directory.
 - **The Student/Trainee** — heavy consumer of the library and events, lighter obligations, values a low-pressure on-ramp and forums with peers.
-- **The Friend** — not a full member; wants free access to public events/recordings without any application friction. A conversion funnel target (Friend → Applicant).
+- **The Friend** — not a full member; gets the same platform access as any other tier, including a listed Directory presence with a "Friend" badge, except the Inbox (can't be messaged/meeting-requested, and can't send/receive Inbox items themselves), without any contribution obligation or application friction. A conversion funnel target (Friend → Applicant, i.e. toward Active/Associate/Student).
 
 ---
 
@@ -101,6 +101,8 @@ Application form fields (from prototype, `/apply`):
 - **Professional reference (new):** name and contact info of a professional reference. The Charter requires "at least one professional reference" starting in the **Open Applications** phase (§3.2, phase 3); in the current Referral-Driven Growth phase it should be collected but treated as optional/soft — the field exists in the form now so it doesn't need to be added later as a breaking schema change, but form-level `required` validation should be tied to the active admission phase rather than hardcoded.
 
 On submit: confirmation toast/state ("Application submitted, Board will review within 7 days") + application enters admin review queue. No email verification loop is shown in the prototype for applicants, but system-design.md requires email verification for the general Authentication Domain — apply it at account-creation time post-approval.
+
+A second entry point exists for Friend-tier applications only: the `/donate` opt-in checkbox described in §4.14, which auto-submits a minimal application (name/email only, `sourcedFromDonation: true`) directly into this same review queue rather than requiring a separate `/join` visit.
 
 ### 3.2 Admission Phases (product-level rollout, must be reflected in copy/config, not hardcoded)
 
@@ -168,7 +170,7 @@ This is the platform's differentiating mechanic. system-design.md's generic "Con
 - Immutable ledger — no direct balance mutation, ever.
 - Balance = `SUM(all ledger transactions)` for a user, computed, never stored as a mutable field (a cached/denormalized balance column is acceptable for read performance but must be derived from and reconcilable against the ledger).
 - Full audit trail on every transaction (actor, counterpart, timestamp, activity type, hour value).
-- Knowledge Hours must never be purchasable, transferable for money, or a gate to core platform access (only exception: Friend tier's reduced scope, which is governance-based, not balance-based).
+- Knowledge Hours must never be purchasable, transferable for money, or a gate to core platform access (only exception: Friend tier's exclusion from the Inbox, which is a governance/design decision, not balance-based).
 
 **Earning activities (from prototype, define as configurable `ContributionRule` records, not hardcoded):**
 | Activity | Hours |
@@ -213,9 +215,9 @@ Routes: `POST /api/contributions/earn`, `POST /api/contributions/spend`, `GET /a
 
 ### 4.5 Member Directory
 
-- Grid of member cards: avatar thumbnail next to the member's name — the member's uploaded profile photo if set, otherwise the initials + brand-color fallback (§4.3) — title, country, tier badge, expertise tags, and two actions — **"Send Message"** and **"Request Meeting"** (both open into the Inbox domain, §4.7; there is no live chat entry point from the directory).
+- Grid of member cards: avatar thumbnail next to the member's name — the member's uploaded profile photo if set, otherwise the initials + brand-color fallback (§4.3) — title, country, tier badge, expertise tags, and two actions — **"Send Message"** and **"Request Meeting"** (both open into the Inbox domain, §4.7; there is no live chat entry point from the directory). **Exception:** a Friend-tier member's card shows the tier badge like any other but omits both actions entirely — Friend tier has no Inbox access (§2.2, §4.7).
 - Search: free-text across name, title, country, expertise.
-- Filter: by tier (All / Active / Associate / Student-Trainee) — note Friend tier is intentionally excluded from directory filters/listing per the tier's reduced-access design.
+- Filter: by tier (All / Active / Associate / Student-Trainee / Friend) — every tier, including Friend, is listed and filterable; only the card actions differ (above).
 - Must respect per-user directory visibility preference (§4.3).
 - Entity: derived from `Profile` + `User`; no separate directory entity needed. Search index: Meilisearch, indexed on profile fields.
 - Route: `/members`.
@@ -227,11 +229,12 @@ Routes: `POST /api/contributions/earn`, `POST /api/contributions/spend`, `GET /a
 - Event metadata: title, type (Webinar / Workshop / Case Discussion / Student Event / Roundtable / Lecture, extensible enum), host, date/time (must store as UTC + display with locale/timezone conversion — prototype hardcodes "UTC" labels, real system needs proper timezone handling), open/members-only flag, icon/category, **meeting/video link** (new — a URL field for the actual session, e.g. Zoom/Google Meet; per Technology_Roadmap.md the org runs live sessions on Zoom/Meet rather than a built-in video system, so Nasiha's platform hosts the event *listing and RSVP*, not the video call itself; only visible to RSVP'd members, not on the public `/events` listing).
 - Event submission by members ("Submit Event" action — implies an event-creation permission, likely gated to Active tier or above — **needs explicit rule**, see §11).
 - **De-identification confirmation (new):** submitting a **Case Discussion** type event requires an explicit checkbox — "I confirm no identifiable patient information will be shared" — before the event can be published. This mirrors the same requirement on Knowledge Library case-study submissions (§4.9) and is a hard requirement from the Charter's Code of Conduct and Risk_and_Liability.md, not optional guidance.
-- Entities: `Event` (add `meetingUrl`, `deidentificationConfirmed`), `EventRecurrence`, `RSVP`, `Attendance`.
+- **Anonymous registration for open events (new):** an `open` event's card on the public `/events` listing shows a "Register" action to a signed-out visitor (distinct from the members-only "Join to RSVP" CTA) that captures name/email into a new `EventRegistration` record — no account required. This exists to (a) let the public actually register interest in a free/open event, and (b) build a list of non-members who've engaged with an open event, for later membership-campaign outreach. A signed-in member sees the existing RSVP toggle on an open event's card instead (previously this CTA was missing entirely for open events). Registering is unrelated to `RSVP`/`Attendance`/Knowledge Hours — it never creates either.
+- Entities: `Event` (add `meetingUrl`, `deidentificationConfirmed`), `EventRecurrence`, `RSVP`, `Attendance`, `EventRegistration` (new — `eventId`, `email`, `name?`, `createdAt`, unique per `(eventId, email)`; no `userId`, mirroring the nullable-account-capture pattern used by `Donation`/`MembershipApplication`).
 - Recording `Attendance` for an event's host is the trigger for an auto-posted Knowledge Hours earn transaction (§4.4) — no separate manual step needed for hosting. `host` is single-actor only (see §11's open question on multi-host/co-presenter attribution).
 - UI tool: FullCalendar (per system-design.md).
-- Routes: `GET /api/events`, `POST /api/events`, `PATCH /api/events/:id`, `POST /api/events/:id/rsvp`.
-- Public route: `/events`. Member route: `/calendar`.
+- Routes: `GET /api/events`, `POST /api/events`, `PATCH /api/events/:id`, `POST /api/events/:id/rsvp`, `POST /api/events/:id/register` (new — public, unauthenticated, rate-limited; 400s if the target event isn't `open`).
+- Public route: `/events`. Member route: `/calendar`. Admin/moderator route: `/admin/event-registrations` (view/export captured registrations for campaign outreach).
 
 ### 4.7 Inbox (Messages & Meeting Requests)
 
@@ -257,7 +260,7 @@ Routes: `POST /api/contributions/earn`, `POST /api/contributions/spend`, `GET /a
 
 **UI:** single inbox list view (not a 3-column live-chat layout) with a detail pane per selected item; mobile collapses to a single column (list → detail on tap, back to return).
 
-**Gating question:** should Friend-tier users be reachable via the directory / able to use the inbox? Default assumption: no (full-member feature only, and Friend tier isn't listed in the directory at all per §4.5) — confirm before build.
+**Resolved (§2.2):** Friend-tier members are listed in the Directory like any other tier, but are not reachable via Send Message/Request Meeting, and cannot use the Inbox themselves — their Directory card omits both actions (§4.5), and the Inbox API rejects both a Friend-tier sender and a Friend-tier recipient regardless of entry point. This is the only feature Friend tier is excluded from; every other domain (including Directory listing/search) is full member access.
 
 ### 4.8 Blog
 
@@ -303,8 +306,8 @@ Not present in the HTML prototype (no `/admin` UI was built), but required per s
 
 - User management, content moderation, event management, contribution ledger auditing (including manual `adjusted` transactions), application review queue.
 - Tool: AdminJS.
-- Routes: `/admin`, `/admin/users`, `/admin/applications`, `/admin/content` (shared flagged-content moderation queue — published Blog posts, published Library items post-publish flags, and Forum posts, per §4.13's "one shared moderation queue, not a separate one per domain"; distinct from `/admin/library/review-queue`, which handles pre-publish review, not post-publish flags), `/admin/events`, `/admin/ledger`, `/admin/team` (§4.12), `/admin/reports`, `/admin/library/review-queue` (§4.9), `/admin/conduct` (§4.15), `/admin/privacy-requests` (§4.15), `/admin/donations` (§4.14 — view/export donation records; read-only with respect to `ContributionLedger`/`users.tier`, preserving the structural separation).
-- Admin nav items (per ui-system.md): Users, Applications, Content, Events, Ledger, Reports. Extend this list with **Team** (§4.12), **Library Review Queue** (§4.9), **Conduct** (§4.15), **Privacy Requests** (§4.15), and **Donations** (§4.14) — all five have dedicated admin routes but were missing from the nav list in earlier drafts.
+- Routes: `/admin`, `/admin/users`, `/admin/applications`, `/admin/content` (shared flagged-content moderation queue — published Blog posts, published Library items post-publish flags, and Forum posts, per §4.13's "one shared moderation queue, not a separate one per domain"; distinct from `/admin/library/review-queue`, which handles pre-publish review, not post-publish flags), `/admin/events`, `/admin/ledger`, `/admin/team` (§4.12), `/admin/reports`, `/admin/library/review-queue` (§4.9), `/admin/conduct` (§4.15), `/admin/privacy-requests` (§4.15), `/admin/donations` (§4.14 — view/export donation records; read-only with respect to `ContributionLedger`/`users.tier`, preserving the structural separation), `/admin/event-registrations` (§4.6 — moderator-or-admin view/export of anonymous open-event registrations, for membership-campaign outreach).
+- Admin nav items (per ui-system.md): Users, Applications, Content, Events, Ledger, Reports. Extend this list with **Team** (§4.12), **Library Review Queue** (§4.9), **Conduct** (§4.15), **Privacy Requests** (§4.15), **Donations** (§4.14), and **Event Registrations** (§4.6) — all six have dedicated admin routes but were missing from the nav list in earlier drafts.
 - **This is a build gap vs. the prototype and should be treated as P0/critical-path** — approvals, tier assignment, and ledger adjustments are impossible without it.
 
 **Reports / KPI dashboard (fleshed out from `Nasiha_KPIs.md`, which previously left the "Reports" nav item unspecified):**
@@ -386,6 +389,8 @@ Categories should be admin-manageable (not hardcoded), same rationale as Our Tea
 
 **Entity:** `Donation` — donor name/email (or linked `User` if the donor is a member), amount, date, one-time vs. recurring, `recognitionConsent` (boolean), optional note (e.g., "in honor of..."). Institutional/sponsor-tier partnerships (Community/Supporting/Founding Partner, per Funding.md) are a related but distinct concept from an individual donation and from the Our Team "Partner" role badge (§4.12) — **not resolved in this pass** (flagged separately, out of scope for this round of changes); this section covers individual/one-off donations only.
 
+**Frictionless Friend-tier conversion:** the donate form has an opt-in checkbox (checked by default), "Also apply to become a Friend of NASIHA member," that folds Code of Conduct agreement into the same click. Checking it auto-submits a `MembershipApplication` (`requestedTier: friend`, `sourcedFromDonation: true`) using only the donor's name/email — it still enters the normal admin review queue and normal approve/reject flow (§3.1/§3.3); this does **not** bypass admin review or grant tier from the donation itself, so it doesn't conflict with the hard rule above. Fields the donate form never collects (career stage, availability, area of interest, country/region, why-join, expertise, topics-to-learn) are left blank rather than fabricated; `sourcedFromDonation` flags this for the reviewing admin. Skipped silently if the donor's email already has a pending/approved application or an existing member account, so recurring-donation renewals never create duplicates.
+
 **New infrastructure requirement:** none of the existing tech stack (§8) includes a payment processor. A donation page needs one (e.g., Stripe) added to the stack — this is a new dependency, not something covered by the current architecture.
 
 **Routes:** `POST /api/donations` (public), `GET /api/admin/donations` (admin — list/export donation records with recognition-consent flag visible; no write path back into `ContributionLedger` or `users.tier`). **IA:** `/donate` (public), `/admin/donations` (admin, §4.11) — without this, a donation is a write into a black hole nobody on the org side can see.
@@ -433,7 +438,7 @@ Not scoped for MVP — tracked here so it isn't lost, and to flag the infrastruc
 /about               Mission, values, vision, dedication, "what we do"
 /our-team            Founders, board members, and partners — combined grid with role badges, photo + bio per person (§4.12)
 /how-to-join         Admission phases, tier explainer, eligibility, CTA
-/events              Public event list (RSVP requires membership)
+/events              Public event list (RSVP requires membership; open events also accept anonymous "Register" — §4.6)
 /blog
 /blog/[slug]
 /join (apply)        Membership application form
@@ -476,6 +481,7 @@ Not scoped for MVP — tracked here so it isn't lost, and to flag the infrastruc
 /admin/conduct         Code of Conduct violation tracking (§4.15)
 /admin/privacy-requests  Data export/deletion request fulfillment (§4.15)
 /admin/donations       Donation records, recognition-consent visibility (§4.14)
+/admin/event-registrations  Anonymous open-event registrations, for membership-campaign outreach (§4.6)
 ```
 
 Note: system-design.md's route list uses `/join` for the application form; the prototype implements this as `/apply` in its JS routing (`navigate('apply')`). **Reconcile naming before implementation** — recommend `/join` to match system-design.md and the "Join NASIHA" CTA copy used everywhere.
@@ -524,7 +530,7 @@ users,
 profiles, skills, profile_skills,
 membership_applications, application_reviews, application_attachments,
 contribution_ledger, contribution_events, contribution_rules,
-events, event_recurrences, rsvps, attendance,
+events, event_recurrences, rsvps, attendance, event_registrations,
 inbox_messages, meeting_requests,
 posts, post_categories, post_tags, post_comments,
 knowledge_items, knowledge_categories, knowledge_tags, knowledge_attachments,
@@ -544,6 +550,7 @@ announcements
 - `contribution_ledger` balance must be derivable via `SUM(transactions WHERE user_id = ? AND status = 'confirmed')`; do not store balance as the sole source of truth. Every row needs a `status` (`pending`/`confirmed`/`rejected`) per the hybrid auto/self-report/confirm model in §4.4 — rejected rows stay for audit but are excluded from the sum.
 - Directory visibility requires two booleans on `profiles` (or a JSON prefs blob): `list_in_directory`, `show_specialty_location`.
 - Event `open` boolean (public/free vs. members-only) is required on `events`.
+- `event_registrations` (§4.6, new) captures a non-member's email/name when they register for an `open` event from the public listing — no `user_id`, unique per `(event_id, email)`. Deliberately not a nullable-`user_id` extension of `rsvps`: RSVP is member-only and feeds `attendance`/Knowledge Hours, while this is a lead-capture record for membership-campaign outreach.
 - `profiles` needs an `avatar_url` field (nullable) pointing to the MinIO-stored profile photo; absence of a value is the signal to render the initials fallback (§4.3) — this is a display rule, not a separate "has photo" flag.
 - `conversations`/`messages` (system-design.md's realtime DM tables) are **replaced** by `inbox_messages` + `meeting_requests` (§4.7) — no participant/conversation join table is needed since every thread is two-party and always originates from the Directory.
 - `team_members` (§4.12) is unlike the rest of the public marketing content (Home/About/How-to-Join copy, which is static): it's admin-CRUD-backed, closer in shape to `events`/`posts`/`knowledge_items` than to hardcoded page copy.
@@ -628,7 +635,7 @@ The plan below regroups work so each phase ships a coherent, demonstrable slice 
 
 1. **Admin review states:** should there be an explicit `needs_more_info` state between `under_review` and `approved/rejected`? The current three-state workflow may be too coarse for real review conversations.
 2. **Event creation permission:** which tiers can submit events — Active only, or Active + Associate? Not specified in source docs.
-3. **Inbox access by tier:** should Friend-tier members be reachable via the Directory's Send Message / Request Meeting actions? Assumed no, since Friend tier isn't listed in the Directory at all (§4.5) — needs confirmation (see also §4.7).
+3. ~~**Inbox access by tier:** should Friend-tier members be reachable via the Directory's Send Message / Request Meeting actions?~~ **Resolved:** no — Friend tier is listed/filterable in the Member Directory like any other tier (§4.5), but its card omits Send Message/Request Meeting, and Friend-tier accounts can neither send nor receive Inbox items (§4.7). This is Friend tier's only feature exclusion; every other domain (Dashboard, Library, Blog, Forums, Contributions, Calendar, Directory) is full member access (§2.2).
 4. **Re-application policy:** can a rejected applicant reapply, and after what cooldown?
 5. **Tier promotion:** system implies Associate → Active progression ("growing toward Active status") but no promotion trigger/workflow is specified — manual admin action, automatic threshold on lifetime hours, or hybrid?
 6. ~~**Route naming:** `/join` (system-design.md) vs. `/apply` (prototype JS) — pick one before scaffolding.~~ **Resolved:** `/join` — already adopted in §5's IA table, matching system-design.md and the "Join NASIHA" CTA copy used everywhere; `/apply` was only ever the prototype's internal JS route name.
@@ -655,13 +662,16 @@ MVP is considered feature-complete when:
 - [ ] A member can view their Knowledge Hours balance (confirmed transactions only) and full transaction history including pending/rejected items; hosting an attended event auto-posts a confirmed earn transaction; an accepted meeting request auto-posts a confirmed spend transaction for the requester *and* a pending earn transaction for the recipient that requires the requester's confirmation; other activities post as `pending` via "Log Contribution" and require counterpart or admin confirmation before counting toward the balance (§4.4).
 - [ ] The Member Directory is searchable/filterable, respects each member's visibility preferences, and shows each member's uploaded photo (or initials fallback) as a thumbnail next to their name.
 - [ ] A member can find another member in the Directory and send them a message or request a meeting; the recipient sees it in their Inbox and can respond (including accept/decline/reschedule for meeting requests).
+- [ ] A Friend-tier member has full access to every other member feature (Dashboard, Library, Blog, Forums, Contributions, Calendar) and is listed/searchable/filterable in the Member Directory with a "Friend" tier badge, but their card shows no "Send Message"/"Request Meeting" actions and they cannot send/receive Inbox messages or meeting requests (§2.2).
 - [ ] The Calendar shows real events; a member can RSVP and the event's attendee state updates.
+- [ ] On the public `/events` listing, a signed-out visitor sees a "Register" action on `open` events (not on members-only events) that captures their email/name into `event_registrations` without creating an account; a signed-in member sees the RSVP toggle on `open` events instead. An admin or moderator can view/export captured registrations from `/admin/event-registrations`.
 - [ ] A member can write and publish a blog post; other members can read it publicly at `/blog/[slug]`.
 - [ ] Publishing a blog post auto-posts a pending earn transaction (0.5 hr) for the author with no counterpart, requiring admin confirmation from `/admin/ledger` before it counts toward the balance (§4.4).
 - [ ] The post's author, or an admin, can edit a published post's title/body/category/tags/hero image from `/blog/[slug]/edit`; the publish date and slug don't change on edit (§4.8, §11.12).
 - [ ] A member can submit a resource to the Knowledge Library with metadata and a file upload (MinIO-backed); it enters `pending_review` and only appears in search/browse after a Library Steward publishes it from `/admin/library/review-queue`.
 - [ ] A member can browse and post in Discussion Forums (all six seeded categories); posts are visible to the full membership, and a member can follow a forum to receive digest updates instead of per-post notifications.
 - [ ] A visitor or member can make a donation from `/donate`; the donation record has no relationship to Knowledge Hours balance or membership tier anywhere in the system.
+- [ ] Checking the "Also apply to become a Friend of NASIHA member" checkbox on `/donate` auto-submits a Friend-tier `MembershipApplication` into the same `/admin/applications` review queue as `/join`, without granting tier automatically; a duplicate is never created for a donor with an existing pending/approved application or member account.
 - [ ] The Code of Conduct disclaimer and acceptance checkbox appear at application/first-login; a member can report a Code of Conduct concern; an admin can log a warning or suspension from `/admin/conduct`, and a suspended user cannot log in while their historical content/ledger entries remain intact.
 - [ ] The standard educational disclaimer renders on every public/member page footer and on Library case studies, Case Discussion events, and Clinical Discussions forum posts.
 - [ ] Case Discussion events and Library case-study submissions cannot be published without an explicit de-identification confirmation checkbox.

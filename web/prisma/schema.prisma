@@ -94,8 +94,8 @@ model User {
 
   // Tier-promotion audit trail (§7.3) — a user accrues entries as the
   // subject of a change and, separately, as the admin who made one.
-  tierHistoryEntries    TierHistory[] @relation("TierHistorySubject")
-  tierChangesMade       TierHistory[] @relation("TierHistoryActor")
+  tierHistoryEntries TierHistory[] @relation("TierHistorySubject")
+  tierChangesMade    TierHistory[] @relation("TierHistoryActor")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -280,6 +280,7 @@ model Donation {
   currency                String            @default("usd")
   frequency               DonationFrequency
   recognitionConsent      Boolean           @default(false)
+  emailUpdatesOptIn       Boolean           @default(false)
   note                    String?
   stripeCheckoutSessionId String            @unique
   stripeSubscriptionId    String?
@@ -288,15 +289,34 @@ model Donation {
   @@map("donations")
 }
 
+// A public /contact form submission (PRD §5 IA). Persisted as a durable
+// record so a submission survives even if the notification email below
+// fails or RESEND_API_KEY isn't configured — the email is the fast path,
+// this row is the fallback so nothing is silently lost.
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String
+  message   String
+  createdAt DateTime @default(now())
+
+  @@map("contact_messages")
+}
+
 model MembershipApplication {
   id                           String                  @id @default(cuid())
   firstName                    String
   lastName                     String
   email                        String
   professionalTitle            String
-  careerStage                  CareerStage
-  availability                 ApplicationAvailability
-  areaOfInterest               AreaOfInterest
+  // Nullable only because donation-triggered auto-applications (see
+  // sourcedFromDonation below) don't collect it — a manually-submitted
+  // application always has this required by applicationSchema's Zod
+  // validation regardless of DB nullability.
+  careerStage                  CareerStage?
+  availability                 ApplicationAvailability[]
+  areaOfInterest               AreaOfInterest[]
   countryRegion                String
   referral                     String?
   whyJoin                      String
@@ -305,13 +325,22 @@ model MembershipApplication {
   professionalReferenceName    String?
   professionalReferenceContact String?
   codeOfConductAcceptedAt      DateTime
+  emailUpdatesOptIn            Boolean                 @default(false)
   status                       ApplicationStatus       @default(submitted)
+
+  // True when this application was auto-submitted from the donate form's
+  // "also apply as a Friend" checkbox (PRD §4.14) rather than filled out
+  // directly on /join — still goes through the same admin review queue,
+  // just pre-fills only the fields a donation checkout actually has
+  // (name/email), leaving career/interest fields blank for the admin to
+  // see as unanswered rather than fabricated.
+  sourcedFromDonation          Boolean                 @default(false)
 
   // Applicant's own tier preference (e.g. "just want Friend of Nasiha access")
   // — a non-binding hint only. It pre-fills the admin's assignedTier selector
   // at review time but the admin can freely override it; assignedTier below
   // remains the sole source of truth for what tier is actually granted.
-  requestedTier                Tier?
+  requestedTier Tier?
 
   // Review outcome (PRD §3.3/§4.11). Set once by the admin review action;
   // the application row itself is the audit trail — never deleted, so these
@@ -624,9 +653,10 @@ model Event {
   createdAt                 DateTime  @default(now())
   updatedAt                 DateTime  @updatedAt
 
-  recurrence  EventRecurrence?
-  rsvps       RSVP[]
-  attendances Attendance[]
+  recurrence    EventRecurrence?
+  rsvps         RSVP[]
+  attendances   Attendance[]
+  registrations EventRegistration[]
 
   @@index([startsAt])
   @@map("events")
@@ -665,6 +695,25 @@ model RSVP {
   @@unique([eventId, userId])
   @@index([userId])
   @@map("rsvps")
+}
+
+// Captures a non-member's email (and optional name) when they register
+// interest in an `open` event from the public /events page, without
+// requiring a User account. Deliberately separate from RSVP: RSVP is
+// member-only and feeds Attendance/Knowledge Hours, while this is just a
+// lead-capture record for later membership-campaign outreach (no userId —
+// same nullable-account-capture precedent as Donation/MembershipApplication).
+model EventRegistration {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  email     String
+  name      String?
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, email])
+  @@index([email])
+  @@map("event_registrations")
 }
 
 // Records that a user actually attended (vs. merely RSVP'd). A `host`-role
@@ -1055,15 +1104,15 @@ enum PrivacyRequestStatus {
 // it up; `fulfilledAt` is set once the export/deletion has actually been
 // carried out, not merely acknowledged.
 model PrivacyDataRequest {
-  id              String                @id @default(cuid())
+  id              String               @id @default(cuid())
   userId          String
-  user            User                  @relation("PrivacyRequestUser", fields: [userId], references: [id])
+  user            User                 @relation("PrivacyRequestUser", fields: [userId], references: [id])
   type            PrivacyRequestType
-  status          PrivacyRequestStatus  @default(pending)
-  requestedAt     DateTime              @default(now())
+  status          PrivacyRequestStatus @default(pending)
+  requestedAt     DateTime             @default(now())
   fulfilledAt     DateTime?
   handledByUserId String?
-  handledByUser   User?                 @relation("PrivacyRequestHandledBy", fields: [handledByUserId], references: [id])
+  handledByUser   User?                @relation("PrivacyRequestHandledBy", fields: [handledByUserId], references: [id])
 
   @@index([userId])
   @@map("privacy_data_requests")

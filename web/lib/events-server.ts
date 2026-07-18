@@ -150,6 +150,55 @@ export async function getDashboardUpcomingEvents(
   }));
 }
 
+// /admin/event-registrations — a merged view of who's engaged with each
+// event: anonymous EventRegistration rows (non-members) plus `going` RSVP
+// rows joined to their User (members, tagged with tier so the admin table
+// can render a tier badge instead of "Non-member"). Merging these two
+// otherwise-separate tables is admin-reporting-only — nothing here feeds
+// back into either table. No pagination/date filtering server-side; the
+// admin table filters client-side, same as UserTable, since this data is
+// expected to stay small.
+export async function getEventEngagementForAdmin() {
+  const [registrations, rsvps] = await Promise.all([
+    db.eventRegistration.findMany({
+      include: { event: { select: { title: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    db.rSVP.findMany({
+      where: { status: RSVPStatus.going },
+      include: {
+        event: { select: { title: true } },
+        user: { select: { email: true, name: true, tier: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  const guestRows = registrations.map((r) => ({
+    id: `registration:${r.id}`,
+    eventId: r.eventId,
+    eventTitle: r.event.title,
+    email: r.email,
+    name: r.name,
+    createdAt: r.createdAt,
+    isMember: false as const,
+    tier: null,
+  }));
+
+  const memberRows = rsvps.map((r) => ({
+    id: `rsvp:${r.id}`,
+    eventId: r.eventId,
+    eventTitle: r.event.title,
+    email: r.user.email,
+    name: r.user.name,
+    createdAt: r.createdAt,
+    isMember: true as const,
+    tier: r.user.tier,
+  }));
+
+  return [...guestRows, ...memberRows].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
 export class EventError extends Error {
   constructor(
     public readonly status: 400 | 403 | 404,
@@ -254,6 +303,33 @@ export async function rsvpToEvent(
 
   const rsvped = nextStatus === RSVPStatus.going;
   return { rsvped, meetingUrl: rsvped ? event.meetingUrl : null };
+}
+
+/**
+ * Captures a non-member's email/name registering interest in an `open`
+ * event from the public /events page — the anonymous counterpart to
+ * rsvpToEvent above, but writing to EventRegistration (no userId) instead
+ * of RSVP. Upserts on the `(eventId, email)` unique key so a repeat
+ * submission from the same visitor is idempotent rather than an error.
+ */
+export async function registerForEvent(
+  eventId: string,
+  input: { email: string; name: string },
+): Promise<{ id: string; title: string; startsAt: Date }> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { id: true, title: true, startsAt: true, open: true },
+  });
+  if (!event) throw new EventError(404, "Event not found.");
+  if (!event.open) throw new EventError(400, "This event isn't open for public registration.");
+
+  await db.eventRegistration.upsert({
+    where: { eventId_email: { eventId, email: input.email } },
+    create: { eventId, email: input.email, name: input.name },
+    update: { name: input.name },
+  });
+
+  return { id: event.id, title: event.title, startsAt: event.startsAt };
 }
 
 function formatIcsDate(date: Date): string {

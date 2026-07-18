@@ -25,7 +25,7 @@ function HeroImage({ src, title }: { src: string | null; title: string }) {
 
 export function PostCard({ post, showExcerpt = true }: { post: PostCardData; showExcerpt?: boolean }) {
   return (
-    <Card className="flex flex-col overflow-hidden">
+    <Card className="flex h-full flex-col overflow-hidden">
       <Link href={`/blog/${post.slug}`}>
         <HeroImage src={post.heroImageUrl} title={post.title} />
       </Link>

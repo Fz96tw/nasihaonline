@@ -113,9 +113,14 @@ export default async function AdminApplicationsPage({
                 <TableCell>
                   <Link
                     href={`/admin/applications/${application.id}`}
-                    className="font-medium text-primary hover:underline"
+                    className="flex items-center gap-2 font-medium text-primary hover:underline"
                   >
                     {application.firstName} {application.lastName}
+                    {application.sourcedFromDonation && (
+                      <Badge variant="info" title="Auto-submitted from the donate form">
+                        Donation
+                      </Badge>
+                    )}
                   </Link>
                 </TableCell>
                 <TableCell className="text-muted-foreground">{application.email}</TableCell>

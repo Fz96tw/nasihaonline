@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EVENT_TYPE_LABELS, type PastEventForAttendance } from "@/lib/events";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { useHasMounted } from "@/lib/use-has-mounted";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
@@ -21,6 +22,7 @@ export function AdminEventAttendanceQueue({ initialEvents }: { initialEvents: Pa
   const [events, setEvents] = useState(initialEvents);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const hasMounted = useHasMounted();
 
   async function recordAttendance(eventId: string) {
     setPendingId(eventId);
@@ -70,7 +72,7 @@ export function AdminEventAttendanceQueue({ initialEvents }: { initialEvents: Pa
         <TableBody>
           {events.map((event) => (
             <TableRow key={event.id}>
-              <TableCell>{formatDate(event.startsAt)}</TableCell>
+              <TableCell>{hasMounted ? formatDate(event.startsAt) : null}</TableCell>
               <TableCell>{event.title}</TableCell>
               <TableCell>{EVENT_TYPE_LABELS[event.type]}</TableCell>
               <TableCell>{event.hostName ?? "Unknown"}</TableCell>

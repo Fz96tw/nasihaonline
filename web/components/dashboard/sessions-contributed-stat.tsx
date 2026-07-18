@@ -9,7 +9,7 @@ export async function SessionsContributedStat({ userId }: { userId: string }) {
   return (
     <StatCard
       label="Sessions contributed"
-      value={String(count)}
+      numericValue={count}
       sublabel="Confirmed contributions"
       href="/contributions"
       linkLabel="View history"

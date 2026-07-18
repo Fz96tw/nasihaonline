@@ -69,8 +69,8 @@ export default function PrivacyPolicyPage() {
               Settings
             </Link>
             . For any other question, contact us at{" "}
-            <a href="mailto:contact@nasihaonline.com" className="underline underline-offset-2">
-              contact@nasihaonline.com
+            <a href="mailto:info@nasihaforyou.org" className="underline underline-offset-2">
+              info@nasihaforyou.org
             </a>
             .
           </p>

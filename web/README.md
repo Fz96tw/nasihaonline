@@ -7,11 +7,11 @@ Login/logout, sessions, password reset, and email verification are handled by [C
 1. Create a Clerk application (or use an existing dev instance) and copy the API keys into `.env` (see `.env.example`): `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`. Set `NEXT_PUBLIC_APP_URL` to wherever the app is actually reachable (`http://localhost:3010` for local docker-compose, or your public domain e.g. `https://nasihaforyou.org`) — it's used to build the invitation redirect URL below.
 2. **Required manual step — disable public sign-up:** in the Clerk Dashboard, go to **User & Authentication → Restrictions** and enable **Restricted** sign-up mode. This isn't automatable via Clerk's API; it must be set per Clerk project. With this enabled, `/accept-invite` (see below) still works for invited users — Clerk validates the invitation ticket regardless of this setting — but nobody can complete sign-up without one.
 3. Register a webhook endpoint in the Clerk Dashboard pointing at `<your-app-url>/api/webhooks/clerk`, subscribed to `user.created`, `user.updated`, `user.deleted`. Copy its signing secret into `.env` as `CLERK_WEBHOOK_SIGNING_SECRET`. (Clerk's servers need a publicly reachable HTTPS URL to deliver this — a reverse proxy such as nginx proxy manager or Caddy fronting your public domain works, or for ad hoc local dev, a tunnel like ngrok.)
-4. Provision a test user (stands in for the admin-approval flow, which doesn't exist yet):
+4. Provision a test user (stands in for the admin-approval flow):
    ```bash
    npx tsx scripts/create-test-user.ts you@example.com member
    ```
-   This sends a Clerk invitation email; the recipient follows the link to `/accept-invite`, sets their own password, and the local `User` row is created by the webhook once they accept.
+   `lib/clerk-admin.ts` creates this invitation with `notify: false`, so Clerk does **not** email it — Clerk's dev instances cap outbound email at 100/month, shared across every invitation and verification email on the project, and invitation email doesn't need Clerk's template/branding anyway. The script prints the accept-invite URL directly; for the real admin-approval flow, that same URL is emailed via Resend instead (see below). Whoever follows the link to `/accept-invite` sets their own password, and the local `User` row is created by the webhook once they accept.
 
 ### Auth routes
 
@@ -45,6 +45,25 @@ Every protected route/page does its own server-side check via `requireUser()`/`r
 - `GET /admin/donations`, `GET /api/admin/donations` (add `?export=csv` for a CSV download) — admin-only.
 
 `Donation` has no relation to `ContributionLedger` or `users.tier` anywhere in the schema — donating never confers Knowledge Hours or membership advantage (§4.14).
+
+## Email (Resend) setup
+
+Outbound app email — application-confirmation, approval/welcome (with the account set-up link), event-registration confirmation, and contact-form notifications — goes through [Resend](https://resend.com), not Clerk. All four send functions live in `lib/email.ts`; each is best-effort (logs a warning and skips rather than throwing) if `RESEND_API_KEY` isn't set, so email being unconfigured never blocks the underlying action.
+
+1. Create a Resend account and an API key at [resend.com/api-keys](https://resend.com/api-keys); copy it into `.env` as `RESEND_API_KEY`. Use a **sending-only** scoped key for `.env` — only use a **full access** key temporarily if you need to (re)create/verify a domain via the API, then revoke it once verified.
+2. Verify a sending domain under **Domains** in the Resend dashboard. `mail.nasihaforyou.org` is already verified for this project (as a subdomain, not the apex `nasihaforyou.org`, to keep transactional-sender reputation separate from the root domain's own mail/forwarding setup). If it ever needs re-creating (domain transfer, moved DNS provider, etc.), Resend will generate fresh values, but the record *shapes* were:
+
+   | Type | Host | Value | Priority |
+   |------|------|-------|----------|
+   | TXT | `resend._domainkey.mail` | Resend-provided DKIM public key (`p=...`) | — |
+   | MX | `send.mail` | `feedback-smtp.us-east-1.amazonses.com` | `10` |
+   | TXT | `send.mail` | `v=spf1 include:amazonses.com ~all` | — |
+
+   Until a domain is verified, Resend's sandbox mode only delivers to the email address on your own Resend account — every other recipient silently fails, which matters for testing the approval-email flow with a real applicant address.
+
+   **Namecheap-specific gotcha:** the MX record does *not* go in the regular Advanced DNS "Add New Record" dropdown — MX only appears in the separate **Mail Settings** section, and adding one there requires switching Mail Settings from its default to **Custom MX** first. If the domain already has mail forwarding configured through Namecheap's own "Email Forwarding" preset, switching to Custom MX can drop those records — note the existing forwarding config before switching, or add forwarding via a Custom-MX-compatible third-party service (e.g. ImprovMX) instead of Namecheap's native "Email Forwarding" preset, since the two Mail Settings modes are mutually exclusive. The two TXT records aren't affected by this — they go through the normal Host Records "Add New Record" flow regardless of Mail Settings mode.
+3. Set `RESEND_FROM_EMAIL` in `.env` to an address on the verified domain (defaults to `NASIHA <no-reply@mail.nasihaforyou.org>` if unset).
+4. Resend's free tier covers this project's current volume; check [resend.com/pricing](https://resend.com/pricing) for current limits before assuming they still apply.
 
 ## Getting Started (Docker)
 

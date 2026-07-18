@@ -49,8 +49,8 @@ const emptyValues: ApplicationFormValues = {
   professionalTitle: "",
   requestedTier: "",
   careerStage: "" as CareerStage,
-  availability: "" as ApplicationAvailability,
-  areaOfInterest: "" as AreaOfInterest,
+  availability: [],
+  areaOfInterest: [],
   countryRegion: "",
   referral: "",
   whyJoin: "",
@@ -59,6 +59,7 @@ const emptyValues: ApplicationFormValues = {
   professionalReferenceName: "",
   professionalReferenceContact: "",
   codeOfConductAccepted: false,
+  emailUpdatesOptIn: true,
 };
 
 export function JoinForm({ phase }: { phase: AdmissionPhase }) {
@@ -73,6 +74,8 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
     reValidateMode: "onChange",
   });
 
+  const isFriendTier = form.watch("requestedTier") === Tier.friend;
+
   async function onSubmit(values: ApplicationFormValues) {
     setSubmitError(null);
     try {
@@ -82,7 +85,15 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
         headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
         body: JSON.stringify(values),
       });
-      if (!res.ok) throw new Error("Submission failed");
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        const emailError = body?.error?.fieldErrors?.email?.[0];
+        if (emailError) {
+          form.setError("email", { message: emailError });
+          return;
+        }
+        throw new Error("Submission failed");
+      }
       setSubmitted(true);
     } catch {
       setSubmitError("Something went wrong submitting your application. Please try again.");
@@ -168,6 +179,25 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
 
         <FormField
           control={form.control}
+          name="emailUpdatesOptIn"
+          render={({ field }) => (
+            <FormItem>
+              <label className="flex items-start gap-2 text-sm">
+                <FormControl>
+                  <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                </FormControl>
+                <span>
+                  Keep me updated with NASIHA news, event announcements, and other important
+                  communications by email.
+                </span>
+              </label>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
           name="professionalTitle"
           render={({ field }) => (
             <FormItem>
@@ -242,20 +272,24 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Availability</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="How can you participate?" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {Object.values(ApplicationAvailability).map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {AVAILABILITY_LABELS[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <FormDescription>How can you participate? Select all that apply.</FormDescription>
+              <div className="flex flex-col gap-2">
+                {Object.values(ApplicationAvailability).map((value) => (
+                  <label key={value} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={field.value.includes(value)}
+                      onCheckedChange={(checked) =>
+                        field.onChange(
+                          checked
+                            ? [...field.value, value]
+                            : field.value.filter((v) => v !== value)
+                        )
+                      }
+                    />
+                    {AVAILABILITY_LABELS[value]}
+                  </label>
+                ))}
+              </div>
               <FormMessage />
             </FormItem>
           )}
@@ -267,20 +301,24 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Area of interest</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select an area" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {Object.values(AreaOfInterest).map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {AREA_OF_INTEREST_LABELS[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <FormDescription>Select all that apply.</FormDescription>
+              <div className="flex flex-col gap-2">
+                {Object.values(AreaOfInterest).map((value) => (
+                  <label key={value} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={field.value.includes(value)}
+                      onCheckedChange={(checked) =>
+                        field.onChange(
+                          checked
+                            ? [...field.value, value]
+                            : field.value.filter((v) => v !== value)
+                        )
+                      }
+                    />
+                    {AREA_OF_INTEREST_LABELS[value]}
+                  </label>
+                ))}
+              </div>
               <FormMessage />
             </FormItem>
           )}
@@ -300,53 +338,59 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="referral"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Referral (optional)</FormLabel>
-              <FormControl>
-                <Input placeholder="Name of the NASIHA member who referred you" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {!isFriendTier && (
+          <FormField
+            control={form.control}
+            name="referral"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Referral (optional)</FormLabel>
+                <FormControl>
+                  <Input placeholder="Name of the NASIHA member who referred you" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
-        <FormField
-          control={form.control}
-          name="whyJoin"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Why do you want to join NASIHA?</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="Tell us about yourself and what you hope to contribute to and learn from the community…"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {!isFriendTier && (
+          <FormField
+            control={form.control}
+            name="whyJoin"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Why do you want to join NASIHA?</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Tell us about yourself and what you hope to contribute to and learn from the community…"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
-        <FormField
-          control={form.control}
-          name="expertiseToShare"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Areas of expertise you&rsquo;d like to share</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="e.g. Cardiology, ECG interpretation, clinical research methodology…"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {!isFriendTier && (
+          <FormField
+            control={form.control}
+            name="expertiseToShare"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Areas of expertise you&rsquo;d like to share</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="e.g. Cardiology, ECG interpretation, clinical research methodology…"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         <FormField
           control={form.control}
@@ -365,44 +409,46 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
           )}
         />
 
-        <div className="flex flex-col gap-4 rounded-[10px] border p-4">
-          <div>
-            <p className="text-sm font-medium">
-              Professional reference {referenceRequired ? "" : "(optional for now)"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {referenceRequired
-                ? "Required during the Open Applications phase: name and contact info of someone who can vouch for your professional standing."
-                : "Not required during the current phase, but collected now so it's already on file when Open Applications begins."}
-            </p>
+        {!isFriendTier && (
+          <div className="flex flex-col gap-4 rounded-[10px] border p-4">
+            <div>
+              <p className="text-sm font-medium">
+                Professional reference {referenceRequired ? "" : "(optional for now)"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {referenceRequired
+                  ? "Required during the Open Applications phase: name and contact info of someone who can vouch for your professional standing."
+                  : "Not required during the current phase, but collected now so it's already on file when Open Applications begins."}
+              </p>
+            </div>
+            <FormField
+              control={form.control}
+              name="professionalReferenceName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Reference name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Dr. Jane Doe" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="professionalReferenceContact"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Reference contact info</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Email or phone number" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
-          <FormField
-            control={form.control}
-            name="professionalReferenceName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Reference name</FormLabel>
-                <FormControl>
-                  <Input placeholder="Dr. Jane Doe" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="professionalReferenceContact"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Reference contact info</FormLabel>
-                <FormControl>
-                  <Input placeholder="Email or phone number" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
+        )}
 
         <FormField
           control={form.control}

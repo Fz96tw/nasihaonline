@@ -26,13 +26,14 @@ import { cn } from "@/lib/utils";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { DonationFrequency } from "@/lib/generated/prisma/enums";
 import { donationSchema, type DonationFormValues } from "@/lib/validation/donation";
+import { CODE_OF_CONDUCT_PRINCIPLES } from "@/lib/legal";
 
 const FREQUENCY_LABELS: Record<DonationFrequency, string> = {
   [DonationFrequency.one_time]: "One-time",
   [DonationFrequency.recurring]: "Monthly",
 };
 
-const AMOUNT_PRESETS = [25, 50, 100, 250];
+const AMOUNT_PRESETS = [10, 25, 50, 100];
 
 export function DonateForm({
   defaultName,
@@ -52,7 +53,9 @@ export function DonateForm({
       donorEmail: defaultEmail ?? "",
       amount: 50,
       frequency: DonationFrequency.one_time,
-      recognitionConsent: false,
+      recognitionConsent: true,
+      emailUpdatesOptIn: true,
+      friendApplicationOptIn: true,
       note: "",
     },
     mode: "onTouched",
@@ -208,6 +211,25 @@ export function DonateForm({
 
         <FormField
           control={form.control}
+          name="emailUpdatesOptIn"
+          render={({ field }) => (
+            <FormItem>
+              <label className="flex items-start gap-2 text-sm">
+                <FormControl>
+                  <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                </FormControl>
+                <span>
+                  Keep me updated with NASIHA news, event announcements, and other important
+                  communications by email.
+                </span>
+              </label>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
           name="recognitionConsent"
           render={({ field }) => (
             <FormItem>
@@ -220,6 +242,35 @@ export function DonateForm({
                   digest or annual report). Leave unchecked to give anonymously.
                 </span>
               </label>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="friendApplicationOptIn"
+          render={({ field }) => (
+            <FormItem>
+              <label className="flex items-start gap-2 text-sm">
+                <FormControl>
+                  <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                </FormControl>
+                <span>
+                  Also apply to become a <strong>Friend of NASIHA</strong> member — free access
+                  to public events, recordings, and community updates, with no separate
+                  application to fill out. Your application will still be reviewed by the Board
+                  before it&rsquo;s approved. By checking this box you agree to the NASIHA Code
+                  of Conduct:
+                </span>
+              </label>
+              {field.value && (
+                <ul className="ml-8 mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                  {CODE_OF_CONDUCT_PRINCIPLES.map((principle) => (
+                    <li key={principle}>{principle}</li>
+                  ))}
+                </ul>
+              )}
               <FormMessage />
             </FormItem>
           )}

@@ -2,7 +2,21 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { CalendarDays, Heart, Info, LogIn, Menu, PenLine, UserPlus, Users } from "lucide-react";
+import {
+  BookOpen,
+  CalendarDays,
+  Heart,
+  Inbox,
+  Info,
+  KeyRound,
+  LogIn,
+  Mail,
+  Menu,
+  MessageSquare,
+  PenLine,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -13,20 +27,28 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { MEMBER_NAV_SECTIONS, memberFooterItems } from "@/lib/member-nav";
+import { cn } from "@/lib/utils";
 
 const publicLinks = [
-  { href: "/about", label: "About", icon: Info },
+  { href: "/about", label: "Our Mission", icon: Info },
   { href: "/our-team", label: "Our Team", icon: Users },
   { href: "/events", label: "Events", icon: CalendarDays },
   { href: "/blog", label: "Blog", icon: PenLine },
-  { href: "/donate", label: "Donate", icon: Heart },
+  { href: "/library", label: "Knowledge Library", icon: BookOpen, restricted: true },
+  { href: "/forums", label: "Forums", icon: MessageSquare, restricted: true },
+  { href: "/members", label: "Member Directory", icon: Users, restricted: true },
+  { href: "/inbox", label: "Message Inbox", icon: Inbox, restricted: true },
+  { href: "/donate", label: "Support Us", icon: Heart },
+  { href: "/contact", label: "Contact", icon: Mail },
 ];
-// For signed-in members, Events and Blog are dropped from the top-level
-// links to cut clutter — Calendar (which supersedes Events) and Blogs
-// already live in the member Community section below.
-const memberHiddenHrefs = new Set(["/events", "/blog"]);
+// For signed-in members, Events, Blog, Library, Forums, Member Directory,
+// and Message Inbox are dropped from the top-level links to cut clutter —
+// Calendar (which supersedes Events), Blogs, the Library, Forums, the
+// Member Directory, and the Inbox already live in the member Main/Community
+// sections below.
+const memberHiddenHrefs = new Set(["/events", "/blog", "/library", "/forums", "/members", "/inbox"]);
 
-const linkClasses = "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-accent";
+const linkClasses = "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold hover:bg-accent";
 
 export function MobileNav({
   signedIn,
@@ -55,14 +77,25 @@ export function MobileNav({
           <SheetTitle>Menu</SheetTitle>
         </SheetHeader>
         <nav className="mt-2 flex flex-col gap-1">
-          {topLevelLinks.map((link) => (
-            <SheetClose asChild key={link.href}>
-              <Link href={link.href} className={linkClasses}>
-                <link.icon className="h-[18px] w-[18px] flex-shrink-0" />
-                <span className="truncate">{link.label}</span>
-              </Link>
-            </SheetClose>
-          ))}
+          {topLevelLinks.map((link) => {
+            const dimmed = link.restricted && !signedIn;
+            return (
+              <SheetClose asChild key={link.href}>
+                <Link
+                  href={link.href}
+                  className={cn(linkClasses, dimmed && "justify-between text-muted-foreground")}
+                >
+                  <span className="flex items-center gap-3">
+                    <link.icon className="h-[18px] w-[18px] flex-shrink-0" />
+                    <span className="truncate">{link.label}</span>
+                  </span>
+                  {dimmed && (
+                    <KeyRound className="h-3.5 w-3.5 flex-shrink-0" aria-label="Sign-in required" />
+                  )}
+                </Link>
+              </SheetClose>
+            );
+          })}
 
           {signedIn ? (
             <>

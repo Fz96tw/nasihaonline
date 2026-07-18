@@ -15,6 +15,9 @@ const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
  * flow, so no plaintext password ever exists in Nasiha's systems. `role`
  * and `tier` ride along in publicMetadata so the user.created webhook
  * (lib/clerk-sync.ts) can assign them to the local User row it creates.
+ * `firstName`/`lastName` ride along the same way so that row gets a `name`
+ * on creation without asking the applicant to type it again during
+ * accept-invite — they already gave it on the application form.
  *
  * redirectUrl points at our own /accept-invite (a <SignUp/> mount) rather
  * than leaving Clerk to default to its generic hosted Account Portal —
@@ -23,13 +26,28 @@ const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
  * <SignIn/> can't render that step. Restricted mode still rejects anyone
  * without a valid ticket at /accept-invite, so this doesn't reopen
  * self-serve registration.
+ *
+ * notify: false stops Clerk from sending its own invitation email — those
+ * count against Clerk's dev-instance monthly email cap independently of
+ * the email-verification/device-code toggles in the Clerk dashboard, so
+ * disabling those doesn't stop them. With notify: false, Clerk returns the
+ * accept-invite `url` on the response instead, which the caller forwards
+ * via the app's own Resend-based welcome email.
  */
-export async function provisionMemberAccount(email: string, role: Role, tier?: Tier) {
+export async function provisionMemberAccount(
+  email: string,
+  role: Role,
+  tier?: Tier,
+  firstName?: string,
+  lastName?: string,
+) {
+  const name = [firstName, lastName].filter(Boolean).join(" ") || undefined;
   return clerk.invitations.createInvitation({
     emailAddress: email,
-    publicMetadata: tier ? { role, tier } : { role },
+    publicMetadata: { role, ...(tier ? { tier } : {}), ...(name ? { name } : {}) },
     ignoreExisting: true,
     redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL}/accept-invite`,
+    notify: false,
   });
 }
 

@@ -33,7 +33,7 @@ export default async function ForumsPage() {
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {forums.map((forum) => (
           <Link key={forum.id} href={`/forums/${forum.slug}`}>
-            <Card className="h-full transition-colors hover:border-primary/50">
+            <Card className="h-full">
               <CardHeader>
                 <CardTitle className="text-lg">{forum.name}</CardTitle>
               </CardHeader>

@@ -1,18 +1,24 @@
 import Image from "next/image";
 import Link from "next/link";
+import { KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { NavDropdown } from "@/components/nav-dropdown";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { AdminReviewIcon } from "@/components/admin/admin-review-icon";
 import { UserMenu } from "@/components/user-menu";
 import { MobileNav } from "@/components/mobile-nav";
+import { ScrollHeader } from "@/components/scroll-header";
 import { getSessionUser } from "@/lib/auth";
 import { getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
+import { cn } from "@/lib/utils";
 
 export async function SiteHeader() {
   const user = await getSessionUser();
   const profile = user ? withResolvedAvatarUrl(await getOrCreateProfile(user.id)) : null;
 
   return (
-    <header className="sticky top-0 z-50 flex h-[62px] items-center gap-6 border-b bg-background px-4 shadow-sm lg:px-8">
+    <ScrollHeader>
       <Link href="/" className="flex flex-shrink-0 items-center gap-[.65rem]">
         <Image
           src="/images/nasihalogo-cropped.png"
@@ -31,43 +37,83 @@ export async function SiteHeader() {
           </span>
         </span>
       </Link>
-      <div className="hidden items-center gap-6 lg:flex">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/about">About</Link>
-        </Button>
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/our-team">Our Team</Link>
-        </Button>
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/events">Events</Link>
-        </Button>
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/blog">Blog</Link>
-        </Button>
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/donate">Donate</Link>
+      <div className="hidden items-center gap-6 self-stretch lg:flex">
+        <NavDropdown label="Our Mission">
+          <DropdownMenuItem className="text-base" asChild>
+            <Link href="/about">About</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-base" asChild>
+            <Link href="/getinvolved">Get Involved</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-base" asChild>
+            <Link href="/our-team">Our Team</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-base" asChild>
+            <Link href="/contact">Contact Us</Link>
+          </DropdownMenuItem>
+        </NavDropdown>
+        <NavDropdown label="Community">
+          <DropdownMenuItem className="text-base" asChild>
+            <Link href="/events">Events</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-base" asChild>
+            <Link href="/blog">Blogs</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-base" asChild>
+            <Link href="/library" className={cn("justify-between", !user && "text-muted-foreground")}>
+              Knowledge Library
+              {!user && (
+                <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
+              )}
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-base" asChild>
+            <Link href="/forums" className={cn("justify-between", !user && "text-muted-foreground")}>
+              Forums
+              {!user && (
+                <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
+              )}
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-base" asChild>
+            <Link href="/members" className={cn("justify-between", !user && "text-muted-foreground")}>
+              Member Directory
+              {!user && (
+                <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
+              )}
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-base" asChild>
+            <Link href="/inbox" className={cn("justify-between", !user && "text-muted-foreground")}>
+              Message Inbox
+              {!user && (
+                <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
+              )}
+            </Link>
+          </DropdownMenuItem>
+        </NavDropdown>
+        <Button variant="ghost" size="sm" className="text-base font-semibold" asChild>
+          <Link href="/donate">Support Us</Link>
         </Button>
       </div>
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
         {user ? (
           <>
             <div className="hidden items-center gap-2 lg:flex">
-              <Button variant="ghost" size="sm" asChild>
+              <Button variant="ghost" size="sm" className="text-base font-semibold" asChild>
                 <Link href="/dashboard">Dashboard</Link>
               </Button>
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/members">Members</Link>
-              </Button>
             </div>
+            {user.role === "admin" && <AdminReviewIcon />}
             <NotificationBell />
             <UserMenu name={user.name ?? user.email} avatarUrl={profile?.avatarUrl ?? null} />
           </>
         ) : (
           <>
-            <Button variant="ghost" size="sm" className="hidden lg:inline-flex" asChild>
+            <Button variant="ghost" size="sm" className="hidden text-base font-semibold lg:inline-flex" asChild>
               <Link href="/sign-in">Log in</Link>
             </Button>
-            <Button size="sm" asChild>
+            <Button size="sm" className="text-base" asChild>
               <Link href="/join">Join NASIHA</Link>
             </Button>
           </>
@@ -78,6 +124,6 @@ export async function SiteHeader() {
           canModerate={user?.role === "moderator" || user?.role === "admin"}
         />
       </div>
-    </header>
+    </ScrollHeader>
   );
 }

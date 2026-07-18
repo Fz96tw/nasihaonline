@@ -25,7 +25,8 @@ async function main() {
 
   const invitation = await provisionMemberAccount(email, roleArg as Role);
   console.log(
-    `Invitation sent to ${email} (role: ${roleArg}). Invitation id: ${invitation.id}.\n` +
+    `Invitation created for ${email} (role: ${roleArg}). Invitation id: ${invitation.id}.\n` +
+      `Clerk does not email this one (notify: false) — accept it manually at:\n${invitation.url}\n\n` +
       `The local User row is created by the user.created webhook once they accept and set a password.`,
   );
 }

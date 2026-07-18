@@ -1,5 +1,4 @@
 import { getContributionSummary } from "@/lib/contributions-server";
-import { formatHours } from "@/lib/contributions";
 import { StatCard } from "@/components/dashboard/stat-card";
 
 // Live confirmed balance from the Contribution Ledger, replacing the
@@ -10,7 +9,8 @@ export async function HoursBalanceStat({ userId }: { userId: string }) {
   return (
     <StatCard
       label="Hours balance"
-      value={formatHours(balance)}
+      numericValue={balance}
+      decimals={balance % 1 === 0 ? 0 : 1}
       sublabel="Knowledge Hours"
       href="/contributions"
       linkLabel="View history"

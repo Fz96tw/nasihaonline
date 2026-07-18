@@ -37,14 +37,14 @@ export const MEMBER_NAV_SECTIONS: NavSection[] = [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
       { label: "My Profile", href: "/profile", icon: User },
       { label: "Knowledge Hours", href: "/contributions", icon: Award },
-      { label: "Inbox", href: "/inbox", icon: Inbox },
     ],
   },
   {
     title: "Community",
     items: [
       { label: "Member Directory", href: "/members", icon: Users },
-      { label: "Calendar", href: "/calendar", icon: CalendarDays },
+      { label: "Message Inbox", href: "/inbox", icon: Inbox },
+      { label: "Events Calendar", href: "/calendar", icon: CalendarDays },
       { label: "Forums", href: "/forums", icon: MessageSquare },
       { label: "Blogs", href: "/blog", icon: PenLine },
       { label: "Library", href: "/library", icon: BookOpen },
