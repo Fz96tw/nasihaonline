@@ -98,11 +98,11 @@ function WorkflowAccordion({ items }: { items: WorkflowItem[] }) {
     <Accordion type="single" collapsible>
       {items.map((item) => (
         <AccordionItem key={item.label} value={item.label}>
-          <AccordionTrigger className="text-left text-sm hover:no-underline">
+          <AccordionTrigger className="text-left text-xl font-semibold hover:no-underline">
             <span className="flex items-center gap-2">
-              <item.icon className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+              <item.icon className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
               <span>
-                {item.label} · <strong className="font-semibold">{item.value}</strong>
+                {item.label} · <span className="font-normal">{item.value}</span>
               </span>
             </span>
           </AccordionTrigger>
@@ -116,18 +116,18 @@ function WorkflowAccordion({ items }: { items: WorkflowItem[] }) {
 export function KnowledgeExchangeTable() {
   return (
     <Card className="border-primary/15 bg-primary/5 p-5">
-      <p className="text-sm font-semibold">How the Knowledge Exchange Works</p>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <p className="text-lg font-semibold">How the Knowledge Exchange Works</p>
+      <p className="mt-1 text-lg text-muted-foreground">
         How members earn and spend Knowledge Hours. Expand an entry to see what triggers the
         credit and who confirms it before it counts toward a balance.
       </p>
-      <div className="mt-4 grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-2">
         <div>
-          <p className="mb-2 text-sm font-semibold text-primary">Earn by Teaching</p>
+          <p className="mb-2 text-lg font-semibold text-primary">Earn by Teaching</p>
           <WorkflowAccordion items={EARN_ITEMS} />
         </div>
         <div>
-          <p className="mb-2 text-sm font-semibold text-brand-accent">Spend to Learn</p>
+          <p className="mb-2 text-lg font-semibold text-brand-accent">Spend to Learn</p>
           <WorkflowAccordion items={SPEND_ITEMS} />
         </div>
       </div>
