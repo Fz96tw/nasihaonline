@@ -44,11 +44,11 @@ export default async function BlogPage({
   return (
     <main className="min-h-screen">
       <section className="relative overflow-hidden px-8 py-16 text-center text-primary-foreground">
-        <ParallaxHeroImage src="/images/brick-texture.jpg" priority />
-        <div className="absolute inset-0 -z-10 bg-[linear-gradient(to_bottom,rgba(10,20,60,.75),rgba(10,20,80,.6))]" />
+        <ParallaxHeroImage src="/images/blog.jpg" priority objectPosition="object-[center_62%]" />
+        <div className="absolute inset-0 -z-10 bg-[rgba(10,20,70,.65)]" />
         <div className="relative mx-auto max-w-[580px]">
-          <h1 className="mb-3 text-[2.4rem] font-extrabold tracking-[-.02em]">Blog</h1>
-          <p className="text-base leading-[1.7] opacity-[.88]">
+          <h1 className="mb-3 text-[2.4rem] font-extrabold tracking-[-.02em] [text-shadow:0_2px_16px_rgba(0,10,40,.55)]">Blog</h1>
+          <p className="text-lg leading-[1.7] opacity-[.88] [text-shadow:0_1px_10px_rgba(0,10,40,.6)]">
             Member-written posts on clinical practice, research, and community life.
           </p>
         </div>
@@ -96,7 +96,7 @@ export default async function BlogPage({
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {posts.map((post, index) => (
-              <Reveal key={post.id} index={index} hover>
+              <Reveal key={post.id} index={index} hover className="h-full">
                 <PostCard post={post} />
               </Reveal>
             ))}

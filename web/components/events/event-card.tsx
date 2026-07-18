@@ -28,7 +28,7 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
   const [rsvped, setRsvped] = useState(event.rsvped);
 
   return (
-    <Card className="flex flex-col">
+    <Card className="flex h-full flex-col">
       <CardHeader>
         <div className="mb-1 flex flex-wrap items-center gap-2">
           <Badge variant={event.open ? "success" : "info"}>

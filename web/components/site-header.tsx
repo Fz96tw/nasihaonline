@@ -1,11 +1,20 @@
 import Image from "next/image";
 import Link from "next/link";
+import { ChevronDown, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { AdminReviewIcon } from "@/components/admin/admin-review-icon";
 import { UserMenu } from "@/components/user-menu";
 import { MobileNav } from "@/components/mobile-nav";
 import { getSessionUser } from "@/lib/auth";
 import { getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
+import { cn } from "@/lib/utils";
 
 export async function SiteHeader() {
   const user = await getSessionUser();
@@ -32,20 +41,59 @@ export async function SiteHeader() {
         </span>
       </Link>
       <div className="hidden items-center gap-6 lg:flex">
-        <Button variant="ghost" size="sm" className="font-semibold" asChild>
-          <Link href="/about">About</Link>
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="gap-1 font-semibold">
+              Mission
+              <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem asChild>
+              <Link href="/about">About</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/getinvolved">Get Involved</Link>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="gap-1 font-semibold">
+              Community
+              <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem asChild>
+              <Link href="/events">Events</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/blog">Blog</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/library" className={cn("justify-between", !user && "text-muted-foreground")}>
+                Knowledge Library
+                {!user && (
+                  <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
+                )}
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/forums" className={cn("justify-between", !user && "text-muted-foreground")}>
+                Forums
+                {!user && (
+                  <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
+                )}
+              </Link>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button variant="ghost" size="sm" className="font-semibold" asChild>
           <Link href="/our-team">Our Team</Link>
         </Button>
         <Button variant="ghost" size="sm" className="font-semibold" asChild>
-          <Link href="/events">Events</Link>
-        </Button>
-        <Button variant="ghost" size="sm" className="font-semibold" asChild>
-          <Link href="/blog">Blog</Link>
-        </Button>
-        <Button variant="ghost" size="sm" className="font-semibold" asChild>
-          <Link href="/donate">Donate</Link>
+          <Link href="/donate">Support Us</Link>
         </Button>
       </div>
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
@@ -55,10 +103,8 @@ export async function SiteHeader() {
               <Button variant="ghost" size="sm" className="font-semibold" asChild>
                 <Link href="/dashboard">Dashboard</Link>
               </Button>
-              <Button variant="ghost" size="sm" className="font-semibold" asChild>
-                <Link href="/members">Members</Link>
-              </Button>
             </div>
+            {user.role === "admin" && <AdminReviewIcon />}
             <NotificationBell />
             <UserMenu name={user.name ?? user.email} avatarUrl={profile?.avatarUrl ?? null} />
           </>

@@ -29,8 +29,8 @@ export async function HeroSection() {
 
   return (
     <section className="relative overflow-hidden px-8 pb-12 pt-14 text-center text-primary-foreground">
-      <ParallaxHeroImage src="/images/lighthouse-shifted.jpg" priority />
-      <div className="absolute inset-0 -z-10 bg-[linear-gradient(to_bottom,rgba(10,20,60,.25),rgba(10,20,80,.15))]" />
+      <ParallaxHeroImage src="/images/lighthouse.jpg" priority />
+      <div className="absolute inset-0 -z-10 bg-[linear-gradient(to_bottom,rgba(10,20,60,.4)_0%,rgba(10,20,80,1)_100%)]" />
       <div className="relative mx-auto max-w-[960px]">
         <p className="inline-block rounded-full border border-primary-foreground/25 bg-primary-foreground/[.15] px-4 py-[.35rem] text-sm font-semibold uppercase tracking-[.06em] text-[#e0eaff] backdrop-blur-sm [text-shadow:0_1px_6px_rgba(0,10,40,.55)]">
           A Learning Community
@@ -47,26 +47,18 @@ export async function HeroSection() {
         <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
           <Button
             size="lg"
+            variant="outline"
+            className="w-full border-primary-foreground/40 bg-primary-foreground/[.08] text-primary-foreground backdrop-blur-sm hover:bg-primary-foreground/[.18] hover:text-primary-foreground sm:w-auto"
+            asChild
+          >
+            <Link href="/about">Our Mission</Link>
+          </Button>
+          <Button
+            size="lg"
             className="w-full shadow-[0_4px_14px_rgba(37,99,235,0.5)] sm:w-auto"
             asChild
           >
-            <Link href="/join">Join NASIHA</Link>
-          </Button>
-          <Button
-            size="lg"
-            variant="outline"
-            className="w-full border-primary-foreground/60 bg-primary-foreground/15 text-primary-foreground [text-shadow:0_1px_8px_rgba(0,10,40,.55)] hover:bg-primary-foreground/25 hover:text-primary-foreground sm:w-auto"
-            asChild
-          >
-            <a href="#how-it-works">See How It Works</a>
-          </Button>
-          <Button
-            size="lg"
-            variant="outline"
-            className="w-full border-primary-foreground/60 bg-primary-foreground/15 text-primary-foreground [text-shadow:0_1px_8px_rgba(0,10,40,.55)] hover:bg-primary-foreground/25 hover:text-primary-foreground sm:w-auto"
-            asChild
-          >
-            <Link href="/donate">Donate</Link>
+            <Link href="/getinvolved">Get Involved</Link>
           </Button>
         </div>
         <div className="mt-14 flex flex-wrap justify-center gap-12 border-t border-primary-foreground/20 pt-8">

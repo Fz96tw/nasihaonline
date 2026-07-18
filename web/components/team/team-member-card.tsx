@@ -6,7 +6,7 @@ import type { TeamMemberWithPhotoUrl } from "@/lib/team";
 
 export function TeamMemberCard({ member }: { member: TeamMemberWithPhotoUrl }) {
   return (
-    <Card className="flex flex-col items-center p-6 text-center">
+    <Card className="flex h-full flex-col items-center p-6 text-center">
       <Avatar name={member.name} src={member.photoUrl} size="xl" className="mb-4" />
       <div className="mb-1 text-base font-bold">{member.name}</div>
       <Badge variant={TEAM_ROLE_BADGE_VARIANT[member.roleBadge]} className="mb-2">

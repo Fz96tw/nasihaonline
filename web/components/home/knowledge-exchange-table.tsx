@@ -106,7 +106,7 @@ function WorkflowAccordion({ items }: { items: WorkflowItem[] }) {
               </span>
             </span>
           </AccordionTrigger>
-          <AccordionContent className="text-muted-foreground">{item.detail}</AccordionContent>
+          <AccordionContent className="text-base text-muted-foreground">{item.detail}</AccordionContent>
         </AccordionItem>
       ))}
     </Accordion>
@@ -117,7 +117,7 @@ export function KnowledgeExchangeTable() {
   return (
     <Card className="border-primary/15 bg-primary/5 p-5">
       <p className="text-sm font-semibold">How the Knowledge Exchange Works</p>
-      <p className="mt-1 text-xs text-muted-foreground">
+      <p className="mt-1 text-sm text-muted-foreground">
         How members earn and spend Knowledge Hours. Expand an entry to see what triggers the
         credit and who confirms it before it counts toward a balance.
       </p>

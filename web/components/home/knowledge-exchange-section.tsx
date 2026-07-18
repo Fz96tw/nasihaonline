@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { KnowledgeExchangeTable } from "@/components/home/knowledge-exchange-table";
 import { Reveal } from "@/components/home/reveal";
 
@@ -8,7 +6,7 @@ export function KnowledgeExchangeSection() {
     <section className="px-8 py-20">
       <div className="mx-auto max-w-[960px]">
         <Reveal>
-          <div className="max-w-[640px]">
+          <div className="mx-auto max-w-[640px] text-center">
             <p className="text-base font-semibold uppercase tracking-wide text-primary">
               Our Currency
             </p>
@@ -20,9 +18,6 @@ export function KnowledgeExchangeSection() {
               expert knowledge in return. Hours are recognition, not gatekeeping —
               full access regardless of balance.
             </p>
-            <Button variant="outline" className="mt-2" asChild>
-              <Link href="/join">See How to Join →</Link>
-            </Button>
           </div>
           <div className="mt-10">
             <KnowledgeExchangeTable />

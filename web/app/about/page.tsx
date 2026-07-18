@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 import { Microscope, Eye, GraduationCap } from "lucide-react";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Reveal } from "@/components/home/reveal";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "About — NASIHA",
@@ -52,12 +54,12 @@ const ACTIVITIES = [
 export default function AboutPage() {
   return (
     <main className="min-h-screen">
-      <section className="relative overflow-hidden px-8 py-20 text-center text-primary-foreground">
+      <section className="relative overflow-hidden px-8 py-16 text-center text-primary-foreground">
         <ParallaxHeroImage src="/images/blue-rain.jpg" priority />
-        <div className="absolute inset-0 -z-10 bg-[linear-gradient(to_bottom,rgba(10,20,60,.75),rgba(10,20,80,.6))]" />
+        <div className="absolute inset-0 -z-10 bg-[rgba(10,20,70,.65)]" />
         <div className="relative mx-auto max-w-[580px]">
-          <h1 className="mb-4 text-[2.5rem] font-extrabold leading-[1.1] tracking-[-.02em] md:text-[3.5rem]">About NASIHA</h1>
-          <p className="text-lg leading-[1.7] opacity-[.88]">
+          <h1 className="mb-3 text-[2.4rem] font-extrabold tracking-[-.02em] [text-shadow:0_2px_16px_rgba(0,10,40,.55)]">About NASIHA</h1>
+          <p className="text-lg leading-[1.7] opacity-[.88] [text-shadow:0_1px_10px_rgba(0,10,40,.6)]">
             NASIHA — meaning <em className="not-italic text-[#93c5fd]">sincere advice and guidance</em> — was
             founded on the belief that knowledge is a shared resource, not a commodity.
           </p>
@@ -72,7 +74,7 @@ export default function AboutPage() {
                 Our Mission
               </p>
               <h2 className="mb-4 text-3xl font-extrabold tracking-[-.02em] md:text-4xl">Why We Exist</h2>
-              <blockquote className="mb-7 border-l-[3px] border-primary pl-5 text-[1.2rem] italic leading-[1.8] text-foreground/80">
+              <blockquote className="mb-7 border-l-[3px] border-primary pl-5 text-[1.35rem] italic leading-[1.8] text-foreground/80">
                 &ldquo;NASIHA exists to spread knowledge — encouraging every one of us to learn,
                 to teach, and to share freely with others.&rdquo;
               </blockquote>
@@ -82,10 +84,10 @@ export default function AboutPage() {
               </p>
               <h3 className="mb-4 text-2xl font-extrabold tracking-[-.02em]">Core Principles</h3>
             </Reveal>
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-5">
               {VALUES.map((value, index) => (
                 <Reveal key={value.title} index={index} hover>
-                  <div className="rounded-[10px] border bg-card px-[1.1rem] py-[.85rem] text-base shadow-sm">
+                  <div className="rounded-[10px] border bg-card px-[1.1rem] py-[.85rem] text-lg shadow-sm">
                     <strong className="font-bold">{value.title}</strong> — {value.body}
                   </div>
                 </Reveal>
@@ -110,7 +112,7 @@ export default function AboutPage() {
             </p>
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-6">
               <p className="mb-2 text-lg font-bold text-primary">Dedicated To</p>
-              <p className="text-base italic leading-[1.7] text-foreground/80">
+              <p className="text-lg italic leading-[1.7] text-foreground/80">
                 NASIHA — Dedicated to Narjis and Syed Iftikhar Hussain Abidi, who guided us toward a
                 life of learning.
               </p>
@@ -135,12 +137,26 @@ export default function AboutPage() {
                     <Icon className="h-[26px] w-[26px]" strokeWidth={1.5} />
                   </div>
                   <p className="mb-2 text-lg font-bold">{title}</p>
-                  <p className="text-base leading-[1.7] text-muted-foreground">{body}</p>
+                  <p className="text-lg leading-[1.7] text-muted-foreground">{body}</p>
                 </div>
               </Reveal>
             ))}
           </div>
         </div>
+      </section>
+
+      <section className="px-8 py-24 text-center">
+        <Reveal>
+          <h2 className="mb-4 text-3xl font-extrabold tracking-[-.02em] md:text-4xl">
+            Ready to Join the Exchange?
+          </h2>
+          <p className="mx-auto mb-8 max-w-[520px] text-lg leading-[1.7] text-muted-foreground">
+            Become part of a community dedicated to free, reciprocal knowledge exchange.
+          </p>
+          <Button size="lg" asChild>
+            <Link href="/getinvolved">Get Involved</Link>
+          </Button>
+        </Reveal>
       </section>
     </main>
   );

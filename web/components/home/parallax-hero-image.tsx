@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
+import { cn } from "@/lib/utils";
 
 const PARALLAX_RANGE = 50;
 
@@ -10,10 +11,12 @@ export function ParallaxHeroImage({
   src,
   alt = "",
   priority = false,
+  objectPosition = "object-top",
 }: {
   src: string;
   alt?: string;
   priority?: boolean;
+  objectPosition?: string;
 }) {
   const sectionRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
@@ -39,7 +42,7 @@ export function ParallaxHeroImage({
           fill
           priority={priority}
           sizes="100vw"
-          className="object-cover object-top"
+          className={cn("object-cover", objectPosition)}
         />
       </motion.div>
     </div>

@@ -7,8 +7,7 @@ import { getPendingLedgerCountForAdmin } from "@/lib/contributions-server";
 import { getReviewQueueCount } from "@/lib/library-server";
 import { getOpenConductReportCount } from "@/lib/conduct-server";
 import { getOpenPrivacyRequestCount } from "@/lib/privacy-server";
-import { db } from "@/lib/db";
-import { ApplicationStatus } from "@/lib/generated/prisma/enums";
+import { getPendingApplicationsCount } from "@/lib/admin-review-server";
 import { AdminPhaseForm } from "@/components/admin-phase-form";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -114,9 +113,7 @@ export default async function AdminPage() {
     privacyCount,
   ] = await Promise.all([
     getAdmissionPhase(),
-    db.membershipApplication.count({
-      where: { status: { in: [ApplicationStatus.submitted, ApplicationStatus.under_review] } },
-    }),
+    getPendingApplicationsCount(),
     getFlaggedContentCount(),
     getPendingLedgerCountForAdmin(),
     getReviewQueueCount(),

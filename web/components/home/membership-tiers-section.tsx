@@ -51,10 +51,10 @@ export function MembershipTiersSection() {
         </Reveal>
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {TIERS.map((tier, index) => (
-            <Reveal key={tier.name} index={index} hover>
+            <Reveal key={tier.name} index={index} hover className="h-full">
               <Card
                 className={cn(
-                  "relative overflow-hidden border-none bg-gradient-to-br text-primary-foreground",
+                  "relative flex h-full flex-col overflow-hidden border-none bg-gradient-to-br text-primary-foreground",
                   tier.gradient,
                 )}
               >
@@ -66,9 +66,9 @@ export function MembershipTiersSection() {
                   <CardTitle className="text-xl text-primary-foreground">
                     {tier.name}
                   </CardTitle>
-                  <p className="text-sm text-primary-foreground/75">{tier.tagline}</p>
+                  <p className="text-base text-primary-foreground/75">{tier.tagline}</p>
                 </CardHeader>
-                <CardContent className="relative pt-0 text-base leading-relaxed text-primary-foreground/90">
+                <CardContent className="relative pt-0 text-lg leading-relaxed text-primary-foreground/90">
                   {tier.description}
                 </CardContent>
               </Card>

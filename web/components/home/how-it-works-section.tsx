@@ -1,6 +1,8 @@
+import Image from "next/image";
 import { Microscope, Eye, GraduationCap } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Reveal } from "@/components/home/reveal";
+import { cn } from "@/lib/utils";
 
 const STEPS = [
   {
@@ -40,16 +42,44 @@ export function HowItWorksSection() {
           </p>
         </Reveal>
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {STEPS.map(({ icon: Icon, title, description }, index) => (
-            <Reveal key={title} index={index} hover>
-              <Card className="text-center">
-                <CardHeader className="items-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+          {STEPS.map(({ icon: Icon, title, description, image }, index) => (
+            <Reveal key={title} index={index} hover className="h-full">
+              <Card className="relative h-full min-h-[280px] overflow-hidden text-center">
+                {image && (
+                  <>
+                    <Image src={image} alt="" fill className="object-cover" />
+                    <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(10,20,60,.55),rgba(10,20,80,.8))]" />
+                  </>
+                )}
+                <CardHeader className="relative items-center">
+                  <div
+                    className={cn(
+                      "flex h-12 w-12 items-center justify-center rounded-full",
+                      image
+                        ? "bg-primary-foreground/15 text-primary-foreground"
+                        : "bg-primary/10 text-primary",
+                    )}
+                  >
                     <Icon className="h-6 w-6" aria-hidden="true" />
                   </div>
-                  <CardTitle className="text-xl">{title}</CardTitle>
+                  <CardTitle
+                    className={cn(
+                      "text-xl",
+                      image &&
+                        "text-primary-foreground [text-shadow:0_1px_8px_rgba(0,10,40,.55)]",
+                    )}
+                  >
+                    {title}
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="pt-0 text-base leading-relaxed text-muted-foreground">
+                <CardContent
+                  className={cn(
+                    "relative pt-0 text-lg leading-relaxed",
+                    image
+                      ? "text-primary-foreground/90 [text-shadow:0_1px_8px_rgba(0,10,40,.55)]"
+                      : "text-muted-foreground",
+                  )}
+                >
                   {description}
                 </CardContent>
               </Card>
