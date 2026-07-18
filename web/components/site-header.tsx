@@ -83,6 +83,14 @@ export async function SiteHeader() {
               )}
             </Link>
           </DropdownMenuItem>
+          <DropdownMenuItem className="text-base" asChild>
+            <Link href="/inbox" className={cn("justify-between", !user && "text-muted-foreground")}>
+              Message Inbox
+              {!user && (
+                <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
+              )}
+            </Link>
+          </DropdownMenuItem>
         </NavDropdown>
         <Button variant="ghost" size="sm" className="text-base font-semibold" asChild>
           <Link href="/donate">Support Us</Link>

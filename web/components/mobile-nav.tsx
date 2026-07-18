@@ -6,6 +6,7 @@ import {
   BookOpen,
   CalendarDays,
   Heart,
+  Inbox,
   Info,
   KeyRound,
   LogIn,
@@ -35,14 +36,17 @@ const publicLinks = [
   { href: "/blog", label: "Blog", icon: PenLine },
   { href: "/library", label: "Knowledge Library", icon: BookOpen, restricted: true },
   { href: "/forums", label: "Forums", icon: MessageSquare, restricted: true },
+  { href: "/members", label: "Member Directory", icon: Users, restricted: true },
+  { href: "/inbox", label: "Message Inbox", icon: Inbox, restricted: true },
   { href: "/donate", label: "Support Us", icon: Heart },
   { href: "/contact", label: "Contact", icon: Mail },
 ];
-// For signed-in members, Events, Blog, Library, and Forums are dropped from
-// the top-level links to cut clutter — Calendar (which supersedes Events),
-// Blogs, the Library, and Forums already live in the member Community
-// section below.
-const memberHiddenHrefs = new Set(["/events", "/blog", "/library", "/forums"]);
+// For signed-in members, Events, Blog, Library, Forums, Member Directory,
+// and Message Inbox are dropped from the top-level links to cut clutter —
+// Calendar (which supersedes Events), Blogs, the Library, Forums, the
+// Member Directory, and the Inbox already live in the member Main/Community
+// sections below.
+const memberHiddenHrefs = new Set(["/events", "/blog", "/library", "/forums", "/members", "/inbox"]);
 
 const linkClasses = "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold hover:bg-accent";
 
