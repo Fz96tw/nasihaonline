@@ -3,7 +3,7 @@ import { Tier } from "@/lib/generated/prisma/enums";
 import { TIER_LABELS } from "@/lib/validation/application-review";
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "NASIHA <no-reply@nasihaonline.org>";
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "NASIHA <no-reply@mail.nasihaforyou.org>";
 const CONTACT_EMAIL = process.env.CONTACT_INBOX_EMAIL ?? "info@nasihaforyou.org";
 
 /**
@@ -33,8 +33,14 @@ export async function sendApplicationConfirmationEmail(to: string, firstName: st
  * Sent by the admin approve action once provisionMemberAccount() has
  * created the Clerk invitation. Best-effort, same as above: a failed send
  * must not undo the approval, which has already happened by this point.
+ *
+ * inviteUrl is the accept-invite link from Clerk's invitation response.
+ * provisionMemberAccount() creates that invitation with notify: false, so
+ * Clerk never sends its own email for it (those count against Clerk's
+ * dev-instance monthly email cap) — this welcome email is the only place
+ * the applicant receives the link to set up their account.
  */
-export async function sendWelcomeEmail(to: string, firstName: string, tier: Tier) {
+export async function sendWelcomeEmail(to: string, firstName: string, tier: Tier, inviteUrl: string) {
   if (!resend) {
     console.warn(`[email] RESEND_API_KEY not set — skipping welcome email to ${to}`);
     return;
@@ -45,7 +51,7 @@ export async function sendWelcomeEmail(to: string, firstName: string, tier: Tier
       from: FROM_EMAIL,
       to,
       subject: "Welcome to NASIHA!",
-      text: `Hi ${firstName},\n\nYour NASIHA membership application has been approved, and you've been welcomed as a(n) ${TIER_LABELS[tier]}. Check your inbox for a separate invitation email to set up your account and log in.\n\n— The NASIHA Team`,
+      text: `Hi ${firstName},\n\nYour NASIHA membership application has been approved, and you've been welcomed as a(n) ${TIER_LABELS[tier]}. Set up your account and log in here:\n\n${inviteUrl}\n\n— The NASIHA Team`,
     });
   } catch (error) {
     console.error("[email] Failed to send welcome email", error);
