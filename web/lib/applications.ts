@@ -1,7 +1,38 @@
+import { db } from "@/lib/db";
 import { ApplicationStatus } from "@/lib/generated/prisma/enums";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 const KNOWN_STATUSES = new Set<string>(Object.values(ApplicationStatus));
+
+// Statuses that count as an "active" application for duplicate-email
+// purposes — a rejected application must not block reapplication.
+export const BLOCKING_APPLICATION_STATUSES: ApplicationStatus[] = [
+  ApplicationStatus.submitted,
+  ApplicationStatus.under_review,
+  ApplicationStatus.approved,
+];
+
+export type DuplicateApplicantReason = "existing_member" | "pending_application";
+
+/**
+ * Checks whether an email already belongs to a member account or has an
+ * active (non-rejected) application, so callers can reject duplicate
+ * /join submissions before creating a new MembershipApplication row.
+ * Mirrors the skip condition already used by autoSubmitFriendApplication.
+ */
+export async function findDuplicateApplicant(
+  email: string,
+): Promise<DuplicateApplicantReason | null> {
+  const existingUser = await db.user.findUnique({ where: { email } });
+  if (existingUser) return "existing_member";
+
+  const existingApplication = await db.membershipApplication.findFirst({
+    where: { email, status: { in: BLOCKING_APPLICATION_STATUSES } },
+  });
+  if (existingApplication) return "pending_application";
+
+  return null;
+}
 
 export const STATUS_LABELS: Record<ApplicationStatus, string> = {
   [ApplicationStatus.submitted]: "Submitted",

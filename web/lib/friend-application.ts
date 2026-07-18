@@ -1,12 +1,7 @@
 import { db } from "@/lib/db";
-import { ApplicationStatus, Tier } from "@/lib/generated/prisma/enums";
+import { Tier } from "@/lib/generated/prisma/enums";
 import { sendApplicationConfirmationEmail } from "@/lib/email";
-
-const BLOCKING_STATUSES: ApplicationStatus[] = [
-  ApplicationStatus.submitted,
-  ApplicationStatus.under_review,
-  ApplicationStatus.approved,
-];
+import { findDuplicateApplicant } from "@/lib/applications";
 
 function splitName(fullName: string): { firstName: string; lastName: string } {
   const trimmed = fullName.trim();
@@ -39,13 +34,7 @@ export async function autoSubmitFriendApplication({
   donorEmail: string;
   emailUpdatesOptIn: boolean;
 }) {
-  const existingUser = await db.user.findUnique({ where: { email: donorEmail } });
-  if (existingUser) return;
-
-  const existingApplication = await db.membershipApplication.findFirst({
-    where: { email: donorEmail, status: { in: BLOCKING_STATUSES } },
-  });
-  if (existingApplication) return;
+  if (await findDuplicateApplicant(donorEmail)) return;
 
   const { firstName, lastName } = splitName(donorName);
 

@@ -85,7 +85,15 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
         headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
         body: JSON.stringify(values),
       });
-      if (!res.ok) throw new Error("Submission failed");
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        const emailError = body?.error?.fieldErrors?.email?.[0];
+        if (emailError) {
+          form.setError("email", { message: emailError });
+          return;
+        }
+        throw new Error("Submission failed");
+      }
       setSubmitted(true);
     } catch {
       setSubmitError("Something went wrong submitting your application. Please try again.");
