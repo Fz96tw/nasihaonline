@@ -94,7 +94,12 @@ export async function getFeedPage(params: {
       take: pageSize,
     }),
     db.announcement.findMany({
-      where: { sentAt: { not: null }, retractedAt: null, ...(before ? { sentAt: { lt: before } } : {}) },
+      where: {
+        sentAt: { not: null },
+        retractedAt: null,
+        showInFeed: true,
+        ...(before ? { sentAt: { lt: before } } : {}),
+      },
       select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true },
       orderBy: { sentAt: "desc" },
       take: pageSize,

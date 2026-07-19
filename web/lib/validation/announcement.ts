@@ -7,9 +7,17 @@ import { z } from "zod";
  * FormData entry, validated by uploadAnnouncementHeroImage), same convention
  * as createPostSchema/hero image.
  */
-export const createAnnouncementSchema = z.object({
-  title: z.string().trim().min(1, "Title is required").max(200),
-  body: z.string().trim().min(1, "Write something before sending"),
-});
+export const createAnnouncementSchema = z
+  .object({
+    title: z.string().trim().min(1, "Title is required").max(200),
+    body: z.string().trim().min(1, "Write something before sending"),
+    showInFeed: z.boolean(),
+    notifyInApp: z.boolean(),
+    sendEmail: z.boolean(),
+  })
+  .refine((values) => values.showInFeed || values.notifyInApp || values.sendEmail, {
+    message: "Select at least one delivery channel",
+    path: ["showInFeed"],
+  });
 
 export type CreateAnnouncementValues = z.infer<typeof createAnnouncementSchema>;

@@ -58,6 +58,7 @@ export function AnnouncementHistoryTable({ announcements }: { announcements: Ann
               <TableHead>Title</TableHead>
               <TableHead>Sent</TableHead>
               <TableHead>Sent by</TableHead>
+              <TableHead>Channels</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -65,7 +66,7 @@ export function AnnouncementHistoryTable({ announcements }: { announcements: Ann
           <TableBody>
             {announcements.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                <TableCell colSpan={6} className="text-center text-muted-foreground">
                   No announcements sent yet.
                 </TableCell>
               </TableRow>
@@ -75,6 +76,13 @@ export function AnnouncementHistoryTable({ announcements }: { announcements: Ann
                 <TableCell className="font-medium">{announcement.title}</TableCell>
                 <TableCell className="text-muted-foreground">{formatTimestamp(announcement.sentAt)}</TableCell>
                 <TableCell className="text-muted-foreground">{announcement.authorName}</TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1">
+                    {announcement.showInFeed && <Badge variant="neutral">Feed</Badge>}
+                    {announcement.notifyInApp && <Badge variant="neutral">Bell</Badge>}
+                    {announcement.sendEmail && <Badge variant="neutral">Email</Badge>}
+                  </div>
+                </TableCell>
                 <TableCell>
                   {announcement.retractedAt ? (
                     <Badge variant="neutral">

@@ -18,7 +18,14 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
  */
 export async function createAndSendAnnouncement(
   authorId: string,
-  input: { title: string; body: string; heroImage: File | null },
+  input: {
+    title: string;
+    body: string;
+    heroImage: File | null;
+    showInFeed: boolean;
+    notifyInApp: boolean;
+    sendEmail: boolean;
+  },
 ): Promise<{ id: string }> {
   let heroImageUrl: string | null = null;
   if (input.heroImage) {
@@ -31,42 +38,51 @@ export async function createAndSendAnnouncement(
       body: input.body,
       authorId,
       heroImageUrl,
+      showInFeed: input.showInFeed,
+      notifyInApp: input.notifyInApp,
+      sendEmail: input.sendEmail,
       sentAt: new Date(),
     },
   });
 
-  const recipients = await db.user.findMany({
-    where: { role: { in: [Role.member, Role.moderator, Role.admin] }, tier: { not: null } },
-    select: { id: true, email: true, name: true },
-  });
-
   const detailPath = `/whats-new/announcements/${announcement.id}`;
 
-  if (recipients.length > 0) {
-    await db.notification.createMany({
-      data: recipients.map((recipient) => ({
-        recipientId: recipient.id,
-        type: NotificationType.board_announcement,
-        message: `NASIHA Board sent a new announcement: "${input.title}"`,
-        link: detailPath,
-      })),
+  if (input.notifyInApp || input.sendEmail) {
+    const recipients = await db.user.findMany({
+      where: { role: { in: [Role.member, Role.moderator, Role.admin] }, tier: { not: null } },
+      select: { id: true, email: true, name: true },
     });
 
-    // Best-effort per recipient, same rationale as every other email in
-    // lib/email.ts — a failed/unconfigured send must not undo the broadcast,
-    // whose Announcement + Notification rows already exist by this point.
-    await Promise.allSettled(
-      recipients.map((recipient) =>
-        sendAnnouncementEmail(recipient.email, {
-          title: input.title,
-          body: input.body,
-          heroImageUrl: getAnnouncementHeroImageUrl(heroImageUrl)
-            ? `${APP_URL}${getAnnouncementHeroImageUrl(heroImageUrl)}`
-            : null,
-          detailUrl: `${APP_URL}${detailPath}`,
-        }),
-      ),
-    );
+    if (recipients.length > 0) {
+      if (input.notifyInApp) {
+        await db.notification.createMany({
+          data: recipients.map((recipient) => ({
+            recipientId: recipient.id,
+            type: NotificationType.board_announcement,
+            message: `NASIHA Board sent a new announcement: "${input.title}"`,
+            link: detailPath,
+          })),
+        });
+      }
+
+      if (input.sendEmail) {
+        // Best-effort per recipient, same rationale as every other email in
+        // lib/email.ts — a failed/unconfigured send must not undo the broadcast,
+        // whose Announcement + Notification rows already exist by this point.
+        await Promise.allSettled(
+          recipients.map((recipient) =>
+            sendAnnouncementEmail(recipient.email, {
+              title: input.title,
+              body: input.body,
+              heroImageUrl: getAnnouncementHeroImageUrl(heroImageUrl)
+                ? `${APP_URL}${getAnnouncementHeroImageUrl(heroImageUrl)}`
+                : null,
+              detailUrl: `${APP_URL}${detailPath}`,
+            }),
+          ),
+        );
+      }
+    }
   }
 
   return { id: announcement.id };
@@ -120,6 +136,9 @@ export type AnnouncementHistoryItem = {
   authorName: string;
   retractedAt: string | null;
   retractedByName: string | null;
+  showInFeed: boolean;
+  notifyInApp: boolean;
+  sendEmail: boolean;
 };
 
 /**
@@ -140,6 +159,9 @@ export async function listAnnouncementHistory(): Promise<AnnouncementHistoryItem
       author: { select: { name: true } },
       retractedAt: true,
       retractedBy: { select: { name: true } },
+      showInFeed: true,
+      notifyInApp: true,
+      sendEmail: true,
     },
   });
 
@@ -151,5 +173,8 @@ export async function listAnnouncementHistory(): Promise<AnnouncementHistoryItem
     authorName: announcement.author.name ?? "NASIHA Member",
     retractedAt: announcement.retractedAt?.toISOString() ?? null,
     retractedByName: announcement.retractedBy?.name ?? null,
+    showInFeed: announcement.showInFeed,
+    notifyInApp: announcement.notifyInApp,
+    sendEmail: announcement.sendEmail,
   }));
 }

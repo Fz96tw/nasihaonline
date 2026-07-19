@@ -7,11 +7,18 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { createAnnouncementSchema, type CreateAnnouncementValues } from "@/lib/validation/announcement";
 import { getCsrfToken } from "@/lib/csrf-client";
 
-const DEFAULT_VALUES: CreateAnnouncementValues = { title: "", body: "" };
+const DEFAULT_VALUES: CreateAnnouncementValues = {
+  title: "",
+  body: "",
+  showInFeed: true,
+  notifyInApp: true,
+  sendEmail: true,
+};
 
 /**
  * "Compose Announcement" form (§4.10), posted from /admin/announcements/new.
@@ -33,6 +40,9 @@ export function AnnouncementForm() {
     mode: "onTouched",
   });
 
+  const channelValues = form.watch(["showInFeed", "notifyInApp", "sendEmail"]);
+  const checkedChannelCount = channelValues.filter(Boolean).length;
+
   async function onSubmit(values: CreateAnnouncementValues) {
     if (
       !window.confirm(
@@ -49,6 +59,9 @@ export function AnnouncementForm() {
       const formData = new FormData();
       formData.append("title", values.title);
       formData.append("body", values.body);
+      formData.append("showInFeed", String(values.showInFeed));
+      formData.append("notifyInApp", String(values.notifyInApp));
+      formData.append("sendEmail", String(values.sendEmail));
       if (heroImage) formData.append("heroImage", heroImage);
 
       const res = await fetch("/api/admin/announcements", {
@@ -119,9 +132,71 @@ export function AnnouncementForm() {
           />
         </div>
 
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium">Deliver via</span>
+          <FormField
+            control={form.control}
+            name="showInFeed"
+            render={({ field }) => (
+              <FormItem>
+                <label className="flex items-center gap-2 text-sm">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={field.value && checkedChannelCount <= 1}
+                    />
+                  </FormControl>
+                  <span>Post to feed (What&rsquo;s New)</span>
+                </label>
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="notifyInApp"
+            render={({ field }) => (
+              <FormItem>
+                <label className="flex items-center gap-2 text-sm">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={field.value && checkedChannelCount <= 1}
+                    />
+                  </FormControl>
+                  <span>Send bell notification</span>
+                </label>
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="sendEmail"
+            render={({ field }) => (
+              <FormItem>
+                <label className="flex items-center gap-2 text-sm">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={field.value && checkedChannelCount <= 1}
+                    />
+                  </FormControl>
+                  <span>Send email</span>
+                </label>
+              </FormItem>
+            )}
+          />
+          {form.formState.errors.showInFeed && (
+            <p className="text-sm text-destructive">{form.formState.errors.showInFeed.message}</p>
+          )}
+        </div>
+
         <p className="text-xs text-muted-foreground">
-          Sent as &ldquo;NASIHA Board&rdquo; to every member, in-app and by email, regardless of
-          their notification preferences. Reserve this for infrequent, high-signal updates.
+          Sent as &ldquo;NASIHA Board&rdquo; via the channels selected above, regardless of
+          recipients&rsquo; notification preferences. Reserve this for infrequent, high-signal
+          updates.
         </p>
 
         {error && <p className="text-sm text-destructive">{error}</p>}

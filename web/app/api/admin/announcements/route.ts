@@ -24,6 +24,9 @@ export async function POST(request: Request) {
   const parsed = createAnnouncementSchema.safeParse({
     title: formData.get("title"),
     body: formData.get("body"),
+    showInFeed: formData.get("showInFeed") === "true",
+    notifyInApp: formData.get("notifyInApp") === "true",
+    sendEmail: formData.get("sendEmail") === "true",
   });
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

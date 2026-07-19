@@ -1157,6 +1157,12 @@ model Announcement {
   // Post.heroImageUrl — a single optional cover image, not a multi-file
   // attachment system.
   heroImageUrl  String?
+  // Per-channel delivery toggles — which surfaces this send fanned out to.
+  // Default true on all three preserves prior all-channels behavior for
+  // existing rows and is the sensible default for new sends too.
+  showInFeed    Boolean   @default(true)
+  notifyInApp   Boolean   @default(true)
+  sendEmail     Boolean   @default(true)
   sentAt        DateTime?
   retractedAt   DateTime?
   retractedById String?
