@@ -72,23 +72,75 @@ export async function createAndSendAnnouncement(
   return { id: announcement.id };
 }
 
+export class AnnouncementError extends Error {
+  constructor(
+    public readonly status: 404 | 409,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Retracts a sent Announcement: hides it from the member feed/detail page
+ * (lib/feed-server.ts filters on retractedAt: null) and deletes its
+ * Notification rows, so it disappears from the bell for anyone who hasn't
+ * read it yet too. Can't un-send the email that already went out, and the
+ * Announcement row itself is kept (retracted, not deleted) so
+ * listAnnouncementHistory retains an audit trail of who retracted it and
+ * when.
+ */
+export async function retractAnnouncement(id: string, retractedById: string): Promise<void> {
+  const announcement = await db.announcement.findUnique({
+    where: { id },
+    select: { sentAt: true, retractedAt: true },
+  });
+  if (!announcement || !announcement.sentAt) {
+    throw new AnnouncementError(404, "Announcement not found.");
+  }
+  if (announcement.retractedAt) {
+    throw new AnnouncementError(409, "This announcement has already been retracted.");
+  }
+
+  await db.$transaction([
+    db.announcement.update({
+      where: { id },
+      data: { retractedAt: new Date(), retractedById },
+    }),
+    db.notification.deleteMany({
+      where: { type: NotificationType.board_announcement, link: `/whats-new/announcements/${id}` },
+    }),
+  ]);
+}
+
 export type AnnouncementHistoryItem = {
   id: string;
   title: string;
   sentAt: string;
   authorName: string;
+  retractedAt: string | null;
+  retractedByName: string | null;
 };
 
 /**
  * Past Announcements with the real sending admin's name, unmasked — the
  * Board's internal record. Distinct from the member-facing feed/detail page,
  * which display the fixed "NASIHA Board" identity instead (lib/feed-server.ts).
+ * Includes retracted announcements (with who/when) so the record persists
+ * even once an announcement is hidden from members.
  */
 export async function listAnnouncementHistory(): Promise<AnnouncementHistoryItem[]> {
   const announcements = await db.announcement.findMany({
     where: { sentAt: { not: null } },
     orderBy: { sentAt: "desc" },
-    select: { id: true, title: true, sentAt: true, author: { select: { name: true } } },
+    select: {
+      id: true,
+      title: true,
+      sentAt: true,
+      author: { select: { name: true } },
+      retractedAt: true,
+      retractedBy: { select: { name: true } },
+    },
   });
 
   return announcements.map((announcement) => ({
@@ -97,5 +149,7 @@ export async function listAnnouncementHistory(): Promise<AnnouncementHistoryItem
     // sentAt is never null here — the where clause above excludes drafts.
     sentAt: (announcement.sentAt as Date).toISOString(),
     authorName: announcement.author.name ?? "NASIHA Member",
+    retractedAt: announcement.retractedAt?.toISOString() ?? null,
+    retractedByName: announcement.retractedBy?.name ?? null,
   }));
 }

@@ -94,7 +94,7 @@ export async function getFeedPage(params: {
       take: pageSize,
     }),
     db.announcement.findMany({
-      where: { sentAt: { not: null }, ...(before ? { sentAt: { lt: before } } : {}) },
+      where: { sentAt: { not: null }, retractedAt: null, ...(before ? { sentAt: { lt: before } } : {}) },
       select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true },
       orderBy: { sentAt: "desc" },
       take: pageSize,
@@ -182,9 +182,9 @@ export type AnnouncementDetail = {
 export async function getSentAnnouncement(id: string): Promise<AnnouncementDetail | null> {
   const announcement = await db.announcement.findUnique({
     where: { id },
-    select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true },
+    select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true, retractedAt: true },
   });
-  if (!announcement || !announcement.sentAt) return null;
+  if (!announcement || !announcement.sentAt || announcement.retractedAt) return null;
 
   return {
     id: announcement.id,

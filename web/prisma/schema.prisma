@@ -91,6 +91,7 @@ model User {
   privacyDataRequestsHandled PrivacyDataRequest[]     @relation("PrivacyRequestHandledBy")
   notificationPreferences    NotificationPreference[]
   announcementsAuthored      Announcement[]           @relation("AnnouncementAuthor")
+  announcementsRetracted     Announcement[]           @relation("AnnouncementRetractedBy")
 
   // Tier-promotion audit trail (§7.3) — a user accrues entries as the
   // subject of a change and, separately, as the admin who made one.
@@ -1143,19 +1144,25 @@ model NotificationPreference {
 // convention as Post.publishedAt. Member-facing surfaces (feed, detail page,
 // email) deliberately mask `author` behind a fixed "NASIHA Board" identity —
 // `authorId` is still the real sender, used only by the admin history list.
+// `retractedAt` set = hidden from the feed/detail page and its Notification
+// rows deleted (can't un-send the email already delivered) — the row itself
+// is kept, retracted, so the admin history list retains an audit trail.
 model Announcement {
-  id           String    @id @default(cuid())
-  title        String
-  body         String
-  authorId     String
-  author       User      @relation("AnnouncementAuthor", fields: [authorId], references: [id])
+  id            String    @id @default(cuid())
+  title         String
+  body          String
+  authorId      String
+  author        User      @relation("AnnouncementAuthor", fields: [authorId], references: [id])
   // MinIO object key in the attachments/ bucket, same pattern as
   // Post.heroImageUrl — a single optional cover image, not a multi-file
   // attachment system.
-  heroImageUrl String?
-  sentAt       DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  heroImageUrl  String?
+  sentAt        DateTime?
+  retractedAt   DateTime?
+  retractedById String?
+  retractedBy   User?     @relation("AnnouncementRetractedBy", fields: [retractedById], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@map("announcements")
 }
