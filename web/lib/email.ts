@@ -99,6 +99,57 @@ export async function sendEventRegistrationConfirmationEmail(
  * RESEND_API_KEY isn't configured. replyTo is set to the submitter's
  * address so the org can reply directly from their inbox.
  */
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (char) => HTML_ESCAPES[char] ?? char);
+}
+
+/**
+ * Sent to every member once an admin sends a Board Announcement (§4.10).
+ * The one email in this file with an `html` body, not just `text` — the
+ * optional cover image can only render as an inline <img>, plain text has
+ * no way to show it. `from` is overridden to "NASIHA Board" (rather than
+ * this file's default "NASIHA") to match the masked institutional sender
+ * identity shown everywhere else the announcement appears (feed, detail
+ * page) — see lib/feed-server.ts's ANNOUNCEMENT_SENDER. Best-effort, same
+ * as every other function here: the Announcement/Notification rows already
+ * exist by the time this runs, so a failed/unconfigured send is non-fatal.
+ */
+export async function sendAnnouncementEmail(
+  to: string,
+  announcement: { title: string; body: string; heroImageUrl: string | null; detailUrl: string },
+) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping announcement email to ${to}`);
+    return;
+  }
+
+  const safeTitle = escapeHtml(announcement.title);
+  const safeBody = escapeHtml(announcement.body).replace(/\n/g, "<br>");
+  const imageHtml = announcement.heroImageUrl
+    ? `<img src="${announcement.heroImageUrl}" alt="" style="max-width:100%;border-radius:8px;margin-bottom:16px" />`
+    : "";
+
+  try {
+    await resend.emails.send({
+      from: "NASIHA Board <no-reply@mail.nasihaforyou.org>",
+      to,
+      subject: announcement.title,
+      text: `${announcement.title}\n\n${announcement.body}\n\nView online: ${announcement.detailUrl}`,
+      html: `<div>${imageHtml}<h1>${safeTitle}</h1><p>${safeBody}</p><p><a href="${announcement.detailUrl}">View online</a></p></div>`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send announcement email", error);
+  }
+}
+
 export async function sendContactMessageEmail(message: {
   name: string;
   email: string;

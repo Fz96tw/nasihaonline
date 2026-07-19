@@ -270,6 +270,28 @@ export function getPostHeroImageUrl(key: string | null): string | null {
 }
 
 /**
+ * Same validation/storage shape as uploadPostHeroImage, for a Board
+ * Announcement's single optional cover image (§4.10). Returns the object
+ * key to persist on Announcement.heroImageUrl.
+ */
+export async function uploadAnnouncementHeroImage(file: File): Promise<string> {
+  const { buffer, ext, mime } = await validateImageUpload(file);
+
+  await ensureBucket(BUCKET_ATTACHMENTS);
+  const key = `announcement-hero/${crypto.randomUUID()}.${ext}`;
+  const minio = getClient();
+  await minio.putObject(BUCKET_ATTACHMENTS, key, buffer, buffer.length, {
+    "Content-Type": mime,
+  });
+  return key;
+}
+
+export function getAnnouncementHeroImageUrl(key: string | null): string | null {
+  if (!key) return null;
+  return `/api/announcements/hero/${key}`;
+}
+
+/**
  * Fetches a stored blog hero image (attachments/ bucket) for streaming
  * through the /api/blog/hero proxy — same shape/rationale as
  * getAvatarObject, just the other bucket.

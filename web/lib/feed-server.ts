@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { KnowledgeStatus } from "@/lib/generated/prisma/enums";
-import { getProfileAvatarUrl, getPostHeroImageUrl } from "@/lib/storage";
+import { getProfileAvatarUrl, getPostHeroImageUrl, getAnnouncementHeroImageUrl } from "@/lib/storage";
 import { excerptFromHtml } from "@/lib/blog";
 import { withFeedRef, type FeedItem, type FeedCursor } from "@/lib/feed";
 
@@ -19,6 +19,12 @@ function truncate(text: string, maxLength = EXCERPT_LENGTH): string {
 function authorOf(user: { name: string | null; profile: { avatarUrl: string | null } | null }) {
   return { name: user.name, avatarUrl: getProfileAvatarUrl(user.profile?.avatarUrl ?? null) };
 }
+
+// Board Announcements deliberately mask the sending admin behind a fixed
+// institutional identity on every member-facing surface (feed row, detail
+// page, email) — the real sender (Announcement.authorId) is only ever shown
+// unmasked in the admin history list (lib/announcements-server.ts).
+const ANNOUNCEMENT_SENDER = { name: "NASIHA Board", avatarUrl: "/images/nasihalogo-cropped.png" };
 
 /**
  * "What's New" feed (member-only) — merges five domains at query time
@@ -89,7 +95,7 @@ export async function getFeedPage(params: {
     }),
     db.announcement.findMany({
       where: { sentAt: { not: null }, ...(before ? { sentAt: { lt: before } } : {}) },
-      select: { id: true, title: true, body: true, sentAt: true, author: { select: AUTHOR_SELECT } },
+      select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true },
       orderBy: { sentAt: "desc" },
       take: pageSize,
     }),
@@ -145,8 +151,8 @@ export async function getFeedPage(params: {
       href: `/whats-new/announcements/${announcement.id}`,
       // sentAt is never null here — the where clause above excludes drafts.
       timestamp: (announcement.sentAt as Date).toISOString(),
-      author: authorOf(announcement.author),
-      imageUrl: null,
+      author: ANNOUNCEMENT_SENDER,
+      imageUrl: getAnnouncementHeroImageUrl(announcement.heroImageUrl),
     })),
   ].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
@@ -164,6 +170,7 @@ export type AnnouncementDetail = {
   body: string;
   sentAt: string;
   author: { name: string | null; avatarUrl: string | null };
+  imageUrl: string | null;
 };
 
 /**
@@ -175,7 +182,7 @@ export type AnnouncementDetail = {
 export async function getSentAnnouncement(id: string): Promise<AnnouncementDetail | null> {
   const announcement = await db.announcement.findUnique({
     where: { id },
-    select: { id: true, title: true, body: true, sentAt: true, author: { select: AUTHOR_SELECT } },
+    select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true },
   });
   if (!announcement || !announcement.sentAt) return null;
 
@@ -184,6 +191,7 @@ export async function getSentAnnouncement(id: string): Promise<AnnouncementDetai
     title: announcement.title,
     body: announcement.body,
     sentAt: announcement.sentAt.toISOString(),
-    author: authorOf(announcement.author),
+    author: ANNOUNCEMENT_SENDER,
+    imageUrl: getAnnouncementHeroImageUrl(announcement.heroImageUrl),
   };
 }

@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getSentAnnouncement } from "@/lib/feed-server";
 import { formatTimestamp } from "@/lib/format-date";
+import { linkifyAnnouncementBody } from "@/lib/linkify";
 import { Avatar } from "@/components/ui/avatar";
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
@@ -35,7 +36,18 @@ export default async function AnnouncementDetailPage({ params }: { params: { id:
         </div>
       </div>
 
-      <p className="whitespace-pre-wrap text-sm leading-relaxed">{announcement.body}</p>
+      {announcement.imageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
+        <img
+          src={announcement.imageUrl}
+          alt=""
+          className="max-h-96 w-full rounded-md object-cover"
+        />
+      )}
+
+      <p className="whitespace-pre-wrap text-sm leading-relaxed">
+        {linkifyAnnouncementBody(announcement.body)}
+      </p>
     </main>
   );
 }

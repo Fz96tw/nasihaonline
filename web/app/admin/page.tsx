@@ -84,6 +84,11 @@ const ADMIN_SECTIONS = [
     title: "Reports",
     description: "Community, engagement, and organizational KPIs.",
   },
+  {
+    href: "/admin/announcements",
+    title: "Announcements",
+    description: "Compose and send Board Announcements to every member.",
+  },
 ] as const;
 
 /**

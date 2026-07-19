@@ -305,7 +305,7 @@ model ContactMessage {
 }
 
 model MembershipApplication {
-  id                           String                  @id @default(cuid())
+  id                           String                    @id @default(cuid())
   firstName                    String
   lastName                     String
   email                        String
@@ -325,8 +325,8 @@ model MembershipApplication {
   professionalReferenceName    String?
   professionalReferenceContact String?
   codeOfConductAcceptedAt      DateTime
-  emailUpdatesOptIn            Boolean                 @default(false)
-  status                       ApplicationStatus       @default(submitted)
+  emailUpdatesOptIn            Boolean                   @default(false)
+  status                       ApplicationStatus         @default(submitted)
 
   // True when this application was auto-submitted from the donate form's
   // "also apply as a Friend" checkbox (PRD §4.14) rather than filled out
@@ -334,7 +334,7 @@ model MembershipApplication {
   // just pre-fills only the fields a donation checkout actually has
   // (name/email), leaving career/interest fields blank for the admin to
   // see as unanswered rather than fabricated.
-  sourcedFromDonation          Boolean                 @default(false)
+  sourcedFromDonation Boolean @default(false)
 
   // Applicant's own tier preference (e.g. "just want Friend of Nasiha access")
   // — a non-binding hint only. It pre-fills the admin's assignedTier selector
@@ -1139,18 +1139,23 @@ model NotificationPreference {
 
 // Board-authored broadcast (§4.10) — fans out to every member's
 // notification feed (+ email) as a `board_announcement` Notification once
-// sent; the sending job itself is a later objective. `sentAt` null = draft,
-// set = sent, same nullable-timestamp-as-status convention as
-// Post.publishedAt.
+// sent. `sentAt` null = draft, set = sent, same nullable-timestamp-as-status
+// convention as Post.publishedAt. Member-facing surfaces (feed, detail page,
+// email) deliberately mask `author` behind a fixed "NASIHA Board" identity —
+// `authorId` is still the real sender, used only by the admin history list.
 model Announcement {
-  id        String    @id @default(cuid())
-  title     String
-  body      String
-  authorId  String
-  author    User      @relation("AnnouncementAuthor", fields: [authorId], references: [id])
-  sentAt    DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id           String    @id @default(cuid())
+  title        String
+  body         String
+  authorId     String
+  author       User      @relation("AnnouncementAuthor", fields: [authorId], references: [id])
+  // MinIO object key in the attachments/ bucket, same pattern as
+  // Post.heroImageUrl — a single optional cover image, not a multi-file
+  // attachment system.
+  heroImageUrl String?
+  sentAt       DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@map("announcements")
 }
