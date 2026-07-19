@@ -15,6 +15,12 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
  * any NotificationPreference opt-out check: no other NotificationType
  * enforces opt-out yet either (that lands in a later objective), and Board
  * Announcements are specced to ignore it even once it exists.
+ *
+ * `templateHeroImageUrl` supports "use as template" resends: when the admin
+ * didn't pick a new file, the new Announcement reuses a prior announcement's
+ * already-uploaded MinIO object key instead of requiring a re-upload (those
+ * objects are immutable and never deleted). A new `heroImage` file always
+ * takes priority over it.
  */
 export async function createAndSendAnnouncement(
   authorId: string,
@@ -22,12 +28,13 @@ export async function createAndSendAnnouncement(
     title: string;
     body: string;
     heroImage: File | null;
+    templateHeroImageUrl?: string | null;
     showInFeed: boolean;
     notifyInApp: boolean;
     sendEmail: boolean;
   },
 ): Promise<{ id: string }> {
-  let heroImageUrl: string | null = null;
+  let heroImageUrl: string | null = input.templateHeroImageUrl ?? null;
   if (input.heroImage) {
     heroImageUrl = await uploadAnnouncementHeroImage(input.heroImage);
   }
@@ -86,6 +93,27 @@ export async function createAndSendAnnouncement(
   }
 
   return { id: announcement.id };
+}
+
+export type AnnouncementTemplate = {
+  title: string;
+  body: string;
+  heroImageUrl: string | null;
+};
+
+/**
+ * Fetches a past (live or retracted) Announcement's content to pre-fill the
+ * compose form for a "use as template" resend (?fromId=<id>). Returns null
+ * for a missing/invalid id so the caller can fall back to a blank form
+ * rather than erroring — same graceful-fallback shape as an unrecognized
+ * query param anywhere else in the app.
+ */
+export async function getAnnouncementTemplate(id: string): Promise<AnnouncementTemplate | null> {
+  const announcement = await db.announcement.findUnique({
+    where: { id },
+    select: { title: true, body: true, heroImageUrl: true },
+  });
+  return announcement;
 }
 
 export class AnnouncementError extends Error {

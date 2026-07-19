@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireRole } from "@/lib/auth";
 import { Role } from "@/lib/generated/prisma/enums";
 import { createAnnouncementSchema } from "@/lib/validation/announcement";
-import { createAndSendAnnouncement } from "@/lib/announcements-server";
+import { createAndSendAnnouncement, getAnnouncementTemplate } from "@/lib/announcements-server";
 import { UploadValidationError } from "@/lib/storage";
 
 /**
@@ -35,8 +35,24 @@ export async function POST(request: Request) {
   const heroImageField = formData.get("heroImage");
   const heroImage = heroImageField instanceof File && heroImageField.size > 0 ? heroImageField : null;
 
+  // "Use as template" resend (?fromId=<id> on the compose page): reuse the
+  // source announcement's already-uploaded cover image key when the admin
+  // didn't pick a new file. Looked up server-side by id rather than trusting
+  // a client-supplied key directly, so an admin can't point heroImageUrl at
+  // an arbitrary storage key.
+  const fromId = formData.get("fromId");
+  let templateHeroImageUrl: string | null = null;
+  if (typeof fromId === "string" && fromId) {
+    const template = await getAnnouncementTemplate(fromId);
+    templateHeroImageUrl = template?.heroImageUrl ?? null;
+  }
+
   try {
-    const announcement = await createAndSendAnnouncement(user.id, { ...parsed.data, heroImage });
+    const announcement = await createAndSendAnnouncement(user.id, {
+      ...parsed.data,
+      heroImage,
+      templateHeroImageUrl,
+    });
     return NextResponse.json({ id: announcement.id }, { status: 201 });
   } catch (error) {
     if (error instanceof UploadValidationError) {

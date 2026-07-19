@@ -20,6 +20,13 @@ const DEFAULT_VALUES: CreateAnnouncementValues = {
   sendEmail: true,
 };
 
+type TemplateAnnouncement = {
+  sourceId: string;
+  title: string;
+  body: string;
+  heroImageDisplayUrl: string | null;
+};
+
 /**
  * "Compose Announcement" form (§4.10), posted from /admin/announcements/new.
  * Multipart rather than JSON since the optional cover image travels
@@ -27,8 +34,14 @@ const DEFAULT_VALUES: CreateAnnouncementValues = {
  * Sending is immediate on submit (no separate draft-save step): the Board
  * Announcement broadcasts to every member and can't be un-sent, so this
  * shows a confirm before firing.
+ *
+ * `templateAnnouncement` supports "use as template" resends from a past
+ * (live or retracted) announcement (?fromId=<id>): pre-fills title/body/cover
+ * image but always submits as a brand-new Announcement — same `existingPost`
+ * prop pattern WritePostForm uses for edit mode, except this always POSTs
+ * (never PATCHes) since the source's history entry must stay untouched.
  */
-export function AnnouncementForm() {
+export function AnnouncementForm({ templateAnnouncement }: { templateAnnouncement?: TemplateAnnouncement }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +49,9 @@ export function AnnouncementForm() {
 
   const form = useForm<CreateAnnouncementValues>({
     resolver: zodResolver(createAnnouncementSchema),
-    defaultValues: DEFAULT_VALUES,
+    defaultValues: templateAnnouncement
+      ? { ...DEFAULT_VALUES, title: templateAnnouncement.title, body: templateAnnouncement.body }
+      : DEFAULT_VALUES,
     mode: "onTouched",
   });
 
@@ -63,6 +78,7 @@ export function AnnouncementForm() {
       formData.append("notifyInApp", String(values.notifyInApp));
       formData.append("sendEmail", String(values.sendEmail));
       if (heroImage) formData.append("heroImage", heroImage);
+      if (templateAnnouncement) formData.append("fromId", templateAnnouncement.sourceId);
 
       const res = await fetch("/api/admin/announcements", {
         method: "POST",
@@ -123,6 +139,14 @@ export function AnnouncementForm() {
           <label htmlFor="hero-image" className="text-sm font-medium">
             Cover image (optional)
           </label>
+          {templateAnnouncement?.heroImageDisplayUrl && !heroImage && (
+            // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
+            <img
+              src={templateAnnouncement.heroImageDisplayUrl}
+              alt="Current cover image"
+              className="h-32 w-full max-w-xs rounded-md object-cover"
+            />
+          )}
           <input
             id="hero-image"
             type="file"
@@ -130,6 +154,9 @@ export function AnnouncementForm() {
             onChange={(e) => setHeroImage(e.target.files?.[0] ?? null)}
             className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
           />
+          {templateAnnouncement?.heroImageDisplayUrl && (
+            <p className="text-xs text-muted-foreground">Choose a new file to replace it.</p>
+          )}
         </div>
 
         <div className="flex flex-col gap-2">

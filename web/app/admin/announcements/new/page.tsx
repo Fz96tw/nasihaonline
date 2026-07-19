@@ -2,8 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { AnnouncementForm } from "@/components/admin/announcement-form";
+import { getAnnouncementTemplate } from "@/lib/announcements-server";
+import { getAnnouncementHeroImageUrl } from "@/lib/storage";
 
-export default async function NewAnnouncementPage() {
+export default async function NewAnnouncementPage({
+  searchParams,
+}: {
+  searchParams: { fromId?: string };
+}) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
@@ -14,6 +20,20 @@ export default async function NewAnnouncementPage() {
         <p className="text-muted-foreground">You don&apos;t have access to this page.</p>
       </main>
     );
+  }
+
+  const { fromId } = searchParams;
+  let templateAnnouncement;
+  if (fromId) {
+    const template = await getAnnouncementTemplate(fromId);
+    if (template) {
+      templateAnnouncement = {
+        sourceId: fromId,
+        title: template.title,
+        body: template.body,
+        heroImageDisplayUrl: getAnnouncementHeroImageUrl(template.heroImageUrl),
+      };
+    }
   }
 
   return (
@@ -28,7 +48,7 @@ export default async function NewAnnouncementPage() {
           notification preferences.
         </p>
       </div>
-      <AnnouncementForm />
+      <AnnouncementForm templateAnnouncement={templateAnnouncement} />
     </main>
   );
 }

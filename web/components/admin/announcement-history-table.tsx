@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -94,16 +95,21 @@ export function AnnouncementHistoryTable({ announcements }: { announcements: Ann
                   )}
                 </TableCell>
                 <TableCell className="text-right">
-                  {!announcement.retractedAt && (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      disabled={pendingId === announcement.id}
-                      onClick={() => retract(announcement)}
-                    >
-                      Retract
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/admin/announcements/new?fromId=${announcement.id}`}>Use as template</Link>
                     </Button>
-                  )}
+                    {!announcement.retractedAt && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={pendingId === announcement.id}
+                        onClick={() => retract(announcement)}
+                      >
+                        Retract
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
