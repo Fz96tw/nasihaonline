@@ -19,7 +19,7 @@ import { getSessionUser } from "@/lib/auth";
 export default async function SignInPage() {
   const user = await getSessionUser();
   if (user?.suspended) redirect("/account-suspended");
-  if (user) redirect("/dashboard");
+  if (user) redirect("/whats-new");
 
   return (
     <main className="flex min-h-screen items-center justify-center p-8">

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPublishedPostBySlug, getPostComments, getPostsByAuthor } from "@/lib/blog-server";
 import { getSessionUser } from "@/lib/auth";
+import { isFromFeed } from "@/lib/feed";
 import { Role } from "@/lib/generated/prisma/enums";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +24,13 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 // /blog/[slug] (§4.8) — public-readable, no auth required. Unpublished
 // posts and unknown slugs both 404 rather than distinguishing the two, so
 // a draft's existence isn't leaked to a signed-out visitor.
-export default async function BlogPostPage({ params }: { params: { slug: string } }) {
+export default async function BlogPostPage({
+  params,
+  searchParams,
+}: {
+  params: { slug: string };
+  searchParams: { ref?: string };
+}) {
   const post = await getPublishedPostBySlug(params.slug);
   if (!post) notFound();
 
@@ -33,10 +40,15 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
     getPostsByAuthor(post.authorId, post.id),
   ]);
 
+  const cameFromFeed = isFromFeed(searchParams);
+
   return (
     <main className="mx-auto max-w-3xl px-8 py-16">
-      <Link href="/blog" className="mb-6 inline-block text-sm text-muted-foreground hover:underline">
-        ← Back to Blog
+      <Link
+        href={cameFromFeed ? "/whats-new" : "/blog"}
+        className="mb-6 inline-block text-sm text-muted-foreground hover:underline"
+      >
+        {cameFromFeed ? "← Back to What's New" : "← Back to Blog"}
       </Link>
 
       {post.heroImageUrl && (

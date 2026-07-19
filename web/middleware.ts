@@ -35,7 +35,8 @@ function isProtectedPageRoute(pathname: string) {
     pathname.startsWith("/profile") ||
     pathname.startsWith("/contributions") ||
     pathname.startsWith("/inbox") ||
-    pathname.startsWith("/calendar")
+    pathname.startsWith("/calendar") ||
+    pathname.startsWith("/whats-new")
   );
 }
 

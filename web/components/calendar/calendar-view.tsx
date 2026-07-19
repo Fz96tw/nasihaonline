@@ -39,7 +39,13 @@ function renderEventContent(arg: EventContentArg) {
   );
 }
 
-export function CalendarView({ events }: { events: MemberEvent[] }) {
+export function CalendarView({
+  events,
+  defaultTab = "month",
+}: {
+  events: MemberEvent[];
+  defaultTab?: "month" | "list";
+}) {
   // Radix's TabsContent unmounts the inactive panel by default, so RSVP
   // state can't live in EventListItem's own useState — switching to Month
   // and back would remount it from the original (now-stale) `events` prop
@@ -77,7 +83,7 @@ export function CalendarView({ events }: { events: MemberEvent[] }) {
   }
 
   return (
-    <Tabs defaultValue="month">
+    <Tabs defaultValue={defaultTab}>
       <TabsList>
         <TabsTrigger value="month">Month</TabsTrigger>
         <TabsTrigger value="list">Upcoming List</TabsTrigger>

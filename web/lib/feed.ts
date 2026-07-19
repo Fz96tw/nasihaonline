@@ -1,0 +1,64 @@
+// Client-safe "What's New" feed types (unifies Events/Blog/Knowledge
+// Library/Forums/Announcements into one chronological list) — mirrors
+// lib/blog.ts's split between plain data shapes (this file) and DB-touching
+// queries (lib/feed-server.ts).
+
+export type FeedItemType = "event" | "post" | "library" | "forum_thread" | "announcement";
+
+export const FEED_TYPE_LABELS: Record<FeedItemType, string> = {
+  event: "Event",
+  post: "Blog",
+  library: "Library",
+  forum_thread: "Forum",
+  announcement: "Announcement",
+};
+
+export type FeedItem = {
+  type: FeedItemType;
+  id: string;
+  title: string;
+  excerpt: string;
+  href: string;
+  /** ISO timestamp this item was published/created — the feed's sort key. */
+  timestamp: string;
+  author: { name: string | null; avatarUrl: string | null };
+  /** Only blog posts (Post.heroImageUrl) carry an image today — null for every other type. */
+  imageUrl: string | null;
+};
+
+// Marks a feed row's href so the page it lands on (blog post, forum thread,
+// calendar, library — all reachable from elsewhere too) can show a "back to
+// the feed" link only when the visit actually came from there.
+export const FEED_REF_PARAM = "ref";
+export const FEED_REF_VALUE = "whats-new";
+
+export function withFeedRef(href: string): string {
+  const separator = href.includes("?") ? "&" : "?";
+  return `${href}${separator}${FEED_REF_PARAM}=${FEED_REF_VALUE}`;
+}
+
+export function isFromFeed(searchParams?: Record<string, string | string[] | undefined>): boolean {
+  return searchParams?.[FEED_REF_PARAM] === FEED_REF_VALUE;
+}
+
+export type FeedCursor = { ts: string; id: string };
+
+// A plain JSON+encodeURIComponent cursor (not base64) — it only ever needs
+// to round-trip through a URL query param, and this avoids relying on
+// Buffer/btoa, which differ between server and browser environments.
+export function encodeFeedCursor(cursor: FeedCursor): string {
+  return encodeURIComponent(JSON.stringify(cursor));
+}
+
+export function decodeFeedCursor(value: string | null | undefined): FeedCursor | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(decodeURIComponent(value));
+    if (parsed && typeof parsed.ts === "string" && typeof parsed.id === "string") {
+      return { ts: parsed.ts, id: parsed.id };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}

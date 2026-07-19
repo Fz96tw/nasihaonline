@@ -45,7 +45,7 @@ export function UserMenu({ name, avatarUrl }: { name: string; avatarUrl: string 
           Manage Clerk Account
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => clerk.signOut({ redirectUrl: "/sign-in" })}>
+        <DropdownMenuItem onSelect={() => clerk.signOut({ redirectUrl: "/" })}>
           <LogOut className="h-4 w-4" />
           Sign out
         </DropdownMenuItem>

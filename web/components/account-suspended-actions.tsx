@@ -7,7 +7,7 @@ export function AccountSuspendedActions() {
   const clerk = useClerk();
 
   return (
-    <Button variant="outline" onClick={() => clerk.signOut({ redirectUrl: "/sign-in" })}>
+    <Button variant="outline" onClick={() => clerk.signOut({ redirectUrl: "/" })}>
       Sign out
     </Button>
   );

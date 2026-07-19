@@ -6,6 +6,7 @@ import { getKnowledgeCategories, getPublishedKnowledgeItems } from "@/lib/librar
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS } from "@/lib/library";
 import { KnowledgeContentType, KnowledgeLevel } from "@/lib/generated/prisma/enums";
 import { LibraryItemCard } from "@/components/library/library-item-card";
+import { BackToFeedLink } from "@/components/feed/back-to-feed-link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -42,7 +43,7 @@ const selectClasses =
 export default async function LibraryPage({
   searchParams,
 }: {
-  searchParams: { category?: string; type?: string; level?: string; q?: string };
+  searchParams: { category?: string; type?: string; level?: string; q?: string; ref?: string };
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
@@ -73,6 +74,8 @@ export default async function LibraryPage({
       </section>
 
       <section className="mx-auto flex max-w-[1120px] flex-col gap-6 px-8 py-16">
+        <BackToFeedLink searchParams={searchParams} />
+
         <div className="flex flex-wrap items-center justify-end gap-4">
           <div className="flex gap-2">
             <Button asChild variant="outline">

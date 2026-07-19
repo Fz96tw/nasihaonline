@@ -110,11 +110,14 @@ export async function SiteHeader() {
           </>
         ) : (
           <>
-            <Button variant="ghost" size="sm" className="hidden text-base font-semibold lg:inline-flex" asChild>
+            <Button variant="ghost" size="sm" className="px-2 text-sm font-semibold sm:px-3 sm:text-base" asChild>
               <Link href="/sign-in">Log in</Link>
             </Button>
-            <Button size="sm" className="text-base" asChild>
-              <Link href="/join">Join NASIHA</Link>
+            <Button size="sm" className="px-3 text-sm sm:text-base" asChild>
+              <Link href="/join">
+                <span className="sm:hidden">Join</span>
+                <span className="hidden sm:inline">Join NASIHA</span>
+              </Link>
             </Button>
           </>
         )}

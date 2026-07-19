@@ -5,6 +5,8 @@ import { getSessionUser } from "@/lib/auth";
 import { getMemberUpcomingEvents } from "@/lib/events-server";
 import { EVENT_SUBMISSION_TIERS } from "@/lib/events";
 import { CalendarView } from "@/components/calendar/calendar-view";
+import { BackToFeedLink } from "@/components/feed/back-to-feed-link";
+import { isFromFeed } from "@/lib/feed";
 import { Button } from "@/components/ui/button";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 
@@ -12,7 +14,7 @@ export const metadata: Metadata = {
   title: "Calendar — NASIHA",
 };
 
-export default async function CalendarPage() {
+export default async function CalendarPage({ searchParams }: { searchParams: { ref?: string } }) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
@@ -33,6 +35,8 @@ export default async function CalendarPage() {
       </section>
 
       <section className="mx-auto flex max-w-[1120px] flex-col gap-8 px-8 py-16">
+        <BackToFeedLink searchParams={searchParams} />
+
         {canSubmitEvent && (
           <div className="flex justify-end">
             <Button asChild>
@@ -41,7 +45,7 @@ export default async function CalendarPage() {
           </div>
         )}
 
-        <CalendarView events={events} />
+        <CalendarView events={events} defaultTab={isFromFeed(searchParams) ? "list" : "month"} />
       </section>
     </main>
   );
