@@ -56,10 +56,10 @@ export default function AboutPage() {
     <main className="min-h-screen">
       <section className="relative overflow-hidden px-8 py-16 text-center text-primary-foreground">
         <ParallaxHeroImage src="/images/blue-rain.jpg" priority />
-        <div className="absolute inset-0 -z-10 bg-[rgba(10,20,70,.65)]" />
+        <div className="absolute inset-0 -z-10 bg-[rgba(10,20,70,.4)]" />
         <div className="relative mx-auto max-w-[580px]">
-          <h1 className="mb-3 text-[2.4rem] font-extrabold tracking-[-.02em] [text-shadow:0_2px_16px_rgba(0,10,40,.55)]">About NASIHA</h1>
-          <p className="text-lg leading-[1.7] opacity-[.88] [text-shadow:0_1px_10px_rgba(0,10,40,.6)]">
+          <h1 className="mb-3 text-[2.5rem] font-extrabold leading-[1.1] tracking-[-.02em] [text-shadow:0_2px_16px_rgba(0,10,40,.55)] md:text-[3.5rem]">About NASIHA</h1>
+          <p className="text-xl leading-[1.6] opacity-[.88] [text-shadow:0_1px_10px_rgba(0,10,40,.6)] md:text-2xl">
             NASIHA — meaning <em className="not-italic text-[#93c5fd]">sincere advice and guidance</em> — was
             founded on the belief that knowledge is a shared resource, not a commodity.
           </p>
@@ -79,7 +79,7 @@ export default function AboutPage() {
                 to teach, and to share freely with others.&rdquo;
               </blockquote>
 
-              <p className="mb-3 text-sm font-bold uppercase tracking-[.1em] text-primary">
+              <p className="mb-3 mt-10 text-sm font-bold uppercase tracking-[.1em] text-primary">
                 Values
               </p>
               <h3 className="mb-4 text-2xl font-extrabold tracking-[-.02em]">Core Principles</h3>
@@ -131,8 +131,8 @@ export default function AboutPage() {
           </Reveal>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
             {ACTIVITIES.map(({ icon: Icon, title, body }, index) => (
-              <Reveal key={title} index={index} hover>
-                <div className="rounded-xl border bg-card p-6 text-center shadow-sm">
+              <Reveal key={title} index={index} hover className="h-full">
+                <div className="flex h-full flex-col items-center rounded-xl border bg-card p-6 text-center shadow-sm">
                   <div className="mx-auto mb-4 flex h-[52px] w-[52px] items-center justify-center rounded-lg bg-primary/10 text-primary">
                     <Icon className="h-[26px] w-[26px]" strokeWidth={1.5} />
                   </div>

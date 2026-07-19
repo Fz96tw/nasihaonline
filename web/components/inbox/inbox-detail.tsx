@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar } from "@/components/ui/avatar";
 import { type InboxThread } from "@/lib/inbox";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { cn } from "@/lib/utils";
@@ -81,6 +82,7 @@ export function InboxDetail({
         <Button variant="ghost" size="icon" className="h-8 w-8 sm:hidden" onClick={onBack} aria-label="Back to inbox">
           <ArrowLeft className="h-4 w-4" />
         </Button>
+        <Avatar name={thread.otherPartyName} src={thread.otherPartyAvatarUrl} size="sm" className="flex-shrink-0" />
         <div className="min-w-0">
           <div className="truncate font-semibold">{thread.subject ?? thread.otherPartyName}</div>
           <div className="truncate text-xs text-muted-foreground">with {thread.otherPartyName}</div>

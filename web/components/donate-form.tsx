@@ -39,10 +39,12 @@ export function DonateForm({
   defaultName,
   defaultEmail,
   canceled,
+  showHeader = true,
 }: {
   defaultName?: string;
   defaultEmail?: string;
   canceled?: boolean;
+  showHeader?: boolean;
 }) {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -86,14 +88,16 @@ export function DonateForm({
         className="mx-auto flex max-w-xl flex-col gap-6 p-8"
         noValidate
       >
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Support NASIHA</h1>
-          <p className="text-sm text-muted-foreground">
-            Donations fund the Organization directly and are entirely separate from the
-            Knowledge Hours exchange — donating never confers Knowledge Hours or membership
-            advantage.
-          </p>
-        </div>
+        {showHeader && (
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Support NASIHA</h1>
+            <p className="text-sm text-muted-foreground">
+              Donations fund the Organization directly and are entirely separate from the
+              Knowledge Hours exchange — donating never confers Knowledge Hours or membership
+              advantage.
+            </p>
+          </div>
+        )}
 
         {canceled && (
           <p className="rounded-[10px] border bg-muted p-3 text-sm text-muted-foreground">

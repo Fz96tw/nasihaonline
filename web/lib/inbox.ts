@@ -10,6 +10,7 @@ export type InboxMessageListItem = {
   id: string;
   otherPartyId: string;
   otherPartyName: string;
+  otherPartyAvatarUrl: string | null;
   subject: string | null;
   /** The most recent message's body, truncated. */
   snippet: string;
@@ -30,6 +31,7 @@ export type MeetingRequestListItem = {
   id: string;
   otherPartyId: string;
   otherPartyName: string;
+  otherPartyAvatarUrl: string | null;
   /** Whether the current user sent or received this request. */
   direction: "sent" | "received";
   topic: string;
@@ -48,6 +50,7 @@ export type InboxThreadMessage = {
   id: string;
   senderId: string;
   senderName: string;
+  senderAvatarUrl: string | null;
   body: string;
   createdAt: string;
   /** True if this message was sent by the current viewer. */
@@ -59,5 +62,6 @@ export type InboxThread = {
   subject: string | null;
   otherPartyId: string;
   otherPartyName: string;
+  otherPartyAvatarUrl: string | null;
   messages: InboxThreadMessage[];
 };

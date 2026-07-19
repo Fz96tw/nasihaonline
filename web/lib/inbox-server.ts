@@ -4,6 +4,7 @@ import { NotificationType } from "@/lib/generated/prisma/enums";
 import type { InboxListItem, InboxThread } from "@/lib/inbox";
 import { INBOX_TIERS } from "@/lib/members";
 import { createNotification } from "@/lib/notifications-server";
+import { getProfileAvatarUrl } from "@/lib/storage";
 
 const SNIPPET_LENGTH = 140;
 
@@ -12,14 +13,16 @@ function truncate(body: string): string {
   return trimmed.length > SNIPPET_LENGTH ? `${trimmed.slice(0, SNIPPET_LENGTH).trimEnd()}…` : trimmed;
 }
 
+const PARTY_SELECT = { id: true, name: true, profile: { select: { avatarUrl: true } } } as const;
+
 const MESSAGE_INCLUDE = {
-  sender: { select: { id: true, name: true } },
-  recipient: { select: { id: true, name: true } },
+  sender: { select: PARTY_SELECT },
+  recipient: { select: PARTY_SELECT },
 } as const;
 
 const MEETING_REQUEST_INCLUDE = {
-  sender: { select: { id: true, name: true } },
-  recipient: { select: { id: true, name: true } },
+  sender: { select: PARTY_SELECT },
+  recipient: { select: PARTY_SELECT },
 } as const;
 
 /**
@@ -67,6 +70,7 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
       id: rootId,
       otherPartyId: otherParty.id,
       otherPartyName: otherParty.name ?? "NASIHA Member",
+      otherPartyAvatarUrl: getProfileAvatarUrl(otherParty.profile?.avatarUrl ?? null),
       subject: root.subject,
       snippet: truncate(latest.body),
       unread,
@@ -83,6 +87,7 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
       id: meetingRequest.id,
       otherPartyId: otherParty.id,
       otherPartyName: otherParty.name ?? "NASIHA Member",
+      otherPartyAvatarUrl: getProfileAvatarUrl(otherParty.profile?.avatarUrl ?? null),
       direction,
       topic: meetingRequest.topic,
       message: meetingRequest.message,
@@ -134,10 +139,12 @@ export async function getThreadForUser(rootId: string, userId: string): Promise<
     subject: root.subject,
     otherPartyId: otherParty.id,
     otherPartyName: otherParty.name ?? "NASIHA Member",
+    otherPartyAvatarUrl: getProfileAvatarUrl(otherParty.profile?.avatarUrl ?? null),
     messages: [root, ...replies].map((message) => ({
       id: message.id,
       senderId: message.senderId,
       senderName: message.sender.name ?? "NASIHA Member",
+      senderAvatarUrl: getProfileAvatarUrl(message.sender.profile?.avatarUrl ?? null),
       body: message.body,
       createdAt: message.createdAt.toISOString(),
       isOwn: message.senderId === userId,

@@ -47,7 +47,7 @@ export function InboxList({
                 selectedId === item.id && "bg-accent",
               )}
             >
-              <Avatar name={item.otherPartyName} size="sm" />
+              <Avatar name={item.otherPartyName} src={item.otherPartyAvatarUrl} size="sm" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className={cn("truncate text-sm", unread ? "font-bold" : "font-medium")}>

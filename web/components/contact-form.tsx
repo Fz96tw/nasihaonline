@@ -20,9 +20,11 @@ import { contactSchema, type ContactFormValues } from "@/lib/validation/contact"
 export function ContactForm({
   defaultName,
   defaultEmail,
+  showHeader = true,
 }: {
   defaultName?: string;
   defaultEmail?: string;
+  showHeader?: boolean;
 }) {
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -77,12 +79,14 @@ export function ContactForm({
         className="mx-auto flex max-w-xl flex-col gap-6 p-8"
         noValidate
       >
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Contact Us</h1>
-          <p className="text-sm text-muted-foreground">
-            Questions, feedback, or partnership inquiries — we&rsquo;d love to hear from you.
-          </p>
-        </div>
+        {showHeader && (
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Contact Us</h1>
+            <p className="text-sm text-muted-foreground">
+              Questions, feedback, or partnership inquiries — we&rsquo;d love to hear from you.
+            </p>
+          </div>
+        )}
 
         <FormField
           control={form.control}

@@ -23,12 +23,12 @@ export default async function GetInvolvedPage({
           priority
           objectPosition="object-[center_70%]"
         />
-        <div className="absolute inset-0 -z-10 bg-[rgba(10,20,70,.65)]" />
+        <div className="absolute inset-0 -z-10 bg-[rgba(10,20,70,.4)]" />
         <div className="relative mx-auto max-w-[580px]">
           <h1 className="mb-4 text-[2.5rem] font-extrabold leading-[1.1] tracking-[-.02em] [text-shadow:0_2px_16px_rgba(0,10,40,.55)] md:text-[3.5rem]">
             Get Involved
           </h1>
-          <p className="text-lg leading-[1.7] opacity-[.88] [text-shadow:0_1px_10px_rgba(0,10,40,.6)]">
+          <p className="text-xl leading-[1.6] opacity-[.88] [text-shadow:0_1px_10px_rgba(0,10,40,.6)] md:text-2xl">
             Join a community built on reciprocal knowledge exchange — learn how the
             model works and how every contribution earns its return.
           </p>

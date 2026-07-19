@@ -28,22 +28,24 @@ export function GetInvolvedTabs({
   return (
     <Tabs value={tab} onValueChange={setTab}>
       <div className="mx-auto max-w-6xl px-4 pt-12 md:px-8">
-        <TabsList className="h-auto items-end gap-1 rounded-none bg-transparent p-0">
+        <TabsList
+          className="h-auto w-full items-end justify-start gap-1 overflow-x-auto overflow-y-hidden rounded-none bg-transparent p-0 [-ms-overflow-style:none] [scrollbar-width:none] [touch-action:pan-x] [&::-webkit-scrollbar]:hidden"
+        >
           <TabsTrigger
             value="how-it-works"
-            className="rounded-t-lg rounded-b-none border border-b-0 border-transparent px-5 py-3 text-lg font-semibold text-muted-foreground shadow-none data-[state=active]:-mb-px data-[state=active]:border-border data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none"
+            className="shrink-0 rounded-t-lg rounded-b-none border border-b-0 border-transparent px-3 py-3 text-base font-semibold text-muted-foreground shadow-none data-[state=active]:-mb-px data-[state=active]:border-border data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none sm:px-5 sm:text-lg"
           >
             How NASIHA Works
           </TabsTrigger>
           <TabsTrigger
             value="join"
-            className="rounded-t-lg rounded-b-none border border-b-0 border-transparent px-5 py-3 text-lg font-semibold text-muted-foreground shadow-none data-[state=active]:-mb-px data-[state=active]:border-border data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none"
+            className="shrink-0 rounded-t-lg rounded-b-none border border-b-0 border-transparent px-3 py-3 text-base font-semibold text-muted-foreground shadow-none data-[state=active]:-mb-px data-[state=active]:border-border data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none sm:px-5 sm:text-lg"
           >
             Join NASIHA
           </TabsTrigger>
           <TabsTrigger
             value="support"
-            className="rounded-t-lg rounded-b-none border border-b-0 border-transparent px-5 py-3 text-lg font-semibold text-muted-foreground shadow-none data-[state=active]:-mb-px data-[state=active]:border-border data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none"
+            className="shrink-0 rounded-t-lg rounded-b-none border border-b-0 border-transparent px-3 py-3 text-base font-semibold text-muted-foreground shadow-none data-[state=active]:-mb-px data-[state=active]:border-border data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none sm:px-5 sm:text-lg"
           >
             Support NASIHA
           </TabsTrigger>
