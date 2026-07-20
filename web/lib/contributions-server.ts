@@ -196,9 +196,12 @@ export class ContributionResolutionError extends Error {
 
 /**
  * Confirms or rejects a pending ledger entry (§4.4's hybrid posting model).
- * Authorization: the submitter can never resolve their own entry, even as
- * admin; the entry's named counterpart or any admin can. Entries with no
- * named counterpart therefore require an admin.
+ * Authorization: the entry's named counterpart or any admin can resolve it —
+ * including an admin resolving their own submission. Admins are trusted
+ * actors and every resolution is attributed (`resolvedByUserId`) and
+ * immutable, so self-resolution is auditable rather than anonymous.
+ * Non-admin submitters still can't resolve their own entry; entries with no
+ * named counterpart require an admin.
  *
  * `reason` is required when an admin rejects in their admin capacity (i.e.
  * not also the named counterpart) — same audit requirement as the
@@ -222,12 +225,13 @@ export async function resolveContribution(
   if (entry.status !== LedgerStatus.pending) {
     throw new ContributionResolutionError(409, `Contribution is already ${entry.status}.`);
   }
-  if (entry.userId === actingUser.id) {
+
+  const isAdmin = actingUser.role === Role.admin;
+  if (entry.userId === actingUser.id && !isAdmin) {
     throw new ContributionResolutionError(403, "You can't confirm or reject your own contribution.");
   }
 
   const isNamedCounterpart = entry.event?.counterpartId === actingUser.id;
-  const isAdmin = actingUser.role === Role.admin;
   if (!isNamedCounterpart && !isAdmin) {
     throw new ContributionResolutionError(
       403,
