@@ -149,6 +149,9 @@ model Profile {
   expertiseAreas        String[]       @default([])
   learningTopics        String?
   interestAreas         InterestArea[] @default([])
+  // How the member can participate (§3.1) — collected at application time
+  // only until now; also editable here since availability changes over time.
+  availability          ApplicationAvailability[] @default([])
   skills                ProfileSkill[]
   // Directory visibility prefs (§4.3/§4.5/§9) — enforced server-side in
   // lib/members-server.ts, not just hidden client-side.

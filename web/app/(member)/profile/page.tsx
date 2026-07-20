@@ -47,6 +47,7 @@ export default async function ProfilePage() {
           expertiseAreas: joinList(profile.expertiseAreas),
           learningTopics: profile.learningTopics ?? "",
           interestAreas: profile.interestAreas,
+          availability: profile.availability,
           listInDirectory: profile.listInDirectory,
           showSpecialtyLocation: profile.showSpecialtyLocation,
         }}
