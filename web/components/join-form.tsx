@@ -339,7 +339,7 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
           )}
         />
 
-        {!isFriendTier && (
+        {!isFriendTier && phase !== AdmissionPhase.founding_cohort && (
           <FormField
             control={form.control}
             name="referral"
