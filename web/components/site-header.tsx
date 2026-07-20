@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { KeyRound } from "lucide-react";
+import { KeyRound, Rss } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { NavDropdown } from "@/components/nav-dropdown";
@@ -101,9 +101,14 @@ export async function SiteHeader() {
           <>
             <div className="hidden items-center gap-2 lg:flex">
               <Button variant="ghost" size="sm" className="text-base font-semibold" asChild>
-                <Link href="/dashboard">Dashboard</Link>
+                <Link href="/whats-new">What&apos;s New</Link>
               </Button>
             </div>
+            <Button variant="ghost" size="icon" className="lg:hidden" aria-label="What's New" asChild>
+              <Link href="/whats-new">
+                <Rss className="h-[18px] w-[18px]" />
+              </Link>
+            </Button>
             {user.role === "admin" && <AdminReviewIcon />}
             <NotificationBell />
             <UserMenu name={user.name ?? user.email} avatarUrl={profile?.avatarUrl ?? null} />

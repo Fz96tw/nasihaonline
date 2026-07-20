@@ -25,6 +25,7 @@ export function FeedRow({ item }: { item: FeedItem }) {
             </span>
           </div>
           <div className="mt-0.5 text-sm font-semibold">{item.title}</div>
+          <div className="mt-0.5 truncate text-sm text-muted-foreground">{item.excerpt}</div>
           {item.imageUrl && (
             // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
             <img
@@ -33,7 +34,6 @@ export function FeedRow({ item }: { item: FeedItem }) {
               className="mt-2 max-h-48 w-full rounded-md object-cover"
             />
           )}
-          <div className="mt-0.5 truncate text-xs text-muted-foreground">{item.excerpt}</div>
         </div>
       </Link>
     </li>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { Rss } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getFeedPage } from "@/lib/feed-server";
 import { FeedList } from "@/components/feed/feed-list";
@@ -18,7 +19,10 @@ export default async function WhatsNewPage() {
   return (
     <main className="mx-auto flex max-w-[720px] flex-col gap-6 p-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">What&apos;s New</h1>
+        <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
+          <Rss className="h-7 w-7" aria-hidden="true" />
+          What&apos;s New
+        </h1>
         <p className="text-muted-foreground">Recent activity across events, blog posts, the library, forums, and announcements.</p>
       </div>
 

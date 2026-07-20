@@ -36,9 +36,9 @@ export const MEMBER_NAV_SECTIONS: NavSection[] = [
     title: "Main",
     items: [
       { label: "What's New", href: "/whats-new", icon: Rss },
-      { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+      { label: "My Dashboard", href: "/dashboard", icon: LayoutDashboard },
       { label: "My Profile", href: "/profile", icon: User },
-      { label: "Knowledge Hours", href: "/contributions", icon: Award },
+      { label: "My Knowledge Hours", href: "/contributions", icon: Award },
     ],
   },
   {
