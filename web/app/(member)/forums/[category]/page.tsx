@@ -79,9 +79,12 @@ export default async function ForumCategoryPage({
                   {thread.authorName ?? "A member"} · {formatDate(thread.createdAt)}
                 </span>
               </div>
-              <Badge variant="neutral">
-                {thread.replyCount} {thread.replyCount === 1 ? "reply" : "replies"}
-              </Badge>
+              <div className="flex flex-col items-end gap-1">
+                <Badge variant="neutral">
+                  {thread.replyCount} {thread.replyCount === 1 ? "reply" : "replies"}
+                </Badge>
+                <span className="text-xs text-muted-foreground">Active {formatDate(thread.lastActivityAt)}</span>
+              </div>
             </Link>
           ))}
         </div>
