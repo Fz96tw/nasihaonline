@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { DIRECTORY_TIERS, DIRECTORY_TIER_LABELS } from "@/lib/members";
 import { useDirectoryFilters, type DirectoryTierFilter } from "@/lib/stores/directory-filters";
+import { InterestAreaFilter } from "@/components/members/interest-area-filter";
 import { SkillFilter } from "@/components/members/skill-filter";
 
 export function DirectoryFiltersBar({ availableSkills }: { availableSkills: { id: string; name: string }[] }) {
@@ -50,6 +51,7 @@ export function DirectoryFiltersBar({ availableSkills }: { availableSkills: { id
       </Select>
 
       <SkillFilter options={availableSkills} />
+      <InterestAreaFilter />
     </div>
   );
 }

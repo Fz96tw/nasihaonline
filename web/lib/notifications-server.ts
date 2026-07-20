@@ -80,3 +80,10 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
     data: { readAt: new Date() },
   });
 }
+
+/** Deletes every already-read notification for this user ("clear read"), pruning the bell's list. */
+export async function clearReadNotifications(userId: string): Promise<void> {
+  await db.notification.deleteMany({
+    where: { recipientId: userId, readAt: { not: null } },
+  });
+}

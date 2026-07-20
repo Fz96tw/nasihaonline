@@ -8,8 +8,11 @@ import {
   NotificationType,
 } from "@/lib/generated/prisma/enums";
 import type { MeetingRequestModel } from "@/lib/generated/prisma/models/MeetingRequest";
+import { sendMeetingRequestEmail } from "@/lib/email";
 import { INBOX_TIERS } from "@/lib/members";
 import { createNotification } from "@/lib/notifications-server";
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
 /** The rate-card key that prices an accepted meeting request's spend side (§4.4, seeded in prisma/seed.ts). */
 const EXPERT_CONSULTATION_ACTIVITY_KEY = "expert_consultation";
@@ -66,11 +69,17 @@ export async function createMeetingRequest(
     },
   });
 
+  const link = `/inbox?item=${meetingRequest.id}`;
   await createNotification({
     recipientId: input.recipientId,
     type: NotificationType.meeting_request_received,
     message: `${sender?.name ?? "A member"} requested a meeting: "${input.topic}"`,
-    link: `/inbox?item=${meetingRequest.id}`,
+    link,
+  });
+  await sendMeetingRequestEmail(recipient.email, recipient.name ?? "there", {
+    subject: `New meeting request: ${input.topic}`,
+    message: `${sender?.name ?? "A member"} requested a meeting: "${input.topic}"`,
+    link: `${APP_URL}${link}`,
   });
 
   return meetingRequest;
@@ -112,46 +121,58 @@ export async function resolveMeetingRequest(
     throw new MeetingRequestError(409, `This meeting request is already ${meetingRequest.status}.`);
   }
 
-  const actor = await db.user.findUnique({ where: { id: actingUserId }, select: { name: true } });
+  const [actor, requester] = await Promise.all([
+    db.user.findUnique({ where: { id: actingUserId }, select: { name: true } }),
+    db.user.findUnique({ where: { id: meetingRequest.senderId }, select: { email: true, name: true } }),
+  ]);
   const actorName = actor?.name ?? "A member";
+  const link = `/inbox?item=${meetingRequestId}`;
 
   if (action.action === "decline") {
-    return db.$transaction(async (tx) => {
+    const message = `${actorName} declined your meeting request: "${meetingRequest.topic}"`;
+    const updated = await db.$transaction(async (tx) => {
       const updated = await tx.meetingRequest.update({
         where: { id: meetingRequestId },
         data: { status: MeetingRequestStatus.declined },
       });
       await createNotification(
-        {
-          recipientId: meetingRequest.senderId,
-          type: NotificationType.meeting_request_declined,
-          message: `${actorName} declined your meeting request: "${meetingRequest.topic}"`,
-          link: `/inbox?item=${meetingRequestId}`,
-        },
+        { recipientId: meetingRequest.senderId, type: NotificationType.meeting_request_declined, message, link },
         tx,
       );
       return updated;
     });
+    if (requester) {
+      await sendMeetingRequestEmail(requester.email, requester.name ?? "there", {
+        subject: `Meeting request declined: ${meetingRequest.topic}`,
+        message,
+        link: `${APP_URL}${link}`,
+      });
+    }
+    return updated;
   }
 
   if (action.action === "reschedule") {
     const proposedTimes = parseProposedTimes(action.proposedTimes);
-    return db.$transaction(async (tx) => {
+    const message = `${actorName} proposed a new time for: "${meetingRequest.topic}"`;
+    const updated = await db.$transaction(async (tx) => {
       const updated = await tx.meetingRequest.update({
         where: { id: meetingRequestId },
         data: { status: MeetingRequestStatus.rescheduled, proposedTimes, message: action.message },
       });
       await createNotification(
-        {
-          recipientId: meetingRequest.senderId,
-          type: NotificationType.meeting_request_rescheduled,
-          message: `${actorName} proposed a new time for: "${meetingRequest.topic}"`,
-          link: `/inbox?item=${meetingRequestId}`,
-        },
+        { recipientId: meetingRequest.senderId, type: NotificationType.meeting_request_rescheduled, message, link },
         tx,
       );
       return updated;
     });
+    if (requester) {
+      await sendMeetingRequestEmail(requester.email, requester.name ?? "there", {
+        subject: `New time proposed: ${meetingRequest.topic}`,
+        message,
+        link: `${APP_URL}${link}`,
+      });
+    }
+    return updated;
   }
 
   const [spendRule, earnRule] = await Promise.all([
@@ -165,7 +186,9 @@ export async function resolveMeetingRequest(
     throw new MeetingRequestError(409, "Knowledge discussion rate isn't configured.");
   }
 
-  return db.$transaction(async (tx) => {
+  const acceptedMessage = `${actorName} accepted your meeting request: "${meetingRequest.topic}"`;
+
+  const updated = await db.$transaction(async (tx) => {
     const spendEvent = await tx.contributionEvent.create({
       data: {
         ruleId: spendRule.id,
@@ -222,12 +245,22 @@ export async function resolveMeetingRequest(
       {
         recipientId: meetingRequest.senderId,
         type: NotificationType.meeting_request_accepted,
-        message: `${actorName} accepted your meeting request: "${meetingRequest.topic}"`,
-        link: `/inbox?item=${meetingRequestId}`,
+        message: acceptedMessage,
+        link,
       },
       tx,
     );
 
     return updated;
   });
+
+  if (requester) {
+    await sendMeetingRequestEmail(requester.email, requester.name ?? "there", {
+      subject: `Meeting request accepted: ${meetingRequest.topic}`,
+      message: acceptedMessage,
+      link: `${APP_URL}${link}`,
+    });
+  }
+
+  return updated;
 }

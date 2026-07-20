@@ -2,9 +2,12 @@ import "server-only";
 import { db } from "@/lib/db";
 import { NotificationType } from "@/lib/generated/prisma/enums";
 import type { InboxListItem, InboxThread } from "@/lib/inbox";
+import { sendInboxMessageEmail } from "@/lib/email";
 import { INBOX_TIERS } from "@/lib/members";
 import { createNotification } from "@/lib/notifications-server";
 import { getProfileAvatarUrl } from "@/lib/storage";
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
 const SNIPPET_LENGTH = 140;
 
@@ -186,11 +189,18 @@ export async function sendMessage(
     const message = await db.inboxMessage.create({
       data: { senderId, recipientId, subject: input.subject, body: input.body, parentId: null },
     });
+    const link = `/inbox?item=${message.id}`;
     await createNotification({
       recipientId,
       type: NotificationType.inbox_message,
       message: input.subject ? `${senderName} sent you a message: "${input.subject}"` : `${senderName} sent you a message`,
-      link: `/inbox?item=${message.id}`,
+      link,
+    });
+    await sendInboxMessageEmail(recipient.email, recipient.name ?? "there", {
+      senderName,
+      subject: input.subject,
+      snippet: truncate(input.body),
+      threadUrl: `${APP_URL}${link}`,
     });
     return { id: message.id, threadId: message.id };
   }
@@ -205,15 +215,25 @@ export async function sendMessage(
   }
 
   const recipientId = root.senderId === senderId ? root.recipientId : root.senderId;
+  const recipient = await db.user.findUnique({ where: { id: recipientId }, select: { email: true, name: true } });
 
   const message = await db.inboxMessage.create({
     data: { senderId, recipientId, subject: null, body: input.body, parentId: rootId },
   });
+  const link = `/inbox?item=${rootId}`;
   await createNotification({
     recipientId,
     type: NotificationType.inbox_message,
     message: `${senderName} replied${root.subject ? ` to "${root.subject}"` : ""}`,
-    link: `/inbox?item=${rootId}`,
+    link,
   });
+  if (recipient) {
+    await sendInboxMessageEmail(recipient.email, recipient.name ?? "there", {
+      senderName,
+      subject: root.subject,
+      snippet: truncate(input.body),
+      threadUrl: `${APP_URL}${link}`,
+    });
+  }
   return { id: message.id, threadId: rootId };
 }

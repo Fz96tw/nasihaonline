@@ -1,7 +1,7 @@
 // Client-safe Directory types/constants (PRD §4.5) — kept separate from
 // members-server.ts so client components can import them without pulling
 // in the "server-only" query logic.
-import { Tier } from "@/lib/generated/prisma/enums";
+import { ApplicationAvailability, InterestArea, Tier } from "@/lib/generated/prisma/enums";
 import { TIER_LABELS } from "@/lib/validation/application-review";
 
 // Every tier is listed/filterable in the Directory (§4.5), Friend included
@@ -29,6 +29,8 @@ export type DirectoryMember = {
   careerStage: string | null;
   learningTopics: string | null;
   bio: string | null;
+  interestAreas: InterestArea[];
+  availability: ApplicationAvailability[];
 };
 
 export const DIRECTORY_TIER_LABELS: Record<Tier, string> = TIER_LABELS;

@@ -42,6 +42,15 @@ async function markAllRead(): Promise<void> {
   if (!response.ok) throw new Error("Failed to mark all notifications read");
 }
 
+async function clearRead(): Promise<void> {
+  const csrfToken = await getCsrfToken();
+  const response = await fetch("/api/notifications/clear-read", {
+    method: "DELETE",
+    headers: { "x-csrf-token": csrfToken },
+  });
+  if (!response.ok) throw new Error("Failed to clear read notifications");
+}
+
 /**
  * Homegrown in-app notification bell (§4.10, §8 — request/response polling,
  * no socket). Self-contained (fetch + setInterval) rather than react-query:
@@ -95,6 +104,16 @@ export function NotificationBell() {
     }
   }
 
+  async function handleClearRead() {
+    const previousItems = items;
+    setItems((prev) => prev.filter((item) => item.unread));
+    try {
+      await clearRead();
+    } catch {
+      setItems(previousItems);
+    }
+  }
+
   return (
     <DropdownMenu onOpenChange={(open) => open && refresh()}>
       <DropdownMenuTrigger asChild>
@@ -112,39 +131,55 @@ export function NotificationBell() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80">
-        <div className="flex items-center justify-between px-2 py-1.5">
+        <div className="flex items-center justify-between gap-2 px-2 py-1.5">
           <DropdownMenuLabel className="p-0">Notifications</DropdownMenuLabel>
-          {unreadCount > 0 ? (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.preventDefault();
-                handleMarkAllRead();
-              }}
-              className="text-xs font-medium text-primary hover:underline"
-            >
-              Mark all read
-            </button>
-          ) : null}
+          <div className="flex items-center gap-2">
+            {items.some((item) => !item.unread) ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  handleClearRead();
+                }}
+                className="text-xs font-medium text-muted-foreground hover:underline"
+              >
+                Clear read
+              </button>
+            ) : null}
+            {unreadCount > 0 ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  handleMarkAllRead();
+                }}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Mark all read
+              </button>
+            ) : null}
+          </div>
         </div>
         <DropdownMenuSeparator />
         {items.length === 0 ? (
           <div className="px-2 py-6 text-center text-sm text-muted-foreground">No notifications yet.</div>
         ) : (
-          items.map((notification) => (
-            <DropdownMenuItem
-              key={notification.id}
-              onSelect={() => handleSelect(notification)}
-              className="flex flex-col items-start gap-0.5 whitespace-normal py-2"
-            >
-              <span className={cn("text-sm", notification.unread ? "font-semibold" : "text-muted-foreground")}>
-                {notification.message}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {new Date(notification.createdAt).toLocaleString()}
-              </span>
-            </DropdownMenuItem>
-          ))
+          <div className="max-h-96 overflow-y-auto">
+            {items.map((notification) => (
+              <DropdownMenuItem
+                key={notification.id}
+                onSelect={() => handleSelect(notification)}
+                className="flex flex-col items-start gap-0.5 whitespace-normal py-2"
+              >
+                <span className={cn("text-sm", notification.unread ? "font-semibold" : "text-muted-foreground")}>
+                  {notification.message}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(notification.createdAt).toLocaleString()}
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </div>
         )}
       </DropdownMenuContent>
     </DropdownMenu>

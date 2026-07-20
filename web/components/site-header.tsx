@@ -37,7 +37,7 @@ export async function SiteHeader() {
           </span>
         </span>
       </Link>
-      <div className="hidden items-center gap-6 self-stretch lg:flex">
+      <div className="hidden items-center gap-3 self-stretch lg:flex">
         <NavDropdown label="Our Mission">
           <DropdownMenuItem className="text-base" asChild>
             <Link href="/about">About</Link>

@@ -90,11 +90,15 @@ export function MemberSidebar({
 
           {MEMBER_NAV_SECTIONS.map((section) => (
             <div key={section.title} className="flex flex-col gap-1">
-              {expanded && (
-                <div className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {section.title}
-                </div>
-              )}
+              <div
+                className={cn(
+                  "truncate px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground",
+                  !expanded && "invisible",
+                )}
+                aria-hidden={!expanded}
+              >
+                {section.title}
+              </div>
               {section.items.map((item) => {
                 const isActive = item.href != null && pathname.startsWith(item.href);
                 const Icon = item.icon;
@@ -147,8 +151,14 @@ export function MemberSidebar({
           ))}
 
           <div className="mt-auto pt-4">
-            {canModerate && !isAdmin && expanded && (
-              <div className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {canModerate && !isAdmin && (
+              <div
+                className={cn(
+                  "truncate px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground",
+                  !expanded && "invisible",
+                )}
+                aria-hidden={!expanded}
+              >
                 Action Needed
               </div>
             )}

@@ -38,6 +38,7 @@ export function DirectoryGrid({
   const search = useDirectoryFilters((state) => state.search);
   const tier = useDirectoryFilters((state) => state.tier);
   const skillIds = useDirectoryFilters((state) => state.skillIds);
+  const interestAreas = useDirectoryFilters((state) => state.interestAreas);
   const debouncedSearch = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
 
   const { data: members, isLoading } = useQuery({
@@ -51,9 +52,14 @@ export function DirectoryGrid({
     return members.filter((member) => {
       if (tier !== "all" && member.tier !== tier) return false;
       if (skillIds.length > 0 && !member.skills.some((skill) => skillIds.includes(skill.id))) return false;
+      if (
+        interestAreas.length > 0 &&
+        !member.interestAreas.some((area) => interestAreas.includes(area))
+      )
+        return false;
       return true;
     });
-  }, [members, tier, skillIds]);
+  }, [members, tier, skillIds, interestAreas]);
 
   if (isLoading) {
     return (

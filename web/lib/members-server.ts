@@ -37,6 +37,8 @@ function toDirectoryMember(profile: ProfileWithUser): DirectoryMember {
     careerStage: profile.careerStage,
     learningTopics: profile.learningTopics,
     bio: profile.bio,
+    interestAreas: profile.interestAreas,
+    availability: profile.availability,
   };
 }
 

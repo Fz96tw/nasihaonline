@@ -3,7 +3,9 @@
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT, type DirectoryMember } from "@/lib/members";
+import { AVAILABILITY_LABELS } from "@/lib/validation/application";
 
 /**
  * Full-detail view of a Directory card (§4.5) — the one field the card
@@ -87,6 +89,36 @@ export function MemberProfileDialog({
             <p className="whitespace-pre-wrap text-sm text-muted-foreground">
               {member.learningTopics}
             </p>
+          </div>
+        )}
+
+        {member.interestAreas.length > 0 && (
+          <div>
+            <div className="text-xs font-semibold uppercase text-muted-foreground">
+              Interest Areas
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {member.interestAreas.map((area) => (
+                <Badge key={area} variant="neutral">
+                  {INTEREST_AREA_LABELS[area]}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {member.availability.length > 0 && (
+          <div>
+            <div className="text-xs font-semibold uppercase text-muted-foreground">
+              Availability
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {member.availability.map((value) => (
+                <Badge key={value} variant="neutral">
+                  {AVAILABILITY_LABELS[value]}
+                </Badge>
+              ))}
+            </div>
           </div>
         )}
       </DialogContent>

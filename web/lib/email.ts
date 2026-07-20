@@ -190,6 +190,66 @@ export async function sendSurveyInviteEmail(
   }
 }
 
+/**
+ * Sent to the recipient whenever a new inbox_message Notification is created
+ * (§4.7) — a fresh top-level message or a reply on an existing thread.
+ * Best-effort, same as every other function here: the InboxMessage +
+ * Notification rows already exist by the time this runs.
+ */
+export async function sendInboxMessageEmail(
+  to: string,
+  name: string,
+  message: { senderName: string; subject: string | null; snippet: string; threadUrl: string },
+) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping inbox message email to ${to}`);
+    return;
+  }
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: message.subject ? `New message: ${message.subject}` : `New message from ${message.senderName}`,
+      text: `Hi ${name},\n\n${message.senderName} sent you a message${
+        message.subject ? ` — "${message.subject}"` : ""
+      }:\n\n"${message.snippet}"\n\nReply here:\n${message.threadUrl}\n\n— The NASIHA Team`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send inbox message email", error);
+  }
+}
+
+/**
+ * Sent to whichever party a meeting_request_received/accepted/declined/
+ * rescheduled Notification targets (§4.7) — one shared shape since all four
+ * events are a single line of context plus a link back to the thread, only
+ * the subject/copy differs per call site. Best-effort, same as every other
+ * function here: the MeetingRequest + Notification rows already exist by
+ * the time this runs.
+ */
+export async function sendMeetingRequestEmail(
+  to: string,
+  name: string,
+  request: { subject: string; message: string; link: string },
+) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping meeting request email to ${to}`);
+    return;
+  }
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: request.subject,
+      text: `Hi ${name},\n\n${request.message}\n\nView it here:\n${request.link}\n\n— The NASIHA Team`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send meeting request email", error);
+  }
+}
+
 export async function sendContactMessageEmail(message: {
   name: string;
   email: string;
