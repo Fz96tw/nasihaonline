@@ -20,11 +20,13 @@ function authorOf(user: { name: string | null; profile: { avatarUrl: string | nu
   return { name: user.name, avatarUrl: getProfileAvatarUrl(user.profile?.avatarUrl ?? null) };
 }
 
-// Board Announcements deliberately mask the sending admin behind a fixed
-// institutional identity on every member-facing surface (feed row, detail
-// page, email) — the real sender (Announcement.authorId) is only ever shown
-// unmasked in the admin history list (lib/announcements-server.ts).
-const ANNOUNCEMENT_SENDER = { name: "NASIHA Board", avatarUrl: "/images/nasihalogo-cropped.png" };
+// Every admin-broadcast content type (Board Announcements, Surveys)
+// deliberately masks the sending admin behind a fixed institutional
+// identity on every member-facing surface (feed row, detail page, email) —
+// the real sender (Announcement.authorId / Survey.authorId) is only ever
+// shown unmasked in the admin history list (lib/announcements-server.ts,
+// lib/surveys-server.ts).
+const BOARD_SENDER = { name: "NASIHA Board", avatarUrl: "/images/nasihalogo-cropped.png" };
 
 /**
  * "What's New" feed (member-only) — merges five domains at query time
@@ -108,22 +110,15 @@ export async function getFeedPage(params: {
     // the member audience — a scheduled-but-not-yet-open or closed survey
     // has nothing for a member to do here, same "only show what's
     // actionable/live" rationale as Announcement's sentAt+retractedAt
-    // filter. Unlike Announcement, the author isn't masked — surveys don't
-    // have that "institutional voice" convention.
+    // filter. No author select needed — like Announcement, the real sending
+    // admin is masked behind BOARD_SENDER on this member-facing surface.
     db.survey.findMany({
       where: {
         status: SurveyStatus.open,
         audienceMembers: true,
         ...(before ? { openedAt: { lt: before } } : {}),
       },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        heroImageUrl: true,
-        openedAt: true,
-        author: { select: AUTHOR_SELECT },
-      },
+      select: { id: true, title: true, description: true, heroImageUrl: true, openedAt: true },
       orderBy: { openedAt: "desc" },
       take: pageSize,
     }),
@@ -179,7 +174,7 @@ export async function getFeedPage(params: {
       href: `/whats-new/announcements/${announcement.id}`,
       // sentAt is never null here — the where clause above excludes drafts.
       timestamp: (announcement.sentAt as Date).toISOString(),
-      author: ANNOUNCEMENT_SENDER,
+      author: BOARD_SENDER,
       imageUrl: getAnnouncementHeroImageUrl(announcement.heroImageUrl),
     })),
     ...surveys.map((survey): FeedItem => ({
@@ -190,7 +185,7 @@ export async function getFeedPage(params: {
       href: withFeedRef(`/surveys/${survey.id}`),
       // openedAt is never null here — the where clause above filters to status: open.
       timestamp: (survey.openedAt as Date).toISOString(),
-      author: authorOf(survey.author),
+      author: BOARD_SENDER,
       imageUrl: getSurveyHeroImageUrl(survey.heroImageUrl),
     })),
   ].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
@@ -230,7 +225,7 @@ export async function getSentAnnouncement(id: string): Promise<AnnouncementDetai
     title: announcement.title,
     body: announcement.body,
     sentAt: announcement.sentAt.toISOString(),
-    author: ANNOUNCEMENT_SENDER,
+    author: BOARD_SENDER,
     imageUrl: getAnnouncementHeroImageUrl(announcement.heroImageUrl),
   };
 }

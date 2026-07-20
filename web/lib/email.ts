@@ -153,12 +153,14 @@ export async function sendAnnouncementEmail(
 /**
  * Sent to each SurveyInvitation recipient once a survey is scheduled/opened.
  * respondUrl already carries the recipient's unique token (the magic link
- * that authenticates their response — no login, member or not), so this is
- * a plain text email like sendEventRegistrationConfirmationEmail rather
- * than the html body sendAnnouncementEmail uses, since there's no cover
- * image to render. Best-effort, same rationale as every other function
- * here: the Survey + SurveyInvitation rows already exist by the time this
- * runs, so a failed/unconfigured send is non-fatal.
+ * that authenticates their response — no login, member or not). `from` is
+ * overridden to "NASIHA Board" (rather than this file's default "NASIHA")
+ * to match the masked institutional sender identity shown everywhere else
+ * an admin-authored survey appears — the feed row, same rationale as
+ * sendAnnouncementEmail's identical override (see lib/feed-server.ts's
+ * BOARD_SENDER). Best-effort, same rationale as every other function here:
+ * the Survey + SurveyInvitation rows already exist by the time this runs,
+ * so a failed/unconfigured send is non-fatal.
  */
 export async function sendSurveyInviteEmail(
   to: string,
@@ -177,7 +179,7 @@ export async function sendSurveyInviteEmail(
 
   try {
     await resend.emails.send({
-      from: FROM_EMAIL,
+      from: "NASIHA Board <no-reply@mail.nasihaforyou.org>",
       to,
       subject: `Survey: ${survey.title}`,
       text: `${survey.title}\n${survey.description ? `\n${survey.description}\n` : ""}\nShare your feedback here:\n${survey.respondUrl}\n\n— The NASIHA Team`,
