@@ -292,6 +292,29 @@ export function getAnnouncementHeroImageUrl(key: string | null): string | null {
 }
 
 /**
+ * Same validation/storage shape as uploadAnnouncementHeroImage, for a
+ * Survey's single optional cover image — shown on the compose form, the
+ * invite email, the public respond page, and the What's New feed row.
+ * Returns the object key to persist on Survey.heroImageUrl.
+ */
+export async function uploadSurveyHeroImage(file: File): Promise<string> {
+  const { buffer, ext, mime } = await validateImageUpload(file);
+
+  await ensureBucket(BUCKET_ATTACHMENTS);
+  const key = `survey-hero/${crypto.randomUUID()}.${ext}`;
+  const minio = getClient();
+  await minio.putObject(BUCKET_ATTACHMENTS, key, buffer, buffer.length, {
+    "Content-Type": mime,
+  });
+  return key;
+}
+
+export function getSurveyHeroImageUrl(key: string | null): string | null {
+  if (!key) return null;
+  return `/api/surveys/hero/${key}`;
+}
+
+/**
  * Fetches a stored blog hero image (attachments/ bucket) for streaming
  * through the /api/blog/hero proxy — same shape/rationale as
  * getAvatarObject, just the other bucket.

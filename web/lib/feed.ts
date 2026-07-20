@@ -3,7 +3,7 @@
 // lib/blog.ts's split between plain data shapes (this file) and DB-touching
 // queries (lib/feed-server.ts).
 
-export type FeedItemType = "event" | "post" | "library" | "forum_thread" | "announcement";
+export type FeedItemType = "event" | "post" | "library" | "forum_thread" | "announcement" | "survey";
 
 export const FEED_TYPE_LABELS: Record<FeedItemType, string> = {
   event: "Event",
@@ -11,6 +11,7 @@ export const FEED_TYPE_LABELS: Record<FeedItemType, string> = {
   library: "Library",
   forum_thread: "Forum",
   announcement: "Announcement",
+  survey: "Survey",
 };
 
 export type FeedItem = {

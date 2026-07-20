@@ -89,6 +89,11 @@ const ADMIN_SECTIONS = [
     title: "Announcements",
     description: "Compose and send Board Announcements to every member.",
   },
+  {
+    href: "/admin/surveys",
+    title: "Surveys",
+    description: "Build and send surveys to members, donors, and event registrants.",
+  },
 ] as const;
 
 /**

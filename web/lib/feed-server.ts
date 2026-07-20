@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { KnowledgeStatus } from "@/lib/generated/prisma/enums";
-import { getProfileAvatarUrl, getPostHeroImageUrl, getAnnouncementHeroImageUrl } from "@/lib/storage";
+import { KnowledgeStatus, SurveyStatus } from "@/lib/generated/prisma/enums";
+import { getProfileAvatarUrl, getPostHeroImageUrl, getAnnouncementHeroImageUrl, getSurveyHeroImageUrl } from "@/lib/storage";
 import { excerptFromHtml } from "@/lib/blog";
 import { withFeedRef, type FeedItem, type FeedCursor } from "@/lib/feed";
 
@@ -47,7 +47,7 @@ export async function getFeedPage(params: {
   const pageSize = params.pageSize ?? DEFAULT_PAGE_SIZE;
   const before = params.cursor ? new Date(params.cursor.ts) : null;
 
-  const [events, posts, libraryItems, forumThreads, announcements] = await Promise.all([
+  const [events, posts, libraryItems, forumThreads, announcements, surveys] = await Promise.all([
     db.event.findMany({
       where: before ? { createdAt: { lt: before } } : {},
       select: { id: true, title: true, description: true, createdAt: true, host: { select: AUTHOR_SELECT } },
@@ -104,6 +104,29 @@ export async function getFeedPage(params: {
       orderBy: { sentAt: "desc" },
       take: pageSize,
     }),
+    // Only surveys currently accepting responses (status: open) and sent to
+    // the member audience — a scheduled-but-not-yet-open or closed survey
+    // has nothing for a member to do here, same "only show what's
+    // actionable/live" rationale as Announcement's sentAt+retractedAt
+    // filter. Unlike Announcement, the author isn't masked — surveys don't
+    // have that "institutional voice" convention.
+    db.survey.findMany({
+      where: {
+        status: SurveyStatus.open,
+        audienceMembers: true,
+        ...(before ? { openedAt: { lt: before } } : {}),
+      },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        heroImageUrl: true,
+        openedAt: true,
+        author: { select: AUTHOR_SELECT },
+      },
+      orderBy: { openedAt: "desc" },
+      take: pageSize,
+    }),
   ]);
 
   const merged: FeedItem[] = [
@@ -158,6 +181,17 @@ export async function getFeedPage(params: {
       timestamp: (announcement.sentAt as Date).toISOString(),
       author: ANNOUNCEMENT_SENDER,
       imageUrl: getAnnouncementHeroImageUrl(announcement.heroImageUrl),
+    })),
+    ...surveys.map((survey): FeedItem => ({
+      type: "survey",
+      id: survey.id,
+      title: survey.title,
+      excerpt: survey.description ? truncate(survey.description) : "Share your feedback.",
+      href: withFeedRef(`/surveys/${survey.id}`),
+      // openedAt is never null here — the where clause above filters to status: open.
+      timestamp: (survey.openedAt as Date).toISOString(),
+      author: authorOf(survey.author),
+      imageUrl: getSurveyHeroImageUrl(survey.heroImageUrl),
     })),
   ].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 

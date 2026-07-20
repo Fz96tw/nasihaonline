@@ -150,6 +150,44 @@ export async function sendAnnouncementEmail(
   }
 }
 
+/**
+ * Sent to each SurveyInvitation recipient once a survey is scheduled/opened.
+ * respondUrl already carries the recipient's unique token (the magic link
+ * that authenticates their response — no login, member or not), so this is
+ * a plain text email like sendEventRegistrationConfirmationEmail rather
+ * than the html body sendAnnouncementEmail uses, since there's no cover
+ * image to render. Best-effort, same rationale as every other function
+ * here: the Survey + SurveyInvitation rows already exist by the time this
+ * runs, so a failed/unconfigured send is non-fatal.
+ */
+export async function sendSurveyInviteEmail(
+  to: string,
+  survey: { title: string; description: string | null; heroImageUrl: string | null; respondUrl: string },
+) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping survey invite email to ${to}`);
+    return;
+  }
+
+  const safeTitle = escapeHtml(survey.title);
+  const safeDescription = survey.description ? escapeHtml(survey.description).replace(/\n/g, "<br>") : "";
+  const imageHtml = survey.heroImageUrl
+    ? `<img src="${survey.heroImageUrl}" alt="" style="max-width:100%;border-radius:8px;margin-bottom:16px" />`
+    : "";
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: `Survey: ${survey.title}`,
+      text: `${survey.title}\n${survey.description ? `\n${survey.description}\n` : ""}\nShare your feedback here:\n${survey.respondUrl}\n\n— The NASIHA Team`,
+      html: `<div>${imageHtml}<h1>${safeTitle}</h1>${safeDescription ? `<p>${safeDescription}</p>` : ""}<p><a href="${survey.respondUrl}">Take the survey</a></p></div>`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send survey invite email", error);
+  }
+}
+
 export async function sendContactMessageEmail(message: {
   name: string;
   email: string;
