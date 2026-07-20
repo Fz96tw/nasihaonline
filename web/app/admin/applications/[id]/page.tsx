@@ -4,7 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { STATUS_LABELS, STATUS_BADGE_VARIANT } from "@/lib/applications";
 import { TIER_LABELS } from "@/lib/validation/application-review";
-import { CAREER_STAGE_LABELS, AVAILABILITY_LABELS, AREA_OF_INTEREST_LABELS } from "@/lib/validation/application";
+import { CAREER_STAGE_LABELS, AVAILABILITY_LABELS } from "@/lib/validation/application";
 import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -83,10 +83,6 @@ export default async function AdminApplicationDetailPage({
             <Field
               label="Availability"
               value={application.availability.map((v) => AVAILABILITY_LABELS[v]).join(", ")}
-            />
-            <Field
-              label="Area of interest"
-              value={application.areaOfInterest.map((v) => AREA_OF_INTEREST_LABELS[v]).join(", ")}
             />
             <Field
               label="Interest areas"

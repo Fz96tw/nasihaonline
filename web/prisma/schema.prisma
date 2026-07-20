@@ -218,18 +218,10 @@ enum ApplicationAvailability {
   online_review
 }
 
-enum AreaOfInterest {
-  healthcare
-  science
-  law
-  business
-  it
-}
-
-// Granular interest tags (distinct from the broad AreaOfInterest categories
-// above) — a fixed, admin-curated list shown as a multi-select on both the
-// join application and the profile edit page. General-purpose by design
-// since Nasiha's scope has broadened beyond medicine to any discipline.
+// Fixed, admin-curated interest tags shown as a multi-select on both the
+// join application and the profile edit page. Supersedes the old, narrower
+// AreaOfInterest categorization (healthcare/science/law/business/it),
+// removed in favor of this single list.
 enum InterestArea {
   arts_crafts
   basic_science_research
@@ -240,16 +232,13 @@ enum InterestArea {
   data_analytics
   e_learning
   education
-  engineering
   finance_investing
-  government_public_policy
   health_wellness
   health_tech
   healthcare
   leadership_management
   literature_writing
   marketing_sales
-  nonprofit_social_impact
   science_philosophy
   sustainability_environment
   tech_development
@@ -351,7 +340,6 @@ model MembershipApplication {
   // validation regardless of DB nullability.
   careerStage                  CareerStage?
   availability                 ApplicationAvailability[]
-  areaOfInterest               AreaOfInterest[]
   interestAreas                InterestArea[]
   countryRegion                String
   referral                     String?

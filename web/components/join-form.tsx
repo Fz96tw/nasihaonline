@@ -29,7 +29,6 @@ import {
   AdmissionPhase,
   CareerStage,
   ApplicationAvailability,
-  AreaOfInterest,
   InterestArea,
   Tier,
 } from "@/lib/generated/prisma/enums";
@@ -42,7 +41,6 @@ import {
   type ApplicationFormValues,
   CAREER_STAGE_LABELS,
   AVAILABILITY_LABELS,
-  AREA_OF_INTEREST_LABELS,
 } from "@/lib/validation/application";
 
 const INTEREST_AREA_OPTIONS: TagOption[] = Object.values(InterestArea).map((value) => ({
@@ -58,7 +56,6 @@ const emptyValues: ApplicationFormValues = {
   requestedTier: "",
   careerStage: "" as CareerStage,
   availability: [],
-  areaOfInterest: [],
   interestAreas: [],
   countryRegion: "",
   referral: "",
@@ -296,35 +293,6 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
                       }
                     />
                     {AVAILABILITY_LABELS[value]}
-                  </label>
-                ))}
-              </div>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="areaOfInterest"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Area of interest</FormLabel>
-              <FormDescription>Select all that apply.</FormDescription>
-              <div className="flex flex-col gap-2">
-                {Object.values(AreaOfInterest).map((value) => (
-                  <label key={value} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={field.value.includes(value)}
-                      onCheckedChange={(checked) =>
-                        field.onChange(
-                          checked
-                            ? [...field.value, value]
-                            : field.value.filter((v) => v !== value)
-                        )
-                      }
-                    />
-                    {AREA_OF_INTEREST_LABELS[value]}
                   </label>
                 ))}
               </div>

@@ -46,7 +46,6 @@ export async function autoSubmitFriendApplication({
       professionalTitle: "",
       careerStage: null,
       availability: [],
-      areaOfInterest: [],
       countryRegion: "",
       referral: null,
       whyJoin: "",
