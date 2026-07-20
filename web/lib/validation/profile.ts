@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { InterestArea } from "@/lib/generated/prisma/enums";
 
 /**
  * Client-facing form shape: expertiseAreas is split between tagged
@@ -15,6 +16,7 @@ export const profileFormSchema = z.object({
   skillIds: z.array(z.string()).max(30),
   expertiseAreas: z.string().trim().max(500),
   learningTopics: z.string().trim().max(2000),
+  interestAreas: z.array(z.nativeEnum(InterestArea)),
   listInDirectory: z.boolean(),
   showSpecialtyLocation: z.boolean(),
 });
@@ -49,6 +51,7 @@ export const profilePatchSchema = z.object({
   skillIds: z.array(z.string()).max(30),
   expertiseAreas: z.array(z.string().trim().min(1).max(80)).max(30),
   learningTopics: z.string().trim().max(2000),
+  interestAreas: z.array(z.nativeEnum(InterestArea)),
   listInDirectory: z.boolean(),
   showSpecialtyLocation: z.boolean(),
 });

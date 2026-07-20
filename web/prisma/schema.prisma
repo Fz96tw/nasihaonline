@@ -148,6 +148,7 @@ model Profile {
   // ProfileSkill. Not the source of truth for Directory tag filtering.
   expertiseAreas        String[]       @default([])
   learningTopics        String?
+  interestAreas         InterestArea[] @default([])
   skills                ProfileSkill[]
   // Directory visibility prefs (§4.3/§4.5/§9) — enforced server-side in
   // lib/members-server.ts, not just hidden client-side.
@@ -223,6 +224,36 @@ enum AreaOfInterest {
   law
   business
   it
+}
+
+// Granular interest tags (distinct from the broad AreaOfInterest categories
+// above) — a fixed, admin-curated list shown as a multi-select on both the
+// join application and the profile edit page. General-purpose by design
+// since Nasiha's scope has broadened beyond medicine to any discipline.
+enum InterestArea {
+  arts_crafts
+  basic_science_research
+  biotechnology
+  business
+  clinical_research
+  culinary_arts
+  data_analytics
+  e_learning
+  education
+  engineering
+  finance_investing
+  government_public_policy
+  health_wellness
+  health_tech
+  healthcare
+  leadership_management
+  literature_writing
+  marketing_sales
+  nonprofit_social_impact
+  science_philosophy
+  sustainability_environment
+  tech_development
+  travel_culture
 }
 
 enum ApplicationStatus {
@@ -321,6 +352,7 @@ model MembershipApplication {
   careerStage                  CareerStage?
   availability                 ApplicationAvailability[]
   areaOfInterest               AreaOfInterest[]
+  interestAreas                InterestArea[]
   countryRegion                String
   referral                     String?
   whyJoin                      String

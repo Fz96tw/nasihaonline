@@ -18,13 +18,20 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { ProfilePhotoUpload } from "@/components/profile/profile-photo-upload";
-import { SkillPicker, type SkillOption } from "@/components/profile/skill-picker";
+import { TagPicker, type TagOption } from "@/components/tag-picker";
+import { InterestArea } from "@/lib/generated/prisma/enums";
+import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
 import {
   profileFormSchema,
   splitList,
   type ProfileFormValues,
 } from "@/lib/validation/profile";
 import { getCsrfToken } from "@/lib/csrf-client";
+
+const INTEREST_AREA_OPTIONS: TagOption[] = Object.values(InterestArea).map((value) => ({
+  id: value,
+  name: INTEREST_AREA_LABELS[value],
+}));
 
 export function ProfileForm({
   email,
@@ -35,7 +42,7 @@ export function ProfileForm({
   email: string;
   avatarUrl: string | null;
   defaultValues: ProfileFormValues;
-  availableSkills: SkillOption[];
+  availableSkills: TagOption[];
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -66,6 +73,7 @@ export function ProfileForm({
           skillIds: values.skillIds,
           expertiseAreas: splitList(values.expertiseAreas),
           learningTopics: values.learningTopics,
+          interestAreas: values.interestAreas,
           listInDirectory: values.listInDirectory,
           showSpecialtyLocation: values.showSpecialtyLocation,
         }),
@@ -187,7 +195,7 @@ export function ProfileForm({
                 <FormItem>
                   <FormLabel>Areas of Expertise</FormLabel>
                   <FormControl>
-                    <SkillPicker options={availableSkills} value={field.value} onChange={field.onChange} />
+                    <TagPicker options={availableSkills} value={field.value} onChange={field.onChange} triggerLabel="Add a skill…" searchPlaceholder="Search skills…" emptyText="No skill found." />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -217,6 +225,27 @@ export function ProfileForm({
                   <FormLabel>Topics I Want to Learn</FormLabel>
                   <FormControl>
                     <Textarea rows={3} placeholder="e.g. Oncology, palliative care, healthcare leadership…" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="interestAreas"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Interest Areas</FormLabel>
+                  <FormControl>
+                    <TagPicker
+                      options={INTEREST_AREA_OPTIONS}
+                      value={field.value}
+                      onChange={field.onChange}
+                      triggerLabel="Add an interest area…"
+                      searchPlaceholder="Search interest areas…"
+                      emptyText="No interest area found."
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

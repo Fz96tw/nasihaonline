@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { STATUS_LABELS, STATUS_BADGE_VARIANT } from "@/lib/applications";
 import { TIER_LABELS } from "@/lib/validation/application-review";
 import { CAREER_STAGE_LABELS, AVAILABILITY_LABELS, AREA_OF_INTEREST_LABELS } from "@/lib/validation/application";
+import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminApplicationReviewForm } from "@/components/admin-application-review-form";
@@ -86,6 +87,10 @@ export default async function AdminApplicationDetailPage({
             <Field
               label="Area of interest"
               value={application.areaOfInterest.map((v) => AREA_OF_INTEREST_LABELS[v]).join(", ")}
+            />
+            <Field
+              label="Interest areas"
+              value={application.interestAreas.map((v) => INTEREST_AREA_LABELS[v]).join(", ")}
             />
             <Field label="Country / Region" value={application.countryRegion} />
             <Field label="Referral" value={application.referral} />

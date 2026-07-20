@@ -15,21 +15,29 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-export type SkillOption = { id: string; name: string };
+export type TagOption = { id: string; name: string };
 
 /**
- * Tag picker for the Skill catalog (PRD §4.3/§7.3) — members can only select
- * from `options` (seeded skills), not create new ones inline. Anything not
- * covered by the catalog belongs in the separate free-text fallback field.
+ * Generic combobox + badge multi-select: search/select from a fixed
+ * `options` list (no inline creation), selections shown as removable
+ * badges above the trigger. Used for the Skill catalog (PRD §4.3/§7.3) and
+ * for the fixed InterestArea list — both are curated lists too long for a
+ * plain checkbox group.
  */
-export function SkillPicker({
+export function TagPicker({
   options,
   value,
   onChange,
+  triggerLabel = "Add an item…",
+  searchPlaceholder = "Search…",
+  emptyText = "No results found.",
 }: {
-  options: SkillOption[];
+  options: TagOption[];
   value: string[];
-  onChange: (skillIds: string[]) => void;
+  onChange: (ids: string[]) => void;
+  triggerLabel?: string;
+  searchPlaceholder?: string;
+  emptyText?: string;
 }) {
   const [open, setOpen] = useState(false);
   const selected = options.filter((option) => value.includes(option.id));
@@ -67,15 +75,15 @@ export function SkillPicker({
             aria-expanded={open}
             className="w-full justify-between font-normal"
           >
-            Add a skill…
+            {triggerLabel}
             <ChevronsUpDown className="h-4 w-4 opacity-50" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
           <Command>
-            <CommandInput placeholder="Search skills…" />
+            <CommandInput placeholder={searchPlaceholder} />
             <CommandList>
-              <CommandEmpty>No skill found.</CommandEmpty>
+              <CommandEmpty>{emptyText}</CommandEmpty>
               <CommandGroup>
                 {options.map((option) => (
                   <CommandItem key={option.id} value={option.name} onSelect={() => toggle(option.id)}>

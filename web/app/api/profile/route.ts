@@ -62,6 +62,7 @@ export async function PATCH(request: Request) {
         careerStage: parsed.data.careerStage,
         expertiseAreas: parsed.data.expertiseAreas,
         learningTopics: parsed.data.learningTopics,
+        interestAreas: parsed.data.interestAreas,
         listInDirectory: parsed.data.listInDirectory,
         showSpecialtyLocation: parsed.data.showSpecialtyLocation,
         skills: {

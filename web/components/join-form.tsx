@@ -23,17 +23,20 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { TagPicker, type TagOption } from "@/components/tag-picker";
 import { CODE_OF_CONDUCT_PRINCIPLES } from "@/lib/legal";
 import {
   AdmissionPhase,
   CareerStage,
   ApplicationAvailability,
   AreaOfInterest,
+  InterestArea,
   Tier,
 } from "@/lib/generated/prisma/enums";
 import { ADMISSION_PHASE_LABELS, professionalReferenceRequired } from "@/lib/admission-phase";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { TIER_LABELS } from "@/lib/validation/application-review";
+import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
 import {
   applicationSchema,
   type ApplicationFormValues,
@@ -41,6 +44,11 @@ import {
   AVAILABILITY_LABELS,
   AREA_OF_INTEREST_LABELS,
 } from "@/lib/validation/application";
+
+const INTEREST_AREA_OPTIONS: TagOption[] = Object.values(InterestArea).map((value) => ({
+  id: value,
+  name: INTEREST_AREA_LABELS[value],
+}));
 
 const emptyValues: ApplicationFormValues = {
   firstName: "",
@@ -51,6 +59,7 @@ const emptyValues: ApplicationFormValues = {
   careerStage: "" as CareerStage,
   availability: [],
   areaOfInterest: [],
+  interestAreas: [],
   countryRegion: "",
   referral: "",
   whyJoin: "",
@@ -319,6 +328,30 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
                   </label>
                 ))}
               </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="interestAreas"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Interest areas (optional)</FormLabel>
+              <FormDescription>
+                Specific topics you&rsquo;d like to connect with others about.
+              </FormDescription>
+              <FormControl>
+                <TagPicker
+                  options={INTEREST_AREA_OPTIONS}
+                  value={field.value}
+                  onChange={field.onChange}
+                  triggerLabel="Add an interest area…"
+                  searchPlaceholder="Search interest areas…"
+                  emptyText="No interest area found."
+                />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}

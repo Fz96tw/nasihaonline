@@ -4,6 +4,7 @@ import {
   CareerStage,
   ApplicationAvailability,
   AreaOfInterest,
+  InterestArea,
   Tier,
 } from "@/lib/generated/prisma/enums";
 import { professionalReferenceRequired } from "@/lib/admission-phase";
@@ -46,6 +47,9 @@ const baseApplicationSchema = z.object({
   areaOfInterest: z
     .array(z.nativeEnum(AreaOfInterest))
     .min(1, "Select at least one area of interest"),
+  // Granular interest tags (distinct from areaOfInterest above) — optional,
+  // supplementary to the required broad category selection.
+  interestAreas: z.array(z.nativeEnum(InterestArea)),
   countryRegion: z.string().trim().min(1, "Country / region is required"),
   // Optional field: plain (non-optional-typed) string kept possibly empty,
   // rather than z.optional(), so the schema's input/output types match
