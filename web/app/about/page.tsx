@@ -61,10 +61,10 @@ export default function AboutPage() {
         <ParallaxHeroImage src="/images/blue-rain.jpg" priority />
         <div className="absolute inset-0 -z-10 bg-[rgba(10,20,70,.4)]" />
         <div className="relative mx-auto max-w-[580px]">
-          <h1 className="mb-3 text-[2.5rem] font-extrabold leading-[1.1] tracking-[-.02em] [text-shadow:0_2px_16px_rgba(0,10,40,.55)] md:text-[3.5rem]">About NASIHA</h1>
+          <h1 className="mb-3 text-[2.5rem] font-extrabold leading-[1.1] tracking-[-.02em] [text-shadow:0_2px_16px_rgba(0,10,40,.55)] md:text-[3.5rem]">NASIHA</h1>
           <p className="text-xl leading-[1.6] opacity-[.88] [text-shadow:0_1px_10px_rgba(0,10,40,.6)] md:text-2xl">
-            NASIHA — meaning <em className="not-italic text-[#93c5fd]">sincere advice and guidance</em> — was
-            founded on the belief that knowledge is a shared resource, not a commodity.
+            <em className="not-italic text-[#93c5fd]">Sincere advice and guidance</em> — that&rsquo;s what NASIHA
+            means, and what it was founded to give: knowledge as a shared resource, not a commodity.
           </p>
         </div>
       </section>

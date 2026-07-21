@@ -32,8 +32,11 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
   return (
     <Card className="flex h-full flex-col overflow-hidden">
       {event.heroImageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
-        <img src={event.heroImageUrl} alt="" className="h-40 w-full object-cover" />
+        <div className="relative h-40 w-full shrink-0">
+          {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
+          <img src={event.heroImageUrl} alt="" className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-[rgba(10,20,70,.4)]" />
+        </div>
       ) : null}
       <CardHeader>
         <div className="mb-1 flex flex-wrap items-center gap-2">
