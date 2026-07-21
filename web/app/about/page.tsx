@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { Microscope, Eye, GraduationCap } from "lucide-react";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Reveal } from "@/components/home/reveal";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "About — NASIHA",
@@ -35,19 +35,22 @@ const VALUES = [
 
 const ACTIVITIES = [
   {
-    icon: Microscope,
+    image: "/images/curation.jpg",
     title: "Research & Curation",
-    body: "Finding, annotating, and sharing high-quality literature, guidelines, and resources across all fields of knowledge.",
+    body: "Curating and sharing trusted resources across every field.",
+    href: "/about/research-curation",
   },
   {
-    icon: Eye,
+    image: "/images/feedback.jpg",
     title: "Peer Review & Feedback",
-    body: "Constructive, evidence-based critique of work, research, and educational content across disciplines.",
+    body: "Constructive, evidence-based feedback across disciplines.",
+    href: "/about/peer-review-feedback",
   },
   {
-    icon: GraduationCap,
+    image: "/images/teach.jpg",
     title: "Teaching & Sharing",
-    body: "Lectures, webinars, and knowledge discussions — sharing expertise freely across the community.",
+    body: "Sharing expertise through lectures, webinars, and discussions.",
+    href: "/about/teaching-sharing",
   },
 ];
 
@@ -130,15 +133,26 @@ export default function AboutPage() {
             <h2 className="text-3xl font-extrabold tracking-[-.02em] md:text-4xl">What We Do</h2>
           </Reveal>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-            {ACTIVITIES.map(({ icon: Icon, title, body }, index) => (
+            {ACTIVITIES.map(({ image, title, body, href }, index) => (
               <Reveal key={title} index={index} hover className="h-full">
-                <div className="flex h-full flex-col items-center rounded-xl border bg-card p-6 text-center shadow-sm">
-                  <div className="mx-auto mb-4 flex h-[52px] w-[52px] items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Icon className="h-[26px] w-[26px]" strokeWidth={1.5} />
+                <Link
+                  href={href}
+                  className="flex h-full flex-col overflow-hidden rounded-xl border bg-card text-center shadow-sm"
+                >
+                  <div className="relative h-40 w-full shrink-0">
+                    <Image src={image} alt="" fill className="object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                    <p className="absolute inset-x-0 bottom-3 px-4 text-2xl font-bold text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)]">
+                      {title}
+                    </p>
                   </div>
-                  <p className="mb-2 text-lg font-bold">{title}</p>
-                  <p className="text-lg leading-[1.7] text-muted-foreground">{body}</p>
-                </div>
+                  <div className="flex flex-1 flex-col p-6 pt-4">
+                    <p className="mb-4 flex-1 text-lg leading-[1.7] text-muted-foreground">{body}</p>
+                    <span className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mx-auto")}>
+                      Learn More
+                    </span>
+                  </div>
+                </Link>
               </Reveal>
             ))}
           </div>

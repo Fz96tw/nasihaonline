@@ -1,25 +1,28 @@
-import { Microscope, Eye, GraduationCap } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import Image from "next/image";
+import Link from "next/link";
+import { Card, CardContent } from "@/components/ui/card";
 import { Reveal } from "@/components/home/reveal";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const STEPS = [
   {
-    icon: Microscope,
-    title: "Research",
-    description:
-      "Members find and curate resources — articles, guidelines, readings — and share them with the community to deepen collective expertise.",
+    image: "/images/curation.jpg",
+    title: "Research & Curation",
+    description: "Find, curate, and share resources that deepen collective expertise.",
+    href: "/about/research-curation",
   },
   {
-    icon: Eye,
-    title: "Review",
-    description:
-      "Members guide each other to improve through honest, constructive feedback rooted in a shared commitment to growth.",
+    image: "/images/feedback.jpg",
+    title: "Peer Review & Feedback",
+    description: "Guide each other with honest, constructive feedback.",
+    href: "/about/peer-review-feedback",
   },
   {
-    icon: GraduationCap,
-    title: "Teach",
-    description:
-      "Members share knowledge through lectures and case discussions — because knowledge is a common good.",
+    image: "/images/teach.jpg",
+    title: "Teaching & Sharing",
+    description: "Share knowledge through lectures and case discussions.",
+    href: "/about/teaching-sharing",
   },
 ];
 
@@ -40,19 +43,25 @@ export function HowItWorksSection() {
           </p>
         </Reveal>
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {STEPS.map(({ icon: Icon, title, description }, index) => (
+          {STEPS.map(({ image, title, description, href }, index) => (
             <Reveal key={title} index={index} hover className="h-full">
-              <Card className="relative h-full min-h-[280px] overflow-hidden text-center">
-                <CardHeader className="relative items-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <Icon className="h-6 w-6" aria-hidden="true" />
+              <Link href={href} className="block h-full">
+                <Card className="relative flex h-full min-h-[280px] flex-col overflow-hidden text-center">
+                  <div className="relative h-40 w-full shrink-0">
+                    <Image src={image} alt="" fill className="object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                    <p className="absolute inset-x-0 bottom-3 px-4 text-2xl font-bold text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)]">
+                      {title}
+                    </p>
                   </div>
-                  <CardTitle className="text-xl">{title}</CardTitle>
-                </CardHeader>
-                <CardContent className="relative pt-0 text-lg leading-relaxed text-muted-foreground">
-                  {description}
-                </CardContent>
-              </Card>
+                  <CardContent className="relative flex flex-1 flex-col pt-4 text-lg leading-relaxed text-muted-foreground">
+                    <p className="flex-1">{description}</p>
+                    <span className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mx-auto mt-4")}>
+                      Learn More
+                    </span>
+                  </CardContent>
+                </Card>
+              </Link>
             </Reveal>
           ))}
         </div>
