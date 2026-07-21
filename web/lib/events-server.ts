@@ -1,7 +1,27 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { EventType, RSVPStatus } from "@/lib/generated/prisma/enums";
-import type { DashboardUpcomingEvent, EventWithRsvp, MemberEvent, PublicEvent } from "@/lib/events";
+import { EventType, Role, RSVPStatus } from "@/lib/generated/prisma/enums";
+import type { UserModel } from "@/lib/generated/prisma/models/User";
+import type {
+  DashboardUpcomingEvent,
+  EventRegistrationAttendee,
+  EventRsvpAttendee,
+  EventWithRsvp,
+  MemberEvent,
+  PublicEvent,
+} from "@/lib/events";
+import { EVENTS_FORUM_SLUG } from "@/lib/forums";
+import {
+  deleteEventHeroImage,
+  getEventHeroImageUrl,
+  uploadEventHeroImage,
+  UploadValidationError,
+} from "@/lib/storage";
+
+// Absolute, not relative — the auto-created discussion thread's first post
+// (createEvent, below) needs a real URL for lib/linkify.tsx's linkifyText
+// to turn into a clickable link; it only matches absolute http(s) URLs.
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
 // The server-side enforcement point for public event visibility (§4.6):
 // meetingUrl and deidentificationConfirmed are never selected here, so no
@@ -21,6 +41,7 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
       endsAt: true,
       open: true,
       icon: true,
+      heroImageUrl: true,
       host: { select: { name: true } },
     },
     orderBy: { startsAt: "asc" },
@@ -35,6 +56,7 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
     endsAt: event.endsAt?.toISOString() ?? null,
     open: event.open,
     icon: event.icon,
+    heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
     hostName: event.host.name,
   }));
 }
@@ -57,6 +79,7 @@ export async function getEventsForViewer(userId: string | null): Promise<EventWi
       endsAt: true,
       open: true,
       icon: true,
+      heroImageUrl: true,
       host: { select: { name: true } },
       rsvps: userId ? { where: { userId, status: RSVPStatus.going }, select: { id: true } } : false,
     },
@@ -72,6 +95,7 @@ export async function getEventsForViewer(userId: string | null): Promise<EventWi
     endsAt: event.endsAt?.toISOString() ?? null,
     open: event.open,
     icon: event.icon,
+    heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
     hostName: event.host.name,
     rsvped: userId ? event.rsvps.length > 0 : false,
   }));
@@ -81,9 +105,14 @@ export async function getEventsForViewer(userId: string | null): Promise<EventWi
 // events this member has RSVP'd `going` to. meetingUrl is always fetched
 // (unlike the public queries above) since gating happens here, per-row,
 // rather than by omitting the column.
-export async function getMemberUpcomingEvents(userId: string): Promise<MemberEvent[]> {
+//
+// Deliberately not filtered by startsAt — the Month tab needs to keep
+// showing past events when browsing to earlier months (and past events
+// earlier in the current month), not just what's still upcoming. The
+// "Upcoming List" tab derives its own future-only view client-side
+// (CalendarView) rather than this query doing it server-side.
+export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
   const events = await db.event.findMany({
-    where: { startsAt: { gte: new Date() } },
     select: {
       id: true,
       title: true,
@@ -93,9 +122,20 @@ export async function getMemberUpcomingEvents(userId: string): Promise<MemberEve
       endsAt: true,
       open: true,
       icon: true,
+      heroImageUrl: true,
       meetingUrl: true,
+      forumThread: { select: { id: true, _count: { select: { posts: true } } } },
+      hostId: true,
       host: { select: { name: true } },
       rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
+      // Going RSVPs (members) plus EventRegistrations (non-members) — same
+      // merge as getEventEngagementForAdmin's attendee/interest count.
+      _count: {
+        select: {
+          rsvps: { where: { status: RSVPStatus.going } },
+          registrations: true,
+        },
+      },
     },
     orderBy: { startsAt: "asc" },
   });
@@ -111,11 +151,101 @@ export async function getMemberUpcomingEvents(userId: string): Promise<MemberEve
       endsAt: event.endsAt?.toISOString() ?? null,
       open: event.open,
       icon: event.icon,
+      heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
+      hostId: event.hostId,
       hostName: event.host.name,
       rsvped,
       meetingUrl: rsvped ? event.meetingUrl : null,
+      attendeeCount: event._count.rsvps + event._count.registrations,
+      forumThreadId: event.forumThread?.id ?? null,
+      forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
     };
   });
+}
+
+// /calendar/[eventId] — single-event detail view. Not filtered by startsAt
+// so a past event reached via an "Add to calendar" link, email reminder, or
+// direct navigation still resolves instead of 404ing once its start time
+// has passed.
+export async function getMemberEventById(userId: string, eventId: string): Promise<MemberEvent | null> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      type: true,
+      startsAt: true,
+      endsAt: true,
+      open: true,
+      icon: true,
+      heroImageUrl: true,
+      meetingUrl: true,
+      forumThread: { select: { id: true, _count: { select: { posts: true } } } },
+      hostId: true,
+      host: { select: { name: true } },
+      rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
+      _count: {
+        select: {
+          rsvps: { where: { status: RSVPStatus.going } },
+          registrations: true,
+        },
+      },
+    },
+  });
+  if (!event) return null;
+
+  const rsvped = event.rsvps.length > 0;
+  return {
+    id: event.id,
+    title: event.title,
+    description: event.description,
+    type: event.type,
+    startsAt: event.startsAt.toISOString(),
+    endsAt: event.endsAt?.toISOString() ?? null,
+    open: event.open,
+    icon: event.icon,
+    heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
+    hostId: event.hostId,
+    hostName: event.host.name,
+    rsvped,
+    meetingUrl: rsvped ? event.meetingUrl : null,
+    attendeeCount: event._count.rsvps + event._count.registrations,
+    forumThreadId: event.forumThread?.id ?? null,
+    forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
+  };
+}
+
+/**
+ * /calendar/[eventId]'s host/admin-only attendee list (§4.6) — the page
+ * itself gates who this is fetched for; this function doesn't re-check
+ * authorization, same "caller enforces the gate" division as
+ * getEventForEdit.
+ */
+export async function getEventAttendees(
+  eventId: string,
+): Promise<{ rsvps: EventRsvpAttendee[]; registrations: EventRegistrationAttendee[] }> {
+  const [rsvps, registrations] = await Promise.all([
+    db.rSVP.findMany({
+      where: { eventId, status: RSVPStatus.going },
+      select: { id: true, user: { select: { name: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
+    db.eventRegistration.findMany({
+      where: { eventId },
+      select: { id: true, name: true, email: true },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
+
+  return {
+    rsvps: rsvps.map((rsvp) => ({ id: rsvp.id, name: rsvp.user.name })),
+    registrations: registrations.map((registration) => ({
+      id: registration.id,
+      name: registration.name,
+      email: registration.email,
+    })),
+  };
 }
 
 // Dashboard's upcoming-events widget (§10 Phase 4 capstone): this member's
@@ -228,6 +358,8 @@ export async function createEvent(
     icon: string | null;
     meetingUrl: string | null;
     deidentificationConfirmed: boolean;
+    heroImage: File | null;
+    createDiscussionThread: boolean;
   },
 ): Promise<{ id: string }> {
   const startsAt = new Date(input.startsAt);
@@ -253,23 +385,200 @@ export async function createEvent(
     throw new EventError(400, "Case Discussion events require the de-identification confirmation.");
   }
 
-  const event = await db.event.create({
+  let eventsForumId: string | null = null;
+  if (input.createDiscussionThread) {
+    const eventsForum = await db.forum.findUnique({ where: { slug: EVENTS_FORUM_SLUG }, select: { id: true } });
+    if (!eventsForum) {
+      throw new EventError(400, "The Events discussion forum isn't set up yet — contact an admin.");
+    }
+    eventsForumId = eventsForum.id;
+  }
+
+  let heroImageUrl: string | null = null;
+  if (input.heroImage) {
+    try {
+      heroImageUrl = await uploadEventHeroImage(input.heroImage);
+    } catch (error) {
+      if (error instanceof UploadValidationError) {
+        throw new EventError(400, error.message);
+      }
+      throw error;
+    }
+  }
+
+  const event = await db.$transaction(async (tx) => {
+    const created = await tx.event.create({
+      data: {
+        title: input.title,
+        description: input.description,
+        type: input.type,
+        hostId,
+        startsAt,
+        endsAt,
+        open: input.open,
+        icon: input.icon,
+        heroImageUrl,
+        meetingUrl: input.meetingUrl,
+        deidentificationConfirmed: input.deidentificationConfirmed,
+      },
+      select: { id: true },
+    });
+
+    // Auto-created discussion thread (§4.6) — the FK lives on ForumThread,
+    // so the Event above is created first and its id is what the thread
+    // (and the thread's own linking first post) refers back to.
+    if (eventsForumId) {
+      const thread = await tx.forumThread.create({
+        data: { forumId: eventsForumId, authorId: hostId, title: input.title, eventId: created.id },
+        select: { id: true },
+      });
+      await tx.forumPost.create({
+        data: {
+          threadId: thread.id,
+          authorId: hostId,
+          body: `Discussion thread for this event. [View event details](${APP_URL}/calendar/${created.id})`,
+        },
+      });
+    }
+
+    return created;
+  });
+
+  return { id: event.id };
+}
+
+/**
+ * /calendar/[eventId]/edit (§4.6) — full editable field set for the
+ * host/admin-gated edit page. Unlike getMemberEventById, meetingUrl and
+ * heroImageUrl aren't gated by this viewer's RSVP status: the host editing
+ * their own event needs to see (and change) both regardless of whether
+ * they've RSVP'd to it. The page itself does the host-or-admin check
+ * against the returned hostId before rendering the form.
+ */
+export async function getEventForEdit(eventId: string) {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      type: true,
+      startsAt: true,
+      endsAt: true,
+      open: true,
+      icon: true,
+      meetingUrl: true,
+      heroImageUrl: true,
+      deidentificationConfirmed: true,
+      hostId: true,
+    },
+  });
+  if (!event) return null;
+
+  return {
+    id: event.id,
+    title: event.title,
+    description: event.description,
+    type: event.type,
+    startsAt: event.startsAt.toISOString(),
+    endsAt: event.endsAt?.toISOString() ?? null,
+    open: event.open,
+    icon: event.icon,
+    meetingUrl: event.meetingUrl,
+    heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
+    deidentificationConfirmed: event.deidentificationConfirmed,
+    hostId: event.hostId,
+  };
+}
+
+/**
+ * Edits an existing event (§4.6, `PATCH /api/events/:id`), host or admin
+ * only. Doesn't touch the linked discussion thread either way — that's a
+ * one-time create-time decision (createEvent above), not something an edit
+ * can retroactively add or remove.
+ */
+export async function updateEvent(
+  eventId: string,
+  actingUser: UserModel,
+  input: {
+    title: string;
+    description: string | null;
+    type: EventType;
+    startsAt: string;
+    endsAt: string | null;
+    open: boolean;
+    icon: string | null;
+    meetingUrl: string | null;
+    deidentificationConfirmed: boolean;
+    heroImage: File | null;
+  },
+): Promise<{ id: string }> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { id: true, hostId: true, heroImageUrl: true },
+  });
+  if (!event) throw new EventError(404, "Event not found.");
+
+  const isAdmin = actingUser.role === Role.admin;
+  const isHost = event.hostId === actingUser.id;
+  if (!isAdmin && !isHost) {
+    throw new EventError(403, "Only the event's host or an admin can edit it.");
+  }
+
+  const startsAt = new Date(input.startsAt);
+  if (Number.isNaN(startsAt.getTime())) {
+    throw new EventError(400, "Start date and time isn't valid.");
+  }
+
+  let endsAt: Date | null = null;
+  if (input.endsAt) {
+    endsAt = new Date(input.endsAt);
+    if (Number.isNaN(endsAt.getTime())) {
+      throw new EventError(400, "End date and time isn't valid.");
+    }
+    if (endsAt <= startsAt) {
+      throw new EventError(400, "End time must be after the start time.");
+    }
+  }
+
+  if (input.type === EventType.case_discussion && !input.deidentificationConfirmed) {
+    throw new EventError(400, "Case Discussion events require the de-identification confirmation.");
+  }
+
+  let heroImageUrl = event.heroImageUrl;
+  if (input.heroImage) {
+    try {
+      heroImageUrl = await uploadEventHeroImage(input.heroImage);
+    } catch (error) {
+      if (error instanceof UploadValidationError) {
+        throw new EventError(400, error.message);
+      }
+      throw error;
+    }
+  }
+
+  const updated = await db.event.update({
+    where: { id: event.id },
     data: {
       title: input.title,
       description: input.description,
       type: input.type,
-      hostId,
       startsAt,
       endsAt,
       open: input.open,
       icon: input.icon,
+      heroImageUrl,
       meetingUrl: input.meetingUrl,
       deidentificationConfirmed: input.deidentificationConfirmed,
     },
     select: { id: true },
   });
 
-  return { id: event.id };
+  if (input.heroImage && event.heroImageUrl) {
+    await deleteEventHeroImage(event.heroImageUrl);
+  }
+
+  return updated;
 }
 
 /**
@@ -283,7 +592,7 @@ export async function createEvent(
 export async function rsvpToEvent(
   userId: string,
   eventId: string,
-): Promise<{ rsvped: boolean; meetingUrl: string | null }> {
+): Promise<{ rsvped: boolean; meetingUrl: string | null; attendeeCount: number }> {
   const event = await db.event.findUnique({ where: { id: eventId }, select: { meetingUrl: true } });
   if (!event) throw new EventError(404, "Event not found.");
 
@@ -301,8 +610,17 @@ export async function rsvpToEvent(
     update: { status: nextStatus },
   });
 
+  const [goingCount, registrationCount] = await Promise.all([
+    db.rSVP.count({ where: { eventId, status: RSVPStatus.going } }),
+    db.eventRegistration.count({ where: { eventId } }),
+  ]);
+
   const rsvped = nextStatus === RSVPStatus.going;
-  return { rsvped, meetingUrl: rsvped ? event.meetingUrl : null };
+  return {
+    rsvped,
+    meetingUrl: rsvped ? event.meetingUrl : null,
+    attendeeCount: goingCount + registrationCount,
+  };
 }
 
 /**
@@ -348,7 +666,7 @@ function escapeIcsText(value: string): string {
 /**
  * Builds a downloadable .ics for "Add to calendar" (§4.6). `includeMeetingUrl`
  * is decided by the caller (the API route) from the same RSVP gate as
- * getMemberUpcomingEvents — meetingUrl only ever appears in the ICS body for
+ * getMemberEvents — meetingUrl only ever appears in the ICS body for
  * a member who's RSVP'd `going`.
  */
 export function buildEventIcs(event: {

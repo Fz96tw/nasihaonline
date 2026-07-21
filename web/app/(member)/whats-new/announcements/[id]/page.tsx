@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getSentAnnouncement } from "@/lib/feed-server";
 import { formatTimestamp } from "@/lib/format-date";
-import { linkifyAnnouncementBody } from "@/lib/linkify";
+import { linkifyText } from "@/lib/linkify";
 import { Avatar } from "@/components/ui/avatar";
+import { BackLink } from "@/components/back-link";
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const announcement = await getSentAnnouncement(params.id);
@@ -22,9 +22,7 @@ export default async function AnnouncementDetailPage({ params }: { params: { id:
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6 p-8">
-      <Link href="/whats-new" className="inline-block text-sm text-muted-foreground hover:underline">
-        ← Back to What&apos;s New
-      </Link>
+      <BackLink fallbackHref="/whats-new" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline" />
 
       <div>
         <h1 className="text-2xl font-bold tracking-tight">{announcement.title}</h1>
@@ -45,8 +43,8 @@ export default async function AnnouncementDetailPage({ params }: { params: { id:
         />
       )}
 
-      <p className="whitespace-pre-wrap text-sm leading-relaxed">
-        {linkifyAnnouncementBody(announcement.body)}
+      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+        {linkifyText(announcement.body)}
       </p>
     </main>
   );

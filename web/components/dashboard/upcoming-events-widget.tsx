@@ -36,7 +36,9 @@ export async function UpcomingEventsWidget({ userId }: { userId: string }) {
                 className="flex items-center justify-between gap-2 border-b pb-3 last:border-b-0 last:pb-0"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{event.title}</p>
+                  <Link href={`/calendar/${event.id}`} className="block truncate text-sm font-medium hover:underline">
+                    {event.title}
+                  </Link>
                   <p className="text-xs text-muted-foreground">{formatEventDateTime(event.startsAt)}</p>
                 </div>
                 {event.rsvped ? <Badge variant="success">Going</Badge> : null}

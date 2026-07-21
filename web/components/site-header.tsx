@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { KeyRound, Rss } from "lucide-react";
+import { Lock, Rss } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { NavDropdown } from "@/components/nav-dropdown";
@@ -29,7 +29,7 @@ export async function SiteHeader() {
           className="h-9 w-auto shrink-0"
         />
         <span className="flex flex-col leading-none">
-          <span className="text-xl font-black uppercase leading-none tracking-[.14em] text-primary">
+          <span className="text-xl font-black uppercase leading-none tracking-[.14em] text-logo">
             NASIHA
           </span>
           <span className="mt-[.2rem] hidden text-[.58rem] uppercase tracking-[.09em] text-muted-foreground sm:block">
@@ -63,7 +63,7 @@ export async function SiteHeader() {
             <Link href="/library" className={cn("justify-between", !user && "text-muted-foreground")}>
               Knowledge Library
               {!user && (
-                <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
+                <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
               )}
             </Link>
           </DropdownMenuItem>
@@ -71,7 +71,7 @@ export async function SiteHeader() {
             <Link href="/forums" className={cn("justify-between", !user && "text-muted-foreground")}>
               Forums
               {!user && (
-                <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
+                <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
               )}
             </Link>
           </DropdownMenuItem>
@@ -79,7 +79,7 @@ export async function SiteHeader() {
             <Link href="/members" className={cn("justify-between", !user && "text-muted-foreground")}>
               Member Directory
               {!user && (
-                <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
+                <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
               )}
             </Link>
           </DropdownMenuItem>
@@ -87,7 +87,7 @@ export async function SiteHeader() {
             <Link href="/inbox" className={cn("justify-between", !user && "text-muted-foreground")}>
               Message Inbox
               {!user && (
-                <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
+                <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
               )}
             </Link>
           </DropdownMenuItem>

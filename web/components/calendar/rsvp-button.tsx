@@ -19,7 +19,7 @@ export function RsvpButton({
 }: {
   eventId: string;
   rsvped: boolean;
-  onToggled: (result: { rsvped: boolean; meetingUrl: string | null }) => void;
+  onToggled: (result: { rsvped: boolean; meetingUrl: string | null; attendeeCount?: number }) => void;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);

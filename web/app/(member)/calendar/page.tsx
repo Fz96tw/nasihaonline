@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { getMemberUpcomingEvents } from "@/lib/events-server";
+import { getMemberEvents } from "@/lib/events-server";
 import { EVENT_SUBMISSION_TIERS } from "@/lib/events";
 import { CalendarView } from "@/components/calendar/calendar-view";
 import { BackToFeedLink } from "@/components/feed/back-to-feed-link";
@@ -18,7 +18,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: { r
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const events = await getMemberUpcomingEvents(user.id);
+  const events = await getMemberEvents(user.id);
   const canSubmitEvent = Boolean(user.tier && EVENT_SUBMISSION_TIERS.includes(user.tier));
 
   return (
@@ -45,7 +45,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: { r
           </div>
         )}
 
-        <CalendarView events={events} defaultTab={isFromFeed(searchParams) ? "list" : "month"} />
+        <CalendarView events={events} forcedTab={isFromFeed(searchParams) ? "list" : undefined} />
       </section>
     </main>
   );

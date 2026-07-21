@@ -1,11 +1,12 @@
-import Link from "next/link";
 import { isFromFeed } from "@/lib/feed";
+import { BackLink } from "@/components/back-link";
 
 /**
- * The destination pages this appears on (blog post, forum thread, calendar,
- * library) are all reachable from places other than the feed too, so this
- * only renders when the visit's ?ref=whats-new marks it as having actually
- * come from there (see lib/feed.ts's withFeedRef).
+ * The destination pages this appears on (calendar, library, survey respond)
+ * are also reachable directly (nav, magic link), so this only renders when
+ * the visit's ?ref=whats-new marks it as having actually come from there
+ * (see lib/feed.ts's withFeedRef) — otherwise there'd be nothing sensible
+ * to go "back" to.
  */
 export function BackToFeedLink({
   searchParams,
@@ -16,9 +17,5 @@ export function BackToFeedLink({
 }) {
   if (!isFromFeed(searchParams)) return null;
 
-  return (
-    <Link href="/whats-new" className={className ?? "mb-6 inline-block text-sm text-muted-foreground hover:underline"}>
-      ← Back to What&apos;s New
-    </Link>
-  );
+  return <BackLink fallbackHref="/whats-new" className={className ?? "mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline"} />;
 }

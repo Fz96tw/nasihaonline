@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { KnowledgeItemError, flagKnowledgeItem } from "@/lib/library-server";
 import { enqueueKnowledgeItemIndexSync } from "@/lib/queues/search-index-queue";
+import { flagContentSchema } from "@/lib/validation/flag";
 
 /**
  * POST /api/library/:id/flag — community flagging (§4.9), member-auth only.
@@ -10,7 +11,7 @@ import { enqueueKnowledgeItemIndexSync } from "@/lib/queues/search-index-queue";
  * (see flagKnowledgeItem/syncKnowledgeItemToIndex) but is now marked
  * flagged for a Steward to review.
  */
-export async function POST(_request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, { params }: { params: { id: string } }) {
   try {
     await requireUser();
   } catch (error) {
@@ -18,8 +19,13 @@ export async function POST(_request: Request, { params }: { params: { id: string
     throw error;
   }
 
+  const parsed = flagContentSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
   try {
-    const item = await flagKnowledgeItem(params.id);
+    const item = await flagKnowledgeItem(params.id, parsed.data.reason);
     await enqueueKnowledgeItemIndexSync(item.id);
     return NextResponse.json({ item });
   } catch (error) {

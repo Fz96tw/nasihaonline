@@ -270,6 +270,36 @@ export function getPostHeroImageUrl(key: string | null): string | null {
 }
 
 /**
+ * Same validation/storage shape as uploadPostHeroImage, for an Event's
+ * optional hero image (§4.6). Returns the object key to persist on
+ * Event.heroImageUrl.
+ */
+export async function uploadEventHeroImage(file: File): Promise<string> {
+  const { buffer, ext, mime } = await validateImageUpload(file);
+
+  await ensureBucket(BUCKET_ATTACHMENTS);
+  const key = `event-hero/${crypto.randomUUID()}.${ext}`;
+  const minio = getClient();
+  await minio.putObject(BUCKET_ATTACHMENTS, key, buffer, buffer.length, {
+    "Content-Type": mime,
+  });
+  return key;
+}
+
+export function getEventHeroImageUrl(key: string | null): string | null {
+  if (!key) return null;
+  return `/api/events/hero/${key}`;
+}
+
+/** Same shape/rationale as deletePostHeroImage — called when an edit replaces an event's existing hero image. */
+export async function deleteEventHeroImage(key: string | null): Promise<void> {
+  if (!key) return;
+  await ensureBucket(BUCKET_ATTACHMENTS);
+  const minio = getClient();
+  await minio.removeObject(BUCKET_ATTACHMENTS, key).catch(() => undefined);
+}
+
+/**
  * Same validation/storage shape as uploadPostHeroImage, for a Board
  * Announcement's single optional cover image (§4.10). Returns the object
  * key to persist on Announcement.heroImageUrl.

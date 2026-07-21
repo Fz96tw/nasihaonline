@@ -90,7 +90,6 @@ services:
     volumes:
       - ./web:/app
       - /app/node_modules
-      - /app/.next
     depends_on:
       postgres:
         condition: service_healthy
@@ -115,7 +114,6 @@ services:
     volumes:
       - ./web:/app
       - /app/node_modules
-      - /app/.next
     depends_on:
       postgres:
         condition: service_healthy

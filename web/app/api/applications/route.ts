@@ -3,17 +3,13 @@ import { db } from "@/lib/db";
 import { getAdmissionPhase } from "@/lib/settings";
 import { applicationSchema } from "@/lib/validation/application";
 import { sendApplicationConfirmationEmail } from "@/lib/email";
-import { rateLimit } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { findDuplicateApplicant } from "@/lib/applications";
 
 const DUPLICATE_EMAIL_MESSAGES = {
   existing_member: "This email is already associated with a member account.",
   pending_application: "An application with this email is already under review.",
 } as const;
-
-function clientIp(request: Request): string {
-  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-}
 
 export async function POST(request: Request) {
   const { success } = await rateLimit(`applications:${clientIp(request)}`, {

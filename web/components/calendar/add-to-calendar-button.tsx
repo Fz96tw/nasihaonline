@@ -7,7 +7,7 @@ export function AddToCalendarButton({ eventId }: { eventId: string }) {
     <Button size="sm" variant="outline" asChild>
       <a href={`/api/events/${eventId}/ics`} download>
         <CalendarPlus className="mr-1.5 h-4 w-4" />
-        Add to calendar
+        REMINDER
       </a>
     </Button>
   );

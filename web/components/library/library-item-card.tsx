@@ -10,6 +10,7 @@ import { CONTENT_TYPE_LABELS, LEVEL_LABELS, type LibraryCard as LibraryCardData 
 import { KnowledgeContentType, KnowledgeStatus } from "@/lib/generated/prisma/enums";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { ResourcePreviewDialog } from "@/components/library/resource-preview-dialog";
+import { FlagContentDialog } from "@/components/flag-content-dialog";
 
 const CONTENT_TYPE_ICONS: Record<KnowledgeContentType, LucideIcon> = {
   [KnowledgeContentType.recorded_lecture]: PlayCircle,
@@ -25,23 +26,26 @@ function formatDate(iso: string) {
 export function LibraryItemCard({ item }: { item: LibraryCardData }) {
   const router = useRouter();
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [flagDialogOpen, setFlagDialogOpen] = useState(false);
   const [flagging, setFlagging] = useState(false);
   const [flagError, setFlagError] = useState<string | null>(null);
   const Icon = CONTENT_TYPE_ICONS[item.contentType] ?? BookOpen;
 
-  async function handleFlag() {
+  async function handleFlag(reason: string) {
     setFlagging(true);
     setFlagError(null);
     try {
       const csrfToken = await getCsrfToken();
       const res = await fetch(`/api/library/${item.id}/flag`, {
         method: "POST",
-        headers: { "x-csrf-token": csrfToken },
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        body: JSON.stringify({ reason }),
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => null);
         throw new Error(typeof payload?.error === "string" ? payload.error : "Something went wrong.");
       }
+      setFlagDialogOpen(false);
       router.refresh();
     } catch (err) {
       setFlagError(err instanceof Error ? err.message : "Something went wrong.");
@@ -82,9 +86,9 @@ export function LibraryItemCard({ item }: { item: LibraryCardData }) {
               Preview
             </Button>
             {item.status === KnowledgeStatus.published && (
-              <Button size="sm" variant="ghost" disabled={flagging} onClick={handleFlag} title="Flag as inaccurate or outdated">
+              <Button size="sm" variant="ghost" onClick={() => setFlagDialogOpen(true)} title="Flag as inaccurate or outdated">
                 <Flag className="mr-1.5 h-3.5 w-3.5" />
-                {flagging ? "Flagging…" : "Flag"}
+                Flag
               </Button>
             )}
           </div>
@@ -99,6 +103,15 @@ export function LibraryItemCard({ item }: { item: LibraryCardData }) {
         contentType={item.contentType}
         youtubeUrl={item.youtubeUrl}
         attachment={item.attachment}
+      />
+
+      <FlagContentDialog
+        open={flagDialogOpen}
+        onOpenChange={setFlagDialogOpen}
+        itemLabel="resource"
+        submitting={flagging}
+        error={flagError}
+        onConfirm={handleFlag}
       />
     </>
   );

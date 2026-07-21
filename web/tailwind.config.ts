@@ -41,6 +41,7 @@ const config: Config = {
           DEFAULT: "hsl(var(--brand-accent))",
           foreground: "hsl(var(--brand-accent-foreground))",
         },
+        logo: "hsl(var(--logo))",
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",

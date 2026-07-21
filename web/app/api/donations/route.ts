@@ -2,12 +2,8 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { stripe } from "@/lib/stripe";
 import { donationSchema } from "@/lib/validation/donation";
-import { rateLimit } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { DonationFrequency } from "@/lib/generated/prisma/enums";
-
-function clientIp(request: Request): string {
-  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-}
 
 /**
  * Creates a Stripe Checkout Session and returns its URL — it does NOT write

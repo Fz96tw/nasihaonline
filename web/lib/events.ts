@@ -31,6 +31,7 @@ export type PublicEvent = {
   endsAt: string | null;
   open: boolean;
   icon: string | null;
+  heroImageUrl: string | null;
   hostName: string | null;
 };
 
@@ -48,6 +49,29 @@ export type EventWithRsvp = PublicEvent & {
 // exposed, and only when `rsvped` is true for this viewer.
 export type MemberEvent = EventWithRsvp & {
   meetingUrl: string | null;
+  /** Going RSVPs (members) plus EventRegistrations (non-members) — same merge as getEventEngagementForAdmin. */
+  attendeeCount: number;
+  /** So the detail page can gate its "Edit Event" link to the host or an admin. */
+  hostId: string;
+  /** Id of the Events-forum thread auto-created at submission time, if the host opted in — null otherwise. */
+  forumThreadId: string | null;
+  /** Reply count on that thread (post count minus the system-authored opening post) — null when forumThreadId is null. */
+  forumReplyCount: number | null;
+};
+
+// /calendar/[eventId]'s host/admin-only attendee list (§4.6) — RSVP'd
+// members (name only, same "no raw contact info exposed" boundary as the
+// Member Directory) and anonymously-registered guests (name + email, since
+// email is the entire point of capturing an EventRegistration).
+export type EventRsvpAttendee = {
+  id: string;
+  name: string | null;
+};
+
+export type EventRegistrationAttendee = {
+  id: string;
+  name: string | null;
+  email: string;
 };
 
 // Dashboard's upcoming-events widget (§10 Phase 4 capstone) — a trimmed-down

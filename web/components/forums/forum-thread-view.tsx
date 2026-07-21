@@ -171,7 +171,7 @@ function PostNode({
         {post.authorProfile && (
           <MemberProfileDialog member={post.authorProfile} open={profileOpen} onOpenChange={setProfileOpen} />
         )}
-        <p className={cn("whitespace-pre-wrap text-sm", post.removed && "italic text-muted-foreground")}>
+        <p className={cn("whitespace-pre-wrap break-words text-sm", post.removed && "italic text-muted-foreground")}>
           {renderTextWithMentions(post.body, mentionableMembers)}
         </p>
         <div className="mt-2 flex items-center gap-3">

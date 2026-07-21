@@ -23,8 +23,16 @@ export type FeedItem = {
   /** ISO timestamp this item was published/created — the feed's sort key. */
   timestamp: string;
   author: { name: string | null; avatarUrl: string | null };
-  /** Only blog posts (Post.heroImageUrl) carry an image today — null for every other type. */
+  /** Events, blog posts, announcements, and surveys carry a hero image — null for library items and forum threads. */
   imageUrl: string | null;
+  /** Only blog posts carry the eye/comment counts shown on /blog/[slug] (§4.8) — undefined for every other type. */
+  stats?: { views: number; comments: number };
+  /** Only events carry a registered/RSVP'd count — undefined for every other type. */
+  attendeeCount?: number;
+  /** Only events carry a start time (§4.5/§4.6 calendar) — undefined for every other type. */
+  eventStartsAt?: string;
+  /** Only events with a linked Events-forum thread (§4.6) carry this — undefined when the event has no thread. */
+  forumReplyCount?: number;
 };
 
 // Marks a feed row's href so the page it lands on (blog post, forum thread,

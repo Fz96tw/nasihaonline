@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
-import type { EventContentArg, EventInput } from "@fullcalendar/core";
+import type { EventClickArg, EventContentArg, EventInput } from "@fullcalendar/core";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,7 +13,14 @@ import { EventListItem } from "@/components/calendar/event-list-item";
 import type { MemberEvent } from "@/lib/events";
 import "@/components/calendar/calendar-theme.css";
 
-type RsvpState = { rsvped: boolean; meetingUrl: string | null };
+type RsvpState = { rsvped: boolean; meetingUrl: string | null; attendeeCount?: number };
+
+// Remembers the last tab the member picked so it survives navigating away
+// from /calendar and back (Tabs' own defaultValue only survives re-renders,
+// not a full remount). The ?ref=feed forced-to-"list" case below is a
+// one-time referral override, not a preference, so it's deliberately never
+// written back here.
+const CALENDAR_TAB_STORAGE_KEY = "nasiha:calendar-tab";
 
 function toFullCalendarEvents(events: MemberEvent[]): EventInput[] {
   return events.map((event) => ({
@@ -41,10 +49,11 @@ function renderEventContent(arg: EventContentArg) {
 
 export function CalendarView({
   events,
-  defaultTab = "month",
+  forcedTab,
 }: {
   events: MemberEvent[];
-  defaultTab?: "month" | "list";
+  /** Referral-driven override (e.g. arriving via ?ref=feed) — wins over any remembered tab, but isn't itself remembered. */
+  forcedTab?: "month" | "list";
 }) {
   // Radix's TabsContent unmounts the inactive panel by default, so RSVP
   // state can't live in EventListItem's own useState — switching to Month
@@ -54,6 +63,19 @@ export function CalendarView({
   const [rsvpState, setRsvpState] = useState<Record<string, RsvpState>>({});
   const calendarRef = useRef<FullCalendar>(null);
   const [title, setTitle] = useState("");
+  const router = useRouter();
+  const [tab, setTab] = useState<"month" | "list">(forcedTab ?? "month");
+
+  useEffect(() => {
+    if (forcedTab) return;
+    const stored = window.localStorage.getItem(CALENDAR_TAB_STORAGE_KEY);
+    if (stored === "month" || stored === "list") setTab(stored);
+  }, [forcedTab]);
+
+  function handleTabChange(value: string) {
+    setTab(value as "month" | "list");
+    window.localStorage.setItem(CALENDAR_TAB_STORAGE_KEY, value);
+  }
 
   const resolvedEvents = useMemo(
     () => events.map((event) => ({ ...event, ...rsvpState[event.id] })),
@@ -61,8 +83,14 @@ export function CalendarView({
   );
 
   const fcEvents = useMemo(() => toFullCalendarEvents(resolvedEvents), [resolvedEvents]);
+  // Month grid shows every event (including past ones, so browsing to an
+  // earlier month isn't empty); this tab is explicitly "Upcoming List", so
+  // it filters startsAt back down to future-only itself.
   const upcoming = useMemo(
-    () => [...resolvedEvents].sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
+    () =>
+      resolvedEvents
+        .filter((event) => event.startsAt >= new Date().toISOString())
+        .sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
     [resolvedEvents],
   );
 
@@ -82,8 +110,13 @@ export function CalendarView({
     calendarRef.current?.getApi().today();
   }
 
+  function handleEventClick(arg: EventClickArg) {
+    arg.jsEvent.preventDefault();
+    router.push(`/calendar/${arg.event.id}`);
+  }
+
   return (
-    <Tabs defaultValue={defaultTab}>
+    <Tabs value={tab} onValueChange={handleTabChange}>
       <TabsList>
         <TabsTrigger value="month">Month</TabsTrigger>
         <TabsTrigger value="list">Upcoming List</TabsTrigger>
@@ -113,6 +146,7 @@ export function CalendarView({
                 initialView="dayGridMonth"
                 events={fcEvents}
                 eventContent={renderEventContent}
+                eventClick={handleEventClick}
                 headerToolbar={false}
                 datesSet={(arg) => setTitle(arg.view.title)}
                 height="auto"

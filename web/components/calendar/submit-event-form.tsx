@@ -40,23 +40,64 @@ const DEFAULT_VALUES: CreateEventValues = {
   icon: null,
   meetingUrl: null,
   deidentificationConfirmed: false,
+  createDiscussionThread: false,
+};
+
+/** Converts a stored ISO timestamp to the local "YYYY-MM-DDTHH:mm" value a <input type="datetime-local"> expects. */
+function toDatetimeLocalValue(iso: string | null): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+type ExistingEvent = {
+  id: string;
+  title: string;
+  description: string | null;
+  type: EventType;
+  startsAt: string;
+  endsAt: string | null;
+  open: boolean;
+  icon: string | null;
+  meetingUrl: string | null;
+  heroImageUrl: string | null;
+  deidentificationConfirmed: boolean;
 };
 
 /**
- * "Submit Event" form (§4.6), posted from /calendar/new. The submitting
- * member always becomes the host (no host field here — see createEvent's
- * comment in lib/events-server.ts). Case Discussion events require the
- * de-identification checkbox — createEventSchema blocks submission without
- * it, and the same schema re-runs server-side in POST /api/events.
+ * "Submit Event" form (§4.6), posted from /calendar/new, and reused from
+ * /calendar/[eventId]/edit when `existingEvent` is supplied. The submitting
+ * member always becomes the host on create (no host field here — see
+ * createEvent's comment in lib/events-server.ts); editing doesn't change
+ * the host either. Case Discussion events require the de-identification
+ * checkbox — createEventSchema/updateEventSchema both block submission
+ * without it. createDiscussionThread is create-only (omitted entirely, and
+ * from updateEventSchema, when editing) — same "one-time action" rationale
+ * as WritePostForm's licenseConsented.
  */
-export function SubmitEventForm() {
+export function SubmitEventForm({ existingEvent }: { existingEvent?: ExistingEvent } = {}) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [heroImage, setHeroImage] = useState<File | null>(null);
 
   const form = useForm<CreateEventValues>({
     resolver: zodResolver(createEventSchema),
-    defaultValues: DEFAULT_VALUES,
+    defaultValues: existingEvent
+      ? {
+          title: existingEvent.title,
+          description: existingEvent.description,
+          type: existingEvent.type,
+          startsAt: toDatetimeLocalValue(existingEvent.startsAt),
+          endsAt: toDatetimeLocalValue(existingEvent.endsAt) || null,
+          open: existingEvent.open,
+          icon: existingEvent.icon,
+          meetingUrl: existingEvent.meetingUrl,
+          deidentificationConfirmed: existingEvent.deidentificationConfirmed,
+          createDiscussionThread: false,
+        }
+      : DEFAULT_VALUES,
     mode: "onTouched",
   });
 
@@ -67,23 +108,33 @@ export function SubmitEventForm() {
     setError(null);
     try {
       const csrfToken = await getCsrfToken();
-      const res = await fetch("/api/events", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
-        body: JSON.stringify({
-          ...values,
-          // datetime-local values are converted to real ISO instants here,
-          // in the browser's own timezone — parsing the raw string
-          // server-side would use the server's timezone instead (§4.6
-          // requires UTC storage), same conversion as
-          // RequestMeetingDialog's proposedTimes.
-          startsAt: new Date(values.startsAt).toISOString(),
-          endsAt: values.endsAt ? new Date(values.endsAt).toISOString() : null,
-          // Only relevant (and only enforced) for Case Discussion events —
-          // clear it for every other type so it can't linger as `true` from
-          // switching away from Case Discussion after checking it.
-          deidentificationConfirmed: isCaseDiscussion && values.deidentificationConfirmed,
-        }),
+      const formData = new FormData();
+      formData.append("title", values.title);
+      if (values.description) formData.append("description", values.description);
+      formData.append("type", values.type);
+      // datetime-local values are converted to real ISO instants here, in
+      // the browser's own timezone — parsing the raw string server-side
+      // would use the server's timezone instead (§4.6 requires UTC
+      // storage), same conversion as RequestMeetingDialog's proposedTimes.
+      formData.append("startsAt", new Date(values.startsAt).toISOString());
+      if (values.endsAt) formData.append("endsAt", new Date(values.endsAt).toISOString());
+      formData.append("open", String(values.open));
+      if (values.icon) formData.append("icon", values.icon);
+      if (values.meetingUrl) formData.append("meetingUrl", values.meetingUrl);
+      // Only relevant (and only enforced) for Case Discussion events — omit
+      // for every other type so it can't linger as `true` from switching
+      // away from Case Discussion after checking it.
+      formData.append(
+        "deidentificationConfirmed",
+        String(isCaseDiscussion && values.deidentificationConfirmed),
+      );
+      if (!existingEvent) formData.append("createDiscussionThread", String(values.createDiscussionThread));
+      if (heroImage) formData.append("heroImage", heroImage);
+
+      const res = await fetch(existingEvent ? `/api/events/${existingEvent.id}` : "/api/events", {
+        method: existingEvent ? "PATCH" : "POST",
+        headers: { "x-csrf-token": csrfToken },
+        body: formData,
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => null);
@@ -95,7 +146,8 @@ export function SubmitEventForm() {
               : "Something went wrong. Please try again.",
         );
       }
-      router.push("/calendar");
+      const { id } = await res.json();
+      router.push(existingEvent ? `/calendar/${id}` : "/calendar");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
@@ -237,6 +289,30 @@ export function SubmitEventForm() {
           />
         </div>
 
+        <div className="flex flex-col gap-2">
+          <label htmlFor="hero-image" className="text-sm font-medium">
+            Hero image (optional)
+          </label>
+          {existingEvent?.heroImageUrl && !heroImage && (
+            // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
+            <img
+              src={existingEvent.heroImageUrl}
+              alt="Current hero image"
+              className="h-32 w-full max-w-xs rounded-md object-cover"
+            />
+          )}
+          <input
+            id="hero-image"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(e) => setHeroImage(e.target.files?.[0] ?? null)}
+            className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
+          />
+          {existingEvent?.heroImageUrl && (
+            <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
+          )}
+        </div>
+
         <FormField
           control={form.control}
           name="open"
@@ -254,6 +330,27 @@ export function SubmitEventForm() {
             </FormItem>
           )}
         />
+
+        {!existingEvent && (
+          <FormField
+            control={form.control}
+            name="createDiscussionThread"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-start gap-2 space-y-0 rounded-md border p-4">
+                <FormControl>
+                  <Checkbox checked={field.value} onCheckedChange={(c) => field.onChange(c === true)} />
+                </FormControl>
+                <div className="space-y-1">
+                  <FormLabel className="!mt-0">Create a discussion thread for this event</FormLabel>
+                  <FormDescription>
+                    Posts a linked thread in the Events forum, titled after this event, with a first post
+                    linking back to it.
+                  </FormDescription>
+                </div>
+              </FormItem>
+            )}
+          />
+        )}
 
         {isCaseDiscussion && (
           <FormField
@@ -279,7 +376,7 @@ export function SubmitEventForm() {
 
         <div>
           <Button type="submit" disabled={submitting}>
-            {submitting ? "Submitting…" : "Submit Event"}
+            {submitting ? "Saving…" : existingEvent ? "Save Changes" : "Submit Event"}
           </Button>
         </div>
       </form>

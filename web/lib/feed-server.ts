@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { KnowledgeStatus, SurveyStatus } from "@/lib/generated/prisma/enums";
-import { getProfileAvatarUrl, getPostHeroImageUrl, getAnnouncementHeroImageUrl, getSurveyHeroImageUrl } from "@/lib/storage";
+import { KnowledgeStatus, RSVPStatus, SurveyStatus } from "@/lib/generated/prisma/enums";
+import { getProfileAvatarUrl, getPostHeroImageUrl, getEventHeroImageUrl, getAnnouncementHeroImageUrl, getSurveyHeroImageUrl } from "@/lib/storage";
 import { excerptFromHtml } from "@/lib/blog";
 import { withFeedRef, type FeedItem, type FeedCursor } from "@/lib/feed";
 
@@ -52,7 +52,27 @@ export async function getFeedPage(params: {
   const [events, posts, libraryItems, forumThreads, announcements, surveys] = await Promise.all([
     db.event.findMany({
       where: before ? { createdAt: { lt: before } } : {},
-      select: { id: true, title: true, description: true, createdAt: true, host: { select: AUTHOR_SELECT } },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        createdAt: true,
+        startsAt: true,
+        heroImageUrl: true,
+        host: { select: AUTHOR_SELECT },
+        // Going RSVPs (members) plus EventRegistrations (non-members) —
+        // same merge as getEventEngagementForAdmin's attendee/interest count.
+        _count: {
+          select: {
+            rsvps: { where: { status: RSVPStatus.going } },
+            registrations: true,
+          },
+        },
+        // posts includes the thread's own system-authored opening post, so
+        // forumReplyCount below subtracts one — same convention as the
+        // forumThreads feed query and getMemberEventById's forumReplyCount.
+        forumThread: { select: { _count: { select: { posts: true } } } },
+      },
       orderBy: { createdAt: "desc" },
       take: pageSize,
     }),
@@ -66,6 +86,10 @@ export async function getFeedPage(params: {
         heroImageUrl: true,
         publishedAt: true,
         author: { select: AUTHOR_SELECT },
+        // Comment rows carry `postId` directly regardless of reply nesting
+        // (see PostComment's parentId self-relation), so this count already
+        // matches lib/blog.ts's countAllComments total on the detail page.
+        _count: { select: { comments: true, views: true } },
       },
       orderBy: { publishedAt: "desc" },
       take: pageSize,
@@ -84,13 +108,20 @@ export async function getFeedPage(params: {
       take: pageSize,
     }),
     db.forumThread.findMany({
-      where: before ? { createdAt: { lt: before } } : {},
+      // eventId: null excludes the Events forum's auto-created threads —
+      // those already surface as their parent Event's own feed row (with
+      // forumReplyCount above), so listing them again here would be a
+      // duplicate, bodiless-looking "Forum" row for the same activity.
+      where: { eventId: null, ...(before ? { createdAt: { lt: before } } : {}) },
       select: {
         id: true,
         title: true,
         createdAt: true,
         author: { select: AUTHOR_SELECT },
         forum: { select: { name: true, slug: true } },
+        // posts includes the thread's own opening post, so replyCount below
+        // subtracts one — same convention as toThreadListItem in forums-server.ts.
+        _count: { select: { posts: true, views: true } },
       },
       orderBy: { createdAt: "desc" },
       take: pageSize,
@@ -130,10 +161,13 @@ export async function getFeedPage(params: {
       id: event.id,
       title: event.title,
       excerpt: event.description ? truncate(event.description) : "No description provided.",
-      href: withFeedRef("/calendar"),
+      href: withFeedRef(`/calendar/${event.id}`),
       timestamp: event.createdAt.toISOString(),
       author: authorOf(event.host),
-      imageUrl: null,
+      imageUrl: getEventHeroImageUrl(event.heroImageUrl),
+      attendeeCount: event._count.rsvps + event._count.registrations,
+      forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : undefined,
+      eventStartsAt: event.startsAt.toISOString(),
     })),
     ...posts.map((post): FeedItem => ({
       type: "post",
@@ -145,6 +179,7 @@ export async function getFeedPage(params: {
       timestamp: (post.publishedAt as Date).toISOString(),
       author: authorOf(post.author),
       imageUrl: getPostHeroImageUrl(post.heroImageUrl),
+      stats: { views: post._count.views, comments: post._count.comments },
     })),
     ...libraryItems.map((item): FeedItem => ({
       type: "library",
@@ -165,6 +200,7 @@ export async function getFeedPage(params: {
       timestamp: thread.createdAt.toISOString(),
       author: authorOf(thread.author),
       imageUrl: null,
+      stats: { views: thread._count.views, comments: thread._count.posts - 1 },
     })),
     ...announcements.map((announcement): FeedItem => ({
       type: "announcement",

@@ -1,4 +1,9 @@
 import { db } from "@/lib/db";
+import { EVENTS_FORUM_SLUG } from "@/lib/forums";
+
+// Absolute, not relative — same rationale as events-server.ts's createEvent:
+// lib/linkify.tsx's linkifyText only turns absolute http(s) URLs into links.
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
 // Common expertise areas across Nasiha's membership (clinical, public
 // health, research, and non-clinical board/leadership domains — matches
@@ -273,6 +278,11 @@ const FORUMS: { name: string; description: string; displayOrder: number }[] = [
     name: "Organizational",
     description: "Board updates, policy discussions, credit system questions.",
     displayOrder: 5,
+  },
+  {
+    name: "Events",
+    description: "Auto-created discussion threads for events that opt in at submission time.",
+    displayOrder: 6,
   },
 ];
 
@@ -551,6 +561,40 @@ async function seedForums() {
   }
 }
 
+// One-time-per-row backfill: retroactively creates the Events-forum
+// discussion thread for every existing Event that doesn't have one yet —
+// same shape (thread titled after the event, one system-authored first
+// post linking back to /calendar/[id]) as createEvent's opt-in "create a
+// discussion thread" checkbox (§4.6), just applied to events that predate
+// that feature. Requires seedForums() to have already run.
+async function backfillEventForumThreads() {
+  const eventsForum = await db.forum.findUnique({ where: { slug: EVENTS_FORUM_SLUG }, select: { id: true } });
+  if (!eventsForum) {
+    console.log("Events forum not seeded yet — skipping event forum thread backfill.");
+    return;
+  }
+
+  const events = await db.event.findMany({
+    where: { forumThread: null },
+    select: { id: true, title: true, hostId: true },
+  });
+
+  for (const event of events) {
+    const thread = await db.forumThread.create({
+      data: { forumId: eventsForum.id, authorId: event.hostId, title: event.title, eventId: event.id },
+      select: { id: true },
+    });
+    await db.forumPost.create({
+      data: {
+        threadId: thread.id,
+        authorId: event.hostId,
+        body: `Discussion thread for this event. Event details: ${APP_URL}/calendar/${event.id}`,
+      },
+    });
+  }
+  console.log(`Backfilled ${events.length} event discussion thread(s).`);
+}
+
 async function main() {
   for (const name of SKILLS) {
     await db.skill.upsert({
@@ -576,6 +620,7 @@ async function main() {
   await seedBlog();
   await seedKnowledgeLibrary();
   await seedForums();
+  await backfillEventForumThreads();
 }
 
 main()

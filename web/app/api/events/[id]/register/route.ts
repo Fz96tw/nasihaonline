@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { EventError, registerForEvent } from "@/lib/events-server";
 import { eventRegistrationSchema } from "@/lib/validation/event-registration";
-import { rateLimit } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { sendEventRegistrationConfirmationEmail } from "@/lib/email";
-
-function clientIp(request: Request): string {
-  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-}
 
 /**
  * POST /api/events/:id/register — captures a non-member's email/name for

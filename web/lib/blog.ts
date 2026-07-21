@@ -43,6 +43,12 @@ export type PostCommentNode = {
   replies: PostCommentNode[];
 };
 
+// Total comment count for the square-chat icon, including nested replies —
+// unlike the Comments tab's own label, which counts only root-level nodes.
+export function countAllComments(nodes: PostCommentNode[]): number {
+  return nodes.reduce((total, node) => total + 1 + countAllComments(node.replies), 0);
+}
+
 // Plain-text excerpt from Tiptap-authored HTML — strips tags rather than
 // rendering, so /blog cards never leak unclosed markup from a truncation
 // cut mid-tag.

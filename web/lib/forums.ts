@@ -1,10 +1,17 @@
 // Shared Forums types (§4.13) — mirrors lib/blog.ts's split between plain
 // data shapes (this file) and DB-touching queries (lib/forums-server.ts).
 
+import type { DirectoryMember } from "@/lib/members";
+
 // Seeded forum slug (see prisma/seed.ts's slugify("Clinical Discussions"))
 // that gates the de-identification confirmation, same rule as
 // KnowledgeItem's case_study contentType and Event's case_discussion type.
 export const CLINICAL_DISCUSSIONS_SLUG = "clinical-discussions";
+
+// Seeded forum slug (see prisma/seed.ts's slugify("Events")) that holds the
+// auto-created discussion thread behind an Event's optional "create a
+// discussion thread" checkbox (§4.6) — createEvent links new threads here.
+export const EVENTS_FORUM_SLUG = "events";
 
 export type ForumCategory = {
   id: string;
@@ -12,6 +19,9 @@ export type ForumCategory = {
   slug: string;
   description: string | null;
   threadCount: number;
+  /** Only populated by getForumCategories, for the /forums sort buttons. */
+  postCount?: number;
+  lastActivityAt?: string | null;
 };
 
 export type ForumThreadListItem = {
@@ -21,6 +31,7 @@ export type ForumThreadListItem = {
   authorName: string | null;
   createdAt: string;
   replyCount: number;
+  viewCount: number;
   lastActivityAt: string;
 };
 
@@ -30,6 +41,8 @@ export type ForumPostNode = {
   body: string;
   authorId: string;
   authorName: string | null;
+  /** Author's Directory profile, if they're directory-listed and tier-eligible (§4.3/§9) — null otherwise, in which case the author's avatar isn't clickable. */
+  authorProfile: DirectoryMember | null;
   createdAt: string;
   flagged: boolean;
   removed: boolean;
@@ -43,6 +56,8 @@ export type ForumThreadDetail = {
   authorId: string;
   authorName: string | null;
   createdAt: string;
+  replyCount: number;
+  viewCount: number;
   forum: { id: string; name: string; slug: string };
   posts: ForumPostNode[];
 };

@@ -2,11 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { contactSchema } from "@/lib/validation/contact";
 import { sendContactMessageEmail } from "@/lib/email";
-import { rateLimit } from "@/lib/rate-limit";
-
-function clientIp(request: Request): string {
-  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-}
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   const { success } = await rateLimit(`contact:${clientIp(request)}`, {

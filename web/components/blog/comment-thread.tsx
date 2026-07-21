@@ -97,7 +97,7 @@ function CommentNode({
           <span className="font-medium text-foreground">{comment.authorName ?? "NASIHA Member"}</span>
           <span>{formatTimestamp(comment.createdAt)}</span>
         </div>
-        <p className="whitespace-pre-wrap text-sm">{renderTextWithMentions(comment.body, mentionableMembers)}</p>
+        <p className="whitespace-pre-wrap break-words text-sm">{renderTextWithMentions(comment.body, mentionableMembers)}</p>
         {canComment && (
           <button
             type="button"

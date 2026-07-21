@@ -301,7 +301,10 @@ export async function reviewKnowledgeItem(id: string, action: "publish" | "rejec
  * back to published or removes it, which is out of scope for this
  * objective (no admin tooling for it yet).
  */
-export async function flagKnowledgeItem(id: string): Promise<{ id: string; status: KnowledgeStatus }> {
+export async function flagKnowledgeItem(
+  id: string,
+  reason: string,
+): Promise<{ id: string; status: KnowledgeStatus }> {
   const item = await db.knowledgeItem.findUnique({ where: { id }, select: { id: true, status: true } });
   if (!item) throw new KnowledgeItemError(404, "Resource not found.");
   if (item.status !== KnowledgeStatus.published) {
@@ -310,7 +313,7 @@ export async function flagKnowledgeItem(id: string): Promise<{ id: string; statu
 
   return db.knowledgeItem.update({
     where: { id },
-    data: { status: KnowledgeStatus.flagged },
+    data: { status: KnowledgeStatus.flagged, flagReason: reason },
     select: { id: true, status: true },
   });
 }
@@ -334,7 +337,10 @@ export async function resolveFlaggedKnowledgeItem(
 
   return db.knowledgeItem.update({
     where: { id },
-    data: { status: action === "remove" ? KnowledgeStatus.rejected : KnowledgeStatus.published },
+    data: {
+      status: action === "remove" ? KnowledgeStatus.rejected : KnowledgeStatus.published,
+      flagReason: null,
+    },
     select: { id: true, status: true },
   });
 }

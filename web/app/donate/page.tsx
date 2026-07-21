@@ -38,7 +38,7 @@ export default async function DonatePage({
         <div className="relative mx-auto max-w-[580px]">
           <h1 className="mb-3 text-[2.5rem] font-extrabold leading-[1.1] tracking-[-.02em] [text-shadow:0_2px_16px_rgba(0,10,40,.55)] md:text-[3.5rem]">Support Us</h1>
           <p className="text-xl leading-[1.6] opacity-[.88] [text-shadow:0_1px_10px_rgba(0,10,40,.6)] md:text-2xl">
-            Donations fund the Organization directly and are entirely separate from the Knowledge Hours exchange.
+            Your donation goes directly to NASIHA — separate from the Knowledge Hours exchange between members.
           </p>
         </div>
       </section>

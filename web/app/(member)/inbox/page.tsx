@@ -24,7 +24,7 @@ export default async function InboxPage() {
         <div className="relative mx-auto max-w-[580px]">
           <h1 className="mb-3 text-[2.5rem] font-extrabold leading-[1.1] tracking-[-.02em] [text-shadow:0_2px_16px_rgba(0,10,40,.55)] md:text-[3.5rem]">Message Inbox</h1>
           <p className="text-xl leading-[1.6] opacity-[.88] [text-shadow:0_1px_10px_rgba(0,10,40,.6)] md:text-2xl">
-            Asynchronous messages and meeting requests from fellow members — no live chat.
+            Messages and meeting requests from fellow members, to read and reply to at your own pace.
           </p>
         </div>
       </section>
