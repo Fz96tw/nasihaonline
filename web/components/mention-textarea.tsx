@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Textarea, type TextareaProps } from "@/components/ui/textarea";
 import { Avatar } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils";
 import type { DirectoryMember } from "@/lib/members";
 
 const SUGGESTION_LIMIT = 5;
@@ -33,6 +34,7 @@ export function MentionTextarea({
 }) {
   const [query, setQuery] = useState<{ start: number; query: string } | null>(null);
   const [suggestions, setSuggestions] = useState<DirectoryMember[]>([]);
+  const [activeIndex, setActiveIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -49,6 +51,7 @@ export function MentionTextarea({
         const payload = await res.json();
         const members: DirectoryMember[] = Array.isArray(payload?.members) ? payload.members : [];
         setSuggestions(members.filter((member) => member.name).slice(0, SUGGESTION_LIMIT));
+        setActiveIndex(0);
       } catch {
         if (!cancelled) setSuggestions([]);
       }
@@ -77,6 +80,24 @@ export function MentionTextarea({
     textareaRef.current?.focus();
   }
 
+  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (suggestions.length === 0) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((index) => (index + 1) % suggestions.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((index) => (index - 1 + suggestions.length) % suggestions.length);
+    } else if (event.key === "Enter" || event.key === "Tab") {
+      event.preventDefault();
+      selectMember(suggestions[activeIndex]);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      setSuggestions([]);
+    }
+  }
+
   return (
     <div className="relative">
       <Textarea
@@ -84,16 +105,21 @@ export function MentionTextarea({
         ref={textareaRef}
         value={value}
         onChange={handleChange}
+        onKeyDown={handleKeyDown}
         onBlur={() => setTimeout(() => setSuggestions([]), 150)}
       />
       {suggestions.length > 0 && (
         <div className="absolute left-0 top-full z-10 mt-1 w-full max-w-xs rounded-md border bg-popover shadow-md">
-          {suggestions.map((member) => (
+          {suggestions.map((member, index) => (
             <button
               key={member.id}
               type="button"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+              className={cn(
+                "flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted",
+                index === activeIndex && "bg-muted",
+              )}
               onMouseDown={(event) => event.preventDefault()}
+              onMouseEnter={() => setActiveIndex(index)}
               onClick={() => selectMember(member)}
             >
               <Avatar name={member.name ?? "Member"} src={member.avatarUrl} size="xs" />
