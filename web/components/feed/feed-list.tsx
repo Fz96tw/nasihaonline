@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { type FeedItem, type FeedCursor, encodeFeedCursor } from "@/lib/feed";
+import { type FeedItem, type FeedItemType, type FeedCursor, encodeFeedCursor } from "@/lib/feed";
 import { FeedRow } from "@/components/feed/feed-row";
 import { Button } from "@/components/ui/button";
 
@@ -9,10 +9,12 @@ export function FeedList({
   initialItems,
   initialCursor,
   initialHasMore,
+  activeType,
 }: {
   initialItems: FeedItem[];
   initialCursor: FeedCursor | null;
   initialHasMore: boolean;
+  activeType?: FeedItemType;
 }) {
   const [items, setItems] = useState(initialItems);
   const [cursor, setCursor] = useState(initialCursor);
@@ -23,7 +25,8 @@ export function FeedList({
     if (!cursor || loading) return;
     setLoading(true);
     try {
-      const response = await fetch(`/api/whats-new?cursor=${encodeFeedCursor(cursor)}`);
+      const typeParam = activeType ? `&type=${activeType}` : "";
+      const response = await fetch(`/api/whats-new?cursor=${encodeFeedCursor(cursor)}${typeParam}`);
       if (!response.ok) return;
       const data = (await response.json()) as { items: FeedItem[]; nextCursor: FeedCursor | null; hasMore: boolean };
       setItems((prev) => [...prev, ...data.items]);

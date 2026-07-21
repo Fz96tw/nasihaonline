@@ -1,16 +1,22 @@
 import { notFound } from "next/navigation";
 import { getInvitationByToken } from "@/lib/surveys-server";
 import { SurveyRespondForm } from "@/components/survey-respond-form";
-import { BackToFeedLink } from "@/components/feed/back-to-feed-link";
+import { BackLink } from "@/components/back-link";
+
+// Maps the ?ref=<source> marker /surveys/[id] forwards here to where "back"
+// should go — an emailed-link visitor (no ref, often no session) has
+// nothing sensible to go back to, so they see no back link at all.
+const REF_BACK_TARGETS: Record<string, string> = {
+  "whats-new": "/whats-new",
+  dashboard: "/dashboard",
+};
 
 /**
  * Public respond page — no session required, reached via either the
  * emailed magic link (?token only) or, for members, a click-through from
- * the What's New feed via /surveys/[id] (which forwards ?ref=whats-new
- * here). Not in middleware's isProtectedPageRoute list, so unauthenticated
- * visitors (donors, event guests) can load it directly. BackToFeedLink only
- * renders when that marker is present, so an emailed-link visitor — who has
- * no session and nothing to "go back" to — never sees it.
+ * the What's New feed or dashboard via /surveys/[id] (which forwards
+ * ?ref=<source> here). Not in middleware's isProtectedPageRoute list, so
+ * unauthenticated visitors (donors, event guests) can load it directly.
  */
 export default async function SurveyRespondPage({
   params,
@@ -22,9 +28,16 @@ export default async function SurveyRespondPage({
   const invitation = await getInvitationByToken(params.token);
   if (!invitation) notFound();
 
+  const backHref = searchParams.ref ? REF_BACK_TARGETS[searchParams.ref] : undefined;
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-6 p-8">
-      <BackToFeedLink searchParams={searchParams} />
+      {backHref && (
+        <BackLink
+          fallbackHref={backHref}
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+        />
+      )}
       <div>
         {invitation.surveyHeroImageUrl && (
           // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale

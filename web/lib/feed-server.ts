@@ -45,12 +45,15 @@ const BOARD_SENDER = { name: "NASIHA Board", avatarUrl: "/images/nasihalogo-crop
 export async function getFeedPage(params: {
   cursor: FeedCursor | null;
   pageSize?: number;
+  /** Restrict to these feed types; omit/undefined for the full merged feed. */
+  types?: FeedItem["type"][];
 }): Promise<{ items: FeedItem[]; nextCursor: FeedCursor | null; hasMore: boolean }> {
   const pageSize = params.pageSize ?? DEFAULT_PAGE_SIZE;
   const before = params.cursor ? new Date(params.cursor.ts) : null;
+  const wants = (type: FeedItem["type"]) => !params.types || params.types.includes(type);
 
   const [events, posts, libraryItems, forumThreads, announcements, surveys] = await Promise.all([
-    db.event.findMany({
+    !wants("event") ? Promise.resolve([]) : db.event.findMany({
       where: before ? { createdAt: { lt: before } } : {},
       select: {
         id: true,
@@ -66,6 +69,7 @@ export async function getFeedPage(params: {
           select: {
             rsvps: { where: { status: RSVPStatus.going } },
             registrations: true,
+            views: true,
           },
         },
         // posts includes the thread's own system-authored opening post, so
@@ -76,7 +80,7 @@ export async function getFeedPage(params: {
       orderBy: { createdAt: "desc" },
       take: pageSize,
     }),
-    db.post.findMany({
+    !wants("post") ? Promise.resolve([]) : db.post.findMany({
       where: { publishedAt: { not: null }, ...(before ? { publishedAt: { lt: before } } : {}) },
       select: {
         id: true,
@@ -94,7 +98,7 @@ export async function getFeedPage(params: {
       orderBy: { publishedAt: "desc" },
       take: pageSize,
     }),
-    db.knowledgeItem.findMany({
+    !wants("library") ? Promise.resolve([]) : db.knowledgeItem.findMany({
       where: { status: KnowledgeStatus.published, ...(before ? { createdAt: { lt: before } } : {}) },
       select: {
         id: true,
@@ -107,7 +111,7 @@ export async function getFeedPage(params: {
       orderBy: { createdAt: "desc" },
       take: pageSize,
     }),
-    db.forumThread.findMany({
+    !wants("forum_thread") ? Promise.resolve([]) : db.forumThread.findMany({
       // eventId: null excludes the Events forum's auto-created threads —
       // those already surface as their parent Event's own feed row (with
       // forumReplyCount above), so listing them again here would be a
@@ -126,7 +130,7 @@ export async function getFeedPage(params: {
       orderBy: { createdAt: "desc" },
       take: pageSize,
     }),
-    db.announcement.findMany({
+    !wants("announcement") ? Promise.resolve([]) : db.announcement.findMany({
       where: {
         sentAt: { not: null },
         retractedAt: null,
@@ -143,7 +147,7 @@ export async function getFeedPage(params: {
     // actionable/live" rationale as Announcement's sentAt+retractedAt
     // filter. No author select needed — like Announcement, the real sending
     // admin is masked behind BOARD_SENDER on this member-facing surface.
-    db.survey.findMany({
+    !wants("survey") ? Promise.resolve([]) : db.survey.findMany({
       where: {
         status: SurveyStatus.open,
         audienceMembers: true,
@@ -168,6 +172,7 @@ export async function getFeedPage(params: {
       attendeeCount: event._count.rsvps + event._count.registrations,
       forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : undefined,
       eventStartsAt: event.startsAt.toISOString(),
+      eventViewCount: event._count.views,
     })),
     ...posts.map((post): FeedItem => ({
       type: "post",

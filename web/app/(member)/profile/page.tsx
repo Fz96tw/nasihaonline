@@ -6,6 +6,7 @@ import { getAllSkills } from "@/lib/skills-server";
 import { ProfileForm } from "@/components/profile/profile-form";
 import { joinList } from "@/lib/validation/profile";
 import { Badge } from "@/components/ui/badge";
+import { BackLink } from "@/components/back-link";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
 
 export const metadata: Metadata = {
@@ -22,7 +23,8 @@ export default async function ProfilePage() {
   return (
     <main className="mx-auto flex max-w-[960px] flex-col gap-8 p-8">
       <div>
-        <div className="flex items-center gap-3">
+        <BackLink fallbackHref="/dashboard" />
+        <div className="mt-2 flex items-center gap-3">
           <h1 className="text-3xl font-bold tracking-tight">My Profile</h1>
           {user.tier && (
             <Badge variant={TIER_BADGE_VARIANT[user.tier]}>{DIRECTORY_TIER_LABELS[user.tier]}</Badge>

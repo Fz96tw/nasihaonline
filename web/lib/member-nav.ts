@@ -1,5 +1,4 @@
 import {
-  Award,
   BookOpen,
   CalendarDays,
   ClipboardCheck,
@@ -10,7 +9,6 @@ import {
   PenLine,
   Rss,
   Shield,
-  User,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -37,8 +35,6 @@ export const MEMBER_NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "What's New", href: "/whats-new", icon: Rss },
       { label: "My Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { label: "My Profile", href: "/profile", icon: User },
-      { label: "My Knowledge Hours", href: "/contributions", icon: Award },
     ],
   },
   {

@@ -14,6 +14,12 @@ export const FEED_TYPE_LABELS: Record<FeedItemType, string> = {
   survey: "Survey",
 };
 
+export const FEED_TYPES = Object.keys(FEED_TYPE_LABELS) as FeedItemType[];
+
+export function isFeedItemType(value: string | null | undefined): value is FeedItemType {
+  return value != null && (FEED_TYPES as string[]).includes(value);
+}
+
 export type FeedItem = {
   type: FeedItemType;
   id: string;
@@ -33,6 +39,8 @@ export type FeedItem = {
   eventStartsAt?: string;
   /** Only events with a linked Events-forum thread (§4.6) carry this — undefined when the event has no thread. */
   forumReplyCount?: number;
+  /** Only events carry a detail-page unique-visitor count (§4.6) — undefined for every other type. */
+  eventViewCount?: number;
 };
 
 // Marks a feed row's href so the page it lands on (blog post, forum thread,

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import {
@@ -27,7 +28,10 @@ export default async function ContributionsPage() {
   return (
     <main className="mx-auto flex max-w-[1120px] flex-col gap-8 p-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Knowledge Hours</h1>
+        <Link href="/dashboard" className="text-sm text-muted-foreground hover:underline">
+          ← Back to Dashboard
+        </Link>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">Knowledge Hours</h1>
         <p className="text-muted-foreground">
           Track your contributions and log new activity for confirmation.
         </p>
