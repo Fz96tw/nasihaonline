@@ -3,12 +3,16 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Flag } from "lucide-react";
+import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { FlagContentDialog } from "@/components/flag-content-dialog";
+import { MemberProfileDialog } from "@/components/members/member-profile-dialog";
+import { MentionTextarea } from "@/components/mention-textarea";
 import type { ForumPostNode } from "@/lib/forums";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { renderTextWithMentions, type MentionCandidate } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
 import { formatTimestamp } from "@/lib/format-date";
 
@@ -64,11 +68,11 @@ function ReplyForm({
 
   return (
     <div className="flex flex-col gap-2">
-      <Textarea
+      <MentionTextarea
         rows={parentId ? 2 : 3}
-        placeholder={parentId ? "Write a reply…" : "Write a post…"}
+        placeholder={parentId ? "Write a reply… (@ to tag a member)" : "Write a post… (@ to tag a member)"}
         value={body}
-        onChange={(event) => setBody(event.target.value)}
+        onChange={setBody}
         autoFocus={autoFocus}
       />
       {requireDeidentification && (
@@ -96,33 +100,40 @@ function PostNode({
   post,
   threadId,
   requireDeidentification,
+  mentionableMembers,
   onPosted,
 }: {
   post: ForumPostNode;
   threadId: string;
   requireDeidentification: boolean;
+  mentionableMembers: MentionCandidate[];
   onPosted: () => void;
 }) {
   const router = useRouter();
   const [replying, setReplying] = useState(false);
+  const [flagDialogOpen, setFlagDialogOpen] = useState(false);
   const [flagging, setFlagging] = useState(false);
   const [flagged, setFlagged] = useState(post.flagged);
   const [flagError, setFlagError] = useState<string | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const authorName = post.authorName ?? "NASIHA Member";
 
-  async function handleFlag() {
+  async function handleFlag(reason: string) {
     setFlagging(true);
     setFlagError(null);
     try {
       const csrfToken = await getCsrfToken();
       const res = await fetch(`/api/forums/posts/${post.id}/flag`, {
         method: "POST",
-        headers: { "x-csrf-token": csrfToken },
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        body: JSON.stringify({ reason }),
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => null);
         throw new Error(typeof payload?.error === "string" ? payload.error : "Something went wrong.");
       }
       setFlagged(true);
+      setFlagDialogOpen(false);
       router.refresh();
     } catch (err) {
       setFlagError(err instanceof Error ? err.message : "Something went wrong.");
@@ -136,14 +147,32 @@ function PostNode({
       <div className="rounded-[10px] border bg-muted/40 p-3">
         <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-2">
-            <span className="font-medium text-foreground">{post.authorName ?? "NASIHA Member"}</span>
+            {post.authorProfile ? (
+              <button
+                type="button"
+                onClick={() => setProfileOpen(true)}
+                aria-label={`View ${authorName}'s profile`}
+                className="flex items-center gap-1.5"
+              >
+                <Avatar name={authorName} src={post.authorProfile.avatarUrl} size="xs" />
+                <span className="font-medium text-foreground hover:underline">{authorName}</span>
+              </button>
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <Avatar name={authorName} size="xs" />
+                <span className="font-medium text-foreground">{authorName}</span>
+              </span>
+            )}
             {post.removed && <Badge variant="neutral">Removed</Badge>}
             {!post.removed && flagged && <Badge variant="danger">Flagged</Badge>}
           </span>
           <span>{formatTimestamp(post.createdAt)}</span>
         </div>
+        {post.authorProfile && (
+          <MemberProfileDialog member={post.authorProfile} open={profileOpen} onOpenChange={setProfileOpen} />
+        )}
         <p className={cn("whitespace-pre-wrap text-sm", post.removed && "italic text-muted-foreground")}>
-          {post.body}
+          {renderTextWithMentions(post.body, mentionableMembers)}
         </p>
         <div className="mt-2 flex items-center gap-3">
           <button
@@ -156,17 +185,24 @@ function PostNode({
           {!post.removed && !flagged && (
             <button
               type="button"
-              disabled={flagging}
               title="Flag for moderator review"
               className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-destructive"
-              onClick={handleFlag}
+              onClick={() => setFlagDialogOpen(true)}
             >
               <Flag className="h-3 w-3" />
-              {flagging ? "Flagging…" : "Flag"}
+              Flag
             </button>
           )}
         </div>
         {flagError && <p className="mt-1 text-xs text-destructive">{flagError}</p>}
+        <FlagContentDialog
+          open={flagDialogOpen}
+          onOpenChange={setFlagDialogOpen}
+          itemLabel="reply"
+          submitting={flagging}
+          error={flagError}
+          onConfirm={handleFlag}
+        />
       </div>
 
       {replying && (
@@ -193,6 +229,7 @@ function PostNode({
               post={reply}
               threadId={threadId}
               requireDeidentification={requireDeidentification}
+              mentionableMembers={mentionableMembers}
               onPosted={onPosted}
             />
           ))}
@@ -207,10 +244,12 @@ export function ForumThreadView({
   threadId,
   posts,
   requireDeidentification,
+  mentionableMembers,
 }: {
   threadId: string;
   posts: ForumPostNode[];
   requireDeidentification: boolean;
+  mentionableMembers: MentionCandidate[];
 }) {
   const router = useRouter();
 
@@ -222,6 +261,7 @@ export function ForumThreadView({
           post={post}
           threadId={threadId}
           requireDeidentification={requireDeidentification}
+          mentionableMembers={mentionableMembers}
           onPosted={() => router.refresh()}
         />
       ))}

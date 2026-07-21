@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import { NotificationType } from "@/lib/generated/prisma/enums";
 import { createNotification } from "@/lib/notifications-server";
 import { searchForumDocuments } from "@/lib/meilisearch";
+import { getDirectoryMembersByIds, getMentionableMembers } from "@/lib/members-server";
+import { findMentionedMembers } from "@/lib/mentions";
 import { CLINICAL_DISCUSSIONS_SLUG } from "@/lib/forums";
 import type { ForumCategory, ForumThreadListItem, ForumThreadDetail, ForumPostNode } from "@/lib/forums";
 
@@ -15,21 +17,50 @@ export class ForumError extends Error {
   }
 }
 
-/** /forums (§4.13) — the six seeded forum categories, admin-manageable but not editable here yet. */
+/**
+ * /forums (§4.13) — the six seeded forum categories, admin-manageable but
+ * not editable here yet. postCount/lastActivityAt are derived from each
+ * thread's latest post (every thread has at least one, from creation) so
+ * the "most active" / "most recent" sort buttons on the page have something
+ * to sort by without a denormalized column on Forum itself.
+ */
 export async function getForumCategories(): Promise<ForumCategory[]> {
   const forums = await db.forum.findMany({
     where: { active: true },
-    select: { id: true, name: true, slug: true, description: true, _count: { select: { threads: true } } },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      description: true,
+      _count: { select: { threads: true } },
+      threads: {
+        select: {
+          _count: { select: { posts: true } },
+          posts: { select: { createdAt: true }, orderBy: { createdAt: "desc" }, take: 1 },
+        },
+      },
+    },
     orderBy: { displayOrder: "asc" },
   });
 
-  return forums.map((forum) => ({
-    id: forum.id,
-    name: forum.name,
-    slug: forum.slug,
-    description: forum.description,
-    threadCount: forum._count.threads,
-  }));
+  return forums.map((forum) => {
+    const postCount = forum.threads.reduce((sum, thread) => sum + thread._count.posts, 0);
+    const lastActivityAt = forum.threads.reduce<Date | null>((latest, thread) => {
+      const postDate = thread.posts[0]?.createdAt;
+      if (!postDate) return latest;
+      return !latest || postDate > latest ? postDate : latest;
+    }, null);
+
+    return {
+      id: forum.id,
+      name: forum.name,
+      slug: forum.slug,
+      description: forum.description,
+      threadCount: forum._count.threads,
+      postCount,
+      lastActivityAt: lastActivityAt ? lastActivityAt.toISOString() : null,
+    };
+  });
 }
 
 const THREAD_LIST_SELECT = {
@@ -39,7 +70,7 @@ const THREAD_LIST_SELECT = {
   createdAt: true,
   author: { select: { name: true } },
   posts: { select: { createdAt: true }, orderBy: { createdAt: "desc" } as const, take: 1 },
-  _count: { select: { posts: true } },
+  _count: { select: { posts: true, views: true } },
 } as const;
 
 function toThreadListItem(thread: {
@@ -49,7 +80,7 @@ function toThreadListItem(thread: {
   createdAt: Date;
   author: { name: string | null };
   posts: { createdAt: Date }[];
-  _count: { posts: number };
+  _count: { posts: number; views: number };
 }): ForumThreadListItem {
   return {
     id: thread.id,
@@ -58,6 +89,7 @@ function toThreadListItem(thread: {
     authorName: thread.author.name,
     createdAt: thread.createdAt.toISOString(),
     replyCount: thread._count.posts - 1,
+    viewCount: thread._count.views,
     lastActivityAt: (thread.posts[0]?.createdAt ?? thread.createdAt).toISOString(),
   };
 }
@@ -111,13 +143,22 @@ export async function getForumBySlug(
     };
   }
 
+  // Browse view sorts pinned first, then by each thread's latest post
+  // (falling back to its own createdAt, same as toThreadListItem) — a
+  // thread that just got a new reply surfaces above one that's been
+  // dormant since creation, standard forum convention. The /forums/
+  // [category] page can re-sort this client-side (newest/most-active)
+  // via its sort buttons; this is just the default.
   const threads = await db.forumThread.findMany({
     where: { forumId: forum.id },
     select: THREAD_LIST_SELECT,
-    orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
+  });
+  const items = threads.map(toThreadListItem).sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    return b.lastActivityAt.localeCompare(a.lastActivityAt);
   });
 
-  return { forum: forumCategory, threads: threads.map(toThreadListItem), isFollowing };
+  return { forum: forumCategory, threads: items, isFollowing };
 }
 
 /**
@@ -151,9 +192,12 @@ export async function getForumThreadDetail(forumSlug: string, threadId: string):
         },
         orderBy: { createdAt: "asc" },
       },
+      _count: { select: { posts: true, views: true } },
     },
   });
   if (!thread || thread.forum.slug !== forumSlug) return null;
+
+  const authorProfiles = await getDirectoryMembersByIds(Array.from(new Set(thread.posts.map((post) => post.authorId))));
 
   const nodes = new Map<string, ForumPostNode>(
     thread.posts.map((post) => [
@@ -166,6 +210,7 @@ export async function getForumThreadDetail(forumSlug: string, threadId: string):
         body: post.removed ? "[Removed by a moderator]" : post.body,
         authorId: post.authorId,
         authorName: post.author.name,
+        authorProfile: authorProfiles.get(post.authorId) ?? null,
         createdAt: post.createdAt.toISOString(),
         flagged: post.flagged,
         removed: post.removed,
@@ -189,9 +234,31 @@ export async function getForumThreadDetail(forumSlug: string, threadId: string):
     authorId: thread.authorId,
     authorName: thread.author.name,
     createdAt: thread.createdAt.toISOString(),
+    replyCount: thread._count.posts - 1,
+    viewCount: thread._count.views,
     forum: thread.forum,
     posts: roots,
   };
+}
+
+export async function getThreadViewCount(threadId: string): Promise<number> {
+  return db.threadView.count({ where: { threadId } });
+}
+
+/**
+ * Records a unique visit to a thread for the eye-icon count, called from
+ * POST /api/forums/threads/:threadId/view on every page load. Unlike
+ * recordPostView, `userId` is always a real signed-in member (both thread
+ * pages redirect a signed-out visitor to /sign-in before this can ever
+ * fire), so this dedupes on the `[threadId, userId]` unique constraint
+ * directly rather than going through an opaque viewer key.
+ */
+export async function recordThreadView(threadId: string, userId: string): Promise<number> {
+  const thread = await db.forumThread.findUnique({ where: { id: threadId }, select: { id: true } });
+  if (!thread) throw new ForumError(404, "Thread not found.");
+
+  await db.threadView.createMany({ data: { threadId, userId }, skipDuplicates: true });
+  return getThreadViewCount(threadId);
 }
 
 /**
@@ -241,6 +308,10 @@ export async function createForumThread(
  * forum (followers wait for the future digest instead, §4.10 Phase 6).
  * Same de-identification gate as createForumThread, keyed off the parent
  * thread's forum.
+ *
+ * Also matches `@Full Name` tags (§4.13) against Directory-eligible members
+ * and sends each a distinct `mention` notification instead — a tagged
+ * participant gets only the mention notification, not both.
  */
 export async function createForumPost(
   threadId: string,
@@ -285,13 +356,34 @@ export async function createForumPost(
   const otherParticipantIds = new Set(participants.map((participant) => participant.authorId));
   if (thread.authorId !== authorId) otherParticipantIds.add(thread.authorId);
 
+  const mentionableMembers = await getMentionableMembers();
+  const mentionedMembers = findMentionedMembers(input.body, mentionableMembers).filter(
+    (member) => member.id !== authorId,
+  );
+  const postLink = `/forums/${thread.forum.slug}/${threadId}#post-${post.id}`;
+
+  await Promise.all(
+    mentionedMembers.map((member) =>
+      createNotification({
+        recipientId: member.id,
+        type: NotificationType.mention,
+        message: `${author?.name ?? "A member"} tagged you in "${thread.title}"`,
+        link: postLink,
+      }),
+    ),
+  );
+
+  const mentionedIds = new Set(mentionedMembers.map((member) => member.id));
+
   if (otherParticipantIds.size > 0) {
     const followers = await db.forumFollow.findMany({
       where: { forumId: thread.forumId, userId: { in: Array.from(otherParticipantIds) } },
       select: { userId: true },
     });
     const followerIds = new Set(followers.map((follower) => follower.userId));
-    const recipientIds = Array.from(otherParticipantIds).filter((id) => !followerIds.has(id));
+    const recipientIds = Array.from(otherParticipantIds).filter(
+      (id) => !followerIds.has(id) && !mentionedIds.has(id),
+    );
 
     await Promise.all(
       recipientIds.map((recipientId) =>
@@ -299,7 +391,7 @@ export async function createForumPost(
           recipientId,
           type: NotificationType.forum_reply_mention,
           message: `${author?.name ?? "A member"} replied in "${thread.title}"`,
-          link: `/forums/${thread.forum.slug}/${threadId}#post-${post.id}`,
+          link: postLink,
         }),
       ),
     );
@@ -336,12 +428,16 @@ export async function toggleForumFollow(forumId: string, userId: string): Promis
  * forum post has no publish workflow to also encode. A post already
  * flagged can't be flagged again.
  */
-export async function flagForumPost(id: string): Promise<{ id: string; flagged: boolean }> {
+export async function flagForumPost(id: string, reason: string): Promise<{ id: string; flagged: boolean }> {
   const post = await db.forumPost.findUnique({ where: { id }, select: { id: true, flagged: true } });
   if (!post) throw new ForumError(404, "Post not found.");
   if (post.flagged) throw new ForumError(400, "This post has already been flagged.");
 
-  return db.forumPost.update({ where: { id }, data: { flagged: true }, select: { id: true, flagged: true } });
+  return db.forumPost.update({
+    where: { id },
+    data: { flagged: true, flagReason: reason },
+    select: { id: true, flagged: true },
+  });
 }
 
 /**
@@ -361,7 +457,10 @@ export async function resolveForumPostFlag(
 
   return db.forumPost.update({
     where: { id },
-    data: action === "remove" ? { flagged: false, removed: true } : { flagged: false },
+    data:
+      action === "remove"
+        ? { flagged: false, flagReason: null, removed: true }
+        : { flagged: false, flagReason: null },
     select: { id: true, flagged: true, removed: true, threadId: true },
   });
 }

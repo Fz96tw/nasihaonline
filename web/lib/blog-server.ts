@@ -17,6 +17,8 @@ import {
 } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import { createNotification } from "@/lib/notifications-server";
+import { getMentionableMembers } from "@/lib/members-server";
+import { findMentionedMembers } from "@/lib/mentions";
 import type { PostCard, PostDetail, PostCategoryOption, PostTagOption, PostCommentNode } from "@/lib/blog";
 import { excerptFromHtml } from "@/lib/blog";
 
@@ -366,6 +368,22 @@ export async function getPostComments(postId: string): Promise<PostCommentNode[]
   return roots;
 }
 
+export async function getPostViewCount(postId: string): Promise<number> {
+  return db.postView.count({ where: { postId } });
+}
+
+/**
+ * Records a unique visit to a published post for the eye-icon count. Called
+ * from POST /api/blog/:slug/view on every page load, but `viewerKey` (see
+ * schema comment on PostView) is unique per post, so repeat visits from the
+ * same signed-in user or anon cookie no-op via `skipDuplicates` rather than
+ * inflating the count. Returns the up-to-date total.
+ */
+export async function recordPostView(postId: string, viewerKey: string): Promise<number> {
+  await db.postView.createMany({ data: { postId, viewerKey }, skipDuplicates: true });
+  return getPostViewCount(postId);
+}
+
 export class PostCommentError extends Error {
   constructor(
     public readonly status: 400 | 404,
@@ -380,6 +398,11 @@ export class PostCommentError extends Error {
  * post's author (§4.10's blog_comment type), unless the commenter is the
  * author — same "don't notify yourself" rule as sendMessage's self-message
  * guard.
+ *
+ * Also matches `@Full Name` tags (§4.8) against Directory-eligible members
+ * and sends each a distinct `mention` notification instead — the post
+ * author gets only the mention notification if they're also tagged, not
+ * both.
  */
 export async function createPostComment(
   postId: string,
@@ -405,12 +428,32 @@ export async function createPostComment(
     data: { postId, authorId, body: input.body, parentId: input.parentId },
   });
 
-  if (authorId !== post.authorId) {
+  const commentLink = `/blog/${post.slug}#comment-${comment.id}`;
+
+  const mentionableMembers = await getMentionableMembers();
+  const mentionedMembers = findMentionedMembers(input.body, mentionableMembers).filter(
+    (member) => member.id !== authorId,
+  );
+
+  await Promise.all(
+    mentionedMembers.map((member) =>
+      createNotification({
+        recipientId: member.id,
+        type: NotificationType.mention,
+        message: `${commenter?.name ?? "A member"} tagged you in a comment on "${post.title}"`,
+        link: commentLink,
+      }),
+    ),
+  );
+
+  const mentionedIds = new Set(mentionedMembers.map((member) => member.id));
+
+  if (authorId !== post.authorId && !mentionedIds.has(post.authorId)) {
     await createNotification({
       recipientId: post.authorId,
       type: NotificationType.blog_comment,
       message: `${commenter?.name ?? "A member"} commented on your post "${post.title}"`,
-      link: `/blog/${post.slug}#comment-${comment.id}`,
+      link: commentLink,
     });
   }
 
@@ -423,14 +466,14 @@ export async function createPostComment(
  * flagForumPost. Only a currently published post can be flagged, and not a
  * second time while already flagged.
  */
-export async function flagPost(id: string): Promise<{ id: string; flagged: boolean }> {
+export async function flagPost(id: string, reason: string): Promise<{ id: string; flagged: boolean }> {
   const post = await db.post.findUnique({ where: { id }, select: { id: true, flagged: true, publishedAt: true } });
   if (!post || !post.publishedAt) throw new PostError(404, "Post not found.");
   if (post.flagged) throw new PostError(400, "This post has already been flagged.");
 
   return db.post.update({
     where: { id },
-    data: { flagged: true, flagReason: null },
+    data: { flagged: true, flagReason: reason },
     select: { id: true, flagged: true },
   });
 }

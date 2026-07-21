@@ -64,6 +64,66 @@ export async function getDirectoryMembers(): Promise<DirectoryMember[]> {
 }
 
 /**
+ * Batch version of getDirectoryMemberById — one query for every distinct
+ * author in a forum thread rather than N+1. Same visibility gate; ids that
+ * aren't directory-listed/tier-eligible are simply absent from the map.
+ */
+export async function getDirectoryMembersByIds(userIds: string[]): Promise<Map<string, DirectoryMember>> {
+  if (userIds.length === 0) return new Map();
+
+  const profiles = await db.profile.findMany({
+    where: {
+      userId: { in: userIds },
+      listInDirectory: true,
+      user: { tier: { in: DIRECTORY_TIERS } },
+    },
+    include: PROFILE_INCLUDE,
+  });
+
+  return new Map(profiles.map((profile) => [profile.userId, toDirectoryMember(profile)]));
+}
+
+/**
+ * Single-member lookup with the same visibility gate as getDirectoryMembers
+ * (§4.3/§9) — used to decide whether a non-Directory surface (e.g. an
+ * event's host) may show that member's full profile. Returns null rather
+ * than an unlisted/ineligible member's data, same enforcement point as the
+ * listing query.
+ */
+export async function getDirectoryMemberById(userId: string): Promise<DirectoryMember | null> {
+  const profile = await db.profile.findFirst({
+    where: {
+      userId,
+      listInDirectory: true,
+      user: { tier: { in: DIRECTORY_TIERS } },
+    },
+    include: PROFILE_INCLUDE,
+  });
+
+  return profile ? toDirectoryMember(profile) : null;
+}
+
+/**
+ * Lightweight {id, name} list of every Directory-eligible member (§4.5's
+ * listInDirectory + tier gate) — used to match `@Full Name` mention tags
+ * (§4.8/§4.13) against real members without pulling each candidate's full
+ * DirectoryMember shape.
+ */
+export async function getMentionableMembers(): Promise<{ id: string; name: string }[]> {
+  const profiles = await db.profile.findMany({
+    where: {
+      listInDirectory: true,
+      user: { tier: { in: DIRECTORY_TIERS }, name: { not: null } },
+    },
+    select: { userId: true, user: { select: { name: true } } },
+  });
+
+  return profiles
+    .filter((profile): profile is typeof profile & { user: { name: string } } => profile.user.name !== null)
+    .map((profile) => ({ id: profile.userId, name: profile.user.name }));
+}
+
+/**
  * Free-text directory search (§7.2/§9 — "near-instant"): Meilisearch only
  * holds the searchable fields, so hits are re-hydrated from Postgres for a
  * fresh signed avatar URL and to re-apply visibility in case the index is

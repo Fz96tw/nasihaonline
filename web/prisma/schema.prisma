@@ -78,6 +78,7 @@ model User {
   forumThreads              ForumThread[]   @relation("ForumThreadAuthor")
   forumPosts                ForumPost[]     @relation("ForumPostAuthor")
   forumFollows              ForumFollow[]
+  threadViews               ThreadView[]
 
   // Trust & Safety / Compliance / Notifications (§4.10/§4.15) — a member can
   // appear on either side of a conduct report (reported or reporting) and
@@ -605,6 +606,10 @@ enum NotificationType {
   contribution_awarded
   blog_comment
   forum_reply_mention
+  // Explicit @Name tag (§4.8/§4.13) — distinct from forum_reply_mention
+  // (which despite its name is the "other thread participants" reply
+  // notification) and blog_comment (the post-author notification).
+  mention
   resource_review_update
   digest
   board_announcement
@@ -676,6 +681,7 @@ model Event {
   endsAt                    DateTime?
   open                      Boolean   @default(false)
   icon                      String?
+  heroImageUrl              String?
   meetingUrl                String?
   deidentificationConfirmed Boolean   @default(false)
   createdAt                 DateTime  @default(now())
@@ -685,6 +691,11 @@ model Event {
   rsvps         RSVP[]
   attendances   Attendance[]
   registrations EventRegistration[]
+  // Optional discussion thread in the seeded "Events" forum (EVENTS_FORUM_SLUG,
+  // lib/forums.ts), opted into at creation time. The FK lives on ForumThread
+  // (below) rather than here so createEvent can create the Event first and
+  // still know its id when posting the thread's linking first post.
+  forumThread ForumThread?
 
   @@index([startsAt])
   @@map("events")
@@ -834,11 +845,27 @@ model Post {
 
   tags     PostTagOnPost[]
   comments PostComment[]
+  views    PostView[]
 
   @@index([authorId])
   @@index([categoryId])
   @@index([publishedAt])
   @@map("posts")
+}
+
+// One row per unique viewer of a Post (§4.8), for the eye-icon view count.
+// `viewerKey` is "user:<User.id>" for a signed-in visit or "anon:<uuid>"
+// keyed off the nasiha_vid cookie for a signed-out one — the blog is
+// public-readable, so most traffic has no session to dedupe by.
+model PostView {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  viewerKey String
+  createdAt DateTime @default(now())
+
+  @@unique([postId, viewerKey])
+  @@map("post_views")
 }
 
 // Threaded comment on a Post (§4.8), mirroring InboxMessage's parentId
@@ -945,6 +972,10 @@ model KnowledgeItem {
   youtubeUrl                String?
   deidentificationConfirmed Boolean              @default(false)
   licenseConsented          Boolean              @default(false)
+  // Required reason the flagging member gave (§4.9) — same "flag is
+  // one-way for the flagger, only a Steward resolving it clears this"
+  // convention as Post.flagReason.
+  flagReason                String?
   createdAt                 DateTime             @default(now())
   updatedAt                 DateTime             @updatedAt
 
@@ -1026,10 +1057,35 @@ model ForumThread {
   updatedAt DateTime @updatedAt
 
   posts ForumPost[]
+  views ThreadView[]
+
+  // Set only for the auto-created thread behind an Event's optional
+  // "create a discussion thread" checkbox (§4.6) — null for every
+  // ordinary member-started thread.
+  eventId String? @unique
+  event   Event?  @relation(fields: [eventId], references: [id])
 
   @@index([forumId])
   @@index([authorId])
   @@map("forum_threads")
+}
+
+// One row per unique member visit to a ForumThread (§4.13), for the
+// eye-icon view count on /forums/[category]/[threadId] — unlike Blog's
+// PostView, forums require a session (both thread pages redirect signed-out
+// visitors to /sign-in), so there's no anonymous-visitor case to key
+// around; this dedupes by User.id directly rather than PostView's opaque
+// viewerKey string.
+model ThreadView {
+  id        String      @id @default(cuid())
+  threadId  String
+  thread    ForumThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@unique([threadId, userId])
+  @@map("thread_views")
 }
 
 // Top-level posts and replies are the same entity, threaded by
@@ -1054,6 +1110,10 @@ model ForumPost {
 
   deidentificationConfirmed Boolean @default(false)
   flagged                   Boolean @default(false)
+  // Required reason the flagging member gave (§4.13) — same "flag is
+  // one-way for the flagger, only a moderator resolving it clears this"
+  // convention as Post.flagReason.
+  flagReason                String?
   // Set by a moderator/admin resolving a flagged post from /admin/content
   // (§4.11/§4.13). The row itself is kept (never deleted) so parentPostId
   // threading on any replies stays intact — the UI swaps in a placeholder

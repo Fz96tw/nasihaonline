@@ -4,10 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { MentionTextarea } from "@/components/mention-textarea";
 import type { PostCommentNode } from "@/lib/blog";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { formatTimestamp } from "@/lib/format-date";
+import { renderTextWithMentions, type MentionCandidate } from "@/lib/mentions";
 
 function CommentForm({
   slug,
@@ -52,11 +53,11 @@ function CommentForm({
 
   return (
     <div className="flex flex-col gap-2">
-      <Textarea
+      <MentionTextarea
         rows={parentId ? 2 : 3}
-        placeholder={parentId ? "Write a reply…" : "Write a comment…"}
+        placeholder={parentId ? "Write a reply… (@ to tag a member)" : "Write a comment… (@ to tag a member)"}
         value={body}
-        onChange={(event) => setBody(event.target.value)}
+        onChange={setBody}
         autoFocus={autoFocus}
       />
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -78,11 +79,13 @@ function CommentNode({
   comment,
   slug,
   canComment,
+  mentionableMembers,
   onPosted,
 }: {
   comment: PostCommentNode;
   slug: string;
   canComment: boolean;
+  mentionableMembers: MentionCandidate[];
   onPosted: () => void;
 }) {
   const [replying, setReplying] = useState(false);
@@ -94,7 +97,7 @@ function CommentNode({
           <span className="font-medium text-foreground">{comment.authorName ?? "NASIHA Member"}</span>
           <span>{formatTimestamp(comment.createdAt)}</span>
         </div>
-        <p className="whitespace-pre-wrap text-sm">{comment.body}</p>
+        <p className="whitespace-pre-wrap text-sm">{renderTextWithMentions(comment.body, mentionableMembers)}</p>
         {canComment && (
           <button
             type="button"
@@ -124,7 +127,14 @@ function CommentNode({
       {comment.replies.length > 0 && (
         <div className="ml-6 flex flex-col gap-3 border-l pl-4">
           {comment.replies.map((reply) => (
-            <CommentNode key={reply.id} comment={reply} slug={slug} canComment={canComment} onPosted={onPosted} />
+            <CommentNode
+              key={reply.id}
+              comment={reply}
+              slug={slug}
+              canComment={canComment}
+              mentionableMembers={mentionableMembers}
+              onPosted={onPosted}
+            />
           ))}
         </div>
       )}
@@ -137,19 +147,20 @@ export function CommentThread({
   slug,
   comments,
   canComment,
+  mentionableMembers,
 }: {
   slug: string;
   comments: PostCommentNode[];
   canComment: boolean;
+  mentionableMembers: MentionCandidate[];
 }) {
   const router = useRouter();
 
   return (
     <section className="mt-12 border-t pt-8">
-      <h2 className="mb-4 text-lg font-semibold">Comments</h2>
-
       {canComment ? (
         <div className="mb-6">
+          <h2 className="mb-2 text-sm font-medium text-muted-foreground">Share your thoughts</h2>
           <CommentForm slug={slug} parentId={null} onPosted={() => router.refresh()} />
         </div>
       ) : (
@@ -171,6 +182,7 @@ export function CommentThread({
               comment={comment}
               slug={slug}
               canComment={canComment}
+              mentionableMembers={mentionableMembers}
               onPosted={() => router.refresh()}
             />
           ))}
