@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
@@ -23,10 +24,10 @@ type ThreadSort = "recent" | "newest" | "active";
 
 const THREAD_SORT_COOKIE = "forum_thread_sort";
 
-const SORT_OPTIONS: { value: ThreadSort; label: string; icon: typeof Clock }[] = [
-  { value: "recent", label: "Recent activity", icon: Activity },
-  { value: "newest", label: "Newest", icon: Clock },
-  { value: "active", label: "Most active", icon: Flame },
+const SORT_OPTIONS: { value: ThreadSort; label: string; icon: ReactNode }[] = [
+  { value: "recent", label: "Recent activity", icon: <Activity className="h-4 w-4" /> },
+  { value: "newest", label: "Newest", icon: <Clock className="h-4 w-4" /> },
+  { value: "active", label: "Most active", icon: <Flame className="h-4 w-4" /> },
 ];
 
 function isThreadSort(value: string | undefined): value is ThreadSort {

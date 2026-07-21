@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -18,10 +19,10 @@ type ForumSort = "featured" | "active" | "recent";
 
 const FORUM_SORT_COOKIE = "forums_sort";
 
-const SORT_OPTIONS: { value: ForumSort; label: string; icon: typeof Flame }[] = [
-  { value: "featured", label: "Featured order", icon: ListOrdered },
-  { value: "recent", label: "Most recent", icon: Clock },
-  { value: "active", label: "Most active", icon: Flame },
+const SORT_OPTIONS: { value: ForumSort; label: string; icon: ReactNode }[] = [
+  { value: "featured", label: "Featured order", icon: <ListOrdered className="h-4 w-4" /> },
+  { value: "recent", label: "Most recent", icon: <Clock className="h-4 w-4" /> },
+  { value: "active", label: "Most active", icon: <Flame className="h-4 w-4" /> },
 ];
 
 function isForumSort(value: string | undefined): value is ForumSort {

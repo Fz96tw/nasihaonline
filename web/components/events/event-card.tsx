@@ -30,7 +30,11 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
   const hasMounted = useHasMounted();
 
   return (
-    <Card className="flex h-full flex-col">
+    <Card className="flex h-full flex-col overflow-hidden">
+      {event.heroImageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
+        <img src={event.heroImageUrl} alt="" className="h-40 w-full object-cover" />
+      ) : null}
       <CardHeader>
         <div className="mb-1 flex flex-wrap items-center gap-2">
           <Badge variant={event.open ? "success" : "info"}>

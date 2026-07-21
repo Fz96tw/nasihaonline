@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -10,19 +10,23 @@ import { cn } from "@/lib/utils";
  * (one year) so it's applied as the default the next time the page is
  * visited without an explicit `?sort=` param — e.g. navigating back via a
  * plain nav link rather than clicking a sort button again.
+ *
+ * `icon` takes an already-rendered element (not a component reference) —
+ * passing the Lucide component itself from a Server Component parent isn't
+ * serializable across the client boundary.
  */
 export function SortButton({
   href,
   active,
   label,
-  icon: Icon,
+  icon,
   cookieName,
   cookieValue,
 }: {
   href: string;
   active: boolean;
   label: string;
-  icon: LucideIcon;
+  icon: ReactNode;
   cookieName: string;
   cookieValue: string;
 }) {
@@ -41,7 +45,7 @@ export function SortButton({
           document.cookie = `${cookieName}=${cookieValue}; path=/; max-age=31536000; samesite=lax`;
         }}
       >
-        <Icon className="h-4 w-4" />
+        {icon}
       </Link>
     </Button>
   );
