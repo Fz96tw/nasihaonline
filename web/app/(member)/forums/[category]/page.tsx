@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Activity, Clock, Flame, Pin } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
@@ -8,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { FollowForumButton } from "@/components/forums/follow-forum-button";
-import { cn } from "@/lib/utils";
+import { SortButton } from "@/components/forums/sort-button";
 
 export const metadata: Metadata = {
   title: "Forums — NASIHA",
@@ -20,11 +21,17 @@ function formatDate(iso: string) {
 
 type ThreadSort = "recent" | "newest" | "active";
 
+const THREAD_SORT_COOKIE = "forum_thread_sort";
+
 const SORT_OPTIONS: { value: ThreadSort; label: string; icon: typeof Clock }[] = [
   { value: "recent", label: "Recent activity", icon: Activity },
   { value: "newest", label: "Newest", icon: Clock },
   { value: "active", label: "Most active", icon: Flame },
 ];
+
+function isThreadSort(value: string | undefined): value is ThreadSort {
+  return value === "recent" || value === "newest" || value === "active";
+}
 
 /**
  * /forums/[category] (§4.13) — a forum's thread list. `q` routes through
@@ -49,8 +56,8 @@ export default async function ForumCategoryPage({
   if (!result) notFound();
   const { forum, isFollowing } = result;
 
-  const sort: ThreadSort =
-    searchParams.sort === "newest" || searchParams.sort === "active" ? searchParams.sort : "recent";
+  const requestedSort = isThreadSort(searchParams.sort) ? searchParams.sort : cookies().get(THREAD_SORT_COOKIE)?.value;
+  const sort: ThreadSort = isThreadSort(requestedSort) ? requestedSort : "recent";
   const threads = [...result.threads].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     if (sort === "newest") return b.createdAt.localeCompare(a.createdAt);
@@ -97,18 +104,15 @@ export default async function ForumCategoryPage({
           <div className="flex items-center gap-1">
             <span className="mr-1 text-sm text-muted-foreground">Sort:</span>
             {SORT_OPTIONS.map((option) => (
-              <Button
+              <SortButton
                 key={option.value}
-                asChild
-                variant={sort === option.value ? "secondary" : "ghost"}
-                size="icon"
-                className={cn("h-8 w-8", sort === option.value && "border")}
-                title={option.label}
-              >
-                <Link href={sortHref(option.value)} aria-label={option.label}>
-                  <option.icon className="h-4 w-4" />
-                </Link>
-              </Button>
+                href={sortHref(option.value)}
+                active={sort === option.value}
+                label={option.label}
+                icon={option.icon}
+                cookieName={THREAD_SORT_COOKIE}
+                cookieValue={option.value}
+              />
             ))}
           </div>
           <span className="text-xs text-muted-foreground">

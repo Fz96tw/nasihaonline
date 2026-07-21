@@ -239,6 +239,7 @@ export async function createPost(
           actorId: authorId,
           note: `Blog post: ${created.title}`,
           source: ContributionSource.blog_post,
+          postId: created.id,
         },
       });
 

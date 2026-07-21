@@ -57,6 +57,8 @@ export type MemberEvent = EventWithRsvp & {
   forumThreadId: string | null;
   /** Reply count on that thread (post count minus the system-authored opening post) — null when forumThreadId is null. */
   forumReplyCount: number | null;
+  /** Unique-visitor count for the event detail page's eye-icon (§4.6). */
+  viewCount: number;
 };
 
 // /calendar/[eventId]'s host/admin-only attendee list (§4.6) — RSVP'd

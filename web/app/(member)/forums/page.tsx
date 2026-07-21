@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Flame, Clock, ListOrdered } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getForumCategories } from "@/lib/forums-server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
-import { cn } from "@/lib/utils";
+import { SortButton } from "@/components/forums/sort-button";
 
 export const metadata: Metadata = {
   title: "Forums — NASIHA",
@@ -16,11 +16,17 @@ export const metadata: Metadata = {
 
 type ForumSort = "featured" | "active" | "recent";
 
+const FORUM_SORT_COOKIE = "forums_sort";
+
 const SORT_OPTIONS: { value: ForumSort; label: string; icon: typeof Flame }[] = [
   { value: "featured", label: "Featured order", icon: ListOrdered },
-  { value: "active", label: "Most active", icon: Flame },
   { value: "recent", label: "Most recent", icon: Clock },
+  { value: "active", label: "Most active", icon: Flame },
 ];
+
+function isForumSort(value: string | undefined): value is ForumSort {
+  return value === "featured" || value === "active" || value === "recent";
+}
 
 /**
  * /forums (§4.13) — member-only category list, sourced from the six
@@ -33,7 +39,8 @@ export default async function ForumsPage({ searchParams }: { searchParams: { sor
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const sort: ForumSort = searchParams.sort === "active" || searchParams.sort === "recent" ? searchParams.sort : "featured";
+  const requestedSort = isForumSort(searchParams.sort) ? searchParams.sort : cookies().get(FORUM_SORT_COOKIE)?.value;
+  const sort: ForumSort = isForumSort(requestedSort) ? requestedSort : "featured";
 
   const forums = await getForumCategories();
   const sortedForums = [...forums].sort((a, b) => {
@@ -62,18 +69,15 @@ export default async function ForumsPage({ searchParams }: { searchParams: { sor
           <div className="flex items-center gap-1">
             <span className="mr-1 text-sm text-muted-foreground">Sort:</span>
             {SORT_OPTIONS.map((option) => (
-              <Button
+              <SortButton
                 key={option.value}
-                asChild
-                variant={sort === option.value ? "secondary" : "ghost"}
-                size="icon"
-                className={cn("h-8 w-8", sort === option.value && "border")}
-                title={option.label}
-              >
-                <Link href={option.value === "featured" ? "/forums" : `/forums?sort=${option.value}`} aria-label={option.label}>
-                  <option.icon className="h-4 w-4" />
-                </Link>
-              </Button>
+                href={`/forums?sort=${option.value}`}
+                active={sort === option.value}
+                label={option.label}
+                icon={option.icon}
+                cookieName={FORUM_SORT_COOKIE}
+                cookieValue={option.value}
+              />
             ))}
           </div>
           <span className="text-xs text-muted-foreground">

@@ -134,6 +134,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
         select: {
           rsvps: { where: { status: RSVPStatus.going } },
           registrations: true,
+          views: true,
         },
       },
     },
@@ -159,6 +160,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
       attendeeCount: event._count.rsvps + event._count.registrations,
       forumThreadId: event.forumThread?.id ?? null,
       forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
+      viewCount: event._count.views,
     };
   });
 }
@@ -189,6 +191,7 @@ export async function getMemberEventById(userId: string, eventId: string): Promi
         select: {
           rsvps: { where: { status: RSVPStatus.going } },
           registrations: true,
+          views: true,
         },
       },
     },
@@ -213,7 +216,27 @@ export async function getMemberEventById(userId: string, eventId: string): Promi
     attendeeCount: event._count.rsvps + event._count.registrations,
     forumThreadId: event.forumThread?.id ?? null,
     forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
+    viewCount: event._count.views,
   };
+}
+
+export async function getEventViewCount(eventId: string): Promise<number> {
+  return db.eventView.count({ where: { eventId } });
+}
+
+/**
+ * Records a unique visit to an event's detail page for the eye-icon count,
+ * called from POST /api/events/:id/view on every page load. Mirrors
+ * recordThreadView — /calendar/[eventId] redirects a signed-out visitor to
+ * /sign-in before this can ever fire, so `userId` is always a real member
+ * and this dedupes on the `[eventId, userId]` unique constraint directly.
+ */
+export async function recordEventView(eventId: string, userId: string): Promise<number> {
+  const event = await db.event.findUnique({ where: { id: eventId }, select: { id: true } });
+  if (!event) throw new EventError(404, "Event not found.");
+
+  await db.eventView.createMany({ data: { eventId, userId }, skipDuplicates: true });
+  return getEventViewCount(eventId);
 }
 
 /**

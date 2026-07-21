@@ -79,6 +79,7 @@ model User {
   forumPosts                ForumPost[]     @relation("ForumPostAuthor")
   forumFollows              ForumFollow[]
   threadViews               ThreadView[]
+  eventViews                EventView[]
 
   // Trust & Safety / Compliance / Notifications (§4.10/§4.15) — a member can
   // appear on either side of a conduct report (reported or reporting) and
@@ -467,6 +468,13 @@ model ContributionEvent {
   attendanceId String?     @unique
   attendance   Attendance? @relation(fields: [attendanceId], references: [id])
 
+  // Set only for source = blog_post: the Post whose publication triggered
+  // this auto-earn (§4.4/§4.8). Same one-to-one audit-trail pattern as
+  // attendanceId — a given Post can only ever produce a single earn
+  // transaction, posted at publish time.
+  postId String? @unique
+  post   Post?   @relation(fields: [postId], references: [id])
+
   ledgerEntries ContributionLedger[]
 
   @@index([actorId])
@@ -696,9 +704,29 @@ model Event {
   // (below) rather than here so createEvent can create the Event first and
   // still know its id when posting the thread's linking first post.
   forumThread ForumThread?
+  // Unique-visitor count for the event detail page's eye-icon (mirrors
+  // ThreadView) — events are member-only like forums, so this dedupes on
+  // real userId rather than an opaque viewer key like PostView does.
+  views       EventView[]
 
   @@index([startsAt])
   @@map("events")
+}
+
+// One row per unique member visit to an Event's detail page, for the
+// eye-icon view count on /calendar/[eventId] — mirrors ThreadView. Events
+// are member-only like forums (no anonymous-visitor case), so this dedupes
+// by User.id directly rather than PostView's opaque viewerKey string.
+model EventView {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, userId])
+  @@map("event_views")
 }
 
 // Recurrence rule for a recurring Event (§4.6's "recurring events" feature).
@@ -846,6 +874,8 @@ model Post {
   tags     PostTagOnPost[]
   comments PostComment[]
   views    PostView[]
+  // The other direction of ContributionEvent.postId.
+  contributionEvent ContributionEvent?
 
   @@index([authorId])
   @@index([categoryId])

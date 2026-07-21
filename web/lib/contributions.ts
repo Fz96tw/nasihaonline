@@ -41,6 +41,12 @@ export type ContributionTransaction = {
   /** Admin's rejection reason, when status is rejected and one was given (§4.4). */
   reason: string | null;
   meetingRequest: ContributionMeetingRef | null;
+  /** Set only for event_attendance-sourced rows — the calendar Event that earned the hours. */
+  event: { id: string; title: string } | null;
+  /** Set only for blog_post-sourced rows — the Post whose publication earned the hours. */
+  post: { slug: string; title: string } | null;
+  /** Set only for self_reported rows with a note — free text, no linked record to point to. */
+  note: string | null;
 };
 
 /**

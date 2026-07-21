@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -51,11 +52,28 @@ export function ContributionsHistoryTable({ transactions }: { transactions: Cont
                 <TableCell>{formatDate(transaction.date)}</TableCell>
                 <TableCell>
                   {transaction.activity}
+                  {transaction.event && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      <Link href={`/calendar/${transaction.event.id}`} className="hover:underline">
+                        {transaction.event.title}
+                      </Link>
+                    </p>
+                  )}
+                  {transaction.post && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      <Link href={`/blog/${transaction.post.slug}`} className="hover:underline">
+                        {transaction.post.title}
+                      </Link>
+                    </p>
+                  )}
                   {transaction.meetingRequest && (
                     <p className="mt-1 text-xs text-muted-foreground">
                       Meeting: {transaction.meetingRequest.topic} · proposed for{" "}
                       {formatMeetingTime(transaction.meetingRequest.proposedTime)}
                     </p>
+                  )}
+                  {transaction.note && (
+                    <p className="mt-1 text-xs text-muted-foreground">{transaction.note}</p>
                   )}
                   {transaction.status === LedgerStatus.rejected && transaction.reason && (
                     <p className="mt-1 text-xs text-muted-foreground">Reason: {transaction.reason}</p>

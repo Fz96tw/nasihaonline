@@ -52,6 +52,12 @@ export function FeedRow({ item }: { item: FeedItem }) {
           )}
           {item.attendeeCount !== undefined && (
             <div className="mt-2 flex items-center justify-end gap-3 text-xs text-muted-foreground">
+              {item.eventViewCount !== undefined && (
+                <span className="flex items-center gap-1" title="Unique visitors">
+                  <Eye className="h-3.5 w-3.5" />
+                  {item.eventViewCount}
+                </span>
+              )}
               <span className="flex items-center gap-1" title="Registered or RSVP'd">
                 <Users className="h-3.5 w-3.5" />
                 {item.attendeeCount}

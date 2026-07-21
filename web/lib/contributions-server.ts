@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { LedgerStatus, LedgerTransactionType, Role } from "@/lib/generated/prisma/enums";
+import { ContributionSource, LedgerStatus, LedgerTransactionType, Role } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import type {
   ContributionMeetingRef,
@@ -90,7 +90,14 @@ export async function getContributionHistory(userId: string): Promise<Contributi
     where: { userId },
     orderBy: { createdAt: "desc" },
     include: {
-      event: { include: { rule: true, counterpart: { select: { name: true } } } },
+      event: {
+        include: {
+          rule: true,
+          counterpart: { select: { name: true } },
+          attendance: { include: { event: { select: { id: true, title: true } } } },
+          post: { select: { slug: true, title: true } },
+        },
+      },
       meetingRequestAsRequesterSpend: { select: { topic: true, proposedTimes: true } },
       meetingRequestAsRecipientEarn: { select: { topic: true, proposedTimes: true } },
     },
@@ -108,6 +115,9 @@ export async function getContributionHistory(userId: string): Promise<Contributi
     hours: row.hours.toNumber(),
     reason: row.status === LedgerStatus.rejected ? row.reason : null,
     meetingRequest: meetingRequestRef(row),
+    event: row.event?.attendance?.event ?? null,
+    post: row.event?.post ?? null,
+    note: row.event?.source === ContributionSource.self_reported ? row.event.note : null,
   }));
 }
 

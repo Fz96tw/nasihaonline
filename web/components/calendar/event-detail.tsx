@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RsvpButton } from "@/components/calendar/rsvp-button";
 import { AddToCalendarButton } from "@/components/calendar/add-to-calendar-button";
+import { EventViewCounter } from "@/components/calendar/event-view-counter";
 import { MemberProfileDialog } from "@/components/members/member-profile-dialog";
 import {
   EVENT_TYPE_LABELS,
@@ -88,6 +89,7 @@ export function EventDetail({
             <Users className="h-3.5 w-3.5" />
             {event.attendeeCount}
           </span>
+          <EventViewCounter eventId={event.id} initialViews={event.viewCount} />
         </div>
         <h1 className="mb-1 text-3xl font-bold tracking-tight">{event.title}</h1>
         {hostProfile ? (
