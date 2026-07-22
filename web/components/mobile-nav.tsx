@@ -153,7 +153,7 @@ export function MobileNav({
               <SheetClose asChild>
                 <Link href="/sign-in" className={linkClasses}>
                   <LogIn className="h-[18px] w-[18px] flex-shrink-0" />
-                  <span className="truncate">Log in</span>
+                  <span className="truncate">Sign in</span>
                 </Link>
               </SheetClose>
               <SheetClose asChild>

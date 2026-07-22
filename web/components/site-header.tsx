@@ -116,7 +116,7 @@ export async function SiteHeader() {
         ) : (
           <>
             <Button variant="ghost" size="sm" className="px-2 text-sm font-semibold sm:px-3 sm:text-base" asChild>
-              <Link href="/sign-in">Log in</Link>
+              <Link href="/sign-in">Sign in</Link>
             </Button>
             <Button size="sm" className="px-3 text-sm sm:text-base" asChild>
               <Link href="/join">
