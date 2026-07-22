@@ -64,7 +64,12 @@ export default async function LibraryReviewQueuePage() {
                   {CONTENT_TYPE_LABELS[item.contentType]} · {LEVEL_LABELS[item.level]}
                 </p>
               </div>
-              <ReviewQueueActions itemId={item.id} />
+              <div className="flex items-center gap-3">
+                <Link href={`/library/${item.id}/edit`} className="text-sm text-primary hover:underline">
+                  Edit
+                </Link>
+                <ReviewQueueActions itemId={item.id} />
+              </div>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               <p className="text-sm">{item.description}</p>

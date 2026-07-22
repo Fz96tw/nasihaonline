@@ -11,7 +11,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { KnowledgeContentType, KnowledgeLevel } from "@/lib/generated/prisma/enums";
-import { CONTENT_TYPE_LABELS, LEVEL_LABELS, type KnowledgeCategoryOption, type KnowledgeTagOption } from "@/lib/library";
+import {
+  CONTENT_TYPE_LABELS,
+  LEVEL_LABELS,
+  type KnowledgeCategoryOption,
+  type KnowledgeItemForEdit,
+  type KnowledgeTagOption,
+} from "@/lib/library";
 import { createKnowledgeItemSchema, type CreateKnowledgeItemValues } from "@/lib/validation/knowledge";
 import { getCsrfToken } from "@/lib/csrf-client";
 
@@ -28,19 +34,28 @@ const DEFAULT_VALUES: CreateKnowledgeItemValues = {
 };
 
 /**
- * "Submit Resource" form (§4.9), posted from /library/new. Every submission
- * enters pending_review — there is no direct-publish path here, unlike
- * WritePostForm. contentType drives two conditional fields: a YouTube URL
- * input for recorded_lecture (no file), or a file input for every other type
- * (no youtubeUrl); case_study additionally requires the de-identification
- * checkbox. Both gates are enforced again server-side by createKnowledgeItem.
+ * "Submit Resource" form (§4.9), posted from /library/new, and reused from
+ * /library/[id]/edit when `existingItem` is supplied. Keeps using
+ * createKnowledgeItemSchema/CreateKnowledgeItemValues in both modes (rather
+ * than a separate edit-mode type) — same simplification as WritePostForm:
+ * licenseConsented is a one-time consent from the original submission, so
+ * it defaults to `true` and is hidden entirely when editing, and isn't sent
+ * in the PATCH body (the server validates edits with updateKnowledgeItemSchema,
+ * which omits it). contentType still drives the same two conditional fields
+ * as create: a YouTube URL input for recorded_lecture (no file), or a file
+ * input for every other type (no youtubeUrl, but an edit can leave the
+ * existing attachment in place instead of replacing it); case_study
+ * additionally requires the de-identification checkbox, re-affirmed on every
+ * edit rather than carried forward silently.
  */
 export function SubmitResourceForm({
   categories,
   tags,
+  existingItem,
 }: {
   categories: KnowledgeCategoryOption[];
   tags: KnowledgeTagOption[];
+  existingItem?: KnowledgeItemForEdit;
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -49,7 +64,19 @@ export function SubmitResourceForm({
 
   const form = useForm<CreateKnowledgeItemValues>({
     resolver: zodResolver(createKnowledgeItemSchema),
-    defaultValues: DEFAULT_VALUES,
+    defaultValues: existingItem
+      ? {
+          title: existingItem.title,
+          description: existingItem.description,
+          contentType: existingItem.contentType,
+          level: existingItem.level,
+          categoryId: existingItem.categoryId,
+          tagIds: existingItem.tagIds,
+          youtubeUrl: existingItem.youtubeUrl,
+          deidentificationConfirmed: existingItem.deidentificationConfirmed,
+          licenseConsented: true,
+        }
+      : DEFAULT_VALUES,
     mode: "onTouched",
   });
 
@@ -71,11 +98,11 @@ export function SubmitResourceForm({
       values.tagIds.forEach((tagId) => formData.append("tagIds", tagId));
       if (isRecordedLecture && values.youtubeUrl) formData.append("youtubeUrl", values.youtubeUrl);
       formData.append("deidentificationConfirmed", String(isCaseStudy && values.deidentificationConfirmed));
-      formData.append("licenseConsented", String(values.licenseConsented));
+      if (!existingItem) formData.append("licenseConsented", String(values.licenseConsented));
       if (!isRecordedLecture && file) formData.append("file", file);
 
-      const res = await fetch("/api/library", {
-        method: "POST",
+      const res = await fetch(existingItem ? `/api/library/${existingItem.id}` : "/api/library", {
+        method: existingItem ? "PATCH" : "POST",
         headers: { "x-csrf-token": csrfToken },
         body: formData,
       });
@@ -260,12 +287,25 @@ export function SubmitResourceForm({
             <label htmlFor="resource-file" className="text-sm font-medium">
               File
             </label>
+            {existingItem?.attachment && !file && (
+              <a
+                href={existingItem.attachment.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm text-primary hover:underline"
+              >
+                {existingItem.attachment.fileName}
+              </a>
+            )}
             <input
               id="resource-file"
               type="file"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
             />
+            {existingItem?.attachment && (
+              <p className="text-xs text-muted-foreground">Choose a new file to replace the current one.</p>
+            )}
           </div>
         )}
 
@@ -287,30 +327,32 @@ export function SubmitResourceForm({
           />
         )}
 
-        <FormField
-          control={form.control}
-          name="licenseConsented"
-          render={({ field }) => (
-            <FormItem className="flex flex-row items-start gap-2 space-y-0 rounded-md border p-4">
-              <FormControl>
-                <Checkbox checked={field.value} onCheckedChange={(c) => field.onChange(c === true)} />
-              </FormControl>
-              <div className="space-y-1">
-                <FormLabel className="!mt-0">
-                  I retain ownership of what I submit, and grant NASIHA a non-exclusive right to display it to the
-                  membership.
-                </FormLabel>
-                <FormMessage />
-              </div>
-            </FormItem>
-          )}
-        />
+        {!existingItem && (
+          <FormField
+            control={form.control}
+            name="licenseConsented"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-start gap-2 space-y-0 rounded-md border p-4">
+                <FormControl>
+                  <Checkbox checked={field.value} onCheckedChange={(c) => field.onChange(c === true)} />
+                </FormControl>
+                <div className="space-y-1">
+                  <FormLabel className="!mt-0">
+                    I retain ownership of what I submit, and grant NASIHA a non-exclusive right to display it to the
+                    membership.
+                  </FormLabel>
+                  <FormMessage />
+                </div>
+              </FormItem>
+            )}
+          />
+        )}
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <div>
           <Button type="submit" disabled={submitting}>
-            {submitting ? "Submitting…" : "Submit for Review"}
+            {submitting ? "Saving…" : existingItem ? "Save Changes" : "Submit for Review"}
           </Button>
         </div>
       </form>

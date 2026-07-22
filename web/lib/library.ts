@@ -71,6 +71,22 @@ export type LibraryCard = {
   attachment: { fileName: string; mimeType: string; url: string } | null;
 };
 
+/** /library/[id]/edit's data load — a submission's full editable field set, at any status. */
+export type KnowledgeItemForEdit = {
+  id: string;
+  title: string;
+  description: string;
+  contentType: KnowledgeContentType;
+  level: KnowledgeLevel;
+  status: KnowledgeStatus;
+  categoryId: string;
+  tagIds: string[];
+  youtubeUrl: string | null;
+  deidentificationConfirmed: boolean;
+  contributorId: string;
+  attachment: { fileName: string; url: string } | null;
+};
+
 /** Dashboard "recently added to the library" widget row (§4.10). */
 export type RecentLibraryItem = {
   id: string;

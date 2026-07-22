@@ -1,11 +1,24 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { uploadKnowledgeDocument, getKnowledgeDocumentUrl, UploadValidationError } from "@/lib/storage";
+import {
+  uploadKnowledgeDocument,
+  getKnowledgeDocumentUrl,
+  deleteKnowledgeDocument,
+  UploadValidationError,
+} from "@/lib/storage";
 import { searchLibraryDocuments } from "@/lib/meilisearch";
-import { NotificationType, KnowledgeContentType, KnowledgeLevel, KnowledgeStatus } from "@/lib/generated/prisma/enums";
+import {
+  NotificationType,
+  KnowledgeContentType,
+  KnowledgeLevel,
+  KnowledgeStatus,
+  Role,
+} from "@/lib/generated/prisma/enums";
+import type { UserModel } from "@/lib/generated/prisma/models/User";
 import { createNotification } from "@/lib/notifications-server";
 import type {
   KnowledgeCategoryOption,
+  KnowledgeItemForEdit,
   KnowledgeTagOption,
   LibraryCard,
   MySubmission,
@@ -71,7 +84,7 @@ export async function getKnowledgeTags(): Promise<KnowledgeTagOption[]> {
 
 export class KnowledgeItemError extends Error {
   constructor(
-    public readonly status: 400 | 404,
+    public readonly status: 400 | 403 | 404,
     message: string,
   ) {
     super(message);
@@ -153,6 +166,158 @@ export async function createKnowledgeItem(
   });
 
   return item;
+}
+
+/**
+ * /library/[id]/edit's data load (editing a submission, §4.9) — the full
+ * editable field set at any status (unlike getPublishedKnowledgeItems, a
+ * pending_review or rejected item is still editable by its contributor).
+ * Permission (contributor / Steward / admin) is checked by the caller, same
+ * split as getPublishedPostBySlug + EditBlogPostPage.
+ */
+export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItemForEdit | null> {
+  const item = await db.knowledgeItem.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      contentType: true,
+      level: true,
+      status: true,
+      categoryId: true,
+      youtubeUrl: true,
+      deidentificationConfirmed: true,
+      contributorId: true,
+      tags: { select: { tagId: true } },
+      attachments: { select: { fileName: true, objectKey: true }, take: 1 },
+    },
+  });
+  if (!item) return null;
+
+  return {
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    contentType: item.contentType,
+    level: item.level,
+    status: item.status,
+    categoryId: item.categoryId,
+    tagIds: item.tags.map(({ tagId }) => tagId),
+    youtubeUrl: item.youtubeUrl,
+    deidentificationConfirmed: item.deidentificationConfirmed,
+    contributorId: item.contributorId,
+    attachment: item.attachments[0]
+      ? { fileName: item.attachments[0].fileName, url: getKnowledgeDocumentUrl(item.attachments[0].objectKey) }
+      : null,
+  };
+}
+
+/**
+ * PATCH /api/library/:id — editing a submission (§4.9), by its contributor,
+ * a Library Steward (moderator), or an admin. Stewards get edit rights here
+ * (not just publish/reject) since correcting "quality, correct tagging"
+ * (§4.9) directly is faster than reject-and-ask-to-resubmit. A rejected
+ * item is the resubmit path — there's no separate "resubmit" action — so
+ * an edit sends it back to pending_review; a published/flagged item's edit
+ * goes live immediately with no re-review, same "no re-review on edit"
+ * precedent as Blog (§11.12) — only the *initial* submission gates on
+ * Steward review.
+ */
+export async function updateKnowledgeItem(
+  id: string,
+  actingUser: UserModel,
+  input: {
+    title: string;
+    description: string;
+    contentType: KnowledgeContentType;
+    level: KnowledgeLevel;
+    categoryId: string;
+    tagIds: string[];
+    youtubeUrl: string | null;
+    deidentificationConfirmed: boolean;
+    file: File | null;
+  },
+): Promise<{ id: string; status: KnowledgeStatus }> {
+  const item = await db.knowledgeItem.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      contributorId: true,
+      status: true,
+      attachments: { select: { id: true, objectKey: true }, take: 1 },
+    },
+  });
+  if (!item) throw new KnowledgeItemError(404, "Resource not found.");
+
+  const isPrivileged = actingUser.role === Role.admin || actingUser.role === Role.moderator;
+  if (!isPrivileged && item.contributorId !== actingUser.id) {
+    throw new KnowledgeItemError(403, "Only the submitter or a Library Steward/admin can edit this resource.");
+  }
+
+  if (input.contentType === KnowledgeContentType.case_study && !input.deidentificationConfirmed) {
+    throw new KnowledgeItemError(400, "You must confirm all patient information has been de-identified.");
+  }
+
+  const category = await db.knowledgeCategory.findUnique({ where: { id: input.categoryId }, select: { id: true } });
+  if (!category) {
+    throw new KnowledgeItemError(400, "Select a valid category.");
+  }
+
+  const isRecordedLecture = input.contentType === KnowledgeContentType.recorded_lecture;
+  if (isRecordedLecture && !input.youtubeUrl) {
+    throw new KnowledgeItemError(400, "A YouTube URL is required for a recorded lecture.");
+  }
+  const existingAttachment = item.attachments[0] ?? null;
+  if (!isRecordedLecture && !input.file && !existingAttachment) {
+    throw new KnowledgeItemError(400, "A file upload is required for this content type.");
+  }
+
+  let newAttachment: { objectKey: string; fileName: string; mimeType: string; sizeBytes: number } | null = null;
+  if (!isRecordedLecture && input.file) {
+    try {
+      newAttachment = await uploadKnowledgeDocument(input.file);
+    } catch (error) {
+      if (error instanceof UploadValidationError) {
+        throw new KnowledgeItemError(400, error.message);
+      }
+      throw error;
+    }
+  }
+
+  const nextStatus = item.status === KnowledgeStatus.rejected ? KnowledgeStatus.pending_review : item.status;
+  // Drop the old attachment when it's being replaced by a new file, or when
+  // contentType moved to recorded_lecture (which stores youtubeUrl instead).
+  const dropsExistingAttachment = existingAttachment !== null && (isRecordedLecture || newAttachment !== null);
+
+  const updated = await db.$transaction(async (tx) => {
+    await tx.knowledgeItemTag.deleteMany({ where: { knowledgeItemId: item.id } });
+    if (dropsExistingAttachment) {
+      await tx.knowledgeAttachment.delete({ where: { id: existingAttachment!.id } });
+    }
+    return tx.knowledgeItem.update({
+      where: { id: item.id },
+      data: {
+        title: input.title,
+        description: input.description,
+        contentType: input.contentType,
+        level: input.level,
+        categoryId: input.categoryId,
+        youtubeUrl: isRecordedLecture ? input.youtubeUrl : null,
+        deidentificationConfirmed: input.deidentificationConfirmed,
+        status: nextStatus,
+        tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
+        attachments: newAttachment ? { create: [newAttachment] } : undefined,
+      },
+      select: { id: true, status: true },
+    });
+  });
+
+  if (dropsExistingAttachment) {
+    await deleteKnowledgeDocument(existingAttachment!.objectKey);
+  }
+
+  return updated;
 }
 
 /**

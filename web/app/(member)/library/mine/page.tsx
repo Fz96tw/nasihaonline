@@ -47,12 +47,13 @@ export default async function MyLibrarySubmissionsPage() {
               <TableHead>Category</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Submitted</TableHead>
+              <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
             {submissions.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                <TableCell colSpan={6} className="text-center text-muted-foreground">
                   You haven&apos;t submitted any resources yet.
                 </TableCell>
               </TableRow>
@@ -67,6 +68,11 @@ export default async function MyLibrarySubmissionsPage() {
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {new Date(item.createdAt).toLocaleDateString()}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Link href={`/library/${item.id}/edit`} className="text-sm text-primary hover:underline">
+                    Edit
+                  </Link>
                 </TableCell>
               </TableRow>
             ))}
