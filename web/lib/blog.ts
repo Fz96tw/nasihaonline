@@ -22,7 +22,11 @@ export type PostCard = {
   publishedAt: string;
   author: { name: string | null; avatarUrl: string | null };
   category: { name: string; slug: string };
+  viewCount: number;
+  commentCount: number;
 };
+
+export type PostSort = "recent" | "viewed" | "commented";
 
 export type PostDetail = PostCard & {
   body: string;

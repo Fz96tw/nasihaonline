@@ -1,13 +1,18 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { Clock, Eye, MessageSquare } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getPostCategories, getPublishedPosts } from "@/lib/blog-server";
+import type { PostSort } from "@/lib/blog";
 import { PostCard } from "@/components/blog/post-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Reveal } from "@/components/home/reveal";
+import { SortButton } from "@/components/forums/sort-button";
 
 export const metadata: Metadata = {
   title: "Blog — NASIHA",
@@ -27,17 +32,41 @@ function CategoryChip({ href, active, children }: { href: string; active: boolea
   );
 }
 
+const BLOG_SORT_COOKIE = "blog_sort";
+
+const SORT_OPTIONS: { value: PostSort; label: string; icon: ReactNode }[] = [
+  { value: "recent", label: "Most recent", icon: <Clock className="h-4 w-4" /> },
+  { value: "viewed", label: "Most viewed", icon: <Eye className="h-4 w-4" /> },
+  { value: "commented", label: "Most commented", icon: <MessageSquare className="h-4 w-4" /> },
+];
+
+function isPostSort(value: string | undefined): value is PostSort {
+  return value === "recent" || value === "viewed" || value === "commented";
+}
+
+function buildSortHref(base: string, params: Record<string, string | undefined>, sort: PostSort): string {
+  const usp = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) usp.set(key, value);
+  }
+  usp.set("sort", sort);
+  return `${base}?${usp.toString()}`;
+}
+
 // /blog (§4.8) — public, member-authored blog list. `q` routes through
 // Meilisearch (§7.2/§9), `category` filters plain Postgres — same split
 // as getPublishedPosts implements.
 export default async function BlogPage({
   searchParams,
 }: {
-  searchParams: { category?: string; q?: string };
+  searchParams: { category?: string; q?: string; sort?: string };
 }) {
   const user = await getSessionUser();
+  const requestedSort = isPostSort(searchParams.sort) ? searchParams.sort : cookies().get(BLOG_SORT_COOKIE)?.value;
+  const sort: PostSort = isPostSort(requestedSort) ? requestedSort : "recent";
+
   const [posts, categories] = await Promise.all([
-    getPublishedPosts({ categorySlug: searchParams.category, q: searchParams.q }),
+    getPublishedPosts({ categorySlug: searchParams.category, q: searchParams.q, sort }),
     getPostCategories(),
   ]);
 
@@ -87,6 +116,30 @@ export default async function BlogPage({
               Search
             </Button>
           </form>
+        </div>
+
+        <div className="mb-1 flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {posts.length} {posts.length === 1 ? "Blog" : "Blogs"} found
+          </p>
+          <div className="flex items-center gap-1">
+            {SORT_OPTIONS.map((option) => (
+              <SortButton
+                key={option.value}
+                href={buildSortHref("/blog", { category: searchParams.category, q: searchParams.q }, option.value)}
+                active={sort === option.value}
+                label={option.label}
+                icon={option.icon}
+                cookieName={BLOG_SORT_COOKIE}
+                cookieValue={option.value}
+              />
+            ))}
+          </div>
+        </div>
+        <div className="mb-4 flex justify-end">
+          <span className="text-xs text-muted-foreground">
+            Sorted by {SORT_OPTIONS.find((option) => option.value === sort)?.label.toLowerCase()}
+          </span>
         </div>
 
         {posts.length === 0 ? (

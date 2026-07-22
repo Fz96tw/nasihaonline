@@ -69,7 +69,13 @@ export type LibraryCard = {
   // server-only lib/storage.ts) so client components never need to import
   // that module themselves.
   attachment: { fileName: string; mimeType: string; url: string } | null;
+  viewCount: number;
+  // Reply count on the on-demand discussion thread, excluding the
+  // auto-authored opening post — 0 when no thread has been started yet.
+  commentCount: number;
 };
+
+export type LibrarySort = "recent" | "viewed" | "commented";
 
 /**
  * /library/[id] detail page's data load (§4.9) — the browse card's fields

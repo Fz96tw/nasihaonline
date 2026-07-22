@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, ClipboardList, FileText, PlayCircle, Stethoscope, type LucideIcon } from "lucide-react";
+import { BookOpen, ClipboardList, Eye, FileText, MessageSquare, PlayCircle, Stethoscope, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -66,6 +66,16 @@ export function LibraryItemCard({ item, canEdit }: { item: LibraryCardData; canE
             )}
             {item.status === KnowledgeStatus.published && <LibraryFlagButton itemId={item.id} initialFlagged={false} />}
           </div>
+        </div>
+        <div className="flex items-center justify-end gap-3 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1" title="Unique visitors">
+            <Eye className="h-3.5 w-3.5" />
+            {item.viewCount}
+          </span>
+          <span className="flex items-center gap-1" title="Comments">
+            <MessageSquare className="h-3.5 w-3.5" />
+            {item.commentCount}
+          </span>
         </div>
       </CardContent>
     </Card>

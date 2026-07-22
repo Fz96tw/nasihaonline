@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { Clock, Eye, MessageSquare } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getKnowledgeCategories, getPublishedKnowledgeItems } from "@/lib/library-server";
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS } from "@/lib/library";
+import type { LibrarySort } from "@/lib/library";
 import { KnowledgeContentType, KnowledgeLevel, Role } from "@/lib/generated/prisma/enums";
 import { LibraryItemCard } from "@/components/library/library-item-card";
 import { BackToFeedLink } from "@/components/feed/back-to-feed-link";
@@ -11,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
+import { SortButton } from "@/components/forums/sort-button";
 
 export const metadata: Metadata = {
   title: "Knowledge Library — NASIHA",
@@ -33,6 +38,27 @@ function CategoryChip({ href, active, children }: { href: string; active: boolea
 const selectClasses =
   "h-10 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
+const LIBRARY_SORT_COOKIE = "library_sort";
+
+const SORT_OPTIONS: { value: LibrarySort; label: string; icon: ReactNode }[] = [
+  { value: "recent", label: "Most recent", icon: <Clock className="h-4 w-4" /> },
+  { value: "viewed", label: "Most viewed", icon: <Eye className="h-4 w-4" /> },
+  { value: "commented", label: "Most commented", icon: <MessageSquare className="h-4 w-4" /> },
+];
+
+function isLibrarySort(value: string | undefined): value is LibrarySort {
+  return value === "recent" || value === "viewed" || value === "commented";
+}
+
+function buildSortHref(base: string, params: Record<string, string | undefined>, sort: LibrarySort): string {
+  const usp = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) usp.set(key, value);
+  }
+  usp.set("sort", sort);
+  return `${base}?${usp.toString()}`;
+}
+
 /**
  * /library (§4.9/§5) — member-only browse/search landing. `q` routes
  * through Meilisearch (§7.2/§9), category/type/level filter plain Postgres
@@ -43,7 +69,7 @@ const selectClasses =
 export default async function LibraryPage({
   searchParams,
 }: {
-  searchParams: { category?: string; type?: string; level?: string; q?: string; ref?: string };
+  searchParams: { category?: string; type?: string; level?: string; q?: string; ref?: string; sort?: string };
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
@@ -54,9 +80,13 @@ export default async function LibraryPage({
   const level = Object.values(KnowledgeLevel).includes(searchParams.level as KnowledgeLevel)
     ? (searchParams.level as KnowledgeLevel)
     : undefined;
+  const requestedSort = isLibrarySort(searchParams.sort)
+    ? searchParams.sort
+    : cookies().get(LIBRARY_SORT_COOKIE)?.value;
+  const sort: LibrarySort = isLibrarySort(requestedSort) ? requestedSort : "recent";
 
   const [items, categories] = await Promise.all([
-    getPublishedKnowledgeItems({ categorySlug: searchParams.category, contentType, level, q: searchParams.q }),
+    getPublishedKnowledgeItems({ categorySlug: searchParams.category, contentType, level, q: searchParams.q, sort }),
     getKnowledgeCategories(),
   ]);
 
@@ -142,6 +172,40 @@ export default async function LibraryPage({
             </Button>
           </div>
         </form>
+
+        <div className="mb-1 flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {items.length} Library {items.length === 1 ? "item" : "items"} found
+          </p>
+          <div className="flex items-center gap-1">
+            {SORT_OPTIONS.map((option) => (
+              <SortButton
+                key={option.value}
+                href={buildSortHref(
+                  "/library",
+                  {
+                    category: searchParams.category,
+                    type: searchParams.type,
+                    level: searchParams.level,
+                    q: searchParams.q,
+                    ref: searchParams.ref,
+                  },
+                  option.value,
+                )}
+                active={sort === option.value}
+                label={option.label}
+                icon={option.icon}
+                cookieName={LIBRARY_SORT_COOKIE}
+                cookieValue={option.value}
+              />
+            ))}
+          </div>
+        </div>
+        <div className="mb-4 flex justify-end">
+          <span className="text-xs text-muted-foreground">
+            Sorted by {SORT_OPTIONS.find((option) => option.value === sort)?.label.toLowerCase()}
+          </span>
+        </div>
 
         {items.length === 0 ? (
           <p className="rounded-[10px] border p-8 text-center text-muted-foreground">

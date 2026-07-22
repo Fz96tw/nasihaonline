@@ -19,7 +19,7 @@ import type { UserModel } from "@/lib/generated/prisma/models/User";
 import { createNotification } from "@/lib/notifications-server";
 import { getMentionableMembers } from "@/lib/members-server";
 import { findMentionedMembers } from "@/lib/mentions";
-import type { PostCard, PostDetail, PostCategoryOption, PostTagOption, PostCommentNode } from "@/lib/blog";
+import type { PostCard, PostDetail, PostCategoryOption, PostTagOption, PostCommentNode, PostSort } from "@/lib/blog";
 import { excerptFromHtml } from "@/lib/blog";
 
 const CARD_SELECT = {
@@ -31,6 +31,7 @@ const CARD_SELECT = {
   publishedAt: true,
   author: { select: { name: true, profile: { select: { avatarUrl: true } } } },
   category: { select: { name: true, slug: true } },
+  _count: { select: { comments: true, views: true } },
 } as const;
 
 function slugify(value: string): string {
@@ -60,6 +61,7 @@ function toCard(post: {
   publishedAt: Date | null;
   author: { name: string | null; profile: { avatarUrl: string | null } | null };
   category: { name: string; slug: string };
+  _count: { comments: number; views: number };
 }): PostCard {
   return {
     id: post.id,
@@ -72,7 +74,20 @@ function toCard(post: {
     publishedAt: (post.publishedAt ?? new Date()).toISOString(),
     author: { name: post.author.name, avatarUrl: getProfileAvatarUrl(post.author.profile?.avatarUrl ?? null) },
     category: post.category,
+    viewCount: post._count.views,
+    commentCount: post._count.comments,
   };
+}
+
+// Applied in JS rather than a Prisma `orderBy` so the same logic covers both
+// the plain-Postgres browse path and the Meilisearch relevance-ordered `q`
+// path uniformly.
+function sortCards(cards: PostCard[], sort: PostSort): PostCard[] {
+  const sorted = [...cards];
+  if (sort === "viewed") sorted.sort((a, b) => b.viewCount - a.viewCount);
+  else if (sort === "commented") sorted.sort((a, b) => b.commentCount - a.commentCount);
+  else sorted.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+  return sorted;
 }
 
 /**
@@ -81,8 +96,13 @@ function toCard(post: {
  * for `q` present (§7.2/§9), same "real query goes to Meilisearch, browse
  * stays on Postgres" split as getDirectoryMembers/searchDirectoryMembers.
  */
-export async function getPublishedPosts(params: { categorySlug?: string; q?: string }): Promise<PostCard[]> {
+export async function getPublishedPosts(params: {
+  categorySlug?: string;
+  q?: string;
+  sort?: PostSort;
+}): Promise<PostCard[]> {
   const categoryFilter = params.categorySlug ? { category: { slug: params.categorySlug } } : {};
+  const sort = params.sort ?? "recent";
 
   if (params.q?.trim()) {
     const hits = await searchPostDocuments(params.q.trim(), { categorySlug: params.categorySlug });
@@ -93,7 +113,8 @@ export async function getPublishedPosts(params: { categorySlug?: string; q?: str
       select: CARD_SELECT,
     });
     const byId = new Map(posts.map((post) => [post.id, post]));
-    return hits.map((hit) => byId.get(hit.id)).filter((post) => post != null).map(toCard);
+    const cards = hits.map((hit) => byId.get(hit.id)).filter((post) => post != null).map(toCard);
+    return sortCards(cards, sort);
   }
 
   const posts = await db.post.findMany({
@@ -101,7 +122,7 @@ export async function getPublishedPosts(params: { categorySlug?: string; q?: str
     select: CARD_SELECT,
     orderBy: { publishedAt: "desc" },
   });
-  return posts.map(toCard);
+  return sortCards(posts.map(toCard), sort);
 }
 
 /** Dashboard's recently-added-blog widget (§5/§10 Phase 5) — newest published posts, plain Postgres query. */

@@ -41,6 +41,7 @@ export function SortButton({
       <Link
         href={href}
         aria-label={label}
+        scroll={false}
         onClick={() => {
           document.cookie = `${cookieName}=${cookieValue}; path=/; max-age=31536000; samesite=lax`;
         }}

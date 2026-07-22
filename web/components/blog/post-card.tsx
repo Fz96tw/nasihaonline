@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Newspaper } from "lucide-react";
+import { Newspaper, Eye, MessageSquare } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
@@ -48,6 +48,16 @@ export function PostCard({ post, showExcerpt = true }: { post: PostCardData; sho
       {showExcerpt && (
         <CardContent className="pt-0 text-sm leading-relaxed text-muted-foreground">{post.excerpt}</CardContent>
       )}
+      <div className="mt-auto flex items-center justify-end gap-3 px-6 pb-6 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1" title="Unique visitors">
+          <Eye className="h-3.5 w-3.5" />
+          {post.viewCount}
+        </span>
+        <span className="flex items-center gap-1" title="Comments">
+          <MessageSquare className="h-3.5 w-3.5" />
+          {post.commentCount}
+        </span>
+      </div>
     </Card>
   );
 }

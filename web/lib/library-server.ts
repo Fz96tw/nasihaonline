@@ -26,6 +26,7 @@ import type {
   KnowledgeItemForEdit,
   KnowledgeTagOption,
   LibraryCard,
+  LibrarySort,
   MySubmission,
   RecentLibraryItem,
   ReviewQueueItem,
@@ -47,6 +48,8 @@ const LIBRARY_CARD_SELECT = {
   category: { select: { name: true, slug: true } },
   contributor: { select: { id: true, name: true } },
   attachments: { select: { fileName: true, mimeType: true, objectKey: true }, take: 1 },
+  _count: { select: { views: true } },
+  forumThread: { select: { _count: { select: { posts: true } } } },
 } as const;
 
 function toLibraryCard(item: {
@@ -61,6 +64,8 @@ function toLibraryCard(item: {
   category: { name: string; slug: string };
   contributor: { id: string; name: string | null };
   attachments: { fileName: string; mimeType: string; objectKey: string }[];
+  _count: { views: number };
+  forumThread: { _count: { posts: number } } | null;
 }): LibraryCard {
   return {
     id: item.id,
@@ -80,7 +85,21 @@ function toLibraryCard(item: {
           url: getKnowledgeDocumentUrl(item.attachments[0].objectKey),
         }
       : null,
+    viewCount: item._count.views,
+    commentCount: item.forumThread ? Math.max(item.forumThread._count.posts - 1, 0) : 0,
   };
+}
+
+// Applied in JS rather than a Prisma `orderBy` — commentCount depends on the
+// optional forumThread relation, which Prisma can't order a top-level
+// findMany by, and this way the same logic also covers the Meilisearch
+// relevance-ordered `q` path.
+function sortLibraryCards(cards: LibraryCard[], sort: LibrarySort): LibraryCard[] {
+  const sorted = [...cards];
+  if (sort === "viewed") sorted.sort((a, b) => b.viewCount - a.viewCount);
+  else if (sort === "commented") sorted.sort((a, b) => b.commentCount - a.commentCount);
+  else sorted.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return sorted;
 }
 
 export async function getKnowledgeCategories(): Promise<KnowledgeCategoryOption[]> {
@@ -342,6 +361,7 @@ export async function getPublishedKnowledgeItems(params: {
   level?: KnowledgeLevel;
   categorySlug?: string;
   q?: string;
+  sort?: LibrarySort;
 }): Promise<LibraryCard[]> {
   const visibleStatuses = [KnowledgeStatus.published, KnowledgeStatus.flagged];
   const filters = {
@@ -349,6 +369,7 @@ export async function getPublishedKnowledgeItems(params: {
     ...(params.level ? { level: params.level } : {}),
     ...(params.categorySlug ? { category: { slug: params.categorySlug } } : {}),
   };
+  const sort = params.sort ?? "recent";
 
   if (params.q?.trim()) {
     const hits = await searchLibraryDocuments(params.q.trim(), {
@@ -363,7 +384,8 @@ export async function getPublishedKnowledgeItems(params: {
       select: LIBRARY_CARD_SELECT,
     });
     const byId = new Map(items.map((item) => [item.id, item]));
-    return hits.map((hit) => byId.get(hit.id)).filter((item) => item != null).map(toLibraryCard);
+    const cards = hits.map((hit) => byId.get(hit.id)).filter((item) => item != null).map(toLibraryCard);
+    return sortLibraryCards(cards, sort);
   }
 
   const items = await db.knowledgeItem.findMany({
@@ -371,7 +393,7 @@ export async function getPublishedKnowledgeItems(params: {
     select: LIBRARY_CARD_SELECT,
     orderBy: { createdAt: "desc" },
   });
-  return items.map(toLibraryCard);
+  return sortLibraryCards(items.map(toLibraryCard), sort);
 }
 
 /**
