@@ -13,6 +13,7 @@ import { BackLink } from "@/components/back-link";
 import { ResourcePreview } from "@/components/library/resource-preview";
 import { LibraryFlagButton } from "@/components/library/library-flag-button";
 import { LibraryDiscussionLink } from "@/components/library/library-discussion-link";
+import { LibraryViewCounter } from "@/components/library/library-view-counter";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
@@ -56,6 +57,7 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
         {item.contentType === KnowledgeContentType.case_study && item.deidentificationConfirmed && (
           <Badge variant="info">De-identification confirmed</Badge>
         )}
+        <LibraryViewCounter itemId={item.id} initialViews={item.viewCount} />
       </div>
 
       <h1 className="mb-3 text-4xl font-extrabold tracking-tight">{item.title}</h1>

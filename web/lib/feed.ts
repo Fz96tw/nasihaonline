@@ -41,6 +41,8 @@ export type FeedItem = {
   forumReplyCount?: number;
   /** Only events carry a detail-page unique-visitor count (§4.6) — undefined for every other type. */
   eventViewCount?: number;
+  /** Only library items carry a detail-page unique-visitor count (§4.9) — undefined for every other type. */
+  libraryViewCount?: number;
 };
 
 // Marks a feed row's href so the page it lands on (blog post, forum thread,

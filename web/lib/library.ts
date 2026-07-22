@@ -83,6 +83,7 @@ export type KnowledgeItemDetail = LibraryCard & {
   deidentificationConfirmed: boolean;
   forumThreadId: string | null;
   forumReplyCount: number | null;
+  viewCount: number;
 };
 
 /** /library/[id]/edit's data load — a submission's full editable field set, at any status. */

@@ -391,6 +391,7 @@ export async function getPublishedKnowledgeItemById(id: string): Promise<Knowled
       deidentificationConfirmed: true,
       tags: { select: { tag: { select: { name: true, slug: true } } } },
       forumThread: { select: { id: true, _count: { select: { posts: true } } } },
+      _count: { select: { views: true } },
     },
   });
   if (!item) return null;
@@ -402,7 +403,28 @@ export async function getPublishedKnowledgeItemById(id: string): Promise<Knowled
     tags: item.tags.map(({ tag }) => tag),
     forumThreadId: item.forumThread?.id ?? null,
     forumReplyCount: item.forumThread ? item.forumThread._count.posts - 1 : null,
+    viewCount: item._count.views,
   };
+}
+
+export async function getKnowledgeItemViewCount(knowledgeItemId: string): Promise<number> {
+  return db.knowledgeItemView.count({ where: { knowledgeItemId } });
+}
+
+/**
+ * Records a unique visit to a resource's detail page for the eye-icon
+ * count, called from POST /api/library/:id/view on every page load. Mirrors
+ * recordEventView — /library/[id] redirects a signed-out visitor to
+ * /sign-in before this can ever fire, so `userId` is always a real member
+ * and this dedupes on the `[knowledgeItemId, userId]` unique constraint
+ * directly.
+ */
+export async function recordKnowledgeItemView(knowledgeItemId: string, userId: string): Promise<number> {
+  const item = await db.knowledgeItem.findUnique({ where: { id: knowledgeItemId }, select: { id: true } });
+  if (!item) throw new KnowledgeItemError(404, "Resource not found.");
+
+  await db.knowledgeItemView.createMany({ data: { knowledgeItemId, userId }, skipDuplicates: true });
+  return getKnowledgeItemViewCount(knowledgeItemId);
 }
 
 /**

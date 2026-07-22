@@ -83,6 +83,7 @@ model User {
   forumFollows              ForumFollow[]
   threadViews               ThreadView[]
   eventViews                EventView[]
+  knowledgeItemViews        KnowledgeItemView[]
 
   // Trust & Safety / Compliance / Notifications (§4.10/§4.15) — a member can
   // appear on either side of a conduct report (reported or reporting) and
@@ -1036,11 +1037,31 @@ model KnowledgeItem {
   forumThread ForumThread?
   // The other direction of ContributionEvent.knowledgeItemId.
   contributionEvent ContributionEvent?
+  // Unique-visitor count for the item detail page's eye-icon (mirrors
+  // EventView) — the Library is member-only like Events, so this dedupes on
+  // real userId rather than an opaque viewer key like PostView does.
+  views KnowledgeItemView[]
 
   @@index([contributorId])
   @@index([categoryId])
   @@index([status])
   @@map("knowledge_items")
+}
+
+// One row per unique member visit to a KnowledgeItem's detail page, for the
+// eye-icon view count on /library/[id] — mirrors EventView. The Library is
+// member-only like Events (no anonymous-visitor case), so this dedupes by
+// User.id directly rather than PostView's opaque viewerKey string.
+model KnowledgeItemView {
+  id              String        @id @default(cuid())
+  knowledgeItemId String
+  knowledgeItem   KnowledgeItem @relation(fields: [knowledgeItemId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+
+  @@unique([knowledgeItemId, userId])
+  @@map("knowledge_item_views")
 }
 
 // Document/article/case-study binary only — never video (recorded lectures

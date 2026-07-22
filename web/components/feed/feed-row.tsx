@@ -16,7 +16,7 @@ export function FeedRow({ item }: { item: FeedItem }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-sm font-medium">{item.author.name ?? "NASIHA Member"}</span>
+              <span className="truncate text-base font-medium">{item.author.name ?? "NASIHA Member"}</span>
               <Badge variant="neutral" className="flex-shrink-0">
                 {FEED_TYPE_LABELS[item.type]}
               </Badge>
@@ -25,8 +25,8 @@ export function FeedRow({ item }: { item: FeedItem }) {
               {formatRelativeTime(item.timestamp)}
             </span>
           </div>
-          <div className="mt-0.5 text-sm font-semibold">{item.title}</div>
-          <div className="mt-0.5 truncate text-sm text-muted-foreground">{item.excerpt}</div>
+          <div className="mt-0.5 text-base font-semibold">{item.title}</div>
+          <div className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{item.excerpt}</div>
           {item.eventStartsAt && (
             <div className="mt-0.5 text-xs text-muted-foreground">Event Date: {formatTimestamp(item.eventStartsAt)}</div>
           )}
@@ -47,6 +47,14 @@ export function FeedRow({ item }: { item: FeedItem }) {
               <span className="flex items-center gap-1" title="Comments">
                 <MessageSquare className="h-3.5 w-3.5" />
                 {item.stats.comments}
+              </span>
+            </div>
+          )}
+          {item.libraryViewCount !== undefined && (
+            <div className="mt-2 flex items-center justify-end gap-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1" title="Unique visitors">
+                <Eye className="h-3.5 w-3.5" />
+                {item.libraryViewCount}
               </span>
             </div>
           )}
