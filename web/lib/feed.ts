@@ -28,7 +28,7 @@ export type FeedItem = {
   href: string;
   /** ISO timestamp this item was published/created — the feed's sort key. */
   timestamp: string;
-  author: { name: string | null; avatarUrl: string | null };
+  author: { name: string | null; avatarUrl: string | null; titleSpecialty: string | null; countryRegion: string | null };
   /** Events, blog posts, announcements, and surveys carry a hero image — null for library items and forum threads. */
   imageUrl: string | null;
   /** Only blog posts carry the eye/comment counts shown on /blog/[slug] (§4.8) — undefined for every other type. */

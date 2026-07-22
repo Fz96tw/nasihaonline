@@ -6,26 +6,31 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
 export function FeedRow({ item }: { item: FeedItem }) {
+  const subtitle = [item.author.titleSpecialty, item.author.countryRegion].filter(Boolean).join(", ");
+
   return (
     <li>
       <Link
         href={item.href}
-        className="flex w-full items-start gap-3 p-4 text-left transition-colors hover:bg-accent/50"
+        className="flex w-full flex-col p-4 text-left transition-colors hover:bg-accent/50"
       >
-        <Avatar name={item.author.name ?? "NASIHA Member"} src={item.author.avatarUrl} size="sm" />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <div className="flex min-w-0 items-center gap-2">
+        <div className="flex items-start gap-2">
+          <Avatar name={item.author.name ?? "NASIHA Member"} src={item.author.avatarUrl} size="sm" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
               <span className="truncate text-base font-medium">{item.author.name ?? "NASIHA Member"}</span>
               <Badge variant="neutral" className="flex-shrink-0">
                 {FEED_TYPE_LABELS[item.type]}
               </Badge>
+              <span className="ml-auto flex-shrink-0 text-xs text-muted-foreground">
+                {formatRelativeTime(item.timestamp)}
+              </span>
             </div>
-            <span className="ml-auto flex-shrink-0 text-xs text-muted-foreground">
-              {formatRelativeTime(item.timestamp)}
-            </span>
+            {subtitle && <div className="truncate text-xs text-muted-foreground">{subtitle}</div>}
           </div>
-          <div className="mt-0.5 text-base font-semibold">{item.title}</div>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="mt-2 text-base font-semibold">{item.title}</div>
           <div className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{item.excerpt}</div>
           {item.eventStartsAt && (
             <div className="mt-0.5 text-xs text-muted-foreground">Event Date: {formatTimestamp(item.eventStartsAt)}</div>

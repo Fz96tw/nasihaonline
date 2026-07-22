@@ -8,7 +8,10 @@ import { withFeedRef, type FeedItem, type FeedCursor } from "@/lib/feed";
 const DEFAULT_PAGE_SIZE = 20;
 const EXCERPT_LENGTH = 180;
 
-const AUTHOR_SELECT = { name: true, profile: { select: { avatarUrl: true } } } as const;
+const AUTHOR_SELECT = {
+  name: true,
+  profile: { select: { avatarUrl: true, titleSpecialty: true, countryRegion: true, showSpecialtyLocation: true } },
+} as const;
 
 function truncate(text: string, maxLength = EXCERPT_LENGTH): string {
   const trimmed = text.trim();
@@ -16,8 +19,17 @@ function truncate(text: string, maxLength = EXCERPT_LENGTH): string {
   return `${trimmed.slice(0, maxLength).trimEnd()}…`;
 }
 
-function authorOf(user: { name: string | null; profile: { avatarUrl: string | null } | null }) {
-  return { name: user.name, avatarUrl: getProfileAvatarUrl(user.profile?.avatarUrl ?? null) };
+function authorOf(user: {
+  name: string | null;
+  profile: { avatarUrl: string | null; titleSpecialty: string | null; countryRegion: string | null; showSpecialtyLocation: boolean } | null;
+}) {
+  return {
+    name: user.name,
+    avatarUrl: getProfileAvatarUrl(user.profile?.avatarUrl ?? null),
+    // Same showSpecialtyLocation enforcement as the Directory (lib/members-server.ts).
+    titleSpecialty: user.profile?.showSpecialtyLocation ? user.profile.titleSpecialty : null,
+    countryRegion: user.profile?.showSpecialtyLocation ? user.profile.countryRegion : null,
+  };
 }
 
 // Every admin-broadcast content type (Board Announcements, Surveys)
@@ -26,7 +38,12 @@ function authorOf(user: { name: string | null; profile: { avatarUrl: string | nu
 // the real sender (Announcement.authorId / Survey.authorId) is only ever
 // shown unmasked in the admin history list (lib/announcements-server.ts,
 // lib/surveys-server.ts).
-const BOARD_SENDER = { name: "NASIHA Board", avatarUrl: "/images/nasihalogo-cropped.png" };
+const BOARD_SENDER = {
+  name: "NASIHA Board",
+  avatarUrl: "/images/nasihalogo-cropped.png",
+  titleSpecialty: null,
+  countryRegion: null,
+};
 
 /**
  * "What's New" feed (member-only) — merges five domains at query time
