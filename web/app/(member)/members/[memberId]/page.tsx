@@ -12,6 +12,7 @@ import { MemberHostedEvents } from "@/components/members/member-hosted-events";
 import { MemberLibraryItems } from "@/components/members/member-library-items";
 import { MemberForumThreads } from "@/components/members/member-forum-threads";
 import { BackLink } from "@/components/back-link";
+import { Role } from "@/lib/generated/prisma/enums";
 
 export async function generateMetadata({ params }: { params: { memberId: string } }): Promise<Metadata> {
   const member = await getDirectoryMemberById(params.memberId);
@@ -40,6 +41,12 @@ export default async function MemberProfilePage({ params }: { params: { memberId
     getMemberForumThreads(params.memberId),
   ]);
 
+  // Every item in libraryItems belongs to this member (params.memberId), so
+  // edit eligibility is the same for all of them — either the viewer is this
+  // member (self), or a Steward/admin, same gate updateKnowledgeItem enforces.
+  const canEditLibraryItems =
+    user.id === params.memberId || user.role === Role.moderator || user.role === Role.admin;
+
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-8 p-8">
       <BackLink fallbackHref="/members" />
@@ -48,7 +55,7 @@ export default async function MemberProfilePage({ params }: { params: { memberId
 
       <MemberBlogPosts posts={posts} />
       <MemberHostedEvents events={events} />
-      <MemberLibraryItems items={libraryItems} />
+      <MemberLibraryItems items={libraryItems} canEdit={canEditLibraryItems} />
       <MemberForumThreads threads={forumThreads} />
     </main>
   );

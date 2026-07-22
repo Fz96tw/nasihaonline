@@ -62,7 +62,7 @@ export type LibraryCard = {
   level: KnowledgeLevel;
   status: KnowledgeStatus;
   category: { name: string; slug: string };
-  contributor: { name: string | null };
+  contributor: { id: string; name: string | null };
   createdAt: string;
   youtubeUrl: string | null;
   // url is pre-resolved server-side (getKnowledgeDocumentUrl lives in the

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { BookOpen, ClipboardList, FileText, Flag, PlayCircle, Stethoscope, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +24,12 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
-export function LibraryItemCard({ item }: { item: LibraryCardData }) {
+/**
+ * `canEdit` is computed server-side by the page (contributor, Steward, or
+ * admin — same gate updateKnowledgeItem enforces again) since this card has
+ * no other route to the viewer's identity/role.
+ */
+export function LibraryItemCard({ item, canEdit }: { item: LibraryCardData; canEdit: boolean }) {
   const router = useRouter();
   const [previewOpen, setPreviewOpen] = useState(false);
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
@@ -85,12 +91,19 @@ export function LibraryItemCard({ item }: { item: LibraryCardData }) {
             <Button size="sm" variant="outline" onClick={() => setPreviewOpen(true)}>
               Preview
             </Button>
-            {item.status === KnowledgeStatus.published && (
-              <Button size="sm" variant="ghost" onClick={() => setFlagDialogOpen(true)} title="Flag as inaccurate or outdated">
-                <Flag className="mr-1.5 h-3.5 w-3.5" />
-                Flag
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {canEdit && (
+                <Button size="sm" variant="ghost" asChild>
+                  <Link href={`/library/${item.id}/edit`}>Edit</Link>
+                </Button>
+              )}
+              {item.status === KnowledgeStatus.published && (
+                <Button size="sm" variant="ghost" onClick={() => setFlagDialogOpen(true)} title="Flag as inaccurate or outdated">
+                  <Flag className="mr-1.5 h-3.5 w-3.5" />
+                  Flag
+                </Button>
+              )}
+            </div>
           </div>
           {flagError && <p className="text-xs text-destructive">{flagError}</p>}
         </CardContent>

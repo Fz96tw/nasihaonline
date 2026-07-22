@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getKnowledgeCategories, getPublishedKnowledgeItems } from "@/lib/library-server";
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS } from "@/lib/library";
-import { KnowledgeContentType, KnowledgeLevel } from "@/lib/generated/prisma/enums";
+import { KnowledgeContentType, KnowledgeLevel, Role } from "@/lib/generated/prisma/enums";
 import { LibraryItemCard } from "@/components/library/library-item-card";
 import { BackToFeedLink } from "@/components/feed/back-to-feed-link";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,8 @@ export default async function LibraryPage({
     getPublishedKnowledgeItems({ categorySlug: searchParams.category, contentType, level, q: searchParams.q }),
     getKnowledgeCategories(),
   ]);
+
+  const canEditAny = user.role === Role.moderator || user.role === Role.admin;
 
   return (
     <main className="min-h-screen">
@@ -150,7 +152,11 @@ export default async function LibraryPage({
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((item) => (
-              <LibraryItemCard key={item.id} item={item} />
+              <LibraryItemCard
+                key={item.id}
+                item={item}
+                canEdit={canEditAny || item.contributor.id === user.id}
+              />
             ))}
           </div>
         )}

@@ -36,7 +36,7 @@ const LIBRARY_CARD_SELECT = {
   createdAt: true,
   youtubeUrl: true,
   category: { select: { name: true, slug: true } },
-  contributor: { select: { name: true } },
+  contributor: { select: { id: true, name: true } },
   attachments: { select: { fileName: true, mimeType: true, objectKey: true }, take: 1 },
 } as const;
 
@@ -50,7 +50,7 @@ function toLibraryCard(item: {
   createdAt: Date;
   youtubeUrl: string | null;
   category: { name: string; slug: string };
-  contributor: { name: string | null };
+  contributor: { id: string; name: string | null };
   attachments: { fileName: string; mimeType: string; objectKey: string }[];
 }): LibraryCard {
   return {
