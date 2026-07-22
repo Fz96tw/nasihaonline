@@ -52,6 +52,37 @@ export async function provisionMemberAccount(
 }
 
 /**
+ * Re-issues a sign-up ticket for an applicant who was already approved but
+ * never completed (or never received) the original invite — e.g. the
+ * welcome email bounced/never sent, or the link expired. Clerk only ever
+ * returns an invitation's `url` once, at creation time, so there's no way
+ * to fetch the original link back; revoking any still-pending invitation
+ * for this email and creating a fresh one is the only way to get a new,
+ * valid `url` to re-send. Safe to call even if no prior invitation exists
+ * (ignoreExisting: true) or if one was already revoked/expired/accepted —
+ * Clerk just issues a new one regardless.
+ */
+export async function resendMemberInvitation(
+  email: string,
+  role: Role,
+  tier?: Tier,
+  firstName?: string,
+  lastName?: string,
+) {
+  const { data: pending } = await clerk.invitations.getInvitationList({
+    query: email,
+    status: "pending",
+  });
+  await Promise.all(
+    pending
+      .filter((invitation) => invitation.emailAddress === email)
+      .map((invitation) => clerk.invitations.revokeInvitation(invitation.id)),
+  );
+
+  return provisionMemberAccount(email, role, tier, firstName, lastName);
+}
+
+/**
  * Role/tier is sourced from Clerk's publicMetadata on every user.updated
  * webhook (lib/clerk-sync.ts's roleFromMetadata/tierFromMetadata) — a role
  * change written only to Postgres would get silently overwritten by the

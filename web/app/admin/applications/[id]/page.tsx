@@ -9,6 +9,7 @@ import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminApplicationReviewForm } from "@/components/admin-application-review-form";
+import { AdminResendInviteButton } from "@/components/admin-resend-invite-button";
 
 const PENDING_STATUSES = new Set(["submitted", "under_review"]);
 
@@ -146,6 +147,9 @@ export default async function AdminApplicationDetailPage({
                 value={application.adminNote}
               />
             </div>
+            {application.status === "approved" && (
+              <AdminResendInviteButton applicationId={application.id} />
+            )}
           </CardContent>
         </Card>
       )}
