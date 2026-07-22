@@ -6,35 +6,82 @@ import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
 // lib/linkify.tsx's linkifyText only turns absolute http(s) URLs into links.
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
-// Common expertise areas across Nasiha's membership (clinical, public
-// health, research, and non-clinical board/leadership domains — matches
-// the categories used in the prototype's directory/knowledge examples).
-// This is the seed source of truth for taggable Skill.name values;
-// members can only attach existing skills, not create new ones inline.
+// Tagged expertise across Nasiha's membership (Profile.skillIds, §4.3/§7.3)
+// — grouped here by the InterestArea domain (lib/interest-areas.ts) it's
+// most associated with, so the list stays proportioned across the platform's
+// broader (no longer medical-only) membership rather than skewing clinical.
+// This is the seed source of truth for taggable Skill.name values; members
+// can only attach existing skills, not create new ones inline.
 const SKILLS: string[] = [
-  "Internal Medicine",
-  "Cardiology",
-  "Oncology",
-  "Pediatrics",
-  "Primary Care / Family Medicine",
-  "Surgery",
-  "Psychiatry / Mental Health",
-  "Radiology",
-  "Emergency Medicine",
-  "Palliative Care",
-  "Nursing",
-  "Public Health",
-  "Global Health",
+  // Arts & Crafts
+  "Visual Arts",
+  "Crafting & Handmade Goods",
+  // Basic Science Research
+  "Basic Science Research",
   "Epidemiology",
+  // Biotechnology
+  "Biotechnology",
+  "Genomics",
+  // Business
+  "Business",
+  "Entrepreneurship",
+  "Nonprofit Management",
+  // Clinical Research
   "Clinical Research",
   "Research Methodology",
+  // Culinary Arts
+  "Culinary Arts",
+  // Data & Analytics
+  "Data Analytics",
+  "Data Science",
+  // E-Learning
+  "Instructional Design & E-Learning",
+  // Education
+  "Education",
   "Medical Education",
-  "Healthcare Leadership",
-  "Health Policy",
+  // Finance & Investing
+  "Finance & Investing",
+  "Accounting",
+  // Health & Wellness
+  "Nutrition",
+  "Wellness Coaching",
+  // Health-tech
   "Health Technology",
-  "Technology",
-  "Business / Nonprofit Leadership",
+  "Telemedicine",
+  // Healthcare
+  "Internal Medicine",
+  "Cardiology",
+  "Pediatrics",
+  "Surgery",
+  "Psychiatry / Mental Health",
+  "Emergency Medicine",
+  "Nursing",
+  "Primary Care / Family Medicine",
+  "Public Health",
+  "Global Health",
+  "Health Policy",
+  // Leadership & Management
+  "Leadership & Management",
+  "Healthcare Leadership",
   "Communication",
+  // Literature & Writing
+  "Writing & Editing",
+  "Literature",
+  // Marketing & Sales
+  "Marketing",
+  "Sales",
+  // Science & Philosophy
+  "Science Communication",
+  "Philosophy",
+  // Sustainability & Environment
+  "Sustainability",
+  "Environmental Science",
+  // Tech & Development
+  "Technology",
+  "Software Engineering",
+  "Cybersecurity",
+  // Travel & Culture
+  "Travel & Cultural Exchange",
 ];
 
 // Configurable earn/spend rate card (PRD §4.4's tables) — a managed
