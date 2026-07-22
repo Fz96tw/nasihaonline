@@ -57,7 +57,6 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
         {item.contentType === KnowledgeContentType.case_study && item.deidentificationConfirmed && (
           <Badge variant="info">De-identification confirmed</Badge>
         )}
-        <LibraryViewCounter itemId={item.id} initialViews={item.viewCount} />
       </div>
 
       <h1 className="mb-3 text-4xl font-extrabold tracking-tight">{item.title}</h1>
@@ -84,6 +83,7 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
             </div>
           </div>
         )}
+        <LibraryViewCounter itemId={item.id} initialViews={item.viewCount} />
       </div>
 
       <p className="mb-8 text-base leading-relaxed text-muted-foreground">{item.description}</p>
