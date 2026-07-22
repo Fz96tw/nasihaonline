@@ -70,6 +70,9 @@ const SKILLS: string[] = [
   // Marketing & Sales
   "Marketing",
   "Sales",
+  // Music
+  "Music Performance",
+  "Music Production",
   // Science & Philosophy
   "Science Communication",
   "Philosophy",

@@ -19,6 +19,7 @@ export const INTEREST_AREA_LABELS: Record<InterestArea, string> = {
   [InterestArea.leadership_management]: "Leadership & Management",
   [InterestArea.literature_writing]: "Literature & Writing",
   [InterestArea.marketing_sales]: "Marketing & Sales",
+  [InterestArea.music]: "Music",
   [InterestArea.science_philosophy]: "Science & Philosophy",
   [InterestArea.sustainability_environment]: "Sustainability & Environment",
   [InterestArea.tech_development]: "Tech & Development",
