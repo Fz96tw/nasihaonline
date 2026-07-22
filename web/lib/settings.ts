@@ -27,3 +27,32 @@ export async function setAdmissionPhase(phase: AdmissionPhase): Promise<void> {
     update: { admissionPhase: phase },
   });
 }
+
+export type WelcomeAnnouncementSettings = {
+  welcomeAnnouncementInFeed: boolean;
+  welcomeAnnouncementNotify: boolean;
+  welcomeAnnouncementEmail: boolean;
+};
+
+export async function getWelcomeAnnouncementSettings(): Promise<WelcomeAnnouncementSettings> {
+  const settings = await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID },
+    update: {},
+  });
+  return {
+    welcomeAnnouncementInFeed: settings.welcomeAnnouncementInFeed,
+    welcomeAnnouncementNotify: settings.welcomeAnnouncementNotify,
+    welcomeAnnouncementEmail: settings.welcomeAnnouncementEmail,
+  };
+}
+
+export async function setWelcomeAnnouncementSettings(
+  input: WelcomeAnnouncementSettings,
+): Promise<void> {
+  await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID, ...input },
+    update: input,
+  });
+}

@@ -41,6 +41,9 @@ model User {
   // code, not here) but their historical ledger/content rows are untouched.
   suspended   Boolean    @default(false)
   suspendedAt DateTime?
+  // First-sign-in (not registration) welcome shout-out fire-once guard —
+  // set atomically in getSessionUser() so concurrent requests can't double-post.
+  welcomeAnnouncementSentAt DateTime?
   profile     Profile?
   // Denormalized donation attribution only (§4.14) — never joined against
   // for Knowledge Hours/tier logic. See Donation model for the guarantee.
@@ -207,9 +210,12 @@ enum AdmissionPhase {
 // Extend with more columns as future settings (e.g. inactivity threshold,
 // §3.4) are added, rather than introducing a generic key/value table.
 model SiteSettings {
-  id             Int            @id @default(1)
-  admissionPhase AdmissionPhase @default(referral_driven_growth)
-  updatedAt      DateTime       @updatedAt
+  id                        Int            @id @default(1)
+  admissionPhase            AdmissionPhase @default(referral_driven_growth)
+  welcomeAnnouncementInFeed Boolean        @default(true)
+  welcomeAnnouncementNotify Boolean        @default(true)
+  welcomeAnnouncementEmail  Boolean        @default(true)
+  updatedAt                 DateTime       @updatedAt
 
   @@map("site_settings")
 }

@@ -1,0 +1,6 @@
+-- Intentionally a no-op. Originally backfilled welcomeAnnouncementSentAt for
+-- existing users to prevent them from getting a first-sign-in welcome post,
+-- but the app hasn't launched yet and welcoming the existing (test) members
+-- too was decided to be a fine, even nice, side effect for now — so this
+-- migration is kept as a recorded no-op rather than deleted, to avoid a
+-- migration-history/folder mismatch for anyone who already applied it.

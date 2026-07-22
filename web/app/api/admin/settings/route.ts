@@ -3,16 +3,27 @@ import { z } from "zod";
 import { AuthError, authErrorResponse, requireRole } from "@/lib/auth";
 import { Role } from "@/lib/generated/prisma/enums";
 import { AdmissionPhase } from "@/lib/generated/prisma/enums";
-import { getAdmissionPhase, setAdmissionPhase } from "@/lib/settings";
+import {
+  getAdmissionPhase,
+  setAdmissionPhase,
+  getWelcomeAnnouncementSettings,
+  setWelcomeAnnouncementSettings,
+} from "@/lib/settings";
 
 const patchSchema = z.object({
-  admissionPhase: z.nativeEnum(AdmissionPhase),
+  admissionPhase: z.nativeEnum(AdmissionPhase).optional(),
+  welcomeAnnouncementInFeed: z.boolean().optional(),
+  welcomeAnnouncementNotify: z.boolean().optional(),
+  welcomeAnnouncementEmail: z.boolean().optional(),
 });
 
 export async function GET() {
   try {
     await requireRole([Role.admin]);
-    return NextResponse.json({ admissionPhase: await getAdmissionPhase() });
+    return NextResponse.json({
+      admissionPhase: await getAdmissionPhase(),
+      ...(await getWelcomeAnnouncementSettings()),
+    });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
     throw error;
@@ -32,6 +43,26 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  await setAdmissionPhase(parsed.data.admissionPhase);
-  return NextResponse.json({ admissionPhase: parsed.data.admissionPhase });
+  if (parsed.data.admissionPhase !== undefined) {
+    await setAdmissionPhase(parsed.data.admissionPhase);
+  }
+
+  const { welcomeAnnouncementInFeed, welcomeAnnouncementNotify, welcomeAnnouncementEmail } = parsed.data;
+  if (
+    welcomeAnnouncementInFeed !== undefined ||
+    welcomeAnnouncementNotify !== undefined ||
+    welcomeAnnouncementEmail !== undefined
+  ) {
+    const current = await getWelcomeAnnouncementSettings();
+    await setWelcomeAnnouncementSettings({
+      welcomeAnnouncementInFeed: welcomeAnnouncementInFeed ?? current.welcomeAnnouncementInFeed,
+      welcomeAnnouncementNotify: welcomeAnnouncementNotify ?? current.welcomeAnnouncementNotify,
+      welcomeAnnouncementEmail: welcomeAnnouncementEmail ?? current.welcomeAnnouncementEmail,
+    });
+  }
+
+  return NextResponse.json({
+    admissionPhase: await getAdmissionPhase(),
+    ...(await getWelcomeAnnouncementSettings()),
+  });
 }

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { BackLink } from "@/components/back-link";
 import { getSessionUser } from "@/lib/auth";
-import { getAdmissionPhase } from "@/lib/settings";
+import { getAdmissionPhase, getWelcomeAnnouncementSettings } from "@/lib/settings";
 import { getFlaggedContentCount } from "@/lib/moderation-server";
 import { getPendingLedgerCountForAdmin } from "@/lib/contributions-server";
 import { getReviewQueueCount } from "@/lib/library-server";
@@ -9,6 +10,7 @@ import { getOpenConductReportCount } from "@/lib/conduct-server";
 import { getOpenPrivacyRequestCount } from "@/lib/privacy-server";
 import { getPendingApplicationsCount } from "@/lib/admin-review-server";
 import { AdminPhaseForm } from "@/components/admin-phase-form";
+import { WelcomeAnnouncementSettingsForm } from "@/components/admin/welcome-announcement-settings-form";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -143,6 +145,7 @@ export default async function AdminPage() {
 
   const [
     admissionPhase,
+    welcomeAnnouncementSettings,
     applicationsCount,
     contentCount,
     ledgerCount,
@@ -151,6 +154,7 @@ export default async function AdminPage() {
     privacyCount,
   ] = await Promise.all([
     getAdmissionPhase(),
+    getWelcomeAnnouncementSettings(),
     getPendingApplicationsCount(),
     getFlaggedContentCount(),
     getPendingLedgerCountForAdmin(),
@@ -179,9 +183,7 @@ export default async function AdminPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-8 p-8">
       <div>
-        <Link href="/dashboard" className="text-sm text-muted-foreground hover:underline">
-          ← Back to Dashboard
-        </Link>
+        <BackLink fallbackHref="/dashboard" />
         <h1 className="mt-2 text-3xl font-bold tracking-tight">Admin</h1>
         <p className="text-muted-foreground">Signed in as {user.email} (admin)</p>
       </div>
@@ -243,6 +245,13 @@ export default async function AdminPage() {
                     </Link>
                   );
                 })}
+                {group === "Communications" && (
+                  <WelcomeAnnouncementSettingsForm
+                    initialInFeed={welcomeAnnouncementSettings.welcomeAnnouncementInFeed}
+                    initialNotify={welcomeAnnouncementSettings.welcomeAnnouncementNotify}
+                    initialEmail={welcomeAnnouncementSettings.welcomeAnnouncementEmail}
+                  />
+                )}
               </div>
             </div>
           );

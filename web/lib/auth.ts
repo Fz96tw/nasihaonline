@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { syncUserFromClerk } from "@/lib/clerk-sync";
+import { sendWelcomeAnnouncement } from "@/lib/welcome-announcement";
 import type { Role, Tier } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 
@@ -18,9 +19,37 @@ export async function getSessionUser(): Promise<UserModel | null> {
   if (!userId) return null;
 
   const user = await db.user.findUnique({ where: { clerkUserId: userId } });
-  if (user) return user;
+  if (user) {
+    await maybeSendWelcomeAnnouncement(user);
+    return user;
+  }
 
-  return syncUserFromClerk(userId);
+  const synced = await syncUserFromClerk(userId);
+  if (synced) await maybeSendWelcomeAnnouncement(synced);
+  return synced;
+}
+
+/**
+ * Fires the welcome shout-out on a member's first *sign-in* (not
+ * registration) — this is the universal choke point every authenticated
+ * request passes through. The atomic updateMany only flips
+ * welcomeAnnouncementSentAt from null once, so concurrent requests across
+ * server components/tabs can't double-post. Failures are swallowed: this
+ * must never break sign-in.
+ */
+async function maybeSendWelcomeAnnouncement(user: UserModel): Promise<void> {
+  if (user.welcomeAnnouncementSentAt) return;
+  try {
+    const { count } = await db.user.updateMany({
+      where: { id: user.id, welcomeAnnouncementSentAt: null },
+      data: { welcomeAnnouncementSentAt: new Date() },
+    });
+    if (count > 0) {
+      await sendWelcomeAnnouncement(user);
+    }
+  } catch (error) {
+    console.error("Failed to send welcome announcement", error);
+  }
 }
 
 export class AuthError extends Error {
