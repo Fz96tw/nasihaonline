@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { EVENTS_FORUM_SLUG } from "@/lib/forums";
+import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
 
 // Absolute, not relative — same rationale as events-server.ts's createEvent:
 // lib/linkify.tsx's linkifyText only turns absolute http(s) URLs into links.
@@ -246,13 +247,16 @@ async function seedEvents() {
 }
 
 // Managed blog taxonomy (§4.8 — "should be a managed taxonomy, not hardcoded").
-const POST_CATEGORIES = ["Cardiology", "Education", "Research", "Global Health", "Oncology", "Mental Health"];
+// Mirrors the same broad InterestArea labels members pick from on the
+// profile/join form (§3.3/§4.3) rather than a medical-specific list — the
+// platform isn't medical-only, so Blog/Library categories shouldn't be either.
+const POST_CATEGORIES = Object.values(INTEREST_AREA_LABELS);
 const POST_TAGS = ["guidelines", "case-study", "career-advice", "research-methods"];
 
 // Same taxonomy reused for the Knowledge Library so Blog and Library filters
 // stay aligned; not mandated as identical by the PRD but a reasonable shared
 // default an admin can diverge later via /admin CRUD (not yet built).
-const KNOWLEDGE_CATEGORIES = ["Cardiology", "Education", "Research", "Global Health", "Oncology", "Mental Health"];
+const KNOWLEDGE_CATEGORIES = Object.values(INTEREST_AREA_LABELS);
 const KNOWLEDGE_TAGS = ["guidelines", "review-article", "recorded-lecture", "case-study"];
 
 // Six seeded forum categories, per Member_Communications.md's table (§4.13).
@@ -293,21 +297,21 @@ const SAMPLE_POSTS: { title: string; body: string; category: string; published: 
   {
     title: "Heart Failure Guidelines: What Changed in the Latest Update",
     body: "A summary of the key changes clinicians should know about in the latest heart failure management guidelines.",
-    category: "Cardiology",
+    category: "Healthcare",
     published: true,
     tags: ["guidelines"],
   },
   {
     title: "Navigating Your First Year as an Early-Career Researcher",
     body: "Practical advice for early-career members starting out in clinical research, from finding a mentor to publishing your first paper.",
-    category: "Research",
+    category: "Clinical Research",
     published: true,
     tags: ["career-advice", "research-methods"],
   },
   {
     title: "A De-Identified Case Discussion Worth Revisiting",
     body: "Draft notes on a complex oncology case discussed at a recent roundtable — still being written up.",
-    category: "Oncology",
+    category: "Healthcare",
     published: false,
     tags: ["case-study"],
   },
@@ -406,7 +410,7 @@ const SAMPLE_KNOWLEDGE_ITEMS: {
     contentType: "article",
     status: "published",
     level: "all_levels",
-    category: "Global Health",
+    category: "Healthcare",
     attachment: true,
   },
   {
@@ -415,7 +419,7 @@ const SAMPLE_KNOWLEDGE_ITEMS: {
     contentType: "case_study",
     status: "pending_review",
     level: "advanced",
-    category: "Oncology",
+    category: "Healthcare",
     deidentificationConfirmed: true,
   },
   {
@@ -424,7 +428,7 @@ const SAMPLE_KNOWLEDGE_ITEMS: {
     contentType: "recorded_lecture",
     status: "published",
     level: "early_career",
-    category: "Research",
+    category: "Clinical Research",
     youtubeUrl: "https://www.youtube.com/watch?v=nasiha-sample-lecture",
   },
 ];
