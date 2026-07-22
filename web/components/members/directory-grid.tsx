@@ -63,9 +63,9 @@ export function DirectoryGrid({
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, index) => (
-          <Skeleton key={index} className="h-56 rounded-[10px]" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {Array.from({ length: 8 }).map((_, index) => (
+          <Skeleton key={index} className="h-20 rounded-[10px]" />
         ))}
       </div>
     );
@@ -78,11 +78,9 @@ export function DirectoryGrid({
       </p>
 
       {filtered.length === 0 ? (
-        <p className="py-16 text-center text-muted-foreground">
-          No members match your search and filter.
-        </p>
+        <p className="py-16 text-center text-muted-foreground">No members match your search and filter.</p>
       ) : (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((member) => (
             <MemberCard key={member.id} member={member} currentUserId={currentUserId} />
           ))}

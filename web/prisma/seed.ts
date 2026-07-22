@@ -280,7 +280,7 @@ const FORUMS: { name: string; description: string; displayOrder: number }[] = [
     displayOrder: 5,
   },
   {
-    name: "Events",
+    name: "Events Discussion",
     description: "Auto-created discussion threads for events that opt in at submission time.",
     displayOrder: 6,
   },

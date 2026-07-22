@@ -35,6 +35,7 @@ function toDirectoryMember(profile: ProfileWithUser): DirectoryMember {
     titleSpecialty: profile.showSpecialtyLocation ? profile.titleSpecialty : null,
     countryRegion: profile.showSpecialtyLocation ? profile.countryRegion : null,
     careerStage: profile.careerStage,
+    linkedinUrl: profile.linkedinUrl,
     learningTopics: profile.learningTopics,
     bio: profile.bio,
     interestAreas: profile.interestAreas,

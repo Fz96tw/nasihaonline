@@ -200,6 +200,21 @@ export async function getPublishedKnowledgeItems(params: {
   return items.map(toLibraryCard);
 }
 
+/**
+ * /members/[memberId]'s Library section (§4.5/§4.9) — this member's
+ * published/flagged submissions, newest first. Same visible-statuses gate
+ * as getPublishedKnowledgeItems; a still-pending_review or rejected
+ * submission stays private to /library/mine.
+ */
+export async function getPublishedKnowledgeItemsByContributor(contributorId: string): Promise<LibraryCard[]> {
+  const items = await db.knowledgeItem.findMany({
+    where: { contributorId, status: { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] } },
+    select: LIBRARY_CARD_SELECT,
+    orderBy: { createdAt: "desc" },
+  });
+  return items.map(toLibraryCard);
+}
+
 /** Dashboard "recently added to the library" widget (§4.10). */
 export async function getRecentlyPublishedKnowledgeItems(limit = 5): Promise<RecentLibraryItem[]> {
   const items = await db.knowledgeItem.findMany({

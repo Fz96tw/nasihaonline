@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Flag } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { FlagContentDialog } from "@/components/flag-content-dialog";
-import { MemberProfileDialog } from "@/components/members/member-profile-dialog";
 import { MentionTextarea } from "@/components/mention-textarea";
 import type { ForumPostNode } from "@/lib/forums";
 import { getCsrfToken } from "@/lib/csrf-client";
@@ -115,7 +115,6 @@ function PostNode({
   const [flagging, setFlagging] = useState(false);
   const [flagged, setFlagged] = useState(post.flagged);
   const [flagError, setFlagError] = useState<string | null>(null);
-  const [profileOpen, setProfileOpen] = useState(false);
   const authorName = post.authorName ?? "NASIHA Member";
 
   async function handleFlag(reason: string) {
@@ -148,15 +147,14 @@ function PostNode({
         <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-2">
             {post.authorProfile ? (
-              <button
-                type="button"
-                onClick={() => setProfileOpen(true)}
+              <Link
+                href={`/members/${post.authorProfile.id}`}
                 aria-label={`View ${authorName}'s profile`}
                 className="flex items-center gap-1.5"
               >
                 <Avatar name={authorName} src={post.authorProfile.avatarUrl} size="xs" />
                 <span className="font-medium text-foreground hover:underline">{authorName}</span>
-              </button>
+              </Link>
             ) : (
               <span className="flex items-center gap-1.5">
                 <Avatar name={authorName} size="xs" />
@@ -168,9 +166,6 @@ function PostNode({
           </span>
           <span>{formatTimestamp(post.createdAt)}</span>
         </div>
-        {post.authorProfile && (
-          <MemberProfileDialog member={post.authorProfile} open={profileOpen} onOpenChange={setProfileOpen} />
-        )}
         <p className={cn("whitespace-pre-wrap break-words text-sm", post.removed && "italic text-muted-foreground")}>
           {renderTextWithMentions(post.body, mentionableMembers)}
         </p>

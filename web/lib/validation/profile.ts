@@ -1,6 +1,24 @@
 import { z } from "zod";
 import { InterestArea, ApplicationAvailability } from "@/lib/generated/prisma/enums";
 
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/** Optional public profile link (e.g. LinkedIn) — empty string means unset. */
+const linkedinUrlSchema = z
+  .string()
+  .trim()
+  .max(300)
+  .refine((value) => value === "" || isHttpUrl(value), {
+    message: "Enter a valid URL (starting with http:// or https://)",
+  });
+
 /**
  * Client-facing form shape: expertiseAreas is split between tagged
  * `skillIds` (selected from the Skill catalog) and a comma-separated
@@ -13,6 +31,7 @@ export const profileFormSchema = z.object({
   countryRegion: z.string().trim().max(120),
   titleSpecialty: z.string().trim().max(120),
   careerStage: z.string().trim().max(120),
+  linkedinUrl: linkedinUrlSchema,
   skillIds: z.array(z.string()).max(30),
   expertiseAreas: z.string().trim().max(500),
   learningTopics: z.string().trim().max(2000),
@@ -49,6 +68,7 @@ export const profilePatchSchema = z.object({
   countryRegion: z.string().trim().max(120),
   titleSpecialty: z.string().trim().max(120),
   careerStage: z.string().trim().max(120),
+  linkedinUrl: linkedinUrlSchema,
   skillIds: z.array(z.string()).max(30),
   expertiseAreas: z.array(z.string().trim().min(1).max(80)).max(30),
   learningTopics: z.string().trim().max(2000),

@@ -4,11 +4,10 @@
 import { ApplicationAvailability, InterestArea, Tier } from "@/lib/generated/prisma/enums";
 import { TIER_LABELS } from "@/lib/validation/application-review";
 
-// Every tier is listed/filterable in the Directory (§4.5), Friend included
-// (with its own tier badge) — but Friend-tier members can't be messaged or
-// sent a meeting request from their card, and can't use the Inbox
-// themselves, since the Inbox is exclusively Directory-originated (§4.7).
-export const DIRECTORY_TIERS: Tier[] = [Tier.active, Tier.associate, Tier.student, Tier.friend];
+// Friend tier is excluded from the Directory entirely (§2.2/§4.5) — not
+// listed, searched, or filterable — in addition to having no Inbox access
+// (§4.7).
+export const DIRECTORY_TIERS: Tier[] = [Tier.active, Tier.associate, Tier.student];
 
 // The subset of tiers that can send/receive Inbox messages and meeting
 // requests (§4.7) — Friend tier is excluded.
@@ -27,6 +26,7 @@ export type DirectoryMember = {
   titleSpecialty: string | null;
   countryRegion: string | null;
   careerStage: string | null;
+  linkedinUrl: string | null;
   learningTopics: string | null;
   bio: string | null;
   interestAreas: InterestArea[];

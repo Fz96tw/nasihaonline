@@ -56,14 +56,14 @@ admin       — full administrative access
 
 ### 2.2 Membership Tiers (member-facing classification, distinct from system role)
 
-Every `member` belongs to exactly one tier, which drives directory badges, contribution expectations, and (for Friend) Inbox exclusion:
+Every `member` belongs to exactly one tier, which drives Directory eligibility, contribution expectations, and (for Friend) Inbox exclusion:
 
 | Tier | Label | Description | Access |
 |---|---|---|---|
 | `active` | Active Member | Regular contributors via teaching, reviewing, or research | Full access + governance voting rights |
 | `associate` | Associate | Newer members establishing footing, growing toward Active | Full community access |
 | `student` | Student / Trainee | Students/trainees; lighter contribution expectations | Full community access |
-| `friend` | Friend of Nasiha | No contribution obligation | Full member access to every feature (Dashboard, Library, Blog, Forums, Contributions, Calendar, etc.), **including** being listed/searchable/filterable in the Member Directory with its own "Friend" tier badge (§4.5) — the only exception is the Inbox (§4.7): a Friend-tier member's card shows no "Send Message"/"Request Meeting" actions, and Friend-tier accounts can't send or receive Inbox messages/meeting requests at all |
+| `friend` | Friend of Nasiha | No contribution obligation | Full access to Dashboard, Library, Blog, Forums, Contributions, and Calendar — **excluded** from the Member Directory entirely (§4.5: not listed, searchable, or filterable) and from the Inbox (§4.7): Friend-tier accounts can't send or receive Inbox messages/meeting requests at all |
 
 Tier is set by admin review (initial) and should later support admin-driven promotion (e.g., Associate → Active) based on contribution history — promotion workflow is out of scope for v1 but the data model must support it (see §7.3).
 
@@ -72,7 +72,7 @@ Tier is set by admin review (initial) and should later support admin-driven prom
 - **The Practicing Expert** (e.g., physician, 10+ yrs experience) — teaches via lectures/webinars, reviews others' work, occasionally spends hours for cross-specialty consultation. Cares about signal quality of the directory and low-friction content submission.
 - **The Early-Career Professional** (Associate) — building reputation, consuming more than teaching initially, motivated by mentorship access and visibility in the directory.
 - **The Student/Trainee** — heavy consumer of the library and events, lighter obligations, values a low-pressure on-ramp and forums with peers.
-- **The Friend** — not a full member; gets the same platform access as any other tier, including a listed Directory presence with a "Friend" badge, except the Inbox (can't be messaged/meeting-requested, and can't send/receive Inbox items themselves), without any contribution obligation or application friction. A conversion funnel target (Friend → Applicant, i.e. toward Active/Associate/Student).
+- **The Friend** — not a full member; gets access to Dashboard, Library, Blog, Forums, Contributions, and Calendar, but is not listed in the Member Directory and has no Inbox access (can't be messaged/meeting-requested, and can't send/receive Inbox items themselves), without any contribution obligation or application friction. A conversion funnel target (Friend → Applicant, i.e. toward Active/Associate/Student).
 
 ---
 
@@ -216,9 +216,9 @@ Routes: `POST /api/contributions/earn`, `POST /api/contributions/spend`, `GET /a
 
 ### 4.5 Member Directory
 
-- Grid of member cards: avatar thumbnail next to the member's name — the member's uploaded profile photo if set, otherwise the initials + brand-color fallback (§4.3) — title, country, tier badge, expertise tags, and two actions — **"Send Message"** and **"Request Meeting"** (both open into the Inbox domain, §4.7; there is no live chat entry point from the directory). **Exception:** a Friend-tier member's card shows the tier badge like any other but omits both actions entirely — Friend tier has no Inbox access (§2.2, §4.7).
+- Grid of member cards: avatar thumbnail next to the member's name — the member's uploaded profile photo if set, otherwise the initials + brand-color fallback (§4.3) — title, country, tier badge, expertise tags, and two actions — **"Send Message"** and **"Request Meeting"** (both open into the Inbox domain, §4.7; there is no live chat entry point from the directory). **Friend-tier members are excluded from the Directory entirely** — not listed, searched, or filterable (§2.2) — so no Friend card ever appears in this grid.
 - Search: free-text across name, title, country, expertise.
-- Filter: by tier (All / Active / Associate / Student-Trainee / Friend) — every tier, including Friend, is listed and filterable; only the card actions differ (above).
+- Filter: by tier (All / Active / Associate / Student-Trainee) — Friend tier is excluded from the Directory (§2.2), so it has no filter option here.
 - Must respect per-user directory visibility preference (§4.3).
 - Entity: derived from `Profile` + `User`; no separate directory entity needed. Search index: Meilisearch, indexed on profile fields.
 - Route: `/members`.
@@ -261,7 +261,7 @@ Routes: `POST /api/contributions/earn`, `POST /api/contributions/spend`, `GET /a
 
 **UI:** single inbox list view (not a 3-column live-chat layout) with a detail pane per selected item; mobile collapses to a single column (list → detail on tap, back to return).
 
-**Resolved (§2.2):** Friend-tier members are listed in the Directory like any other tier, but are not reachable via Send Message/Request Meeting, and cannot use the Inbox themselves — their Directory card omits both actions (§4.5), and the Inbox API rejects both a Friend-tier sender and a Friend-tier recipient regardless of entry point. This is the only feature Friend tier is excluded from; every other domain (including Directory listing/search) is full member access.
+**Resolved (§2.2):** Friend-tier members are excluded from the Member Directory entirely (§4.5 — not listed, searched, or filterable), so there's no card for Send Message/Request Meeting to appear on in the first place; the Inbox API also rejects both a Friend-tier sender and a Friend-tier recipient regardless of entry point. Directory and Inbox are the two domains Friend tier is excluded from; every other domain (Dashboard, Library, Blog, Forums, Contributions, Calendar) is full member access.
 
 ### 4.8 Blog
 
@@ -638,7 +638,7 @@ The plan below regroups work so each phase ships a coherent, demonstrable slice 
 
 1. **Admin review states:** should there be an explicit `needs_more_info` state between `under_review` and `approved/rejected`? The current three-state workflow may be too coarse for real review conversations.
 2. **Event creation permission:** which tiers can submit events — Active only, or Active + Associate? Not specified in source docs.
-3. ~~**Inbox access by tier:** should Friend-tier members be reachable via the Directory's Send Message / Request Meeting actions?~~ **Resolved:** no — Friend tier is listed/filterable in the Member Directory like any other tier (§4.5), but its card omits Send Message/Request Meeting, and Friend-tier accounts can neither send nor receive Inbox items (§4.7). This is Friend tier's only feature exclusion; every other domain (Dashboard, Library, Blog, Forums, Contributions, Calendar, Directory) is full member access (§2.2).
+3. ~~**Inbox access by tier:** should Friend-tier members be reachable via the Directory's Send Message / Request Meeting actions?~~ **Resolved:** no — Friend tier is excluded from the Member Directory entirely (§4.5: not listed, searched, or filterable), and Friend-tier accounts can neither send nor receive Inbox items (§4.7). Directory and Inbox are Friend tier's only feature exclusions; every other domain (Dashboard, Library, Blog, Forums, Contributions, Calendar) is full member access (§2.2).
 4. **Re-application policy:** can a rejected applicant reapply, and after what cooldown?
 5. **Tier promotion:** system implies Associate → Active progression ("growing toward Active status") but no promotion trigger/workflow is specified — manual admin action, automatic threshold on lifetime hours, or hybrid?
 6. ~~**Route naming:** `/join` (system-design.md) vs. `/apply` (prototype JS) — pick one before scaffolding.~~ **Resolved:** `/join` — already adopted in §5's IA table, matching system-design.md and the "Join NASIHA" CTA copy used everywhere; `/apply` was only ever the prototype's internal JS route name.
@@ -665,7 +665,7 @@ MVP is considered feature-complete when:
 - [ ] A member can view their Knowledge Hours balance (confirmed transactions only) and full transaction history including pending/rejected items; hosting an attended event auto-posts a confirmed earn transaction; an accepted meeting request auto-posts a confirmed spend transaction for the requester *and* a pending earn transaction for the recipient that requires the requester's confirmation; other activities post as `pending` via "Log Contribution" and require counterpart or admin confirmation before counting toward the balance (§4.4).
 - [ ] The Member Directory is searchable/filterable, respects each member's visibility preferences, and shows each member's uploaded photo (or initials fallback) as a thumbnail next to their name.
 - [ ] A member can find another member in the Directory and send them a message or request a meeting; the recipient sees it in their Inbox and can respond (including accept/decline/reschedule for meeting requests).
-- [ ] A Friend-tier member has full access to every other member feature (Dashboard, Library, Blog, Forums, Contributions, Calendar) and is listed/searchable/filterable in the Member Directory with a "Friend" tier badge, but their card shows no "Send Message"/"Request Meeting" actions and they cannot send/receive Inbox messages or meeting requests (§2.2).
+- [ ] A Friend-tier member has full access to every other member feature (Dashboard, Library, Blog, Forums, Contributions, Calendar), but is excluded from the Member Directory entirely (not listed, searched, or filterable) and cannot send/receive Inbox messages or meeting requests (§2.2).
 - [ ] The Calendar shows real events; a member can RSVP and the event's attendee state updates.
 - [ ] On the public `/events` listing, a signed-out visitor sees a "Register" action on `open` events (not on members-only events) that captures their email/name into `event_registrations` without creating an account; a signed-in member sees the RSVP toggle on `open` events instead. An admin or moderator can view/export captured registrations from `/admin/event-registrations`.
 - [ ] A member can write and publish a blog post; other members can read it publicly at `/blog/[slug]`.

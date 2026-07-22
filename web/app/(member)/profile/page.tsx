@@ -45,6 +45,7 @@ export default async function ProfilePage() {
           countryRegion: profile.countryRegion ?? "",
           titleSpecialty: profile.titleSpecialty ?? "",
           careerStage: profile.careerStage ?? "",
+          linkedinUrl: profile.linkedinUrl ?? "",
           skillIds: profile.skills.map(({ skill }) => skill.id),
           expertiseAreas: joinList(profile.expertiseAreas),
           learningTopics: profile.learningTopics ?? "",

@@ -145,6 +145,9 @@ model Profile {
   countryRegion         String?
   titleSpecialty        String?
   careerStage           String?
+  // Public profile link (e.g. LinkedIn) — shown on the full profile page,
+  // not the Directory card. Free-form URL, not restricted to linkedin.com.
+  linkedinUrl           String?
   // Free-text fallback only, for expertise entries that don't map to a
   // seeded Skill tag (PRD §4.3/§7.3) — tagged expertise lives in
   // ProfileSkill. Not the source of truth for Directory tag filtering.

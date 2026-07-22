@@ -60,6 +60,7 @@ export async function PATCH(request: Request) {
         countryRegion: parsed.data.countryRegion,
         titleSpecialty: parsed.data.titleSpecialty,
         careerStage: parsed.data.careerStage,
+        linkedinUrl: parsed.data.linkedinUrl || null,
         expertiseAreas: parsed.data.expertiseAreas,
         learningTopics: parsed.data.learningTopics,
         interestAreas: parsed.data.interestAreas,

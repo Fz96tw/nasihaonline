@@ -8,6 +8,7 @@ import type {
   EventRsvpAttendee,
   EventWithRsvp,
   MemberEvent,
+  MemberHostedEvent,
   PublicEvent,
 } from "@/lib/events";
 import { EVENTS_FORUM_SLUG } from "@/lib/forums";
@@ -59,6 +60,48 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
     heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
     hostName: event.host.name,
   }));
+}
+
+// /events/[eventId] — the public detail page for a signed-out visitor.
+// Open to any event, not just `open: true` ones — a members-only event's
+// detail page is still visible to a signed-out visitor (title,
+// description, host, date), it just can't offer Register (registration is
+// only for `open` events); PublicEventDetail branches its CTA on
+// event.open to draw that line instead of this query. Same field
+// selection as getPublicUpcomingEvents (meetingUrl and
+// deidentificationConfirmed are never selected here regardless), no
+// startsAt filter so a past event reached via a saved/shared link still
+// resolves.
+export async function getPublicEventById(eventId: string): Promise<PublicEvent | null> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      type: true,
+      startsAt: true,
+      endsAt: true,
+      open: true,
+      icon: true,
+      heroImageUrl: true,
+      host: { select: { name: true } },
+    },
+  });
+  if (!event) return null;
+
+  return {
+    id: event.id,
+    title: event.title,
+    description: event.description,
+    type: event.type,
+    startsAt: event.startsAt.toISOString(),
+    endsAt: event.endsAt?.toISOString() ?? null,
+    open: event.open,
+    icon: event.icon,
+    heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
+    hostName: event.host.name,
+  };
 }
 
 // /events for a signed-in viewer (§4.6): same public fields — meetingUrl is
@@ -222,6 +265,25 @@ export async function getMemberEventById(userId: string, eventId: string): Promi
 
 export async function getEventViewCount(eventId: string): Promise<number> {
   return db.eventView.count({ where: { eventId } });
+}
+
+/**
+ * /members/[memberId]'s Events section (§4.5) — events this member has
+ * hosted, newest first. The profile page's viewer is always a signed-in
+ * member, so unlike getPublicUpcomingEvents there's no need to filter out
+ * members-only events here.
+ */
+export async function getEventsHostedByMember(hostId: string): Promise<MemberHostedEvent[]> {
+  const events = await db.event.findMany({
+    where: { hostId },
+    select: { id: true, title: true, type: true, startsAt: true, open: true, heroImageUrl: true },
+    orderBy: { startsAt: "desc" },
+  });
+  return events.map((event) => ({
+    ...event,
+    startsAt: event.startsAt.toISOString(),
+    heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
+  }));
 }
 
 /**

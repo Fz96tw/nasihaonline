@@ -8,9 +8,10 @@ import type { DirectoryMember } from "@/lib/members";
 // KnowledgeItem's case_study contentType and Event's case_discussion type.
 export const CLINICAL_DISCUSSIONS_SLUG = "clinical-discussions";
 
-// Seeded forum slug (see prisma/seed.ts's slugify("Events")) that holds the
-// auto-created discussion thread behind an Event's optional "create a
-// discussion thread" checkbox (§4.6) — createEvent links new threads here.
+// Seeded forum slug (the "Events Discussion" forum in prisma/seed.ts, slug
+// unchanged from its original "Events" name) that holds the auto-created
+// discussion thread behind an Event's optional "create a discussion thread"
+// checkbox (§4.6) — createEvent links new threads here.
 export const EVENTS_FORUM_SLUG = "events";
 
 export type ForumCategory = {
@@ -47,6 +48,19 @@ export type ForumPostNode = {
   flagged: boolean;
   removed: boolean;
   replies: ForumPostNode[];
+};
+
+/**
+ * /members/[memberId]'s Forums section (§4.5) — one row per distinct thread
+ * this member has posted or replied in (deduped, not one row per post),
+ * ordered by their most recent activity in that thread.
+ */
+export type MemberForumThread = {
+  id: string;
+  title: string;
+  forumSlug: string;
+  forumName: string;
+  lastPostAt: string;
 };
 
 export type ForumThreadDetail = {

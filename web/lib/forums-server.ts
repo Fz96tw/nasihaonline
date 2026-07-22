@@ -6,7 +6,13 @@ import { searchForumDocuments } from "@/lib/meilisearch";
 import { getDirectoryMembersByIds, getMentionableMembers } from "@/lib/members-server";
 import { findMentionedMembers } from "@/lib/mentions";
 import { CLINICAL_DISCUSSIONS_SLUG } from "@/lib/forums";
-import type { ForumCategory, ForumThreadListItem, ForumThreadDetail, ForumPostNode } from "@/lib/forums";
+import type {
+  ForumCategory,
+  ForumThreadListItem,
+  ForumThreadDetail,
+  ForumPostNode,
+  MemberForumThread,
+} from "@/lib/forums";
 
 export class ForumError extends Error {
   constructor(
@@ -239,6 +245,40 @@ export async function getForumThreadDetail(forumSlug: string, threadId: string):
     forum: thread.forum,
     posts: roots,
   };
+}
+
+/**
+ * /members/[memberId]'s Forums section (§4.5) — the distinct threads this
+ * member has posted or replied in, newest activity first. Posts are fetched
+ * newest-first and deduped by threadId in JS rather than a SQL DISTINCT ON,
+ * so each thread's row naturally keeps that member's most recent post time
+ * in it (the first occurrence per threadId in createdAt-desc order).
+ */
+export async function getMemberForumThreads(userId: string): Promise<MemberForumThread[]> {
+  const posts = await db.forumPost.findMany({
+    where: { authorId: userId },
+    select: {
+      threadId: true,
+      createdAt: true,
+      thread: { select: { title: true, forum: { select: { slug: true, name: true } } } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const seenThreadIds = new Set<string>();
+  const threads: MemberForumThread[] = [];
+  for (const post of posts) {
+    if (seenThreadIds.has(post.threadId)) continue;
+    seenThreadIds.add(post.threadId);
+    threads.push({
+      id: post.threadId,
+      title: post.thread.title,
+      forumSlug: post.thread.forum.slug,
+      forumName: post.thread.forum.name,
+      lastPostAt: post.createdAt.toISOString(),
+    });
+  }
+  return threads;
 }
 
 export async function getThreadViewCount(threadId: string): Promise<number> {

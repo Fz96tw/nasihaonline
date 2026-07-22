@@ -72,6 +72,7 @@ export function ProfileForm({
           countryRegion: values.countryRegion,
           titleSpecialty: values.titleSpecialty,
           careerStage: values.careerStage,
+          linkedinUrl: values.linkedinUrl,
           skillIds: values.skillIds,
           expertiseAreas: splitList(values.expertiseAreas),
           learningTopics: values.learningTopics,
@@ -186,6 +187,21 @@ export function ProfileForm({
                   <FormControl>
                     <Input placeholder="e.g. Practicing physician, Resident / Fellow" {...field} />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="linkedinUrl"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>LinkedIn (or other public profile link)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="https://www.linkedin.com/in/your-name" {...field} />
+                  </FormControl>
+                  <FormDescription>Shown on your public profile page.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

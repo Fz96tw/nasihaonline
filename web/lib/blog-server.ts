@@ -126,6 +126,16 @@ export async function getPostsByAuthor(authorId: string, excludePostId: string, 
   return posts.map(toCard);
 }
 
+/** /members/[memberId]'s Blog Posts section (§4.5/§4.8) — this member's published posts, newest first. */
+export async function getPublishedPostsByAuthor(authorId: string): Promise<PostCard[]> {
+  const posts = await db.post.findMany({
+    where: { publishedAt: { not: null }, authorId },
+    select: CARD_SELECT,
+    orderBy: { publishedAt: "desc" },
+  });
+  return posts.map(toCard);
+}
+
 export async function getPublishedPostBySlug(slug: string): Promise<PostDetail | null> {
   const post = await db.post.findFirst({
     where: { slug, publishedAt: { not: null } },

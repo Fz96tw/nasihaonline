@@ -100,3 +100,16 @@ export type PastEventForAttendance = {
   hostName: string | null;
   attendanceRecorded: boolean;
 };
+
+// /members/[memberId]'s Events section (§4.5/§4.6) — events this member has
+// hosted, newest first. Trimmed down like PublicEvent rather than the full
+// MemberEvent shape: the viewer's own RSVP state isn't relevant to "did this
+// person host it".
+export type MemberHostedEvent = {
+  id: string;
+  title: string;
+  type: EventType;
+  startsAt: string;
+  open: boolean;
+  heroImageUrl: string | null;
+};

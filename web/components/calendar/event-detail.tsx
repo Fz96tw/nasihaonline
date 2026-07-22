@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { RsvpButton } from "@/components/calendar/rsvp-button";
 import { AddToCalendarButton } from "@/components/calendar/add-to-calendar-button";
 import { EventViewCounter } from "@/components/calendar/event-view-counter";
-import { MemberProfileDialog } from "@/components/members/member-profile-dialog";
 import {
   EVENT_TYPE_LABELS,
   type EventRegistrationAttendee,
@@ -61,7 +60,6 @@ export function EventDetail({
   const [event, setEvent] = useState(initialEvent);
   const hasMounted = useHasMounted();
   const isPast = hasMounted && new Date(event.endsAt ?? event.startsAt) < new Date();
-  const [hostProfileOpen, setHostProfileOpen] = useState(false);
   const hostName = event.hostName ?? "NASIHA Member";
 
   function handleRsvpToggled(result: { rsvped: boolean; meetingUrl: string | null; attendeeCount?: number }) {
@@ -93,9 +91,8 @@ export function EventDetail({
         </div>
         <h1 className="mb-1 text-3xl font-bold tracking-tight">{event.title}</h1>
         {hostProfile ? (
-          <button
-            type="button"
-            onClick={() => setHostProfileOpen(true)}
+          <Link
+            href={`/members/${hostProfile.id}`}
             aria-label={`View ${hostName}'s profile`}
             className="flex items-center gap-3 text-left"
           >
@@ -106,7 +103,7 @@ export function EventDetail({
                 {hasMounted ? formatEventDateRange(event.startsAt, event.endsAt) : null}
               </p>
             </div>
-          </button>
+          </Link>
         ) : (
           <div className="flex items-center gap-3">
             <Avatar name={hostName} size="md" />
@@ -119,10 +116,6 @@ export function EventDetail({
           </div>
         )}
       </div>
-
-      {hostProfile ? (
-        <MemberProfileDialog member={hostProfile} open={hostProfileOpen} onOpenChange={setHostProfileOpen} />
-      ) : null}
 
       {isPast ? (
         <div className="rounded-lg border bg-muted px-4 py-3 text-sm text-muted-foreground">
