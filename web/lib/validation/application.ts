@@ -32,9 +32,10 @@ const baseApplicationSchema = z.object({
   // value type, same rationale as `referral` above.
   requestedTier: z.union([z.nativeEnum(Tier), z.literal("")]),
   careerStage: z.nativeEnum(CareerStage, { message: "Select a career stage" }),
-  availability: z
-    .array(z.nativeEnum(ApplicationAvailability))
-    .min(1, "Select at least one availability option"),
+  // Requiredness depends on requestedTier — Friend of NASIHA applicants skip
+  // this field entirely (hidden in JoinForm), so the min-length check lives
+  // in applicationSchema's superRefine instead of being baked in here.
+  availability: z.array(z.nativeEnum(ApplicationAvailability)),
   interestAreas: z.array(z.nativeEnum(InterestArea)),
   countryRegion: z.string().trim().min(1, "Country / region is required"),
   // Optional field: plain (non-optional-typed) string kept possibly empty,
@@ -65,9 +66,10 @@ export type ApplicationFormValues = z.infer<typeof baseApplicationSchema>;
  * — enforced here via superRefine so the same schema shape (and RHF field
  * types) hold across phases; only the requiredness changes.
  *
- * whyJoin/expertiseToShare/professionalReference* are all skipped for
- * Friend of NASIHA applicants (requestedTier === "friend") — those fields
- * are hidden in JoinForm for that tier, so they must not be required here.
+ * whyJoin/expertiseToShare/availability/professionalReference* are all
+ * skipped for Friend of NASIHA applicants (requestedTier === "friend") —
+ * those fields are hidden in JoinForm for that tier, so they must not be
+ * required here.
  */
 export function applicationSchema(phase: AdmissionPhase) {
   const referenceRequired = professionalReferenceRequired(phase);
@@ -87,6 +89,13 @@ export function applicationSchema(phase: AdmissionPhase) {
           code: z.ZodIssueCode.custom,
           path: ["expertiseToShare"],
           message: "Let us know what you'd like to share",
+        });
+      }
+      if (values.availability.length < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["availability"],
+          message: "Select at least one availability option",
         });
       }
     }

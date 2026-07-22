@@ -272,34 +272,36 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="availability"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Availability</FormLabel>
-              <FormDescription>How can you participate? Select all that apply.</FormDescription>
-              <div className="flex flex-col gap-2">
-                {Object.values(ApplicationAvailability).map((value) => (
-                  <label key={value} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={field.value.includes(value)}
-                      onCheckedChange={(checked) =>
-                        field.onChange(
-                          checked
-                            ? [...field.value, value]
-                            : field.value.filter((v) => v !== value)
-                        )
-                      }
-                    />
-                    {AVAILABILITY_LABELS[value]}
-                  </label>
-                ))}
-              </div>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {!isFriendTier && (
+          <FormField
+            control={form.control}
+            name="availability"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Availability</FormLabel>
+                <FormDescription>How can you participate? Select all that apply.</FormDescription>
+                <div className="flex flex-col gap-2">
+                  {Object.values(ApplicationAvailability).map((value) => (
+                    <label key={value} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={field.value.includes(value)}
+                        onCheckedChange={(checked) =>
+                          field.onChange(
+                            checked
+                              ? [...field.value, value]
+                              : field.value.filter((v) => v !== value)
+                          )
+                        }
+                      />
+                      {AVAILABILITY_LABELS[value]}
+                    </label>
+                  ))}
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         <FormField
           control={form.control}

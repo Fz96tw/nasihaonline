@@ -1,37 +1,6 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
 import { Reveal } from "@/components/home/reveal";
-
-const TIERS = [
-  {
-    name: "Active Member",
-    tagline: "Full contributors",
-    description:
-      "Regular contributors via teaching, reviewing, or research. Full access plus governance voting rights.",
-    gradient: "from-blue-600 to-blue-900",
-  },
-  {
-    name: "Associate",
-    tagline: "Building momentum",
-    description:
-      "Newer members establishing their footing, growing toward Active status. Full community access.",
-    gradient: "from-violet-600 to-violet-900",
-  },
-  {
-    name: "Student / Trainee",
-    tagline: "Future leaders",
-    description:
-      "Students and trainees with lighter contribution expectations. Full community access.",
-    gradient: "from-cyan-600 to-cyan-900",
-  },
-  {
-    name: "Friend of NASIHA",
-    tagline: "Welcome, no strings",
-    description:
-      "No contribution obligation. Free/public content only — including the events calendar and recorded webinars.",
-    gradient: "from-gray-500 to-gray-700",
-  },
-];
+import { TierCard } from "@/components/home/tier-card";
+import { MEMBERSHIP_TIERS } from "@/lib/membership-tiers";
 
 export function MembershipTiersSection() {
   return (
@@ -49,30 +18,9 @@ export function MembershipTiersSection() {
             exchange.
           </p>
         </Reveal>
-        <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {TIERS.map((tier, index) => (
-            <Reveal key={tier.name} index={index} hover className="h-full">
-              <Card
-                className={cn(
-                  "relative flex h-full flex-col overflow-hidden border-none bg-gradient-to-br text-primary-foreground",
-                  tier.gradient,
-                )}
-              >
-                <div
-                  aria-hidden="true"
-                  className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-primary-foreground/10"
-                />
-                <CardHeader className="relative pb-2">
-                  <CardTitle className="text-xl text-primary-foreground">
-                    {tier.name}
-                  </CardTitle>
-                  <p className="text-base text-primary-foreground/75">{tier.tagline}</p>
-                </CardHeader>
-                <CardContent className="relative pt-0 text-lg leading-relaxed text-primary-foreground/90">
-                  {tier.description}
-                </CardContent>
-              </Card>
-            </Reveal>
+        <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2">
+          {MEMBERSHIP_TIERS.map((tier, index) => (
+            <TierCard key={tier.name} tier={tier} index={index} />
           ))}
         </div>
       </div>

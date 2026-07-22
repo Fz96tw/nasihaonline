@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HowItWorksSection } from "@/components/home/how-it-works-section";
 import { KnowledgeExchangeSection } from "@/components/home/knowledge-exchange-section";
 import { JoinForm } from "@/components/join-form";
+import { TierPreviewStrip } from "@/components/join/tier-preview-strip";
 import { DonateForm } from "@/components/donate-form";
 import type { AdmissionPhase } from "@/lib/generated/prisma/enums";
 
@@ -64,7 +65,8 @@ export function GetInvolvedTabs({
       </TabsContent>
 
       <TabsContent value="join" className="mt-0">
-        <div className="mx-auto max-w-6xl rounded-b-lg rounded-tr-lg border border-border bg-background px-4 py-12 md:px-8">
+        <TierPreviewStrip />
+        <div className="mx-auto max-w-6xl rounded-b-lg border border-t-0 border-border bg-background px-4 py-12 md:px-8">
           <JoinForm phase={phase} />
         </div>
       </TabsContent>
