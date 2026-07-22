@@ -96,6 +96,7 @@ export async function getContributionHistory(userId: string): Promise<Contributi
           counterpart: { select: { name: true } },
           attendance: { include: { event: { select: { id: true, title: true } } } },
           post: { select: { slug: true, title: true } },
+          knowledgeItem: { select: { id: true, title: true } },
         },
       },
       meetingRequestAsRequesterSpend: { select: { topic: true, proposedTimes: true } },
@@ -117,6 +118,7 @@ export async function getContributionHistory(userId: string): Promise<Contributi
     meetingRequest: meetingRequestRef(row),
     event: row.event?.attendance?.event ?? null,
     post: row.event?.post ?? null,
+    libraryItem: row.event?.knowledgeItem ?? null,
     note: row.event?.source === ContributionSource.self_reported ? row.event.note : null,
   }));
 }
@@ -143,7 +145,9 @@ export async function getPendingConfirmationsForCounterpart(
     where: { status: LedgerStatus.pending, event: { counterpartId: userId } },
     orderBy: { createdAt: "asc" },
     include: {
-      event: { include: { rule: true, actor: { select: { name: true } } } },
+      event: {
+        include: { rule: true, actor: { select: { name: true } }, knowledgeItem: { select: { id: true, title: true } } },
+      },
       meetingRequestAsRequesterSpend: { select: { topic: true, proposedTimes: true } },
       meetingRequestAsRecipientEarn: { select: { topic: true, proposedTimes: true } },
     },
@@ -157,6 +161,7 @@ export async function getPendingConfirmationsForCounterpart(
     counterpartName: null,
     hours: row.hours.toNumber(),
     meetingRequest: meetingRequestRef(row),
+    libraryItem: row.event?.knowledgeItem ?? null,
   }));
 }
 
@@ -172,7 +177,12 @@ export async function getPendingLedgerEntriesForAdmin(): Promise<ContributionPen
     orderBy: { createdAt: "asc" },
     include: {
       event: {
-        include: { rule: true, actor: { select: { name: true } }, counterpart: { select: { name: true } } },
+        include: {
+          rule: true,
+          actor: { select: { name: true } },
+          counterpart: { select: { name: true } },
+          knowledgeItem: { select: { id: true, title: true } },
+        },
       },
       meetingRequestAsRequesterSpend: { select: { topic: true, proposedTimes: true } },
       meetingRequestAsRecipientEarn: { select: { topic: true, proposedTimes: true } },
@@ -187,6 +197,7 @@ export async function getPendingLedgerEntriesForAdmin(): Promise<ContributionPen
     counterpartName: row.event?.counterpart?.name ?? null,
     hours: row.hours.toNumber(),
     meetingRequest: meetingRequestRef(row),
+    libraryItem: row.event?.knowledgeItem ?? null,
   }));
 }
 

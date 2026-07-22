@@ -13,6 +13,9 @@ import {
   KnowledgeLevel,
   KnowledgeStatus,
   Role,
+  ContributionSource,
+  LedgerStatus,
+  LedgerTransactionType,
 } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import { createNotification } from "@/lib/notifications-server";
@@ -521,12 +524,20 @@ export async function getReviewQueueCount(): Promise<number> {
   return db.knowledgeItem.count({ where: { status: KnowledgeStatus.pending_review } });
 }
 
+const CURATE_RESOURCE_ACTIVITY_KEY = "curate_resource";
+
 /**
  * POST /api/admin/library/:id/publish (§4.9) — transitions a pending_review
  * item to published or rejected and notifies the submitter
  * (resource_review_update), mirroring how createPostComment notifies a
  * post's author. Only pending_review items can be acted on — already-
  * reviewed items (or a double-submit) are rejected with a 409-shaped error.
+ *
+ * On publish, also auto-credits Knowledge Hours (§4.4/§4.9) via the
+ * curate_resource rule, same pattern as createPost's blog_post auto-earn —
+ * best-effort: publishing must still succeed if the rule is missing/inactive,
+ * and the entry lands pending in the admin's counterpart-less confirmation
+ * queue since a curated-resource submission has no natural counterpart.
  */
 export async function reviewKnowledgeItem(id: string, action: "publish" | "reject"): Promise<{ id: string; status: KnowledgeStatus }> {
   const item = await db.knowledgeItem.findUnique({
@@ -539,10 +550,41 @@ export async function reviewKnowledgeItem(id: string, action: "publish" | "rejec
   }
 
   const status = action === "publish" ? KnowledgeStatus.published : KnowledgeStatus.rejected;
-  const updated = await db.knowledgeItem.update({
-    where: { id },
-    data: { status },
-    select: { id: true, status: true },
+  const curateResourceRule =
+    action === "publish"
+      ? await db.contributionRule.findUnique({ where: { activityKey: CURATE_RESOURCE_ACTIVITY_KEY } })
+      : null;
+
+  const updated = await db.$transaction(async (tx) => {
+    const result = await tx.knowledgeItem.update({
+      where: { id },
+      data: { status },
+      select: { id: true, status: true },
+    });
+
+    if (curateResourceRule && curateResourceRule.active && curateResourceRule.type === LedgerTransactionType.earned) {
+      const event = await tx.contributionEvent.create({
+        data: {
+          ruleId: curateResourceRule.id,
+          actorId: item.contributorId,
+          note: `Library submission: ${item.title}`,
+          source: ContributionSource.library_submission,
+          knowledgeItemId: item.id,
+        },
+      });
+
+      await tx.contributionLedger.create({
+        data: {
+          userId: item.contributorId,
+          eventId: event.id,
+          type: LedgerTransactionType.earned,
+          status: LedgerStatus.pending,
+          hours: curateResourceRule.hours,
+        },
+      });
+    }
+
+    return result;
   });
 
   await createNotification({

@@ -45,6 +45,8 @@ export type ContributionTransaction = {
   event: { id: string; title: string } | null;
   /** Set only for blog_post-sourced rows — the Post whose publication earned the hours. */
   post: { slug: string; title: string } | null;
+  /** Set only for library_submission-sourced rows — the KnowledgeItem whose publication earned the hours. */
+  libraryItem: { id: string; title: string } | null;
   /** Set only for self_reported rows with a note — free text, no linked record to point to. */
   note: string | null;
 };
@@ -64,6 +66,8 @@ export type ContributionPendingEntry = {
   counterpartName: string | null;
   hours: number;
   meetingRequest: ContributionMeetingRef | null;
+  /** Set only for library_submission-sourced rows — the KnowledgeItem whose publication earned the hours. */
+  libraryItem: { id: string; title: string } | null;
 };
 
 /** Trims a trailing ".0" so whole-hour balances read as e.g. "3" rather than "3.0". */

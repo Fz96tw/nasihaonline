@@ -66,6 +66,13 @@ export function ContributionsHistoryTable({ transactions }: { transactions: Cont
                       </Link>
                     </p>
                   )}
+                  {transaction.libraryItem && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      <Link href={`/library/${transaction.libraryItem.id}`} className="hover:underline">
+                        {transaction.libraryItem.title}
+                      </Link>
+                    </p>
+                  )}
                   {transaction.meetingRequest && (
                     <p className="mt-1 text-xs text-muted-foreground">
                       Meeting: {transaction.meetingRequest.topic} · proposed for{" "}

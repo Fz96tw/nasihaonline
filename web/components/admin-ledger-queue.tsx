@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
@@ -120,6 +121,13 @@ export function AdminLedgerQueue({ initialEntries }: { initialEntries: Contribut
               <TableCell>{formatDate(entry.date)}</TableCell>
               <TableCell>
                 {entry.activity}
+                {entry.libraryItem && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    <Link href={`/library/${entry.libraryItem.id}`} className="hover:underline" target="_blank">
+                      {entry.libraryItem.title}
+                    </Link>
+                  </p>
+                )}
                 {entry.meetingRequest && (
                   <p className="mt-1 text-xs text-muted-foreground">
                     Meeting: {entry.meetingRequest.topic} · proposed for{" "}

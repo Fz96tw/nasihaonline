@@ -431,6 +431,7 @@ enum ContributionSource {
   meeting_request
   self_reported
   blog_post
+  library_submission
 }
 
 // Configurable earn/spend rate card (§4.4) — not hardcoded, so rates can
@@ -484,6 +485,13 @@ model ContributionEvent {
   // transaction, posted at publish time.
   postId String? @unique
   post   Post?   @relation(fields: [postId], references: [id])
+
+  // Set only for source = library_submission: the KnowledgeItem whose
+  // publish triggered this auto-earn (§4.4/§4.9). Same one-to-one
+  // audit-trail pattern as postId — a given KnowledgeItem can only ever
+  // produce a single earn transaction, posted at publish time.
+  knowledgeItemId String?        @unique
+  knowledgeItem   KnowledgeItem? @relation(fields: [knowledgeItemId], references: [id])
 
   ledgerEntries ContributionLedger[]
 
@@ -1026,6 +1034,8 @@ model KnowledgeItem {
   // — unlike Event's opt-in-at-creation checkbox, since not every resource
   // warrants discussion. The FK lives on ForumThread, same split as Event.
   forumThread ForumThread?
+  // The other direction of ContributionEvent.knowledgeItemId.
+  contributionEvent ContributionEvent?
 
   @@index([contributorId])
   @@index([categoryId])
