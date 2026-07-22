@@ -338,6 +338,11 @@ const FORUMS: { name: string; description: string; displayOrder: number }[] = [
     description: "Auto-created discussion threads for events that opt in at submission time.",
     displayOrder: 6,
   },
+  {
+    name: "Library Discussions",
+    description: "On-demand discussion threads for Knowledge Library resources, started from a resource's detail page.",
+    displayOrder: 7,
+  },
 ];
 
 // Sample blog posts (mixed draft/published, PRD §4.8) so 5.2+ has real data

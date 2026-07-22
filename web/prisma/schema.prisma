@@ -1021,6 +1021,11 @@ model KnowledgeItem {
 
   tags        KnowledgeItemTag[]
   attachments KnowledgeAttachment[]
+  // On-demand discussion thread in the Research & Resources forum (§4.9),
+  // started by any member from /library/[id]'s "Start a Discussion" button
+  // — unlike Event's opt-in-at-creation checkbox, since not every resource
+  // warrants discussion. The FK lives on ForumThread, same split as Event.
+  forumThread ForumThread?
 
   @@index([contributorId])
   @@index([categoryId])
@@ -1104,6 +1109,14 @@ model ForumThread {
   // ordinary member-started thread.
   eventId String? @unique
   event   Event?  @relation(fields: [eventId], references: [id])
+
+  // Set only for the on-demand discussion thread started from a Knowledge
+  // Library item's "Start a Discussion" button (§4.9) — unlike eventId
+  // above, created lazily (not at KnowledgeItem submission time) the first
+  // time any member wants to discuss the resource. Lives in the seeded
+  // "Library Discussions" forum, not Research & Resources.
+  knowledgeItemId String?        @unique
+  knowledgeItem   KnowledgeItem? @relation(fields: [knowledgeItemId], references: [id])
 
   @@index([forumId])
   @@index([authorId])

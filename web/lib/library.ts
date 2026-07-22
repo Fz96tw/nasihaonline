@@ -71,6 +71,20 @@ export type LibraryCard = {
   attachment: { fileName: string; mimeType: string; url: string } | null;
 };
 
+/**
+ * /library/[id] detail page's data load (§4.9) — the browse card's fields
+ * plus tags, the de-identification badge, and the on-demand discussion
+ * thread's linkage (null forumThreadId means "Start a Discussion", not yet
+ * started; forumReplyCount excludes the auto-authored opening post, same
+ * derivation as MemberEvent.forumReplyCount).
+ */
+export type KnowledgeItemDetail = LibraryCard & {
+  tags: { name: string; slug: string }[];
+  deidentificationConfirmed: boolean;
+  forumThreadId: string | null;
+  forumReplyCount: number | null;
+};
+
 /** /library/[id]/edit's data load — a submission's full editable field set, at any status. */
 export type KnowledgeItemForEdit = {
   id: string;

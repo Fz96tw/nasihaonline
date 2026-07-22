@@ -14,6 +14,13 @@ export const CLINICAL_DISCUSSIONS_SLUG = "clinical-discussions";
 // checkbox (§4.6) — createEvent links new threads here.
 export const EVENTS_FORUM_SLUG = "events";
 
+// Seeded forum slug (the "Library Discussions" forum in prisma/seed.ts)
+// that holds the on-demand discussion thread behind a Knowledge Library
+// item's "Start a Discussion" button (§4.9) — unlike EVENTS_FORUM_SLUG's
+// opt-in-at-creation checkbox, the thread is only created lazily, the
+// first time any member actually wants to discuss the resource.
+export const LIBRARY_FORUM_SLUG = "library-discussions";
+
 export type ForumCategory = {
   id: string;
   name: string;

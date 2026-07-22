@@ -16,8 +16,10 @@ import {
 } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import { createNotification } from "@/lib/notifications-server";
+import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import type {
   KnowledgeCategoryOption,
+  KnowledgeItemDetail,
   KnowledgeItemForEdit,
   KnowledgeTagOption,
   LibraryCard,
@@ -25,6 +27,10 @@ import type {
   RecentLibraryItem,
   ReviewQueueItem,
 } from "@/lib/library";
+
+// Absolute, not relative — same rationale as events-server.ts's createEvent:
+// lib/linkify.tsx's linkifyText only turns absolute http(s) URLs into links.
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
 const LIBRARY_CARD_SELECT = {
   id: true,
@@ -363,6 +369,84 @@ export async function getPublishedKnowledgeItems(params: {
     orderBy: { createdAt: "desc" },
   });
   return items.map(toLibraryCard);
+}
+
+/**
+ * /library/[id] (§4.9) — the detail page's data load. Published/flagged
+ * only, same visibility gate as getPublishedKnowledgeItems — a
+ * pending_review/rejected item 404s here too, even for its own
+ * contributor (they use /library/[id]/edit to see it instead).
+ * forumThread's post count includes the auto-authored opening post, so
+ * forumReplyCount subtracts one, same derivation as
+ * getMemberEventById's forumReplyCount.
+ */
+export async function getPublishedKnowledgeItemById(id: string): Promise<KnowledgeItemDetail | null> {
+  const item = await db.knowledgeItem.findUnique({
+    where: { id },
+    select: {
+      ...LIBRARY_CARD_SELECT,
+      deidentificationConfirmed: true,
+      tags: { select: { tag: { select: { name: true, slug: true } } } },
+      forumThread: { select: { id: true, _count: { select: { posts: true } } } },
+    },
+  });
+  if (!item) return null;
+  if (item.status !== KnowledgeStatus.published && item.status !== KnowledgeStatus.flagged) return null;
+
+  return {
+    ...toLibraryCard(item),
+    deidentificationConfirmed: item.deidentificationConfirmed,
+    tags: item.tags.map(({ tag }) => tag),
+    forumThreadId: item.forumThread?.id ?? null,
+    forumReplyCount: item.forumThread ? item.forumThread._count.posts - 1 : null,
+  };
+}
+
+/**
+ * POST /api/library/:id/discussion (§4.9) — the on-demand "Start a
+ * Discussion" action, any signed-in member (not just the contributor),
+ * mirroring how any member can flag a published item. Unlike Events'
+ * opt-in-at-creation checkbox, a Library item earns its thread lazily, the
+ * first time anyone actually wants to discuss it — idempotent, so a second
+ * call after one already exists just returns the existing thread instead
+ * of erroring. Lives in the seeded "Library Discussions" forum
+ * (LIBRARY_FORUM_SLUG), not Research & Resources.
+ */
+export async function startKnowledgeItemDiscussion(
+  itemId: string,
+  starterId: string,
+): Promise<{ threadId: string }> {
+  const item = await db.knowledgeItem.findUnique({
+    where: { id: itemId },
+    select: { id: true, title: true, status: true, forumThread: { select: { id: true } } },
+  });
+  if (!item) throw new KnowledgeItemError(404, "Resource not found.");
+  if (item.status !== KnowledgeStatus.published && item.status !== KnowledgeStatus.flagged) {
+    throw new KnowledgeItemError(400, "Only a published resource can have a discussion thread.");
+  }
+  if (item.forumThread) return { threadId: item.forumThread.id };
+
+  const forum = await db.forum.findUnique({ where: { slug: LIBRARY_FORUM_SLUG }, select: { id: true } });
+  if (!forum) {
+    throw new KnowledgeItemError(400, "The Library Discussions forum isn't set up yet — contact an admin.");
+  }
+
+  const thread = await db.$transaction(async (tx) => {
+    const created = await tx.forumThread.create({
+      data: { forumId: forum.id, authorId: starterId, title: item.title, knowledgeItemId: item.id },
+      select: { id: true },
+    });
+    await tx.forumPost.create({
+      data: {
+        threadId: created.id,
+        authorId: starterId,
+        body: `Discussion thread for this resource. [View resource details](${APP_URL}/library/${item.id})`,
+      },
+    });
+    return created;
+  });
+
+  return { threadId: thread.id };
 }
 
 /**

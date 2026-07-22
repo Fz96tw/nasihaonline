@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Loader2 } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { KnowledgeContentType } from "@/lib/generated/prisma/enums";
 
@@ -146,16 +145,19 @@ function PdfPreview({ url, fileName }: { url: string; fileName: string }) {
   );
 }
 
-export function ResourcePreviewDialog({
-  open,
-  onOpenChange,
+/**
+ * Inline (non-modal) resource preview — PDF.js pager for document
+ * attachments, YouTube embed for recorded lectures. Used on /library/[id];
+ * previously lived inside a Dialog (ResourcePreviewDialog, now retired)
+ * opened from the /library browse grid, which links to the detail page
+ * instead.
+ */
+export function ResourcePreview({
   title,
   contentType,
   youtubeUrl,
   attachment,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   title: string;
   contentType: KnowledgeContentType;
   youtubeUrl: string | null;
@@ -164,40 +166,35 @@ export function ResourcePreviewDialog({
   const isRecordedLecture = contentType === KnowledgeContentType.recorded_lecture;
   const embedUrl = isRecordedLecture && youtubeUrl ? youtubeEmbedUrl(youtubeUrl) : null;
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
-
-        {isRecordedLecture ? (
-          embedUrl ? (
-            <div className="aspect-video w-full overflow-hidden rounded-md">
-              <iframe
-                src={embedUrl}
-                title={title}
-                className="h-full w-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            </div>
-          ) : (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              This lecture&apos;s YouTube link couldn&apos;t be embedded.{" "}
-              {youtubeUrl && (
-                <a href={youtubeUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
-                  Open on YouTube
-                </a>
-              )}
-            </p>
-          )
-        ) : attachment ? (
-          <PdfPreview url={attachment.url} fileName={attachment.fileName} />
-        ) : (
-          <p className="py-6 text-center text-sm text-muted-foreground">No preview is available for this resource.</p>
+  if (isRecordedLecture) {
+    if (embedUrl) {
+      return (
+        <div className="aspect-video w-full overflow-hidden rounded-md">
+          <iframe
+            src={embedUrl}
+            title={title}
+            className="h-full w-full"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      );
+    }
+    return (
+      <p className="py-6 text-center text-sm text-muted-foreground">
+        This lecture&apos;s YouTube link couldn&apos;t be embedded.{" "}
+        {youtubeUrl && (
+          <a href={youtubeUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+            Open on YouTube
+          </a>
         )}
-      </DialogContent>
-    </Dialog>
-  );
+      </p>
+    );
+  }
+
+  if (attachment) {
+    return <PdfPreview url={attachment.url} fileName={attachment.fileName} />;
+  }
+
+  return <p className="py-6 text-center text-sm text-muted-foreground">No preview is available for this resource.</p>;
 }
