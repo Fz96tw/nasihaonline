@@ -41,6 +41,10 @@ export type MeetingRequestListItem = {
   status: MeetingRequestStatus;
   /** Timestamp of the request's most recent status change, for "most recent activity" sort. */
   lastActivityAt: string;
+  /** Set once accepted — the single confirmed time (ISO), chosen from proposedTimes. */
+  scheduledAt: string | null;
+  /** Set once accepted, if Google Calendar was configured and the call succeeded. */
+  meetingUrl: string | null;
 };
 
 export type InboxListItem = InboxMessageListItem | MeetingRequestListItem;

@@ -97,6 +97,8 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
       proposedTimes: meetingRequest.proposedTimes.map((time) => time.toISOString()),
       status: meetingRequest.status,
       lastActivityAt: meetingRequest.updatedAt.toISOString(),
+      scheduledAt: meetingRequest.scheduledAt?.toISOString() ?? null,
+      meetingUrl: meetingRequest.meetingUrl,
     });
   }
 

@@ -9,6 +9,7 @@ import {
 } from "@/lib/generated/prisma/enums";
 import type { MeetingRequestModel } from "@/lib/generated/prisma/models/MeetingRequest";
 import { sendMeetingRequestEmail } from "@/lib/email";
+import { createMeetingCalendarEvent } from "@/lib/google-calendar";
 import { INBOX_TIERS } from "@/lib/members";
 import { createNotification } from "@/lib/notifications-server";
 
@@ -86,9 +87,30 @@ export async function createMeetingRequest(
 }
 
 type ResolveAction =
-  | { action: "accept" }
+  | { action: "accept"; selectedTime?: string }
   | { action: "decline" }
   | { action: "reschedule"; proposedTimes: string[]; message: string | null };
+
+/**
+ * Resolves the recipient's chosen time into one of the request's own
+ * proposedTimes (defaulting to the sole entry when there's only one) — this
+ * becomes the Google Calendar event's start. Rejects anything that doesn't
+ * match a proposed time so the confirmed meeting can never silently drift
+ * from what was actually proposed/accepted.
+ */
+function resolveScheduledTime(meetingRequest: MeetingRequestModel, selectedTime: string | undefined): Date {
+  if (meetingRequest.proposedTimes.length === 1) return meetingRequest.proposedTimes[0];
+
+  if (!selectedTime) {
+    throw new MeetingRequestError(400, "Select which proposed time you're accepting.");
+  }
+  const parsed = new Date(selectedTime);
+  const match = meetingRequest.proposedTimes.find((time) => time.getTime() === parsed.getTime());
+  if (!match) {
+    throw new MeetingRequestError(400, "Selected time isn't one of the proposed times.");
+  }
+  return match;
+}
 
 /**
  * Applies the recipient's response to a pending meeting request (§4.7):
@@ -122,7 +144,7 @@ export async function resolveMeetingRequest(
   }
 
   const [actor, requester] = await Promise.all([
-    db.user.findUnique({ where: { id: actingUserId }, select: { name: true } }),
+    db.user.findUnique({ where: { id: actingUserId }, select: { email: true, name: true } }),
     db.user.findUnique({ where: { id: meetingRequest.senderId }, select: { email: true, name: true } }),
   ]);
   const actorName = actor?.name ?? "A member";
@@ -187,6 +209,24 @@ export async function resolveMeetingRequest(
   }
 
   const acceptedMessage = `${actorName} accepted your meeting request: "${meetingRequest.topic}"`;
+  const scheduledAt = resolveScheduledTime(meetingRequest, action.selectedTime);
+
+  // External network call — kept outside the DB transaction below, and
+  // best-effort (see google-calendar.ts): a failed/unconfigured Google call
+  // must never block acceptance, since the ledger rows are the source of
+  // truth for the meeting having happened.
+  const { meetingUrl, googleEventId } =
+    requester && actor
+      ? await createMeetingCalendarEvent({
+          topic: meetingRequest.topic,
+          startsAt: scheduledAt,
+          attendees: [
+            { email: requester.email, name: requester.name ?? "there" },
+            { email: actor.email, name: actorName },
+          ],
+          description: meetingRequest.message ?? undefined,
+        })
+      : { meetingUrl: null, googleEventId: null };
 
   const updated = await db.$transaction(async (tx) => {
     const spendEvent = await tx.contributionEvent.create({
@@ -238,6 +278,9 @@ export async function resolveMeetingRequest(
         status: MeetingRequestStatus.accepted,
         contributionLedgerId: spendLedgerEntry.id,
         recipientContributionLedgerId: earnLedgerEntry.id,
+        scheduledAt,
+        meetingUrl,
+        googleEventId,
       },
     });
 
@@ -254,13 +297,46 @@ export async function resolveMeetingRequest(
     return updated;
   });
 
-  if (requester) {
-    await sendMeetingRequestEmail(requester.email, requester.name ?? "there", {
-      subject: `Meeting request accepted: ${meetingRequest.topic}`,
-      message: acceptedMessage,
-      link: `${APP_URL}${link}`,
-    });
-  }
+  // No NASIHA email here (unlike decline/reschedule below) — Google's own
+  // calendar invite (sendUpdates: "all" above) already reaches both the
+  // requester and the recipient with the time and Meet link, so a second
+  // email would just be a duplicate. The in-app Notification created above
+  // still covers the acceptance for anyone not checking that inbox.
 
   return updated;
+}
+
+/**
+ * Accepted meeting requests due in the future, for the calendar page's
+ * "Upcoming List" (kept separate from the shared, unfiltered Event model —
+ * see plan doc — since these are private to the two participants).
+ */
+export async function getUpcomingMeetingsForUser(userId: string) {
+  const meetings = await db.meetingRequest.findMany({
+    where: {
+      status: MeetingRequestStatus.accepted,
+      scheduledAt: { gte: new Date() },
+      OR: [{ senderId: userId }, { recipientId: userId }],
+    },
+    select: {
+      id: true,
+      topic: true,
+      scheduledAt: true,
+      meetingUrl: true,
+      senderId: true,
+      recipientId: true,
+      sender: { select: { name: true } },
+      recipient: { select: { name: true } },
+    },
+    orderBy: { scheduledAt: "asc" },
+  });
+
+  return meetings.map((meeting) => ({
+    id: meeting.id,
+    topic: meeting.topic,
+    scheduledAt: (meeting.scheduledAt as Date).toISOString(),
+    meetingUrl: meeting.meetingUrl,
+    otherPartyName:
+      (meeting.senderId === userId ? meeting.recipient.name : meeting.sender.name) ?? "NASIHA Member",
+  }));
 }

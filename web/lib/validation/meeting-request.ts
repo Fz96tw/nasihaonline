@@ -20,12 +20,14 @@ export type CreateMeetingRequestValues = z.infer<typeof createMeetingRequestSche
 
 /**
  * PATCH /api/inbox/meeting-requests/:id body shape — the recipient's
- * response (§4.7): accept, decline, or propose a new time. Only
- * `reschedule` carries a payload (the counter-proposed times); accept/decline
- * are pending -> {accepted|declined} with no further input.
+ * response (§4.7): accept, decline, or propose a new time. `reschedule`
+ * carries the counter-proposed times; `accept` carries `selectedTime` only
+ * when the request has more than one proposedTimes entry (the server
+ * defaults to the sole entry otherwise) — this becomes the confirmed
+ * Google Calendar event's start time. `decline` has no further input.
  */
 export const meetingRequestActionSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("accept") }),
+  z.object({ action: z.literal("accept"), selectedTime: z.string().trim().min(1).optional() }),
   z.object({ action: z.literal("decline") }),
   z.object({
     action: z.literal("reschedule"),

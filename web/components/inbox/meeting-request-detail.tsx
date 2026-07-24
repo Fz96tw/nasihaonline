@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowLeft, Plus, X } from "lucide-react";
+import { ArrowLeft, Plus, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -175,6 +175,7 @@ export function MeetingRequestDetail({
   const [pendingAction, setPendingAction] = useState<"accept" | "decline" | null>(null);
   const [reschedulingOpen, setReschedulingOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTime, setSelectedTime] = useState(item.proposedTimes[0] ?? "");
 
   const canRespond = item.direction === "received" && item.status === "pending";
 
@@ -182,7 +183,10 @@ export function MeetingRequestDetail({
     setPendingAction("accept");
     setError(null);
     try {
-      await patchMeetingRequest(item.id, { action: "accept" });
+      await patchMeetingRequest(
+        item.id,
+        item.proposedTimes.length > 1 ? { action: "accept", selectedTime } : { action: "accept" },
+      );
       await onUpdated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -223,14 +227,33 @@ export function MeetingRequestDetail({
           {MEETING_REQUEST_STATUS_LABELS[item.status]}
         </Badge>
 
-        <div>
-          <div className="mb-1 text-xs font-medium text-muted-foreground">Proposed times</div>
-          <ul className="flex flex-col gap-1 text-sm">
-            {item.proposedTimes.map((time) => (
-              <li key={time}>{formatTimestamp(time)}</li>
-            ))}
-          </ul>
-        </div>
+        {item.status !== "accepted" && (
+          <div>
+            <div className="mb-1 text-xs font-medium text-muted-foreground">Proposed times</div>
+            {canRespond && item.proposedTimes.length > 1 ? (
+              <div className="flex flex-col gap-1.5 text-sm">
+                {item.proposedTimes.map((time) => (
+                  <label key={time} className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="selectedTime"
+                      value={time}
+                      checked={selectedTime === time}
+                      onChange={() => setSelectedTime(time)}
+                    />
+                    {formatTimestamp(time)}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <ul className="flex flex-col gap-1 text-sm">
+                {item.proposedTimes.map((time) => (
+                  <li key={time}>{formatTimestamp(time)}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         {item.message && (
           <div>
@@ -240,15 +263,31 @@ export function MeetingRequestDetail({
         )}
 
         {item.status === "accepted" && (
-          <p className="text-sm text-muted-foreground">
-            {item.direction === "sent"
-              ? "Accepted — a confirmed Knowledge Hours spend entry was posted automatically. A pending earn entry for " +
-                item.otherPartyName +
-                " is waiting in your Contributions for you to confirm."
-              : "Accepted — a pending Knowledge Hours earn entry was created for you automatically. It'll count toward your balance once " +
-                item.otherPartyName +
-                " confirms it."}
-          </p>
+          <div className="flex flex-col gap-2">
+            {item.scheduledAt && (
+              <div>
+                <div className="mb-1 text-xs font-medium text-muted-foreground">Scheduled for</div>
+                <p className="text-sm">{formatTimestamp(item.scheduledAt)}</p>
+              </div>
+            )}
+            {item.meetingUrl && (
+              <Button size="sm" variant="outline" className="w-fit" asChild>
+                <a href={item.meetingUrl} target="_blank" rel="noopener noreferrer">
+                  <Video className="mr-1.5 h-3.5 w-3.5" />
+                  Join Google Meet
+                </a>
+              </Button>
+            )}
+            <p className="text-sm text-muted-foreground">
+              {item.direction === "sent"
+                ? "Accepted — a confirmed Knowledge Hours spend entry was posted automatically. A pending earn entry for " +
+                  item.otherPartyName +
+                  " is waiting in your Contributions for you to confirm."
+                : "Accepted — a pending Knowledge Hours earn entry was created for you automatically. It'll count toward your balance once " +
+                  item.otherPartyName +
+                  " confirms it."}
+            </p>
+          </div>
         )}
 
         {error && <p className="text-sm text-destructive">{error}</p>}

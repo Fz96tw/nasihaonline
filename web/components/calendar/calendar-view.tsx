@@ -10,8 +10,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { EventListItem } from "@/components/calendar/event-list-item";
+import { UpcomingMeetingItem } from "@/components/calendar/upcoming-meeting-item";
 import type { MemberEvent } from "@/lib/events";
+import type { UpcomingMeeting } from "@/lib/meeting-requests";
 import "@/components/calendar/calendar-theme.css";
+
+type UpcomingItem = ({ kind: "event" } & MemberEvent) | ({ kind: "meeting" } & UpcomingMeeting);
 
 type RsvpState = { rsvped: boolean; meetingUrl: string | null; attendeeCount?: number };
 
@@ -49,9 +53,12 @@ function renderEventContent(arg: EventContentArg) {
 
 export function CalendarView({
   events,
+  meetings = [],
   forcedTab,
 }: {
   events: MemberEvent[];
+  /** Accepted 1:1 meeting requests, private to the viewer — surfaced only in the Upcoming List, not the Month grid (see plan doc). */
+  meetings?: UpcomingMeeting[];
   /** Referral-driven override (e.g. arriving via ?ref=feed) — wins over any remembered tab, but isn't itself remembered. */
   forcedTab?: "month" | "list";
 }) {
@@ -85,14 +92,21 @@ export function CalendarView({
   const fcEvents = useMemo(() => toFullCalendarEvents(resolvedEvents), [resolvedEvents]);
   // Month grid shows every event (including past ones, so browsing to an
   // earlier month isn't empty); this tab is explicitly "Upcoming List", so
-  // it filters startsAt back down to future-only itself.
-  const upcoming = useMemo(
-    () =>
-      resolvedEvents
-        .filter((event) => event.startsAt >= new Date().toISOString())
-        .sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
-    [resolvedEvents],
-  );
+  // it filters startsAt back down to future-only itself. Private meetings
+  // are merged in here only — never into fcEvents/the Month grid, which
+  // reflects the shared community calendar.
+  const upcoming = useMemo<UpcomingItem[]>(() => {
+    const upcomingEvents: UpcomingItem[] = resolvedEvents
+      .filter((event) => event.startsAt >= new Date().toISOString())
+      .map((event) => ({ kind: "event" as const, ...event }));
+    const upcomingMeetings: UpcomingItem[] = meetings.map((meeting) => ({ kind: "meeting" as const, ...meeting }));
+
+    return [...upcomingEvents, ...upcomingMeetings].sort((a, b) => {
+      const aStart = a.kind === "event" ? a.startsAt : a.scheduledAt;
+      const bStart = b.kind === "event" ? b.startsAt : b.scheduledAt;
+      return aStart.localeCompare(bStart);
+    });
+  }, [resolvedEvents, meetings]);
 
   function handleRsvpToggled(eventId: string, result: RsvpState) {
     setRsvpState((prev) => ({ ...prev, [eventId]: result }));
@@ -165,13 +179,17 @@ export function CalendarView({
               </p>
             ) : (
               <ul>
-                {upcoming.map((event) => (
-                  <EventListItem
-                    key={event.id}
-                    event={event}
-                    onRsvpToggled={(result) => handleRsvpToggled(event.id, result)}
-                  />
-                ))}
+                {upcoming.map((item) =>
+                  item.kind === "event" ? (
+                    <EventListItem
+                      key={item.id}
+                      event={item}
+                      onRsvpToggled={(result) => handleRsvpToggled(item.id, result)}
+                    />
+                  ) : (
+                    <UpcomingMeetingItem key={item.id} meeting={item} />
+                  ),
+                )}
               </ul>
             )}
           </CardContent>

@@ -572,6 +572,15 @@ model MeetingRequest {
   status        MeetingRequestStatus @default(pending)
   message       String?
 
+  // Set on acceptance — the single confirmed time (chosen from
+  // proposedTimes) and the Google Meet link/event id auto-generated for it
+  // via the app-owned Gmail account (web/lib/google-calendar.ts). meetingUrl
+  // stays null if that call fails or isn't configured — never blocks
+  // acceptance itself.
+  scheduledAt   DateTime?
+  meetingUrl    String?
+  googleEventId String?
+
   // Set on acceptance — the requester's auto-confirmed spend row. Null
   // until accepted (declined/rescheduled requests never get one).
   contributionLedgerId String?             @unique

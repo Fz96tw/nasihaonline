@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getMemberEvents } from "@/lib/events-server";
 import { EVENT_SUBMISSION_TIERS } from "@/lib/events";
+import { getUpcomingMeetingsForUser } from "@/lib/meeting-requests-server";
 import { CalendarView } from "@/components/calendar/calendar-view";
 import { BackToFeedLink } from "@/components/feed/back-to-feed-link";
 import { isFromFeed } from "@/lib/feed";
@@ -18,7 +19,10 @@ export default async function CalendarPage({ searchParams }: { searchParams: { r
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const events = await getMemberEvents(user.id);
+  const [events, meetings] = await Promise.all([
+    getMemberEvents(user.id),
+    getUpcomingMeetingsForUser(user.id),
+  ]);
   const canSubmitEvent = Boolean(user.tier && EVENT_SUBMISSION_TIERS.includes(user.tier));
 
   return (
@@ -45,7 +49,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: { r
           </div>
         )}
 
-        <CalendarView events={events} forcedTab={isFromFeed(searchParams) ? "list" : undefined} />
+        <CalendarView events={events} meetings={meetings} forcedTab={isFromFeed(searchParams) ? "list" : undefined} />
       </section>
     </main>
   );

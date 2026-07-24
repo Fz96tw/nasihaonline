@@ -16,3 +16,18 @@ export const MEETING_REQUEST_STATUS_BADGE_VARIANT: Record<MeetingRequestStatus, 
   [MeetingRequestStatus.declined]: "danger",
   [MeetingRequestStatus.rescheduled]: "info",
 };
+
+/**
+ * An accepted meeting request due in the future, for the calendar page's
+ * "Upcoming List" (getUpcomingMeetingsForUser in meeting-requests-server.ts).
+ * Kept separate from MemberEvent — these are private to the two
+ * participants, not the shared community calendar.
+ */
+export type UpcomingMeeting = {
+  id: string;
+  topic: string;
+  /** ISO timestamp. */
+  scheduledAt: string;
+  meetingUrl: string | null;
+  otherPartyName: string;
+};
