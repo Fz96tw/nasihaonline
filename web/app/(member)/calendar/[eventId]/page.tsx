@@ -22,7 +22,8 @@ export default async function EventDetailPage({ params }: { params: { eventId: s
   const event = await getMemberEventById(user.id, params.eventId);
   if (!event) notFound();
 
-  const canEdit = user.id === event.hostId || user.role === Role.admin;
+  const isHost = user.id === event.hostId;
+  const canEdit = isHost || user.role === Role.admin;
   // Full invitee roster (Objective 02) — visible to every invited member,
   // not just the organizer, so it's fetched independently of `canEdit`.
   // Only restricted events have one; reaching this point at all already
@@ -47,6 +48,7 @@ export default async function EventDetailPage({ params }: { params: { eventId: s
       <EventDetail
         event={event}
         canEdit={canEdit}
+        isHost={isHost}
         attendees={attendees}
         hostProfile={hostProfile}
         roster={roster}

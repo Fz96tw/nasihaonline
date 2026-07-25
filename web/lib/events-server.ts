@@ -214,7 +214,10 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
       hostId: event.hostId,
       hostName: event.host.name,
       rsvped,
-      meetingUrl: rsvped ? event.meetingUrl : null,
+      // The host can always join their own meeting — they never auto-RSVP
+      // to their own event, so gating this on `rsvped` alone would hide it
+      // from the one person who definitely needs it.
+      meetingUrl: rsvped || event.hostId === userId ? event.meetingUrl : null,
       attendeeCount: event._count.rsvps + event._count.registrations,
       forumThreadId: event.forumThread?.id ?? null,
       forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
@@ -274,7 +277,8 @@ export async function getMemberEventById(userId: string, eventId: string): Promi
     hostId: event.hostId,
     hostName: event.host.name,
     rsvped,
-    meetingUrl: rsvped ? event.meetingUrl : null,
+    // Same host exception as getMemberEvents above.
+    meetingUrl: rsvped || event.hostId === userId ? event.meetingUrl : null,
     attendeeCount: event._count.rsvps + event._count.registrations,
     forumThreadId: event.forumThread?.id ?? null,
     forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
@@ -1183,7 +1187,8 @@ export async function rsvpToEvent(
   const rsvped = nextStatus === RSVPStatus.going;
   return {
     rsvped,
-    meetingUrl: rsvped ? event.meetingUrl : null,
+    // Same host exception as getMemberEvents/getMemberEventById.
+    meetingUrl: rsvped || userId === event.hostId ? event.meetingUrl : null,
     attendeeCount: goingCount + registrationCount,
   };
 }
@@ -1286,7 +1291,7 @@ export function buildEventIcs(event: {
 export async function getEventIcs(eventId: string, userId: string | null): Promise<{ title: string; ics: string } | null> {
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { id: true, title: true, description: true, startsAt: true, endsAt: true, meetingUrl: true },
+    select: { id: true, title: true, description: true, startsAt: true, endsAt: true, meetingUrl: true, hostId: true },
   });
   if (!event) return null;
 
@@ -1299,8 +1304,10 @@ export async function getEventIcs(eventId: string, userId: string | null): Promi
     rsvped = rsvp?.status === RSVPStatus.going;
   }
 
+  // Same host exception as getMemberEvents/getMemberEventById/rsvpToEvent.
+  const canSeeMeetingUrl = rsvped || (userId !== null && userId === event.hostId);
   return {
     title: event.title,
-    ics: buildEventIcs({ ...event, meetingUrl: rsvped ? event.meetingUrl : null }),
+    ics: buildEventIcs({ ...event, meetingUrl: canSeeMeetingUrl ? event.meetingUrl : null }),
   };
 }

@@ -56,6 +56,7 @@ function formatEventDateRange(startsAt: string, endsAt: string | null) {
 export function EventDetail({
   event: initialEvent,
   canEdit,
+  isHost,
   attendees,
   hostProfile,
   roster,
@@ -63,6 +64,8 @@ export function EventDetail({
 }: {
   event: MemberEvent;
   canEdit: boolean;
+  /** True only for the event's actual organizer (not an admin viewing someone else's event) — hides the RSVP button and gates the "Join session link" open regardless of RSVP status, since the host never auto-RSVPs to their own event. */
+  isHost: boolean;
   attendees: { rsvps: EventRsvpAttendee[]; registrations: EventRegistrationAttendee[] } | null;
   /** Host's Directory profile, if they're directory-listed and tier-eligible (§4.3/§9) — null otherwise, in which case the avatar shows initials only and isn't clickable. */
   hostProfile: DirectoryMember | null;
@@ -142,7 +145,7 @@ export function EventDetail({
         <p className="whitespace-pre-line text-sm leading-relaxed">{event.description}</p>
       ) : null}
 
-      {event.rsvped && event.meetingUrl ? (
+      {(event.rsvped || isHost) && event.meetingUrl ? (
         <a
           href={event.meetingUrl}
           target="_blank"
@@ -165,7 +168,7 @@ export function EventDetail({
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3">
-        {!isPast && <RsvpButton eventId={event.id} rsvped={event.rsvped} onToggled={handleRsvpToggled} />}
+        {!isPast && !isHost && <RsvpButton eventId={event.id} rsvped={event.rsvped} onToggled={handleRsvpToggled} />}
         {!isPast && <AddToCalendarButton eventId={event.id} />}
         {canEdit && (
           <Button size="sm" variant="outline" asChild>

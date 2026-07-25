@@ -54,11 +54,14 @@ function renderEventContent(arg: EventContentArg) {
 export function CalendarView({
   events,
   meetings = [],
+  currentUserId,
   forcedTab,
 }: {
   events: MemberEvent[];
   /** Accepted 1:1 meeting requests, private to the viewer — surfaced only in the Upcoming List, not the Month grid (see plan doc). */
   meetings?: UpcomingMeeting[];
+  /** Current viewer's id — lets the Upcoming List hide the RSVP button on events this viewer hosts (they never RSVP to their own event). */
+  currentUserId: string;
   /** Referral-driven override (e.g. arriving via ?ref=feed) — wins over any remembered tab, but isn't itself remembered. */
   forcedTab?: "month" | "list";
 }) {
@@ -184,6 +187,7 @@ export function CalendarView({
                     <EventListItem
                       key={item.id}
                       event={item}
+                      isHost={item.hostId === currentUserId}
                       onRsvpToggled={(result) => handleRsvpToggled(item.id, result)}
                     />
                   ) : (

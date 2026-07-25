@@ -23,9 +23,12 @@ function formatEventDateTime(iso: string) {
 // unmounted and remounted when the user switches to Month and back.
 export function EventListItem({
   event,
+  isHost,
   onRsvpToggled,
 }: {
   event: MemberEvent;
+  /** True when this viewer hosts the event — hides the RSVP button (a host never RSVPs to their own event) and shows the join link regardless of RSVP status. */
+  isHost: boolean;
   onRsvpToggled: (result: { rsvped: boolean; meetingUrl: string | null; attendeeCount?: number }) => void;
 }) {
   const { rsvped, meetingUrl, attendeeCount } = event;
@@ -63,7 +66,7 @@ export function EventListItem({
           <p className="text-sm text-muted-foreground">
             {hasMounted ? formatEventDateTime(event.startsAt) : null}
           </p>
-          {rsvped && meetingUrl ? (
+          {(rsvped || isHost) && meetingUrl ? (
             <a
               href={meetingUrl}
               target="_blank"
@@ -76,7 +79,7 @@ export function EventListItem({
         </div>
       </div>
       <div className="flex flex-shrink-0 flex-col items-start gap-2 sm:items-end">
-        <RsvpButton eventId={event.id} rsvped={rsvped} onToggled={onRsvpToggled} />
+        {!isHost && <RsvpButton eventId={event.id} rsvped={rsvped} onToggled={onRsvpToggled} />}
         <AddToCalendarButton eventId={event.id} />
       </div>
     </li>

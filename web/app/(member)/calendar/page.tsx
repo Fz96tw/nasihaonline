@@ -49,7 +49,12 @@ export default async function CalendarPage({ searchParams }: { searchParams: { r
           </div>
         )}
 
-        <CalendarView events={events} meetings={meetings} forcedTab={isFromFeed(searchParams) ? "list" : undefined} />
+        <CalendarView
+          events={events}
+          meetings={meetings}
+          currentUserId={user.id}
+          forcedTab={isFromFeed(searchParams) ? "list" : undefined}
+        />
       </section>
     </main>
   );
