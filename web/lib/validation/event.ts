@@ -12,7 +12,6 @@ const eventFieldsSchema = z.object({
   startsAt: z.string().trim().min(1, "Start date and time are required"),
   endsAt: z.string().trim().min(1).nullable(),
   open: z.boolean(),
-  icon: z.string().trim().max(8).nullable(),
   meetingUrl: z
     .string()
     .trim()
@@ -50,11 +49,24 @@ function requireRestrictedEventInvariants(
     meetLinkSource: "auto" | "manual";
     meetingUrl: string | null;
     createDiscussionThread: boolean;
+    open: boolean;
   },
   ctx: z.RefinementCtx,
 ) {
   if (data.visibility !== EventVisibility.invited) return;
 
+  // "Open to the public" gates the anonymous /events registration flow —
+  // nonsensical for an event that's simultaneously restricted to a named
+  // invite list, and a real bypass risk if combined: the public register
+  // route only ever checked `open`, not `visibility` (fixed separately in
+  // registerForEvent, but this is where a host would actually set it).
+  if (data.open) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["open"],
+      message: "Restricted events can't be open to the public.",
+    });
+  }
   if (data.invitedUserIds.length === 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,

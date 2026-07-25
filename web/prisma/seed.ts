@@ -170,7 +170,6 @@ const SAMPLE_EVENTS: {
   description: string;
   type: "webinar" | "workshop" | "case_discussion" | "student_event" | "roundtable" | "lecture";
   open: boolean;
-  icon: string;
   daysFromNow: number;
   hourUtc: number;
   durationMinutes: number;
@@ -181,7 +180,6 @@ const SAMPLE_EVENTS: {
     description: "Latest ACC/AHA guidelines on heart failure management.",
     type: "webinar",
     open: true,
-    icon: "🫀",
     daysFromNow: 3,
     hourUtc: 19,
     durationMinutes: 60,
@@ -191,7 +189,6 @@ const SAMPLE_EVENTS: {
     description: "A practical workshop on designing and running a clinical research study.",
     type: "workshop",
     open: false,
-    icon: "🔬",
     daysFromNow: 8,
     hourUtc: 18,
     durationMinutes: 90,
@@ -201,7 +198,6 @@ const SAMPLE_EVENTS: {
     description: "De-identified case review and discussion among members.",
     type: "case_discussion",
     open: false,
-    icon: "🏥",
     daysFromNow: 12,
     hourUtc: 20,
     durationMinutes: 60,
@@ -212,7 +208,6 @@ const SAMPLE_EVENTS: {
     description: "Open Q&A on navigating the residency application process.",
     type: "student_event",
     open: true,
-    icon: "🎓",
     daysFromNow: 17,
     hourUtc: 17,
     durationMinutes: 60,
@@ -222,7 +217,6 @@ const SAMPLE_EVENTS: {
     description: "Monthly member roundtable on global health policy topics.",
     type: "roundtable",
     open: false,
-    icon: "🌍",
     daysFromNow: 22,
     hourUtc: 15,
     durationMinutes: 60,
@@ -232,7 +226,6 @@ const SAMPLE_EVENTS: {
     description: "A deep-dive lecture on ECG interpretation for clinicians.",
     type: "lecture",
     open: false,
-    icon: "📈",
     daysFromNow: 26,
     hourUtc: 19,
     durationMinutes: 75,
@@ -278,7 +271,6 @@ async function seedEvents() {
         startsAt,
         endsAt,
         open: sample.open,
-        icon: sample.icon,
         meetingUrl: "https://meet.google.com/nasiha-sample-session",
         deidentificationConfirmed: sample.deidentificationConfirmed ?? false,
       },

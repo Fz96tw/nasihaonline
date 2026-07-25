@@ -27,7 +27,6 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     startsAt: formData.get("startsAt"),
     endsAt: formData.get("endsAt") || null,
     open: formData.get("open") === "true",
-    icon: formData.get("icon") || null,
     meetingUrl: formData.get("meetingUrl") || null,
     deidentificationConfirmed: formData.get("deidentificationConfirmed") === "true",
   });

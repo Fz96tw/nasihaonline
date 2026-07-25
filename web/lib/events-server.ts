@@ -52,7 +52,6 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
       startsAt: true,
       endsAt: true,
       open: true,
-      icon: true,
       heroImageUrl: true,
       host: { select: { name: true } },
     },
@@ -67,7 +66,6 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
     startsAt: event.startsAt.toISOString(),
     endsAt: event.endsAt?.toISOString() ?? null,
     open: event.open,
-    icon: event.icon,
     heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
     hostName: event.host.name,
   }));
@@ -94,7 +92,6 @@ export async function getPublicEventById(eventId: string): Promise<PublicEvent |
       startsAt: true,
       endsAt: true,
       open: true,
-      icon: true,
       heroImageUrl: true,
       host: { select: { name: true } },
     },
@@ -109,7 +106,6 @@ export async function getPublicEventById(eventId: string): Promise<PublicEvent |
     startsAt: event.startsAt.toISOString(),
     endsAt: event.endsAt?.toISOString() ?? null,
     open: event.open,
-    icon: event.icon,
     heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
     hostName: event.host.name,
   };
@@ -139,7 +135,6 @@ export async function getEventsForViewer(userId: string | null): Promise<EventWi
       startsAt: true,
       endsAt: true,
       open: true,
-      icon: true,
       heroImageUrl: true,
       host: { select: { name: true } },
       rsvps: userId ? { where: { userId, status: RSVPStatus.going }, select: { id: true } } : false,
@@ -155,7 +150,6 @@ export async function getEventsForViewer(userId: string | null): Promise<EventWi
     startsAt: event.startsAt.toISOString(),
     endsAt: event.endsAt?.toISOString() ?? null,
     open: event.open,
-    icon: event.icon,
     heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
     hostName: event.host.name,
     rsvped: userId ? event.rsvps.length > 0 : false,
@@ -186,7 +180,6 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
       startsAt: true,
       endsAt: true,
       open: true,
-      icon: true,
       heroImageUrl: true,
       meetingUrl: true,
       visibility: true,
@@ -217,7 +210,6 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
       startsAt: event.startsAt.toISOString(),
       endsAt: event.endsAt?.toISOString() ?? null,
       open: event.open,
-      icon: event.icon,
       heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
       hostId: event.hostId,
       hostName: event.host.name,
@@ -251,7 +243,6 @@ export async function getMemberEventById(userId: string, eventId: string): Promi
       startsAt: true,
       endsAt: true,
       open: true,
-      icon: true,
       heroImageUrl: true,
       meetingUrl: true,
       visibility: true,
@@ -279,7 +270,6 @@ export async function getMemberEventById(userId: string, eventId: string): Promi
     startsAt: event.startsAt.toISOString(),
     endsAt: event.endsAt?.toISOString() ?? null,
     open: event.open,
-    icon: event.icon,
     heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
     hostId: event.hostId,
     hostName: event.host.name,
@@ -573,7 +563,6 @@ export async function createEvent(
     startsAt: string;
     endsAt: string | null;
     open: boolean;
-    icon: string | null;
     meetingUrl: string | null;
     deidentificationConfirmed: boolean;
     heroImage: File | null;
@@ -615,6 +604,14 @@ export async function createEvent(
   // whole community regardless of who's invited.
   if (isRestricted && input.createDiscussionThread) {
     throw new EventError(400, "Restricted events can't have a public discussion thread.");
+  }
+
+  // Belt-and-suspenders, same rationale — createEventSchema already blocks
+  // this combination. The real enforcement point against a leftover/bypassed
+  // `open: true` on a restricted event is registerForEvent's own visibility
+  // check below, but this stops it from ever being set at creation time.
+  if (isRestricted && input.open) {
+    throw new EventError(400, "Restricted events can't be open to the public.");
   }
 
   // Belt-and-suspenders, same rationale as the Case Discussion check above —
@@ -695,7 +692,6 @@ export async function createEvent(
         startsAt,
         endsAt,
         open: input.open,
-        icon: input.icon,
         heroImageUrl,
         meetingUrl,
         googleEventId,
@@ -764,11 +760,11 @@ export async function getEventForEdit(eventId: string) {
       startsAt: true,
       endsAt: true,
       open: true,
-      icon: true,
       meetingUrl: true,
       heroImageUrl: true,
       deidentificationConfirmed: true,
       hostId: true,
+      visibility: true,
     },
   });
   if (!event) return null;
@@ -781,9 +777,9 @@ export async function getEventForEdit(eventId: string) {
     startsAt: event.startsAt.toISOString(),
     endsAt: event.endsAt?.toISOString() ?? null,
     open: event.open,
-    icon: event.icon,
     meetingUrl: event.meetingUrl,
     heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
+    visibility: event.visibility,
     deidentificationConfirmed: event.deidentificationConfirmed,
     hostId: event.hostId,
   };
@@ -805,7 +801,6 @@ export async function updateEvent(
     startsAt: string;
     endsAt: string | null;
     open: boolean;
-    icon: string | null;
     meetingUrl: string | null;
     deidentificationConfirmed: boolean;
     heroImage: File | null;
@@ -821,6 +816,14 @@ export async function updateEvent(
   const isHost = event.hostId === actingUser.id;
   if (!isAdmin && !isHost) {
     throw new EventError(403, "Only the event's host or an admin can edit it.");
+  }
+
+  // Visibility itself isn't editable via this form (see ManageInvitees for
+  // the dedicated invited-list editor), but `open` still is — this stops a
+  // restricted event from being flipped open to public registration via an
+  // edit, the same gap createEvent's own check closes at creation time.
+  if (event.visibility === EventVisibility.invited && input.open) {
+    throw new EventError(400, "Restricted events can't be open to the public.");
   }
 
   const startsAt = new Date(input.startsAt);
@@ -864,7 +867,6 @@ export async function updateEvent(
       startsAt,
       endsAt,
       open: input.open,
-      icon: input.icon,
       heroImageUrl,
       meetingUrl: input.meetingUrl,
       deidentificationConfirmed: input.deidentificationConfirmed,
@@ -1190,10 +1192,16 @@ export async function registerForEvent(
 ): Promise<{ id: string; title: string; startsAt: Date }> {
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { id: true, title: true, startsAt: true, open: true },
+    select: { id: true, title: true, startsAt: true, open: true, visibility: true },
   });
   if (!event) throw new EventError(404, "Event not found.");
-  if (!event.open) throw new EventError(400, "This event isn't open for public registration.");
+  // The real enforcement point: even if `open` were ever true on a
+  // restricted event (blocked at creation/edit time, but this is a public,
+  // unauthenticated route — nothing else stands between an anonymous caller
+  // who has the event id and the invite-only guest list otherwise).
+  if (!event.open || event.visibility === EventVisibility.invited) {
+    throw new EventError(400, "This event isn't open for public registration.");
+  }
 
   await db.eventRegistration.upsert({
     where: { eventId_email: { eventId, email: input.email } },

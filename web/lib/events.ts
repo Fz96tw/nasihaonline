@@ -30,7 +30,6 @@ export type PublicEvent = {
   startsAt: string;
   endsAt: string | null;
   open: boolean;
-  icon: string | null;
   heroImageUrl: string | null;
   hostName: string | null;
 };

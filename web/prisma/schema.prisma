@@ -753,7 +753,6 @@ model Event {
   startsAt                  DateTime
   endsAt                    DateTime?
   open                      Boolean         @default(false)
-  icon                      String?
   heroImageUrl              String?
   meetingUrl                String?
   // Set only when meetingUrl was auto-generated via createMeetingCalendarEvent
