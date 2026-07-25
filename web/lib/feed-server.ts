@@ -67,10 +67,12 @@ export async function getFeedPage(params: {
   /**
    * The signed-in viewer, for the events branch's audience-restriction
    * filter (Audience-Restricted Group Events, Objective 01) — an `invited`
-   * event only ever appears in this viewer's feed if they're the organizer
-   * or an invited member. Every non-event domain is unaffected by this
-   * param; pass null only when there is genuinely no session (there's no
-   * signed-out caller of this function today, but the type stays honest).
+   * event only ever appears in an invited member's feed, never its own
+   * organizer's (confirmed with user: the host already knows they created
+   * it, so it isn't "new" activity for them the way it is for an invitee).
+   * Every non-event domain is unaffected by this param; pass null only
+   * when there is genuinely no session (there's no signed-out caller of
+   * this function today, but the type stays honest).
    */
   viewerId: string | null;
 }): Promise<{ items: FeedItem[]; nextCursor: FeedCursor | null; hasMore: boolean }> {
@@ -86,7 +88,7 @@ export async function getFeedPage(params: {
         cancelledAt: null,
         OR: [
           { visibility: EventVisibility.community },
-          ...(viewerId ? [{ hostId: viewerId }, { invitees: { some: { userId: viewerId } } }] : []),
+          ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
         ],
       },
       select: {
