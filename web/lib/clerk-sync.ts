@@ -2,6 +2,7 @@ import { createClerkClient } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { Role, Tier } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
+import { enqueueProfileIndexSync } from "@/lib/queues/search-index-queue";
 
 const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 
@@ -38,7 +39,7 @@ export async function upsertUserFromClerkData(
   email: string,
   publicMetadata: Record<string, unknown>,
 ): Promise<UserModel> {
-  return db.user.upsert({
+  const user = await db.user.upsert({
     where: { clerkUserId },
     create: {
       clerkUserId,
@@ -50,6 +51,19 @@ export async function upsertUserFromClerkData(
     },
     update: { email, role: roleFromMetadata(publicMetadata), tier: tierFromMetadata(publicMetadata) },
   });
+
+  // The nested Profile row above (create branch only) was otherwise never
+  // enqueued for Meilisearch indexing — enqueueProfileIndexSync was only
+  // ever called from the profile-edit/avatar-upload routes, so a brand-new
+  // member stayed invisible to every search-backed feature (Directory
+  // search, @-mention autocomplete, the restricted-event invitee picker)
+  // until they happened to edit their profile. Enqueuing on every upsert
+  // (not just create) is deliberately simple and idempotent — the worker
+  // re-derives eligibility from the DB regardless of what triggered it —
+  // rather than threading a "was this a create" flag through here.
+  await enqueueProfileIndexSync(user.id);
+
+  return user;
 }
 
 /**
