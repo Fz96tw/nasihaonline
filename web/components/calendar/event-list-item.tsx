@@ -5,7 +5,7 @@ import { Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { RsvpButton } from "@/components/calendar/rsvp-button";
 import { AddToCalendarButton } from "@/components/calendar/add-to-calendar-button";
-import { EVENT_TYPE_LABELS, type MemberEvent } from "@/lib/events";
+import { EVENT_TYPE_LABELS, getEventAudienceBadge, type MemberEvent } from "@/lib/events";
 import { useHasMounted } from "@/lib/use-has-mounted";
 
 function formatEventDateTime(iso: string) {
@@ -33,6 +33,7 @@ export function EventListItem({
 }) {
   const { rsvped, meetingUrl, attendeeCount } = event;
   const hasMounted = useHasMounted();
+  const audienceBadge = getEventAudienceBadge(event);
 
   return (
     <li className="flex flex-col gap-3 border-b py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
@@ -48,9 +49,7 @@ export function EventListItem({
         ) : null}
         <div className="min-w-0">
           <div className="mb-1 flex flex-wrap items-center gap-2">
-            <Badge variant={event.open ? "success" : "info"}>
-              {event.open ? "Open" : "Members Only"}
-            </Badge>
+            <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>
             <Badge variant="neutral">{EVENT_TYPE_LABELS[event.type]}</Badge>
             <span className="flex items-center gap-1 text-xs text-muted-foreground" title="Registered or RSVP'd">
               <Users className="h-3.5 w-3.5" />

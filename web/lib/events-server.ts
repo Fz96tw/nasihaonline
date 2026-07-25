@@ -136,6 +136,7 @@ export async function getEventsForViewer(userId: string | null): Promise<EventWi
       endsAt: true,
       open: true,
       heroImageUrl: true,
+      visibility: true,
       host: { select: { name: true } },
       rsvps: userId ? { where: { userId, status: RSVPStatus.going }, select: { id: true } } : false,
     },
@@ -153,6 +154,7 @@ export async function getEventsForViewer(userId: string | null): Promise<EventWi
     heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
     hostName: event.host.name,
     rsvped: userId ? event.rsvps.length > 0 : false,
+    visibility: event.visibility,
   }));
 }
 

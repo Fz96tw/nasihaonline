@@ -39,9 +39,13 @@ export type PublicEvent = {
 // §4.6's explicit "not on the public /events listing" rule, even for a
 // member who's RSVP'd) plus whether *this* viewer is RSVP'd, so the
 // members-only card's CTA can render as an RSVP toggle instead of "Join to
-// RSVP".
+// RSVP". Also carries `visibility` — a restricted event can reach this page
+// too (for its organizer/invitees, via getEventsForViewer's own filter), so
+// its card needs to know to badge itself "Invitees Only" rather than
+// "Members Only".
 export type EventWithRsvp = PublicEvent & {
   rsvped: boolean;
+  visibility: EventVisibility;
 };
 
 // /calendar (member-only route, §4.6) — the one place meetingUrl is ever
@@ -58,9 +62,22 @@ export type MemberEvent = EventWithRsvp & {
   forumReplyCount: number | null;
   /** Unique-visitor count for the event detail page's eye-icon (§4.6). */
   viewCount: number;
-  /** Audience-Restricted Group Events (Objective 01/02) — `community` for every event before that initiative. */
-  visibility: EventVisibility;
 };
+
+// Shared "Open" / "Members Only" / "Invitees Only" audience badge — used by
+// every card/detail surface that shows event.open + event.visibility
+// (EventListItem, EventDetail, EventCard) so the copy/color never drifts
+// between them. A restricted event badges as "Invitees Only" instead of
+// "Members Only" — `open` is always false for one (createEvent/updateEvent
+// both block combining them), so this branch order is safe.
+export function getEventAudienceBadge(event: {
+  open: boolean;
+  visibility: EventVisibility;
+}): { label: string; variant: "success" | "info" | "warning" } {
+  if (event.open) return { label: "Open", variant: "success" };
+  if (event.visibility === EventVisibility.invited) return { label: "Invitees Only", variant: "warning" };
+  return { label: "Members Only", variant: "info" };
+}
 
 // Full per-person invitee roster for a restricted event's detail page
 // (Objective 02) — visible to every invited member, not just the

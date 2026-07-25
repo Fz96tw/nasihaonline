@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RsvpButton } from "@/components/calendar/rsvp-button";
 import { RegisterButton } from "@/components/events/register-button";
-import { EVENT_TYPE_LABELS, type EventWithRsvp } from "@/lib/events";
+import { EVENT_TYPE_LABELS, getEventAudienceBadge, type EventWithRsvp } from "@/lib/events";
 import { useHasMounted } from "@/lib/use-has-mounted";
 
 function formatEventDate(iso: string) {
@@ -41,6 +41,7 @@ function CardLinkWrapper({ href, children }: { href: string | null; children: Re
 export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSignedIn: boolean }) {
   const [rsvped, setRsvped] = useState(event.rsvped);
   const hasMounted = useHasMounted();
+  const audienceBadge = getEventAudienceBadge(event);
   // A signed-out visitor gets a public detail page to click through to
   // (§4.6's /events/[eventId]) for any event, open or members-only — a
   // signed-in member already has the fuller /calendar/[eventId] view, so
@@ -59,9 +60,7 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
         ) : null}
         <CardHeader>
           <div className="mb-1 flex flex-wrap items-center gap-2">
-            <Badge variant={event.open ? "success" : "info"}>
-              {event.open ? "Open" : "Members Only"}
-            </Badge>
+            <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>
             <Badge variant="neutral">{EVENT_TYPE_LABELS[event.type]}</Badge>
           </div>
           <CardTitle className="text-xl">{event.title}</CardTitle>

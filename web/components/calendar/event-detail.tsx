@@ -14,6 +14,7 @@ import { CancelEventButton } from "@/components/calendar/cancel-event-button";
 import { AttendanceChecklist } from "@/components/calendar/attendance-checklist";
 import {
   EVENT_TYPE_LABELS,
+  getEventAudienceBadge,
   ROSTER_STATUS_LABEL,
   ROSTER_STATUS_VARIANT,
   type AttendanceChecklistMember,
@@ -79,6 +80,7 @@ export function EventDetail({
   const isPast = hasMounted && new Date(event.endsAt ?? event.startsAt) < new Date();
   const hostName = event.hostName ?? "NASIHA Member";
   const isRestricted = event.visibility === EventVisibility.invited;
+  const audienceBadge = getEventAudienceBadge(event);
 
   function handleRsvpToggled(result: { rsvped: boolean; meetingUrl: string | null; attendeeCount?: number }) {
     setEvent((prev) => ({ ...prev, ...result }));
@@ -99,7 +101,7 @@ export function EventDetail({
 
       <div>
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <Badge variant={event.open ? "success" : "info"}>{event.open ? "Open" : "Members Only"}</Badge>
+          <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>
           <Badge variant="neutral">{EVENT_TYPE_LABELS[event.type]}</Badge>
           <span className="flex items-center gap-1 text-xs text-muted-foreground" title="Registered or RSVP'd">
             <Users className="h-3.5 w-3.5" />
