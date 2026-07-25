@@ -323,7 +323,7 @@ export async function updateKnowledgeItem(
     if (dropsExistingAttachment) {
       await tx.knowledgeAttachment.delete({ where: { id: existingAttachment!.id } });
     }
-    return tx.knowledgeItem.update({
+    const result = await tx.knowledgeItem.update({
       where: { id: item.id },
       data: {
         title: input.title,
@@ -339,6 +339,14 @@ export async function updateKnowledgeItem(
       },
       select: { id: true, status: true },
     });
+    // Keep the on-demand discussion thread's title (set from item.title at
+    // creation in startKnowledgeItemDiscussion) in sync with renames — a
+    // no-op updateMany when no thread has been started yet.
+    await tx.forumThread.updateMany({
+      where: { knowledgeItemId: item.id },
+      data: { title: input.title },
+    });
+    return result;
   });
 
   if (dropsExistingAttachment) {
