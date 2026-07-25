@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { EventType, EventVisibility, NotificationType, Role, RSVPStatus } from "@/lib/generated/prisma/enums";
+import type { Prisma } from "@/lib/generated/prisma/client";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import type {
   DashboardUpcomingEvent,
@@ -14,9 +15,13 @@ import type {
 } from "@/lib/events";
 import { EVENTS_FORUM_SLUG } from "@/lib/forums";
 import { DIRECTORY_TIERS } from "@/lib/members";
-import { createMeetingCalendarEvent } from "@/lib/google-calendar";
+import {
+  cancelMeetingCalendarEvent,
+  createMeetingCalendarEvent,
+  updateMeetingCalendarEventAttendees,
+} from "@/lib/google-calendar";
 import { createNotification } from "@/lib/notifications-server";
-import { sendEventInviteEmail } from "@/lib/email";
+import { sendEventInviteEmail, sendEventLifecycleEmail } from "@/lib/email";
 import {
   deleteEventHeroImage,
   getEventHeroImageUrl,
@@ -38,7 +43,7 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 // one.
 export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
   const events = await db.event.findMany({
-    where: { startsAt: { gte: new Date() }, visibility: EventVisibility.community },
+    where: { startsAt: { gte: new Date() }, visibility: EventVisibility.community, cancelledAt: null },
     select: {
       id: true,
       title: true,
@@ -80,7 +85,7 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
 // resolves.
 export async function getPublicEventById(eventId: string): Promise<PublicEvent | null> {
   const event = await db.event.findFirst({
-    where: { id: eventId, visibility: EventVisibility.community },
+    where: { id: eventId, visibility: EventVisibility.community, cancelledAt: null },
     select: {
       id: true,
       title: true,
@@ -120,6 +125,7 @@ export async function getEventsForViewer(userId: string | null): Promise<EventWi
   const events = await db.event.findMany({
     where: {
       startsAt: { gte: new Date() },
+      cancelledAt: null,
       OR: [
         { visibility: EventVisibility.community },
         ...(userId ? [{ hostId: userId }, { invitees: { some: { userId } } }] : []),
@@ -169,6 +175,7 @@ export async function getEventsForViewer(userId: string | null): Promise<EventWi
 export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
   const events = await db.event.findMany({
     where: {
+      cancelledAt: null,
       OR: [{ visibility: EventVisibility.community }, { hostId: userId }, { invitees: { some: { userId } } }],
     },
     select: {
@@ -233,6 +240,7 @@ export async function getMemberEventById(userId: string, eventId: string): Promi
   const event = await db.event.findFirst({
     where: {
       id: eventId,
+      cancelledAt: null,
       OR: [{ visibility: EventVisibility.community }, { hostId: userId }, { invitees: { some: { userId } } }],
     },
     select: {
@@ -401,6 +409,7 @@ export async function getDashboardUpcomingEvents(
   const events = await db.event.findMany({
     where: {
       startsAt: { gte: new Date() },
+      cancelledAt: null,
       // A restricted event's organizer/invitees see it unconditionally —
       // they shouldn't have to RSVP to their own private event just to
       // have it surface here. A community event keeps its pre-existing
@@ -486,11 +495,57 @@ export async function getEventEngagementForAdmin() {
 
 export class EventError extends Error {
   constructor(
-    public readonly status: 400 | 403 | 404,
+    public readonly status: 400 | 403 | 404 | 409,
     message: string,
   ) {
     super(message);
   }
+}
+
+/**
+ * Bell-notifies newly-invited members with the "please RSVP" copy
+ * (Objective 01), reused by both createEvent and updateEventInvitees
+ * (Objective 03) rather than duplicated — takes a transaction client so
+ * callers can post it alongside the EventInvitee rows in the same
+ * transaction.
+ */
+async function notifyInvitedUsers(
+  tx: Prisma.TransactionClient,
+  params: { eventId: string; title: string; hostName: string; userIds: string[] },
+): Promise<void> {
+  if (params.userIds.length === 0) return;
+  const link = `/calendar/${params.eventId}`;
+  const message = `${params.hostName} has requested your attendance at "${params.title}". Please RSVP.`;
+  await tx.notification.createMany({
+    data: params.userIds.map((userId) => ({
+      recipientId: userId,
+      type: NotificationType.event_invited,
+      message,
+      link,
+    })),
+  });
+}
+
+/**
+ * Emails newly-invited members the same "please RSVP" copy, best-effort —
+ * reused by createEvent and updateEventInvitees (Objective 03).
+ */
+async function emailInvitedUsers(
+  users: { email: string; name: string | null }[],
+  params: { eventId: string; title: string; hostName: string; startsAt: Date },
+): Promise<void> {
+  if (users.length === 0) return;
+  const link = `${APP_URL}/calendar/${params.eventId}`;
+  await Promise.allSettled(
+    users.map((user) =>
+      sendEventInviteEmail(user.email, user.name ?? "there", {
+        hostName: params.hostName,
+        title: params.title,
+        startsAt: params.startsAt,
+        link,
+      }),
+    ),
+  );
 }
 
 /**
@@ -662,16 +717,11 @@ export async function createEvent(
       await tx.eventInvitee.createMany({
         data: invitedUsers.map((user) => ({ eventId: created.id, userId: user.id })),
       });
-
-      const link = `/calendar/${created.id}`;
-      const message = `${hostName} has requested your attendance at "${input.title}". Please RSVP.`;
-      await tx.notification.createMany({
-        data: invitedUsers.map((user) => ({
-          recipientId: user.id,
-          type: NotificationType.event_invited,
-          message,
-          link,
-        })),
+      await notifyInvitedUsers(tx, {
+        eventId: created.id,
+        title: input.title,
+        hostName,
+        userIds: invitedUsers.map((user) => user.id),
       });
     }
 
@@ -681,19 +731,7 @@ export async function createEvent(
   // Best-effort, same rationale as every other email in lib/email.ts — the
   // Event/EventInvitee/Notification rows already exist by this point, so a
   // failed/unconfigured send must not undo the creation.
-  if (invitedUsers.length > 0) {
-    const link = `${APP_URL}/calendar/${event.id}`;
-    await Promise.allSettled(
-      invitedUsers.map((user) =>
-        sendEventInviteEmail(user.email, user.name ?? "there", {
-          hostName,
-          title: input.title,
-          startsAt,
-          link,
-        }),
-      ),
-    );
-  }
+  await emailInvitedUsers(invitedUsers, { eventId: event.id, title: input.title, hostName, startsAt });
 
   return { id: event.id };
 }
@@ -766,7 +804,7 @@ export async function updateEvent(
 ): Promise<{ id: string }> {
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { id: true, hostId: true, heroImageUrl: true },
+    select: { id: true, hostId: true, heroImageUrl: true, startsAt: true, endsAt: true, visibility: true },
   });
   if (!event) throw new EventError(404, "Event not found.");
 
@@ -829,7 +867,235 @@ export async function updateEvent(
     await deleteEventHeroImage(event.heroImageUrl);
   }
 
+  // Reschedule notification (Objective 03) — restricted events only,
+  // community events keep today's silent-edit behavior unchanged. Compares
+  // against the pre-update values fetched above, not the input strings, so
+  // e.g. re-submitting the form with the same time never fires this.
+  const rescheduled =
+    event.visibility === EventVisibility.invited &&
+    (event.startsAt.getTime() !== startsAt.getTime() ||
+      (event.endsAt?.getTime() ?? null) !== (endsAt?.getTime() ?? null));
+  if (rescheduled) {
+    const invitees = await db.eventInvitee.findMany({
+      where: { eventId },
+      select: { userId: true, user: { select: { email: true, name: true } } },
+    });
+    if (invitees.length > 0) {
+      const link = `/calendar/${eventId}`;
+      const when = startsAt.toLocaleString("en-US", { dateStyle: "full", timeStyle: "short" });
+      const message = `"${input.title}" has been rescheduled to ${when}.`;
+      await db.notification.createMany({
+        data: invitees.map((invitee) => ({
+          recipientId: invitee.userId,
+          type: NotificationType.event_rescheduled,
+          message,
+          link,
+        })),
+      });
+      await Promise.allSettled(
+        invitees.map((invitee) =>
+          sendEventLifecycleEmail(invitee.user.email, invitee.user.name ?? "there", {
+            subject: `Rescheduled: ${input.title}`,
+            message,
+            link: `${APP_URL}${link}`,
+          }),
+        ),
+      );
+    }
+  }
+
   return updated;
+}
+
+/**
+ * Adds and/or removes members from a restricted event's invited list after
+ * creation (Audience-Restricted Group Events, Objective 03) — host or
+ * admin only. Newly added invitees get the exact same invite
+ * notification+email objective 01 sends at creation (via the shared
+ * notifyInvitedUsers/emailInvitedUsers helpers, not duplicated); removed
+ * invitees get a "no longer needed" notification+email, lose their RSVP
+ * row, and — if the Meet link was auto-generated — are dropped from the
+ * underlying Google Calendar event's attendee list.
+ */
+export async function updateEventInvitees(
+  eventId: string,
+  actingUser: UserModel,
+  input: { addUserIds: string[]; removeUserIds: string[] },
+): Promise<{ added: number; removed: number }> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: {
+      title: true,
+      hostId: true,
+      visibility: true,
+      googleEventId: true,
+      cancelledAt: true,
+      startsAt: true,
+    },
+  });
+  if (!event) throw new EventError(404, "Event not found.");
+  if (event.cancelledAt) throw new EventError(409, "This event has been cancelled.");
+  if (event.visibility !== EventVisibility.invited) {
+    throw new EventError(400, "Only restricted events have an invited list.");
+  }
+
+  const isAdmin = actingUser.role === Role.admin;
+  const isHost = actingUser.id === event.hostId;
+  if (!isAdmin && !isHost) {
+    throw new EventError(403, "Only the event's host or an admin can manage invitees.");
+  }
+
+  const host = await db.user.findUnique({ where: { id: event.hostId }, select: { email: true, name: true } });
+  const hostName = host?.name ?? "A member";
+
+  // Re-resolved against directory eligibility, same rationale as
+  // createEvent — ids that aren't eligible (or already invited, or the
+  // host) are silently dropped rather than erroring.
+  const [addCandidates, alreadyInvited, removeCandidates] = await Promise.all([
+    input.addUserIds.length > 0
+      ? db.user.findMany({
+          where: {
+            id: { in: input.addUserIds, notIn: [event.hostId] },
+            tier: { in: DIRECTORY_TIERS },
+            profile: { listInDirectory: true },
+          },
+          select: { id: true, email: true, name: true },
+        })
+      : Promise.resolve([]),
+    input.addUserIds.length > 0
+      ? db.eventInvitee.findMany({ where: { eventId, userId: { in: input.addUserIds } }, select: { userId: true } })
+      : Promise.resolve([]),
+    input.removeUserIds.length > 0
+      ? db.eventInvitee.findMany({
+          where: { eventId, userId: { in: input.removeUserIds } },
+          select: { userId: true, user: { select: { email: true, name: true } } },
+        })
+      : Promise.resolve([]),
+  ]);
+  const alreadyInvitedIds = new Set(alreadyInvited.map((row) => row.userId));
+  const newInvitees = addCandidates.filter((user) => !alreadyInvitedIds.has(user.id));
+
+  await db.$transaction(async (tx) => {
+    if (newInvitees.length > 0) {
+      await tx.eventInvitee.createMany({
+        data: newInvitees.map((user) => ({ eventId, userId: user.id })),
+      });
+      await notifyInvitedUsers(tx, {
+        eventId,
+        title: event.title,
+        hostName,
+        userIds: newInvitees.map((user) => user.id),
+      });
+    }
+
+    if (removeCandidates.length > 0) {
+      const removeIds = removeCandidates.map((row) => row.userId);
+      await tx.eventInvitee.deleteMany({ where: { eventId, userId: { in: removeIds } } });
+      await tx.rSVP.deleteMany({ where: { eventId, userId: { in: removeIds } } });
+
+      const link = `/calendar/${eventId}`;
+      const message = `You are no longer needed for "${event.title}".`;
+      await tx.notification.createMany({
+        data: removeIds.map((userId) => ({
+          recipientId: userId,
+          type: NotificationType.event_removed,
+          message,
+          link,
+        })),
+      });
+    }
+  });
+
+  // Best-effort, same rationale as every other email/Google call in this
+  // file — the DB rows already reflect the new invited list by this point.
+  await Promise.all([
+    emailInvitedUsers(newInvitees, { eventId, title: event.title, hostName, startsAt: event.startsAt }),
+    removeCandidates.length > 0
+      ? Promise.allSettled(
+          removeCandidates.map((row) =>
+            sendEventLifecycleEmail(row.user.email, row.user.name ?? "there", {
+              subject: `Update: ${event.title}`,
+              message: `You are no longer needed for "${event.title}".`,
+              link: `${APP_URL}/calendar/${eventId}`,
+            }),
+          ),
+        )
+      : Promise.resolve(),
+  ]);
+
+  if (event.googleEventId && (newInvitees.length > 0 || removeCandidates.length > 0)) {
+    const currentInvitees = await db.eventInvitee.findMany({
+      where: { eventId },
+      select: { user: { select: { email: true, name: true } } },
+    });
+    const attendees = [
+      ...(host ? [{ email: host.email, name: hostName }] : []),
+      ...currentInvitees.map((invitee) => ({ email: invitee.user.email, name: invitee.user.name ?? "Member" })),
+    ];
+    await updateMeetingCalendarEventAttendees(event.googleEventId, attendees);
+  }
+
+  return { added: newInvitees.length, removed: removeCandidates.length };
+}
+
+/**
+ * Cancels an event (host or admin only) — a one-way, soft-delete-style flag
+ * (Event.cancelledAt), not a status a host can clear. For a restricted
+ * event, notifies every current invitee (bell + email) and, if the Meet
+ * link was auto-generated, deletes the underlying Google Calendar event.
+ * Community events can be cancelled too (the field/query filtering is
+ * generic) but this objective's UI only exposes the action for restricted
+ * events — see components/calendar/manage-invitees.tsx.
+ */
+export async function cancelEvent(eventId: string, actingUser: UserModel): Promise<void> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { title: true, hostId: true, visibility: true, googleEventId: true, cancelledAt: true },
+  });
+  if (!event) throw new EventError(404, "Event not found.");
+  if (event.cancelledAt) throw new EventError(409, "This event has already been cancelled.");
+
+  const isAdmin = actingUser.role === Role.admin;
+  const isHost = actingUser.id === event.hostId;
+  if (!isAdmin && !isHost) {
+    throw new EventError(403, "Only the event's host or an admin can cancel it.");
+  }
+
+  const isRestricted = event.visibility === EventVisibility.invited;
+  const invitees = isRestricted
+    ? await db.eventInvitee.findMany({
+        where: { eventId },
+        select: { userId: true, user: { select: { email: true, name: true } } },
+      })
+    : [];
+
+  await db.event.update({ where: { id: eventId }, data: { cancelledAt: new Date() } });
+
+  if (isRestricted && invitees.length > 0) {
+    const link = `/calendar/${eventId}`;
+    const message = `${actingUser.name ?? "The host"} cancelled "${event.title}".`;
+    await db.notification.createMany({
+      data: invitees.map((invitee) => ({
+        recipientId: invitee.userId,
+        type: NotificationType.event_cancelled,
+        message,
+        link,
+      })),
+    });
+    await Promise.allSettled(
+      invitees.map((invitee) =>
+        sendEventLifecycleEmail(invitee.user.email, invitee.user.name ?? "there", {
+          subject: `Cancelled: ${event.title}`,
+          message,
+          link: `${APP_URL}${link}`,
+        }),
+      ),
+    );
+  }
+
+  if (event.googleEventId) {
+    await cancelMeetingCalendarEvent(event.googleEventId);
+  }
 }
 
 /**

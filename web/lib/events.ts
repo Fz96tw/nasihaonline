@@ -73,6 +73,21 @@ export type EventRosterMember = {
   status: "pending" | "going" | "not_going";
 };
 
+// Shared between the read-only roster (EventDetail) and the host-facing
+// editable one (ManageInvitees) so both surfaces present the exact same
+// status labels/colors.
+export const ROSTER_STATUS_LABEL: Record<EventRosterMember["status"], string> = {
+  pending: "Invited",
+  going: "Going",
+  not_going: "Not going",
+};
+
+export const ROSTER_STATUS_VARIANT: Record<EventRosterMember["status"], "neutral" | "success" | "danger"> = {
+  pending: "neutral",
+  going: "success",
+  not_going: "danger",
+};
+
 // /calendar/[eventId]'s host/admin-only attendee list (§4.6) — RSVP'd
 // members (name only, same "no raw contact info exposed" boundary as the
 // Member Directory) and anonymously-registered guests (name + email, since

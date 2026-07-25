@@ -288,6 +288,38 @@ export async function sendEventInviteEmail(
   }
 }
 
+/**
+ * Sent for a restricted event's post-creation lifecycle changes — removed
+ * from the invited list, cancelled, or rescheduled (Audience-Restricted
+ * Group Events, Objective 03) — one shared shape since all three are a
+ * single line of context plus a link back to the event, only the
+ * subject/copy differs per call site, same "one function per lifecycle
+ * family" precedent as sendMeetingRequestEmail. Best-effort, same
+ * rationale as every other function here: the Event/Notification rows
+ * already exist by the time this runs.
+ */
+export async function sendEventLifecycleEmail(
+  to: string,
+  name: string,
+  event: { subject: string; message: string; link: string },
+) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping event lifecycle email to ${to}`);
+    return;
+  }
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: event.subject,
+      text: `Hi ${name},\n\n${event.message}\n\nView it here:\n${event.link}\n\n— The NASIHA Team`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send event lifecycle email", error);
+  }
+}
+
 export async function sendContactMessageEmail(message: {
   name: string;
   email: string;

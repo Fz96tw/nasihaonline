@@ -84,3 +84,62 @@ export async function createMeetingCalendarEvent(input: {
     return { meetingUrl: null, googleEventId: null };
   }
 }
+
+/**
+ * Replaces the attendee list on a Calendar event created by
+ * createMeetingCalendarEvent() — used when a restricted Event's invited
+ * list is edited after creation (Audience-Restricted Group Events,
+ * Objective 03), so a removed invitee stops being a Google Calendar
+ * attendee too. sendUpdates: "all" makes Google email the change to
+ * whoever's still on the list. Best-effort, same non-fatal philosophy as
+ * the rest of this file: a failed/unconfigured Google call must never
+ * block the invite-list edit itself, since EventInvitee is the source of
+ * truth for who's actually invited.
+ */
+export async function updateMeetingCalendarEventAttendees(
+  googleEventId: string,
+  attendees: { email: string; name: string }[],
+): Promise<void> {
+  const auth = getOAuthClient();
+  if (!auth) {
+    console.warn("[google-calendar] Google Calendar isn't configured — skipping attendee sync");
+    return;
+  }
+
+  try {
+    const calendar = google.calendar({ version: "v3", auth });
+    await calendar.events.patch({
+      calendarId: CALENDAR_ID,
+      eventId: googleEventId,
+      sendUpdates: "all",
+      requestBody: {
+        attendees: attendees.map((attendee) => ({ email: attendee.email, displayName: attendee.name })),
+      },
+    });
+  } catch (error) {
+    console.error("[google-calendar] Failed to sync meeting calendar event attendees", error);
+  }
+}
+
+/**
+ * Deletes a Calendar event created by createMeetingCalendarEvent(), used
+ * when either party cancels an accepted meeting request. sendUpdates: "all"
+ * makes Google email both attendees a cancellation notice — same
+ * non-fatal philosophy as the rest of this file: a failed/unconfigured
+ * Google call must never block the cancellation itself, since the
+ * MeetingRequest row is the source of truth.
+ */
+export async function cancelMeetingCalendarEvent(googleEventId: string): Promise<void> {
+  const auth = getOAuthClient();
+  if (!auth) {
+    console.warn("[google-calendar] Google Calendar isn't configured — skipping event cancellation");
+    return;
+  }
+
+  try {
+    const calendar = google.calendar({ version: "v3", auth });
+    await calendar.events.delete({ calendarId: CALENDAR_ID, eventId: googleEventId, sendUpdates: "all" });
+  } catch (error) {
+    console.error("[google-calendar] Failed to cancel meeting calendar event", error);
+  }
+}

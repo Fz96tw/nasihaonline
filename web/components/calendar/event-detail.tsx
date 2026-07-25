@@ -9,14 +9,19 @@ import { Button } from "@/components/ui/button";
 import { RsvpButton } from "@/components/calendar/rsvp-button";
 import { AddToCalendarButton } from "@/components/calendar/add-to-calendar-button";
 import { EventViewCounter } from "@/components/calendar/event-view-counter";
+import { ManageInvitees } from "@/components/calendar/manage-invitees";
+import { CancelEventButton } from "@/components/calendar/cancel-event-button";
 import {
   EVENT_TYPE_LABELS,
+  ROSTER_STATUS_LABEL,
+  ROSTER_STATUS_VARIANT,
   type EventRegistrationAttendee,
   type EventRosterMember,
   type EventRsvpAttendee,
   type MemberEvent,
 } from "@/lib/events";
 import { EVENTS_FORUM_SLUG } from "@/lib/forums";
+import { EventVisibility } from "@/lib/generated/prisma/enums";
 import type { DirectoryMember } from "@/lib/members";
 import { useHasMounted } from "@/lib/use-has-mounted";
 
@@ -46,18 +51,6 @@ function formatEventDateRange(startsAt: string, endsAt: string | null) {
 }
 
 /** /calendar/[eventId] (§4.6) — single-event detail: full description, host, RSVP, and add-to-calendar. */
-const ROSTER_STATUS_LABEL: Record<EventRosterMember["status"], string> = {
-  pending: "Invited",
-  going: "Going",
-  not_going: "Not going",
-};
-
-const ROSTER_STATUS_VARIANT: Record<EventRosterMember["status"], "neutral" | "success" | "danger"> = {
-  pending: "neutral",
-  going: "success",
-  not_going: "danger",
-};
-
 export function EventDetail({
   event: initialEvent,
   canEdit,
@@ -77,6 +70,7 @@ export function EventDetail({
   const hasMounted = useHasMounted();
   const isPast = hasMounted && new Date(event.endsAt ?? event.startsAt) < new Date();
   const hostName = event.hostName ?? "NASIHA Member";
+  const isRestricted = event.visibility === EventVisibility.invited;
 
   function handleRsvpToggled(result: { rsvped: boolean; meetingUrl: string | null; attendeeCount?: number }) {
     setEvent((prev) => ({ ...prev, ...result }));
@@ -176,23 +170,28 @@ export function EventDetail({
             </Link>
           </Button>
         )}
+        {canEdit && isRestricted && <CancelEventButton eventId={event.id} title={event.title} />}
       </div>
 
       {roster ? (
-        <div className="flex flex-col gap-2 border-t pt-6">
-          <h2 className="text-sm font-semibold">Invited members ({roster.length})</h2>
-          <ul className="flex flex-col divide-y">
-            {roster.map((member) => (
-              <li key={member.userId} className="flex items-center justify-between gap-3 py-2">
-                <div className="flex items-center gap-2">
-                  <Avatar name={member.name ?? "Member"} src={member.avatarUrl} size="xs" />
-                  <span className="text-sm">{member.name ?? "A member"}</span>
-                </div>
-                <Badge variant={ROSTER_STATUS_VARIANT[member.status]}>{ROSTER_STATUS_LABEL[member.status]}</Badge>
-              </li>
-            ))}
-          </ul>
-        </div>
+        canEdit ? (
+          <ManageInvitees eventId={event.id} initialRoster={roster} />
+        ) : (
+          <div className="flex flex-col gap-2 border-t pt-6">
+            <h2 className="text-sm font-semibold">Invited members ({roster.length})</h2>
+            <ul className="flex flex-col divide-y">
+              {roster.map((member) => (
+                <li key={member.userId} className="flex items-center justify-between gap-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <Avatar name={member.name ?? "Member"} src={member.avatarUrl} size="xs" />
+                    <span className="text-sm">{member.name ?? "A member"}</span>
+                  </div>
+                  <Badge variant={ROSTER_STATUS_VARIANT[member.status]}>{ROSTER_STATUS_LABEL[member.status]}</Badge>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )
       ) : null}
 
       {canEdit && attendees ? (

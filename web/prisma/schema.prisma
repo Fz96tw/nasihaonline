@@ -666,6 +666,15 @@ enum NotificationType {
   // restricted event's host each time an invitee RSVPs going or
   // not-going (Objective 02). Community events never produce this.
   event_rsvp_response
+  // Objective 03 — sent to a member removed from a restricted event's
+  // invited list after creation (paired with email, like event_invited).
+  event_removed
+  // Objective 03 — sent to every current invitee when the host cancels a
+  // restricted event (paired with email).
+  event_cancelled
+  // Objective 03 — sent to every current invitee when the host changes a
+  // restricted event's startsAt/endsAt (paired with email).
+  event_rescheduled
 }
 
 // Homegrown in-app notification feed (§4.10) — no third-party vendor.
@@ -756,6 +765,14 @@ model Event {
   // Audience-Restricted Group Events, Objective 01 (§4.6 extension) —
   // `community` preserves every pre-existing event's behavior unchanged.
   visibility                EventVisibility @default(community)
+  // Objective 03 — soft-delete-style one-way flag (mirrors
+  // Announcement.retractedAt's existing convention) rather than a status
+  // enum, since there's nothing to transition back from. Every
+  // visibility-filtered query excludes a cancelled event entirely; the
+  // "Cancel Event" action is only exposed in the UI for a restricted
+  // event, so this never gets set on a community event today even though
+  // the field/filtering is generic.
+  cancelledAt               DateTime?
   deidentificationConfirmed Boolean         @default(false)
   createdAt                 DateTime        @default(now())
   updatedAt                 DateTime        @updatedAt

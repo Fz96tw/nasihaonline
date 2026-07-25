@@ -83,6 +83,7 @@ export async function getFeedPage(params: {
     !wants("event") ? Promise.resolve([]) : db.event.findMany({
       where: {
         ...(before ? { createdAt: { lt: before } } : {}),
+        cancelledAt: null,
         OR: [
           { visibility: EventVisibility.community },
           ...(viewerId ? [{ hostId: viewerId }, { invitees: { some: { userId: viewerId } } }] : []),
