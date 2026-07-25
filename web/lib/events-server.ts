@@ -621,11 +621,16 @@ export async function createEvent(
   // eligibility that gates mentions/Directory search (§4.5/§4.8/§4.13) —
   // ids that don't match (e.g. a Friend-tier or delisted member) are
   // silently dropped rather than erroring, same "ids that aren't eligible
-  // are simply absent" precedent as getDirectoryMembersByIds.
+  // are simply absent" precedent as getDirectoryMembersByIds. The host is
+  // excluded too — they're already implicitly "in" the event as its
+  // organizer, so being listed as an invitee as well would double-count
+  // them (their own "please RSVP" notification, a redundant EventInvitee
+  // row, a duplicate line in their own roster) — same exclusion
+  // updateEventInvitees already applies when editing the list later.
   const invitedUsers = isRestricted
     ? await db.user.findMany({
         where: {
-          id: { in: input.invitedUserIds },
+          id: { in: input.invitedUserIds, notIn: [hostId] },
           tier: { in: DIRECTORY_TIERS },
           profile: { listInDirectory: true },
         },

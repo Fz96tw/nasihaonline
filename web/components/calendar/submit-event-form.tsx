@@ -79,7 +79,14 @@ type ExistingEvent = {
  * from updateEventSchema, when editing) — same "one-time action" rationale
  * as WritePostForm's licenseConsented.
  */
-export function SubmitEventForm({ existingEvent }: { existingEvent?: ExistingEvent } = {}) {
+export function SubmitEventForm({
+  existingEvent,
+  currentUserId,
+}: {
+  existingEvent?: ExistingEvent;
+  /** Current user's id — excludes them from the invitee picker's suggestions (create mode only). */
+  currentUserId?: string;
+} = {}) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -217,7 +224,7 @@ export function SubmitEventForm({ existingEvent }: { existingEvent?: ExistingEve
               <FormItem>
                 <FormLabel>Invited members</FormLabel>
                 <FormControl>
-                  <InviteePicker value={field.value} onChange={field.onChange} />
+                  <InviteePicker value={field.value} onChange={field.onChange} excludeUserId={currentUserId} />
                 </FormControl>
                 <FormDescription>
                   Each invited member gets a notification and email asking them to RSVP.

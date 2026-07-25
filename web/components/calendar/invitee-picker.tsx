@@ -21,9 +21,12 @@ const SUGGESTION_LIMIT = 8;
 export function InviteePicker({
   value,
   onChange,
+  excludeUserId,
 }: {
   value: string[];
   onChange: (ids: string[]) => void;
+  /** The organizer's own id — excluded from suggestions since they're already implicitly part of the event as its host. */
+  excludeUserId?: string;
 }) {
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<DirectoryMember[]>([]);
@@ -43,7 +46,9 @@ export function InviteePicker({
         const payload = await res.json();
         const members: DirectoryMember[] = Array.isArray(payload?.members) ? payload.members : [];
         setSuggestions(
-          members.filter((member) => member.name && !value.includes(member.id)).slice(0, SUGGESTION_LIMIT),
+          members
+            .filter((member) => member.name && member.id !== excludeUserId && !value.includes(member.id))
+            .slice(0, SUGGESTION_LIMIT),
         );
       } catch {
         if (!cancelled) setSuggestions([]);
@@ -54,7 +59,7 @@ export function InviteePicker({
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [query, value]);
+  }, [query, value, excludeUserId]);
 
   function addMember(member: DirectoryMember) {
     if (value.includes(member.id)) return;

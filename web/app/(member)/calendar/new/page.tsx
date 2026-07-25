@@ -26,7 +26,7 @@ export default async function NewEventPage() {
         </p>
       </div>
 
-      <SubmitEventForm />
+      <SubmitEventForm currentUserId={user.id} />
     </main>
   );
 }
