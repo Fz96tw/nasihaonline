@@ -44,7 +44,13 @@ function requireDeidentificationForCaseDiscussion(
 // objective), enforced by requireRestrictedEventInvariants below rather
 // than by conditionally omitting the fields from the schema.
 function requireRestrictedEventInvariants(
-  data: { visibility: EventVisibility; invitedUserIds: string[]; meetLinkSource: "auto" | "manual"; meetingUrl: string | null },
+  data: {
+    visibility: EventVisibility;
+    invitedUserIds: string[];
+    meetLinkSource: "auto" | "manual";
+    meetingUrl: string | null;
+    createDiscussionThread: boolean;
+  },
   ctx: z.RefinementCtx,
 ) {
   if (data.visibility !== EventVisibility.invited) return;
@@ -61,6 +67,19 @@ function requireRestrictedEventInvariants(
       code: z.ZodIssueCode.custom,
       path: ["meetingUrl"],
       message: "Enter a meeting link, or switch to auto-generate.",
+    });
+  }
+  // The Events forum has no audience-restriction concept at all — a
+  // discussion thread posted there is visible to the whole community
+  // regardless of who's invited to the event, which would leak a
+  // restricted event's title (and any discussion) to everyone. Simplest
+  // correct fix is to not offer it, rather than building per-thread
+  // Forums privacy for this one case.
+  if (data.createDiscussionThread) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["createDiscussionThread"],
+      message: "Restricted events can't have a public discussion thread.",
     });
   }
 }
