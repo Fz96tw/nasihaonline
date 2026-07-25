@@ -664,9 +664,13 @@ export async function createEvent(
   // best-effort philosophy as createMeetingCalendarEvent's own callers
   // (resolveMeetingRequest): a failed/unconfigured Google call must never
   // block event creation, since the Event row is the source of truth.
+  // Auto-generate applies to every event, not just restricted ones —
+  // `invitedUsers` is [] for a community event, so this naturally reduces
+  // to "host only" as the Calendar attendee list there; a community
+  // event's real audience is discovered later via RSVP, not known upfront.
   let meetingUrl = input.meetingUrl;
   let googleEventId: string | null = null;
-  if (isRestricted && input.meetLinkSource === "auto" && host) {
+  if (input.meetLinkSource === "auto" && host) {
     const attendees = [
       { email: host.email, name: hostName },
       ...invitedUsers.map((user) => ({ email: user.email, name: user.name ?? "Member" })),

@@ -183,6 +183,51 @@ export function SubmitEventForm({ existingEvent }: { existingEvent?: ExistingEve
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
+        {!existingEvent && (
+          <FormField
+            control={form.control}
+            name="visibility"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between gap-4 rounded-md border p-4">
+                <div>
+                  <FormLabel>Restrict to specific members</FormLabel>
+                  <FormDescription>
+                    Off keeps this event visible to the whole community. On restricts it to an invited list —
+                    invisible to everyone else, including the public /events listing.
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value === EventVisibility.invited}
+                    onCheckedChange={(checked) =>
+                      field.onChange(checked ? EventVisibility.invited : EventVisibility.community)
+                    }
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        )}
+
+        {!existingEvent && isRestricted && (
+          <FormField
+            control={form.control}
+            name="invitedUserIds"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Invited members</FormLabel>
+                <FormControl>
+                  <InviteePicker value={field.value} onChange={field.onChange} />
+                </FormControl>
+                <FormDescription>
+                  Each invited member gets a notification and email asking them to RSVP.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
         <FormField
           control={form.control}
           name="title"
@@ -274,7 +319,7 @@ export function SubmitEventForm({ existingEvent }: { existingEvent?: ExistingEve
           />
         </div>
 
-        {!existingEvent && isRestricted ? (
+        {!existingEvent ? (
           <div className="flex flex-col gap-3">
             <FormField
               control={form.control}
@@ -304,7 +349,7 @@ export function SubmitEventForm({ existingEvent }: { existingEvent?: ExistingEve
                 name="meetingUrl"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Meeting link</FormLabel>
+                    <FormLabel>Meeting link{isRestricted ? "" : " (optional)"}</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="https://meet.google.com/…"
@@ -312,7 +357,9 @@ export function SubmitEventForm({ existingEvent }: { existingEvent?: ExistingEve
                         onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
                       />
                     </FormControl>
-                    <FormDescription>Shared with invited members.</FormDescription>
+                    <FormDescription>
+                      {isRestricted ? "Shared with invited members." : "Only shown to members who RSVP."}
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -335,51 +382,6 @@ export function SubmitEventForm({ existingEvent }: { existingEvent?: ExistingEve
                 </FormControl>
                 <FormDescription>
                   {isRestricted ? "Shared with invited members." : "Only shown to members who RSVP."}
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-
-        {!existingEvent && (
-          <FormField
-            control={form.control}
-            name="visibility"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-between gap-4 rounded-md border p-4">
-                <div>
-                  <FormLabel>Restrict to specific members</FormLabel>
-                  <FormDescription>
-                    Off keeps this event visible to the whole community. On restricts it to an invited list —
-                    invisible to everyone else, including the public /events listing.
-                  </FormDescription>
-                </div>
-                <FormControl>
-                  <Switch
-                    checked={field.value === EventVisibility.invited}
-                    onCheckedChange={(checked) =>
-                      field.onChange(checked ? EventVisibility.invited : EventVisibility.community)
-                    }
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-        )}
-
-        {!existingEvent && isRestricted && (
-          <FormField
-            control={form.control}
-            name="invitedUserIds"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Invited members</FormLabel>
-                <FormControl>
-                  <InviteePicker value={field.value} onChange={field.onChange} />
-                </FormControl>
-                <FormDescription>
-                  Each invited member gets a notification and email asking them to RSVP.
                 </FormDescription>
                 <FormMessage />
               </FormItem>
