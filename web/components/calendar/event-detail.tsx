@@ -12,6 +12,7 @@ import { EventViewCounter } from "@/components/calendar/event-view-counter";
 import {
   EVENT_TYPE_LABELS,
   type EventRegistrationAttendee,
+  type EventRosterMember,
   type EventRsvpAttendee,
   type MemberEvent,
 } from "@/lib/events";
@@ -45,17 +46,32 @@ function formatEventDateRange(startsAt: string, endsAt: string | null) {
 }
 
 /** /calendar/[eventId] (§4.6) — single-event detail: full description, host, RSVP, and add-to-calendar. */
+const ROSTER_STATUS_LABEL: Record<EventRosterMember["status"], string> = {
+  pending: "Invited",
+  going: "Going",
+  not_going: "Not going",
+};
+
+const ROSTER_STATUS_VARIANT: Record<EventRosterMember["status"], "neutral" | "success" | "danger"> = {
+  pending: "neutral",
+  going: "success",
+  not_going: "danger",
+};
+
 export function EventDetail({
   event: initialEvent,
   canEdit,
   attendees,
   hostProfile,
+  roster,
 }: {
   event: MemberEvent;
   canEdit: boolean;
   attendees: { rsvps: EventRsvpAttendee[]; registrations: EventRegistrationAttendee[] } | null;
   /** Host's Directory profile, if they're directory-listed and tier-eligible (§4.3/§9) — null otherwise, in which case the avatar shows initials only and isn't clickable. */
   hostProfile: DirectoryMember | null;
+  /** Full invitee roster for a restricted event (Objective 02) — visible to every invited member, not just the organizer. Null for a community event. */
+  roster: EventRosterMember[] | null;
 }) {
   const [event, setEvent] = useState(initialEvent);
   const hasMounted = useHasMounted();
@@ -161,6 +177,23 @@ export function EventDetail({
           </Button>
         )}
       </div>
+
+      {roster ? (
+        <div className="flex flex-col gap-2 border-t pt-6">
+          <h2 className="text-sm font-semibold">Invited members ({roster.length})</h2>
+          <ul className="flex flex-col divide-y">
+            {roster.map((member) => (
+              <li key={member.userId} className="flex items-center justify-between gap-3 py-2">
+                <div className="flex items-center gap-2">
+                  <Avatar name={member.name ?? "Member"} src={member.avatarUrl} size="xs" />
+                  <span className="text-sm">{member.name ?? "A member"}</span>
+                </div>
+                <Badge variant={ROSTER_STATUS_VARIANT[member.status]}>{ROSTER_STATUS_LABEL[member.status]}</Badge>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {canEdit && attendees ? (
         <div className="flex flex-col gap-4 border-t pt-6">

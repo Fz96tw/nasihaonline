@@ -1,7 +1,7 @@
 // Client-safe Events types/constants (PRD §4.6) — kept separate from
 // events-server.ts so client components can import them without pulling
 // in the "server-only" query logic.
-import { EventType, Tier } from "@/lib/generated/prisma/enums";
+import { EventType, EventVisibility, Tier } from "@/lib/generated/prisma/enums";
 
 // §11 open question #2 ("which tiers can submit events — Active only, or
 // Active + Associate? Not specified") — defaulted to Active tier per this
@@ -59,6 +59,18 @@ export type MemberEvent = EventWithRsvp & {
   forumReplyCount: number | null;
   /** Unique-visitor count for the event detail page's eye-icon (§4.6). */
   viewCount: number;
+  /** Audience-Restricted Group Events (Objective 01/02) — `community` for every event before that initiative. */
+  visibility: EventVisibility;
+};
+
+// Full per-person invitee roster for a restricted event's detail page
+// (Objective 02) — visible to every invited member, not just the
+// organizer. `pending` = invited but no RSVP row yet.
+export type EventRosterMember = {
+  userId: string;
+  name: string | null;
+  avatarUrl: string | null;
+  status: "pending" | "going" | "not_going";
 };
 
 // /calendar/[eventId]'s host/admin-only attendee list (§4.6) — RSVP'd

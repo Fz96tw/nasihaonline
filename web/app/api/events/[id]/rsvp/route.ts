@@ -21,7 +21,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
 
   try {
-    const result = await rsvpToEvent(user.id, id);
+    const result = await rsvpToEvent(user, id);
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof EventError) {

@@ -5,6 +5,7 @@ import type { UserModel } from "@/lib/generated/prisma/models/User";
 import type {
   DashboardUpcomingEvent,
   EventRegistrationAttendee,
+  EventRosterMember,
   EventRsvpAttendee,
   EventWithRsvp,
   MemberEvent,
@@ -14,10 +15,12 @@ import type {
 import { EVENTS_FORUM_SLUG } from "@/lib/forums";
 import { DIRECTORY_TIERS } from "@/lib/members";
 import { createMeetingCalendarEvent } from "@/lib/google-calendar";
+import { createNotification } from "@/lib/notifications-server";
 import { sendEventInviteEmail } from "@/lib/email";
 import {
   deleteEventHeroImage,
   getEventHeroImageUrl,
+  getProfileAvatarUrl,
   uploadEventHeroImage,
   UploadValidationError,
 } from "@/lib/storage";
@@ -179,6 +182,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
       icon: true,
       heroImageUrl: true,
       meetingUrl: true,
+      visibility: true,
       forumThread: { select: { id: true, _count: { select: { posts: true } } } },
       hostId: true,
       host: { select: { name: true } },
@@ -216,6 +220,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
       forumThreadId: event.forumThread?.id ?? null,
       forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
       viewCount: event._count.views,
+      visibility: event.visibility,
     };
   });
 }
@@ -241,6 +246,7 @@ export async function getMemberEventById(userId: string, eventId: string): Promi
       icon: true,
       heroImageUrl: true,
       meetingUrl: true,
+      visibility: true,
       forumThread: { select: { id: true, _count: { select: { posts: true } } } },
       hostId: true,
       host: { select: { name: true } },
@@ -275,7 +281,44 @@ export async function getMemberEventById(userId: string, eventId: string): Promi
     forumThreadId: event.forumThread?.id ?? null,
     forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
     viewCount: event._count.views,
+    visibility: event.visibility,
   };
+}
+
+/**
+ * Full per-person invitee roster for a restricted event's detail page
+ * (Objective 02) — every invited member, joined against their RSVP row if
+ * any. Caller enforces the access gate (same "caller enforces" convention
+ * as getEventAttendees) — the page only calls this for a restricted event
+ * it has already confirmed the viewer can see via getMemberEventById.
+ */
+export async function getEventRoster(eventId: string): Promise<EventRosterMember[]> {
+  const invitees = await db.eventInvitee.findMany({
+    where: { eventId },
+    select: {
+      userId: true,
+      user: {
+        select: {
+          name: true,
+          profile: { select: { avatarUrl: true } },
+          eventRsvps: { where: { eventId }, select: { status: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return invitees.map((invitee) => {
+    const rsvpStatus = invitee.user.eventRsvps[0]?.status;
+    const status: EventRosterMember["status"] =
+      rsvpStatus === RSVPStatus.going ? "going" : rsvpStatus === RSVPStatus.cancelled ? "not_going" : "pending";
+    return {
+      userId: invitee.userId,
+      name: invitee.user.name,
+      avatarUrl: getProfileAvatarUrl(invitee.user.profile?.avatarUrl ?? null),
+      status,
+    };
+  });
 }
 
 export async function getEventViewCount(eventId: string): Promise<number> {
@@ -798,11 +841,27 @@ export async function updateEvent(
  * once cancelled).
  */
 export async function rsvpToEvent(
-  userId: string,
+  actingUser: UserModel,
   eventId: string,
 ): Promise<{ rsvped: boolean; meetingUrl: string | null; attendeeCount: number }> {
-  const event = await db.event.findUnique({ where: { id: eventId }, select: { meetingUrl: true } });
+  const userId = actingUser.id;
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { title: true, meetingUrl: true, hostId: true, visibility: true },
+  });
   if (!event) throw new EventError(404, "Event not found.");
+
+  // RSVPing on a restricted event is gated to the organizer, an admin, or
+  // an invited member (Objective 02) — a member who isn't invited can't
+  // even see the event per Objective 01's visibility filtering, but this
+  // is the belt-and-suspenders enforcement point for the RSVP action
+  // itself, same "no caller can bypass it" rationale as the Case
+  // Discussion check in createEvent.
+  const isRestricted = event.visibility === EventVisibility.invited;
+  if (isRestricted && userId !== event.hostId && actingUser.role !== Role.admin) {
+    const invited = await db.eventInvitee.findUnique({ where: { eventId_userId: { eventId, userId } } });
+    if (!invited) throw new EventError(403, "You're not invited to this event.");
+  }
 
   const existing = await db.rSVP.findUnique({
     where: { eventId_userId: { eventId, userId } },
@@ -817,6 +876,18 @@ export async function rsvpToEvent(
     create: { eventId, userId, status: nextStatus },
     update: { status: nextStatus },
   });
+
+  // Bell-only host notification (Objective 02) — restricted events only;
+  // skipped when the host RSVPs to their own event (nothing to tell them).
+  if (isRestricted && userId !== event.hostId) {
+    const responseLabel = nextStatus === RSVPStatus.going ? "going" : "not going";
+    await createNotification({
+      recipientId: event.hostId,
+      type: NotificationType.event_rsvp_response,
+      message: `${actingUser.name ?? "A member"} RSVP'd ${responseLabel} to "${event.title}".`,
+      link: `/calendar/${eventId}`,
+    });
+  }
 
   const [goingCount, registrationCount] = await Promise.all([
     db.rSVP.count({ where: { eventId, status: RSVPStatus.going } }),

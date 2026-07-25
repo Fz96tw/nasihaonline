@@ -662,6 +662,10 @@ enum NotificationType {
   board_announcement
   survey_invitation
   event_invited
+  // Bell-only (no paired email, unlike event_invited) — sent to a
+  // restricted event's host each time an invitee RSVPs going or
+  // not-going (Objective 02). Community events never produce this.
+  event_rsvp_response
 }
 
 // Homegrown in-app notification feed (§4.10) — no third-party vendor.
