@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { KnowledgeStatus, RSVPStatus, SurveyStatus } from "@/lib/generated/prisma/enums";
+import { EventVisibility, KnowledgeStatus, RSVPStatus, SurveyStatus } from "@/lib/generated/prisma/enums";
 import { getProfileAvatarUrl, getPostHeroImageUrl, getEventHeroImageUrl, getAnnouncementHeroImageUrl, getSurveyHeroImageUrl } from "@/lib/storage";
 import { excerptFromHtml } from "@/lib/blog";
 import { withFeedRef, type FeedItem, type FeedCursor } from "@/lib/feed";
@@ -64,14 +64,30 @@ export async function getFeedPage(params: {
   pageSize?: number;
   /** Restrict to these feed types; omit/undefined for the full merged feed. */
   types?: FeedItem["type"][];
+  /**
+   * The signed-in viewer, for the events branch's audience-restriction
+   * filter (Audience-Restricted Group Events, Objective 01) — an `invited`
+   * event only ever appears in this viewer's feed if they're the organizer
+   * or an invited member. Every non-event domain is unaffected by this
+   * param; pass null only when there is genuinely no session (there's no
+   * signed-out caller of this function today, but the type stays honest).
+   */
+  viewerId: string | null;
 }): Promise<{ items: FeedItem[]; nextCursor: FeedCursor | null; hasMore: boolean }> {
   const pageSize = params.pageSize ?? DEFAULT_PAGE_SIZE;
   const before = params.cursor ? new Date(params.cursor.ts) : null;
   const wants = (type: FeedItem["type"]) => !params.types || params.types.includes(type);
+  const viewerId = params.viewerId;
 
   const [events, posts, libraryItems, forumThreads, announcements, surveys] = await Promise.all([
     !wants("event") ? Promise.resolve([]) : db.event.findMany({
-      where: before ? { createdAt: { lt: before } } : {},
+      where: {
+        ...(before ? { createdAt: { lt: before } } : {}),
+        OR: [
+          { visibility: EventVisibility.community },
+          ...(viewerId ? [{ hostId: viewerId }, { invitees: { some: { userId: viewerId } } }] : []),
+        ],
+      },
       select: {
         id: true,
         title: true,
@@ -79,6 +95,7 @@ export async function getFeedPage(params: {
         createdAt: true,
         startsAt: true,
         heroImageUrl: true,
+        visibility: true,
         host: { select: AUTHOR_SELECT },
         // Going RSVPs (members) plus EventRegistrations (non-members) —
         // same merge as getEventEngagementForAdmin's attendee/interest count.
@@ -181,7 +198,15 @@ export async function getFeedPage(params: {
       type: "event",
       id: event.id,
       title: event.title,
-      excerpt: event.description ? truncate(event.description) : "No description provided.",
+      // Restricted events only ever reach a viewer who is the organizer or
+      // an invited member (the where clause above), so this framing is
+      // always correct for whoever sees it — no per-viewer branching needed.
+      excerpt:
+        event.visibility === EventVisibility.invited
+          ? `${event.host.name ?? "The host"} has requested your attendance. Please RSVP.`
+          : event.description
+            ? truncate(event.description)
+            : "No description provided.",
       href: withFeedRef(`/calendar/${event.id}`),
       timestamp: event.createdAt.toISOString(),
       author: authorOf(event.host),

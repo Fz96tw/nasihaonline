@@ -25,10 +25,11 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { EventType } from "@/lib/generated/prisma/enums";
+import { EventType, EventVisibility } from "@/lib/generated/prisma/enums";
 import { EVENT_TYPE_LABELS } from "@/lib/events";
 import { createEventSchema, type CreateEventValues } from "@/lib/validation/event";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { InviteePicker } from "@/components/calendar/invitee-picker";
 
 const DEFAULT_VALUES: CreateEventValues = {
   title: "",
@@ -41,6 +42,9 @@ const DEFAULT_VALUES: CreateEventValues = {
   meetingUrl: null,
   deidentificationConfirmed: false,
   createDiscussionThread: false,
+  visibility: EventVisibility.community,
+  invitedUserIds: [],
+  meetLinkSource: "manual",
 };
 
 /** Converts a stored ISO timestamp to the local "YYYY-MM-DDTHH:mm" value a <input type="datetime-local"> expects. */
@@ -96,12 +100,21 @@ export function SubmitEventForm({ existingEvent }: { existingEvent?: ExistingEve
           meetingUrl: existingEvent.meetingUrl,
           deidentificationConfirmed: existingEvent.deidentificationConfirmed,
           createDiscussionThread: false,
+          // Audience isn't editable from this form (Audience-Restricted
+          // Group Events, Objective 01 scope) — editing an existing event's
+          // invited list is a later objective's dedicated UI, not this one.
+          visibility: EventVisibility.community,
+          invitedUserIds: [],
+          meetLinkSource: "manual",
         }
       : DEFAULT_VALUES,
     mode: "onTouched",
   });
 
   const isCaseDiscussion = form.watch("type") === EventType.case_discussion;
+  const visibility = form.watch("visibility");
+  const isRestricted = visibility === EventVisibility.invited;
+  const meetLinkSource = form.watch("meetLinkSource");
 
   async function onSubmit(values: CreateEventValues) {
     setSubmitting(true);
@@ -128,7 +141,12 @@ export function SubmitEventForm({ existingEvent }: { existingEvent?: ExistingEve
         "deidentificationConfirmed",
         String(isCaseDiscussion && values.deidentificationConfirmed),
       );
-      if (!existingEvent) formData.append("createDiscussionThread", String(values.createDiscussionThread));
+      if (!existingEvent) {
+        formData.append("createDiscussionThread", String(values.createDiscussionThread));
+        formData.append("visibility", values.visibility);
+        formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
+        formData.append("meetLinkSource", values.meetLinkSource);
+      }
       if (heroImage) formData.append("heroImage", heroImage);
 
       const res = await fetch(existingEvent ? `/api/events/${existingEvent.id}` : "/api/events", {
@@ -269,25 +287,97 @@ export function SubmitEventForm({ existingEvent }: { existingEvent?: ExistingEve
             )}
           />
 
+          {!(isRestricted && meetLinkSource === "auto") && (
+            <FormField
+              control={form.control}
+              name="meetingUrl"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Meeting link{isRestricted ? "" : " (optional)"}</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="https://meet.google.com/…"
+                      value={field.value ?? ""}
+                      onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {isRestricted ? "Shared with invited members." : "Only shown to members who RSVP."}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+        </div>
+
+        {!existingEvent && (
           <FormField
             control={form.control}
-            name="meetingUrl"
+            name="visibility"
             render={({ field }) => (
-              <FormItem>
-                <FormLabel>Meeting link (optional)</FormLabel>
+              <FormItem className="flex flex-row items-center justify-between gap-4 rounded-md border p-4">
+                <div>
+                  <FormLabel>Restrict to specific members</FormLabel>
+                  <FormDescription>
+                    Off keeps this event visible to the whole community. On restricts it to an invited list —
+                    invisible to everyone else, including the public /events listing.
+                  </FormDescription>
+                </div>
                 <FormControl>
-                  <Input
-                    placeholder="https://meet.google.com/…"
-                    value={field.value ?? ""}
-                    onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
+                  <Switch
+                    checked={field.value === EventVisibility.invited}
+                    onCheckedChange={(checked) =>
+                      field.onChange(checked ? EventVisibility.invited : EventVisibility.community)
+                    }
                   />
                 </FormControl>
-                <FormDescription>Only shown to members who RSVP.</FormDescription>
-                <FormMessage />
               </FormItem>
             )}
           />
-        </div>
+        )}
+
+        {!existingEvent && isRestricted && (
+          <>
+            <FormField
+              control={form.control}
+              name="invitedUserIds"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Invited members</FormLabel>
+                  <FormControl>
+                    <InviteePicker value={field.value} onChange={field.onChange} />
+                  </FormControl>
+                  <FormDescription>
+                    Each invited member gets a notification and email asking them to RSVP.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="meetLinkSource"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between gap-4 rounded-md border p-4">
+                  <div>
+                    <FormLabel>Auto-generate a Google Meet link</FormLabel>
+                    <FormDescription>
+                      Off lets you paste your own meeting link below instead.
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value === "auto"}
+                      onCheckedChange={(checked) => field.onChange(checked ? "auto" : "manual")}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+          </>
+        )}
 
         <div className="flex flex-col gap-2">
           <label htmlFor="hero-image" className="text-sm font-medium">

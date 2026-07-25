@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { EventType, Role, RSVPStatus } from "@/lib/generated/prisma/enums";
+import { EventType, EventVisibility, NotificationType, Role, RSVPStatus } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import type {
   DashboardUpcomingEvent,
@@ -12,6 +12,9 @@ import type {
   PublicEvent,
 } from "@/lib/events";
 import { EVENTS_FORUM_SLUG } from "@/lib/forums";
+import { DIRECTORY_TIERS } from "@/lib/members";
+import { createMeetingCalendarEvent } from "@/lib/google-calendar";
+import { sendEventInviteEmail } from "@/lib/email";
 import {
   deleteEventHeroImage,
   getEventHeroImageUrl,
@@ -32,7 +35,7 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 // one.
 export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
   const events = await db.event.findMany({
-    where: { startsAt: { gte: new Date() } },
+    where: { startsAt: { gte: new Date() }, visibility: EventVisibility.community },
     select: {
       id: true,
       title: true,
@@ -73,8 +76,8 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
 // startsAt filter so a past event reached via a saved/shared link still
 // resolves.
 export async function getPublicEventById(eventId: string): Promise<PublicEvent | null> {
-  const event = await db.event.findUnique({
-    where: { id: eventId },
+  const event = await db.event.findFirst({
+    where: { id: eventId, visibility: EventVisibility.community },
     select: {
       id: true,
       title: true,
@@ -112,7 +115,13 @@ export async function getPublicEventById(eventId: string): Promise<PublicEvent |
 // always yields rsvped: false.
 export async function getEventsForViewer(userId: string | null): Promise<EventWithRsvp[]> {
   const events = await db.event.findMany({
-    where: { startsAt: { gte: new Date() } },
+    where: {
+      startsAt: { gte: new Date() },
+      OR: [
+        { visibility: EventVisibility.community },
+        ...(userId ? [{ hostId: userId }, { invitees: { some: { userId } } }] : []),
+      ],
+    },
     select: {
       id: true,
       title: true,
@@ -156,6 +165,9 @@ export async function getEventsForViewer(userId: string | null): Promise<EventWi
 // (CalendarView) rather than this query doing it server-side.
 export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
   const events = await db.event.findMany({
+    where: {
+      OR: [{ visibility: EventVisibility.community }, { hostId: userId }, { invitees: { some: { userId } } }],
+    },
     select: {
       id: true,
       title: true,
@@ -213,8 +225,11 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
 // direct navigation still resolves instead of 404ing once its start time
 // has passed.
 export async function getMemberEventById(userId: string, eventId: string): Promise<MemberEvent | null> {
-  const event = await db.event.findUnique({
-    where: { id: eventId },
+  const event = await db.event.findFirst({
+    where: {
+      id: eventId,
+      OR: [{ visibility: EventVisibility.community }, { hostId: userId }, { invitees: { some: { userId } } }],
+    },
     select: {
       id: true,
       title: true,
@@ -343,7 +358,19 @@ export async function getDashboardUpcomingEvents(
   const events = await db.event.findMany({
     where: {
       startsAt: { gte: new Date() },
-      OR: [{ open: true }, { rsvps: { some: { userId, status: RSVPStatus.going } } }],
+      // A restricted event's organizer/invitees see it unconditionally —
+      // they shouldn't have to RSVP to their own private event just to
+      // have it surface here. A community event keeps its pre-existing
+      // "open OR I've RSVP'd" gate unchanged (the host isn't auto-included
+      // for a community event either, same as before this objective).
+      OR: [
+        { hostId: userId },
+        { invitees: { some: { userId } } },
+        {
+          visibility: EventVisibility.community,
+          OR: [{ open: true }, { rsvps: { some: { userId, status: RSVPStatus.going } } }],
+        },
+      ],
     },
     select: {
       id: true,
@@ -430,6 +457,14 @@ export class EventError extends Error {
  * the auto-earn Knowledge Hours trigger on Attendance (§4.4), and letting a
  * submitter name someone else as host would let them credit that person's
  * hours without their involvement.
+ *
+ * Audience-Restricted Group Events (Objective 01): when `visibility` is
+ * `invited`, `invitedUserIds` becomes the event's EventInvitee list (a
+ * community event ignores both `invitedUserIds` and `meetLinkSource`
+ * entirely — same manual-only meetingUrl behavior as before this
+ * objective). `meetLinkSource: "auto"` calls the same Google Meet
+ * integration the 1:1 MeetingRequest flow uses; `"manual"` just stores
+ * `input.meetingUrl` as-is, like every event before this objective did.
  */
 export async function createEvent(
   hostId: string,
@@ -445,6 +480,9 @@ export async function createEvent(
     deidentificationConfirmed: boolean;
     heroImage: File | null;
     createDiscussionThread: boolean;
+    visibility: EventVisibility;
+    invitedUserIds: string[];
+    meetLinkSource: "auto" | "manual";
   },
 ): Promise<{ id: string }> {
   const startsAt = new Date(input.startsAt);
@@ -470,6 +508,30 @@ export async function createEvent(
     throw new EventError(400, "Case Discussion events require the de-identification confirmation.");
   }
 
+  const isRestricted = input.visibility === EventVisibility.invited;
+
+  // Belt-and-suspenders, same rationale as the Case Discussion check above —
+  // createEventSchema already requires at least one invitee for a restricted
+  // event, but this is the one place no caller can bypass it. Invitees are
+  // re-resolved against the same listInDirectory + DIRECTORY_TIERS
+  // eligibility that gates mentions/Directory search (§4.5/§4.8/§4.13) —
+  // ids that don't match (e.g. a Friend-tier or delisted member) are
+  // silently dropped rather than erroring, same "ids that aren't eligible
+  // are simply absent" precedent as getDirectoryMembersByIds.
+  const invitedUsers = isRestricted
+    ? await db.user.findMany({
+        where: {
+          id: { in: input.invitedUserIds },
+          tier: { in: DIRECTORY_TIERS },
+          profile: { listInDirectory: true },
+        },
+        select: { id: true, email: true, name: true },
+      })
+    : [];
+  if (isRestricted && invitedUsers.length === 0) {
+    throw new EventError(400, "Select at least one member to invite.");
+  }
+
   let eventsForumId: string | null = null;
   if (input.createDiscussionThread) {
     const eventsForum = await db.forum.findUnique({ where: { slug: EVENTS_FORUM_SLUG }, select: { id: true } });
@@ -491,6 +553,31 @@ export async function createEvent(
     }
   }
 
+  const host = await db.user.findUnique({ where: { id: hostId }, select: { email: true, name: true } });
+  const hostName = host?.name ?? "A member";
+
+  // External network call — kept outside the transaction below, same
+  // best-effort philosophy as createMeetingCalendarEvent's own callers
+  // (resolveMeetingRequest): a failed/unconfigured Google call must never
+  // block event creation, since the Event row is the source of truth.
+  let meetingUrl = input.meetingUrl;
+  let googleEventId: string | null = null;
+  if (isRestricted && input.meetLinkSource === "auto" && host) {
+    const attendees = [
+      { email: host.email, name: hostName },
+      ...invitedUsers.map((user) => ({ email: user.email, name: user.name ?? "Member" })),
+    ];
+    const created = await createMeetingCalendarEvent({
+      topic: input.title,
+      startsAt,
+      durationMinutes: endsAt ? Math.round((endsAt.getTime() - startsAt.getTime()) / 60_000) : undefined,
+      attendees,
+      description: input.description ?? undefined,
+    });
+    meetingUrl = created.meetingUrl;
+    googleEventId = created.googleEventId;
+  }
+
   const event = await db.$transaction(async (tx) => {
     const created = await tx.event.create({
       data: {
@@ -503,7 +590,9 @@ export async function createEvent(
         open: input.open,
         icon: input.icon,
         heroImageUrl,
-        meetingUrl: input.meetingUrl,
+        meetingUrl,
+        googleEventId,
+        visibility: input.visibility,
         deidentificationConfirmed: input.deidentificationConfirmed,
       },
       select: { id: true },
@@ -526,8 +615,42 @@ export async function createEvent(
       });
     }
 
+    if (invitedUsers.length > 0) {
+      await tx.eventInvitee.createMany({
+        data: invitedUsers.map((user) => ({ eventId: created.id, userId: user.id })),
+      });
+
+      const link = `/calendar/${created.id}`;
+      const message = `${hostName} has requested your attendance at "${input.title}". Please RSVP.`;
+      await tx.notification.createMany({
+        data: invitedUsers.map((user) => ({
+          recipientId: user.id,
+          type: NotificationType.event_invited,
+          message,
+          link,
+        })),
+      });
+    }
+
     return created;
   });
+
+  // Best-effort, same rationale as every other email in lib/email.ts — the
+  // Event/EventInvitee/Notification rows already exist by this point, so a
+  // failed/unconfigured send must not undo the creation.
+  if (invitedUsers.length > 0) {
+    const link = `${APP_URL}/calendar/${event.id}`;
+    await Promise.allSettled(
+      invitedUsers.map((user) =>
+        sendEventInviteEmail(user.email, user.name ?? "there", {
+          hostName,
+          title: input.title,
+          startsAt,
+          link,
+        }),
+      ),
+    );
+  }
 
   return { id: event.id };
 }

@@ -250,6 +250,44 @@ export async function sendMeetingRequestEmail(
   }
 }
 
+/**
+ * Sent to each invitee when an organizer restricts a new Event to a specific
+ * list of members (Audience-Restricted Group Events initiative, Objective
+ * 01) — always paired with an in-app event_invited Notification, same
+ * two-channel pattern as sendMeetingRequestEmail. Copy deliberately names
+ * the host and event and asks the recipient to RSVP rather than using
+ * generic "you were invited" language — confirmed requirement, not a
+ * stylistic choice. Best-effort, same rationale as every other function
+ * here: the Event/EventInvitee/Notification rows already exist by the time
+ * this runs.
+ */
+export async function sendEventInviteEmail(
+  to: string,
+  name: string,
+  event: { hostName: string; title: string; startsAt: Date; link: string },
+) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping event invite email to ${to}`);
+    return;
+  }
+
+  const when = event.startsAt.toLocaleString("en-US", {
+    dateStyle: "full",
+    timeStyle: "short",
+  });
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: `You're invited: ${event.title}`,
+      text: `Hi ${name},\n\n${event.hostName} has requested your attendance at "${event.title}" on ${when}. Please RSVP.\n\nView details and RSVP here:\n${event.link}\n\n— The NASIHA Team`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send event invite email", error);
+  }
+}
+
 export async function sendContactMessageEmail(message: {
   name: string;
   email: string;

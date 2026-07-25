@@ -5,8 +5,9 @@ import { decodeFeedCursor, isFeedItemType } from "@/lib/feed";
 
 /** GET /api/whats-new — "Load more" pagination for the What's New feed (member-only, no tier restriction). */
 export async function GET(request: NextRequest) {
+  let user;
   try {
-    await requireUser();
+    user = await requireUser();
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
     throw error;
@@ -14,6 +15,6 @@ export async function GET(request: NextRequest) {
 
   const cursor = decodeFeedCursor(request.nextUrl.searchParams.get("cursor"));
   const type = request.nextUrl.searchParams.get("type");
-  const page = await getFeedPage({ cursor, types: isFeedItemType(type) ? [type] : undefined });
+  const page = await getFeedPage({ cursor, types: isFeedItemType(type) ? [type] : undefined, viewerId: user.id });
   return NextResponse.json(page);
 }

@@ -25,6 +25,7 @@ export default async function WhatsNewPage({
   const { items, nextCursor, hasMore } = await getFeedPage({
     cursor: null,
     types: activeType ? [activeType] : undefined,
+    viewerId: user.id,
   });
 
   const filterLinkClasses = (isActive: boolean) =>

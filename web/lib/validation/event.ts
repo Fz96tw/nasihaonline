@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { EventType } from "@/lib/generated/prisma/enums";
+import { EventType, EventVisibility } from "@/lib/generated/prisma/enums";
 
 // Shared by createEventSchema and updateEventSchema below — startsAt/endsAt
 // are ISO strings (converted from the browser's datetime-local input
@@ -38,13 +38,46 @@ function requireDeidentificationForCaseDiscussion(
   }
 }
 
+// Audience-Restricted Group Events, Objective 01. `invitedUserIds`/
+// `meetLinkSource` only matter when visibility is `invited` — a community
+// event ignores both (same manual-only meetingUrl behavior as before this
+// objective), enforced by requireRestrictedEventInvariants below rather
+// than by conditionally omitting the fields from the schema.
+function requireRestrictedEventInvariants(
+  data: { visibility: EventVisibility; invitedUserIds: string[]; meetLinkSource: "auto" | "manual"; meetingUrl: string | null },
+  ctx: z.RefinementCtx,
+) {
+  if (data.visibility !== EventVisibility.invited) return;
+
+  if (data.invitedUserIds.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["invitedUserIds"],
+      message: "Select at least one member to invite.",
+    });
+  }
+  if (data.meetLinkSource === "manual" && !data.meetingUrl) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["meetingUrl"],
+      message: "Enter a meeting link, or switch to auto-generate.",
+    });
+  }
+}
+
 /**
  * POST /api/events body shape — "Submit Event" (§4.6). Shared between the
  * client form (zodResolver) and the API route's server-side parse.
  */
 export const createEventSchema = eventFieldsSchema
-  .extend({ createDiscussionThread: z.boolean() })
-  .superRefine(requireDeidentificationForCaseDiscussion);
+  .extend({
+    createDiscussionThread: z.boolean(),
+    visibility: z.nativeEnum(EventVisibility),
+    invitedUserIds: z.array(z.string()),
+    meetLinkSource: z.enum(["auto", "manual"]),
+  })
+  .superRefine(requireDeidentificationForCaseDiscussion)
+  .superRefine(requireRestrictedEventInvariants);
 
 export type CreateEventValues = z.infer<typeof createEventSchema>;
 

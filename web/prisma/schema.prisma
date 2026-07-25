@@ -30,24 +30,24 @@ enum Tier {
 }
 
 model User {
-  id          String     @id @default(cuid())
-  clerkUserId String     @unique
-  email       String     @unique
-  name        String?
-  role        Role       @default(applicant)
-  tier        Tier?
+  id                        String     @id @default(cuid())
+  clerkUserId               String     @unique
+  email                     String     @unique
+  name                      String?
+  role                      Role       @default(applicant)
+  tier                      Tier?
   // Trust & Safety state (§4.15) — deliberately separate from role/tier: a
   // suspended member is blocked from login/member routes (enforced in app
   // code, not here) but their historical ledger/content rows are untouched.
-  suspended   Boolean    @default(false)
-  suspendedAt DateTime?
+  suspended                 Boolean    @default(false)
+  suspendedAt               DateTime?
   // First-sign-in (not registration) welcome shout-out fire-once guard —
   // set atomically in getSessionUser() so concurrent requests can't double-post.
   welcomeAnnouncementSentAt DateTime?
-  profile     Profile?
+  profile                   Profile?
   // Denormalized donation attribution only (§4.14) — never joined against
   // for Knowledge Hours/tier logic. See Donation model for the guarantee.
-  donations   Donation[]
+  donations                 Donation[]
 
   // Knowledge Hours ledger (§4.4) — every relation named since a single
   // user can be the balance-holder, the actor/counterpart on the
@@ -70,16 +70,17 @@ model User {
   // Events (§4.6) — hostId is required and un-cascaded on delete, same
   // convention as ContributionEvent.actorId, since a host's past events
   // are historical record even if their account is later removed.
-  hostedEvents     Event[]      @relation("EventHost")
-  eventRsvps       RSVP[]       @relation("EventRsvp")
-  eventAttendances Attendance[] @relation("EventAttendance")
+  hostedEvents     Event[]        @relation("EventHost")
+  eventRsvps       RSVP[]         @relation("EventRsvp")
+  eventAttendances Attendance[]   @relation("EventAttendance")
+  eventInvitations EventInvitee[] @relation("EventInvitee")
 
   // Blog / Knowledge Library / Forums (§4.8/§4.9/§4.13).
-  postsAuthored             Post[]          @relation("PostAuthor")
-  postComments              PostComment[]   @relation("PostCommentAuthor")
-  knowledgeItemsContributed KnowledgeItem[] @relation("KnowledgeContributor")
-  forumThreads              ForumThread[]   @relation("ForumThreadAuthor")
-  forumPosts                ForumPost[]     @relation("ForumPostAuthor")
+  postsAuthored             Post[]              @relation("PostAuthor")
+  postComments              PostComment[]       @relation("PostCommentAuthor")
+  knowledgeItemsContributed KnowledgeItem[]     @relation("KnowledgeContributor")
+  forumThreads              ForumThread[]       @relation("ForumThreadAuthor")
+  forumPosts                ForumPost[]         @relation("ForumPostAuthor")
   forumFollows              ForumFollow[]
   threadViews               ThreadView[]
   eventViews                EventView[]
@@ -139,9 +140,9 @@ model TierHistory {
 // the full Profile domain (PRD §4.3 — avatar upload, directory prefs, skills)
 // has a real record to extend rather than needing a backfill later.
 model Profile {
-  id                    String         @id @default(cuid())
-  userId                String         @unique
-  user                  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String                    @id @default(cuid())
+  userId                String                    @unique
+  user                  User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
   bio                   String?
   // MinIO object key (not a servable URL — see getProfileAvatarUrl in lib/storage.ts),
   // same convention as TeamMember.photoUrl.
@@ -155,19 +156,19 @@ model Profile {
   // Free-text fallback only, for expertise entries that don't map to a
   // seeded Skill tag (PRD §4.3/§7.3) — tagged expertise lives in
   // ProfileSkill. Not the source of truth for Directory tag filtering.
-  expertiseAreas        String[]       @default([])
+  expertiseAreas        String[]                  @default([])
   learningTopics        String?
-  interestAreas         InterestArea[] @default([])
+  interestAreas         InterestArea[]            @default([])
   // How the member can participate (§3.1) — collected at application time
   // only until now; also editable here since availability changes over time.
   availability          ApplicationAvailability[] @default([])
   skills                ProfileSkill[]
   // Directory visibility prefs (§4.3/§4.5/§9) — enforced server-side in
   // lib/members-server.ts, not just hidden client-side.
-  listInDirectory       Boolean        @default(true)
-  showSpecialtyLocation Boolean        @default(true)
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
+  listInDirectory       Boolean                   @default(true)
+  showSpecialtyLocation Boolean                   @default(true)
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
 
   @@map("profiles")
 }
@@ -549,6 +550,11 @@ enum MeetingRequestStatus {
   accepted
   declined
   rescheduled
+  // Either party may cancel an already-accepted meeting (unlike decline,
+  // which is the recipient's pre-acceptance response to a pending request).
+  // Deletes the Google Calendar event; does not reverse the ContributionLedger
+  // rows acceptance already posted.
+  cancelled
 }
 
 // Directory-originated meeting request (§4.7) — always two-party, no
@@ -626,19 +632,24 @@ model InboxMessage {
 }
 
 // §4.10's notification types this objective's entities can produce
-// directly; the remaining types (event/digest/board announcement) get
+// directly; the remaining types (digest/board announcement) get
 // added when those domains land in later phases. blog_comment/
 // forum_reply_mention/resource_review_update were added once Blog,
 // Knowledge Library, and Forums (§4.8/§4.9/§4.13) landed in Phase 5.
 // digest/board_announcement added in Phase 6 (§4.10) — digest batching and
 // announcement-sending jobs are separate later objectives; this only adds
 // the enum values NotificationPreference/Announcement need to reference.
+// event_invited added for the audience-restricted group-events initiative
+// (Objective 01) — sent to each invitee when an organizer restricts an
+// Event to a specific list rather than the whole community; unlike
+// meeting_request_*, community/open events never produce a Notification.
 enum NotificationType {
   inbox_message
   meeting_request_received
   meeting_request_accepted
   meeting_request_declined
   meeting_request_rescheduled
+  meeting_request_cancelled
   contribution_awarded
   blog_comment
   forum_reply_mention
@@ -650,6 +661,7 @@ enum NotificationType {
   digest
   board_announcement
   survey_invitation
+  event_invited
 }
 
 // Homegrown in-app notification feed (§4.10) — no third-party vendor.
@@ -692,6 +704,18 @@ enum RSVPStatus {
   cancelled
 }
 
+// "Audience-Restricted Group Events" initiative, Objective 01. `community`
+// (the only behavior that existed before this) is visible to the whole
+// membership, unconditionally; `invited` is visible only to the host and
+// the members listed in EventInvitee — enforced in every member-facing
+// query in lib/events-server.ts/lib/feed-server.ts, never in the DB layer.
+// Admin-facing reporting (getEventEngagementForAdmin) is deliberately
+// exempt from this restriction.
+enum EventVisibility {
+  community
+  invited
+}
+
 // Distinguishes a host's attendance (the §4.4/§4.6 auto-earn trigger) from
 // a regular attendee's attendance record within the same table.
 enum AttendanceRole {
@@ -707,35 +731,48 @@ enum AttendanceRole {
 // pattern as MembershipApplication's phase-conditional required fields),
 // since the rule depends on `type` and isn't expressible as a DB constraint.
 model Event {
-  id                        String    @id @default(cuid())
+  id                        String          @id @default(cuid())
   title                     String
   description               String?
   type                      EventType
   hostId                    String
-  host                      User      @relation("EventHost", fields: [hostId], references: [id])
+  host                      User            @relation("EventHost", fields: [hostId], references: [id])
   startsAt                  DateTime
   endsAt                    DateTime?
-  open                      Boolean   @default(false)
+  open                      Boolean         @default(false)
   icon                      String?
   heroImageUrl              String?
   meetingUrl                String?
-  deidentificationConfirmed Boolean   @default(false)
-  createdAt                 DateTime  @default(now())
-  updatedAt                 DateTime  @updatedAt
+  // Set only when meetingUrl was auto-generated via createMeetingCalendarEvent
+  // (google-calendar.ts) for an `invited`-visibility event — needed so a
+  // later objective (invite-list edits, cancel/reschedule) can update or
+  // delete the underlying Google Calendar event. Null for a manually-entered
+  // meetingUrl or for community events, which never call Google.
+  googleEventId             String?
+  // Audience-Restricted Group Events, Objective 01 (§4.6 extension) —
+  // `community` preserves every pre-existing event's behavior unchanged.
+  visibility                EventVisibility @default(community)
+  deidentificationConfirmed Boolean         @default(false)
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
 
   recurrence    EventRecurrence?
   rsvps         RSVP[]
   attendances   Attendance[]
   registrations EventRegistration[]
+  // Only populated for visibility = invited — who was asked, distinct from
+  // RSVP (who responded). Supports add/remove after creation (a later
+  // objective), not just bulk-insert at createEvent() time.
+  invitees      EventInvitee[]
   // Optional discussion thread in the seeded "Events" forum (EVENTS_FORUM_SLUG,
   // lib/forums.ts), opted into at creation time. The FK lives on ForumThread
   // (below) rather than here so createEvent can create the Event first and
   // still know its id when posting the thread's linking first post.
-  forumThread ForumThread?
+  forumThread   ForumThread?
   // Unique-visitor count for the event detail page's eye-icon (mirrors
   // ThreadView) — events are member-only like forums, so this dedupes on
   // real userId rather than an opaque viewer key like PostView does.
-  views       EventView[]
+  views         EventView[]
 
   @@index([startsAt])
   @@map("events")
@@ -790,6 +827,24 @@ model RSVP {
   @@unique([eventId, userId])
   @@index([userId])
   @@map("rsvps")
+}
+
+// Who was invited to a visibility = invited Event (§4.6 extension, Objective
+// 01) — distinct from RSVP (who responded). One row per invited member;
+// rows are added/removed independently of RSVP, which a later objective
+// creates/deletes in step with this table (removing an invitee also drops
+// their RSVP, if any).
+model EventInvitee {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("EventInvitee", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, userId])
+  @@index([userId])
+  @@map("event_invitees")
 }
 
 // Captures a non-member's email (and optional name) when they register
@@ -899,9 +954,9 @@ model Post {
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
-  tags     PostTagOnPost[]
-  comments PostComment[]
-  views    PostView[]
+  tags              PostTagOnPost[]
+  comments          PostComment[]
+  views             PostView[]
   // The other direction of ContributionEvent.postId.
   contributionEvent ContributionEvent?
 
@@ -1037,19 +1092,19 @@ model KnowledgeItem {
   createdAt                 DateTime             @default(now())
   updatedAt                 DateTime             @updatedAt
 
-  tags        KnowledgeItemTag[]
-  attachments KnowledgeAttachment[]
+  tags              KnowledgeItemTag[]
+  attachments       KnowledgeAttachment[]
   // On-demand discussion thread in the Research & Resources forum (§4.9),
   // started by any member from /library/[id]'s "Start a Discussion" button
   // — unlike Event's opt-in-at-creation checkbox, since not every resource
   // warrants discussion. The FK lives on ForumThread, same split as Event.
-  forumThread ForumThread?
+  forumThread       ForumThread?
   // The other direction of ContributionEvent.knowledgeItemId.
   contributionEvent ContributionEvent?
   // Unique-visitor count for the item detail page's eye-icon (mirrors
   // EventView) — the Library is member-only like Events, so this dedupes on
   // real userId rather than an opaque viewer key like PostView does.
-  views KnowledgeItemView[]
+  views             KnowledgeItemView[]
 
   @@index([contributorId])
   @@index([categoryId])
@@ -1379,12 +1434,12 @@ enum SurveyQuestionType {
 // auto-close job (queued before a reopen) can no-op instead of closing a
 // survey the admin just reopened — see lib/queues/survey-queue.ts.
 model Survey {
-  id          String       @id @default(cuid())
-  title       String
-  description String?
-  authorId    String
-  author      User         @relation("SurveyAuthor", fields: [authorId], references: [id])
-  status      SurveyStatus @default(draft)
+  id           String       @id @default(cuid())
+  title        String
+  description  String?
+  authorId     String
+  author       User         @relation("SurveyAuthor", fields: [authorId], references: [id])
+  status       SurveyStatus @default(draft)
   // MinIO object key in the attachments/ bucket, same pattern as
   // Announcement.heroImageUrl/Post.heroImageUrl — a single optional cover
   // image, shown on the compose/edit form, the invite email, the public
@@ -1483,8 +1538,8 @@ model SurveyAnswer {
   // cascade paths in a single DELETE, and a Restrict here would race
   // against that (Question's delete blocked by an Answer that the other
   // path hasn't removed yet).
-  question SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  value    String[] // 1 element except multi_choice, which can have several
+  question   SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  value      String[] // 1 element except multi_choice, which can have several
 
   @@unique([responseId, questionId])
   @@map("survey_answers")

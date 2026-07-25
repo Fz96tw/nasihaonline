@@ -32,6 +32,21 @@ export async function POST(request: Request) {
   }
 
   const formData = await request.formData();
+  // invitedUserIds travels as a JSON-encoded array within the same
+  // multipart body as everything else — falls back to [] for a malformed
+  // value rather than erroring, same "invalid input, not invalid request"
+  // handling as every other field here (the schema itself rejects an empty
+  // list for a restricted event).
+  let invitedUserIds: unknown = [];
+  const invitedUserIdsRaw = formData.get("invitedUserIds");
+  if (typeof invitedUserIdsRaw === "string" && invitedUserIdsRaw.length > 0) {
+    try {
+      invitedUserIds = JSON.parse(invitedUserIdsRaw);
+    } catch {
+      invitedUserIds = [];
+    }
+  }
+
   const parsed = createEventSchema.safeParse({
     title: formData.get("title"),
     description: formData.get("description") || null,
@@ -43,6 +58,9 @@ export async function POST(request: Request) {
     meetingUrl: formData.get("meetingUrl") || null,
     deidentificationConfirmed: formData.get("deidentificationConfirmed") === "true",
     createDiscussionThread: formData.get("createDiscussionThread") === "true",
+    visibility: formData.get("visibility") || "community",
+    invitedUserIds,
+    meetLinkSource: formData.get("meetLinkSource") || "manual",
   });
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
