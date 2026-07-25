@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
+import { getEventAttendanceChecklist } from "@/lib/attendance-server";
 import { getEventAttendees, getEventRoster, getMemberEventById } from "@/lib/events-server";
 import { getDirectoryMemberById } from "@/lib/members-server";
 import { EventDetail } from "@/components/calendar/event-detail";
@@ -28,17 +29,29 @@ export default async function EventDetailPage({ params }: { params: { eventId: s
   // means the viewer is the organizer or an invited member (getMemberEventById's
   // own visibility gate), so no further permission check is needed here.
   const isRestricted = event.visibility === EventVisibility.invited;
-  const [attendees, hostProfile, roster] = await Promise.all([
+  // Attendance checklist (Objective 04) — host/admin only, and only once
+  // the event has actually happened, same startsAt < now gate the admin
+  // queue's getPastEventsForAttendance() already uses.
+  const isPast = new Date(event.startsAt) < new Date();
+  const [attendees, hostProfile, roster, attendanceChecklist] = await Promise.all([
     canEdit ? getEventAttendees(event.id) : Promise.resolve(null),
     getDirectoryMemberById(event.hostId),
     isRestricted ? getEventRoster(event.id) : Promise.resolve(null),
+    canEdit && isRestricted && isPast ? getEventAttendanceChecklist(event.id) : Promise.resolve(null),
   ]);
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
       <BackLink fallbackHref="/calendar" />
 
-      <EventDetail event={event} canEdit={canEdit} attendees={attendees} hostProfile={hostProfile} roster={roster} />
+      <EventDetail
+        event={event}
+        canEdit={canEdit}
+        attendees={attendees}
+        hostProfile={hostProfile}
+        roster={roster}
+        attendanceChecklist={attendanceChecklist}
+      />
     </main>
   );
 }

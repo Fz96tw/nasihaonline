@@ -88,6 +88,17 @@ export const ROSTER_STATUS_VARIANT: Record<EventRosterMember["status"], "neutral
   not_going: "danger",
 };
 
+// Host-facing post-event attendance checklist for a restricted event
+// (Objective 04) — every invited member, flagged with whether their
+// attendee-role Attendance row (and confirmed Knowledge Hours earn)
+// already exists.
+export type AttendanceChecklistMember = {
+  userId: string;
+  name: string | null;
+  avatarUrl: string | null;
+  recorded: boolean;
+};
+
 // /calendar/[eventId]'s host/admin-only attendee list (§4.6) — RSVP'd
 // members (name only, same "no raw contact info exposed" boundary as the
 // Member Directory) and anonymously-registered guests (name + email, since

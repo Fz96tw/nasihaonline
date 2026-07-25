@@ -11,10 +11,12 @@ import { AddToCalendarButton } from "@/components/calendar/add-to-calendar-butto
 import { EventViewCounter } from "@/components/calendar/event-view-counter";
 import { ManageInvitees } from "@/components/calendar/manage-invitees";
 import { CancelEventButton } from "@/components/calendar/cancel-event-button";
+import { AttendanceChecklist } from "@/components/calendar/attendance-checklist";
 import {
   EVENT_TYPE_LABELS,
   ROSTER_STATUS_LABEL,
   ROSTER_STATUS_VARIANT,
+  type AttendanceChecklistMember,
   type EventRegistrationAttendee,
   type EventRosterMember,
   type EventRsvpAttendee,
@@ -57,6 +59,7 @@ export function EventDetail({
   attendees,
   hostProfile,
   roster,
+  attendanceChecklist,
 }: {
   event: MemberEvent;
   canEdit: boolean;
@@ -65,6 +68,8 @@ export function EventDetail({
   hostProfile: DirectoryMember | null;
   /** Full invitee roster for a restricted event (Objective 02) — visible to every invited member, not just the organizer. Null for a community event. */
   roster: EventRosterMember[] | null;
+  /** Host/admin-facing attendance checklist (Objective 04) — non-null only once a restricted event's startsAt has passed and the viewer can edit it. */
+  attendanceChecklist: AttendanceChecklistMember[] | null;
 }) {
   const [event, setEvent] = useState(initialEvent);
   const hasMounted = useHasMounted();
@@ -224,6 +229,10 @@ export function EventDetail({
             )}
           </div>
         </div>
+      ) : null}
+
+      {attendanceChecklist ? (
+        <AttendanceChecklist eventId={event.id} initialMembers={attendanceChecklist} />
       ) : null}
     </div>
   );
