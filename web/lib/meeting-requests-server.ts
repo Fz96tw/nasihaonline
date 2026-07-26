@@ -9,7 +9,7 @@ import {
 } from "@/lib/generated/prisma/enums";
 import type { MeetingRequestModel } from "@/lib/generated/prisma/models/MeetingRequest";
 import { sendMeetingRequestEmail } from "@/lib/email";
-import { createMeetingCalendarEvent } from "@/lib/google-calendar";
+import { cancelMeetingCalendarEvent, createMeetingCalendarEvent } from "@/lib/google-calendar";
 import { INBOX_TIERS } from "@/lib/members";
 import { createNotification } from "@/lib/notifications-server";
 
@@ -71,15 +71,21 @@ export async function createMeetingRequest(
   });
 
   const link = `/inbox?item=${meetingRequest.id}`;
+  const notificationMessage = `${sender?.name ?? "A member"} requested a meeting: "${input.topic}"`;
   await createNotification({
     recipientId: input.recipientId,
     type: NotificationType.meeting_request_received,
-    message: `${sender?.name ?? "A member"} requested a meeting: "${input.topic}"`,
+    message: notificationMessage,
     link,
   });
+  // The email gets a fuller note than the terse in-app Notification.message
+  // — at this pending stage there's no Meet link yet (Google only creates
+  // the event on acceptance, in resolveMeetingRequest), so this reassures
+  // the recipient it *will* be one rather than showing a link that doesn't
+  // exist yet.
   await sendMeetingRequestEmail(recipient.email, recipient.name ?? "there", {
     subject: `New meeting request: ${input.topic}`,
-    message: `${sender?.name ?? "A member"} requested a meeting: "${input.topic}"`,
+    message: `${notificationMessage} If you accept, a Google Meet video link will be created automatically and emailed to you both.`,
     link: `${APP_URL}${link}`,
   });
 
@@ -89,7 +95,101 @@ export async function createMeetingRequest(
 type ResolveAction =
   | { action: "accept"; selectedTime?: string }
   | { action: "decline" }
-  | { action: "reschedule"; proposedTimes: string[]; message: string | null };
+  | { action: "reschedule"; proposedTimes: string[]; message: string | null }
+  | { action: "cancel" }
+  | { action: "edit"; topic: string; message: string | null };
+
+/**
+ * Cancels a meeting request (§4.7 follow-up), in either of two states with
+ * different permission rules:
+ *  - `pending`: only the sender may withdraw their own request — the
+ *    recipient already has "decline" for this case, so allowing them to
+ *    "cancel" too would just be a confusing second path to the same thing.
+ *    No Google event exists yet at this stage.
+ *  - `accepted`: either party may cancel — deletes the Google Calendar
+ *    event (Google's own cancellation email covers both attendees, same
+ *    no-duplicate-email rationale as acceptance).
+ * Any other status (declined/rescheduled/already cancelled) is rejected.
+ * Never touches the ContributionLedger rows acceptance already posted —
+ * reversing those is a separate, more invasive decision this doesn't make.
+ */
+async function cancelMeetingRequest(
+  meetingRequest: MeetingRequestModel,
+  actingUserId: string,
+): Promise<MeetingRequestModel> {
+  let otherPartyId: string;
+
+  if (meetingRequest.status === MeetingRequestStatus.pending) {
+    if (meetingRequest.senderId !== actingUserId) {
+      throw new MeetingRequestError(403, "Only the requester can withdraw a pending meeting request.");
+    }
+    otherPartyId = meetingRequest.recipientId;
+  } else if (meetingRequest.status === MeetingRequestStatus.accepted) {
+    if (meetingRequest.senderId !== actingUserId && meetingRequest.recipientId !== actingUserId) {
+      throw new MeetingRequestError(403, "You don't have access to this meeting request.");
+    }
+    otherPartyId =
+      meetingRequest.senderId === actingUserId ? meetingRequest.recipientId : meetingRequest.senderId;
+  } else {
+    throw new MeetingRequestError(409, `This meeting request can't be cancelled (it's ${meetingRequest.status}).`);
+  }
+
+  const actor = await db.user.findUnique({ where: { id: actingUserId }, select: { name: true } });
+  const actorName = actor?.name ?? "A member";
+  const message =
+    meetingRequest.status === MeetingRequestStatus.pending
+      ? `${actorName} withdrew their meeting request: "${meetingRequest.topic}"`
+      : `${actorName} cancelled the meeting: "${meetingRequest.topic}"`;
+  const link = `/inbox?item=${meetingRequest.id}`;
+
+  // External network call — kept outside the DB transaction, same
+  // best-effort philosophy as createMeetingCalendarEvent. Only reachable
+  // for the `accepted` branch above — a pending request never had one.
+  if (meetingRequest.googleEventId) {
+    await cancelMeetingCalendarEvent(meetingRequest.googleEventId);
+  }
+
+  return db.$transaction(async (tx) => {
+    const updated = await tx.meetingRequest.update({
+      where: { id: meetingRequest.id },
+      data: { status: MeetingRequestStatus.cancelled },
+    });
+    await createNotification(
+      { recipientId: otherPartyId, type: NotificationType.meeting_request_cancelled, message, link },
+      tx,
+    );
+    return updated;
+  });
+}
+
+/**
+ * Lets the sender correct/expand their own request's topic or message
+ * while the interaction is still open (pending, or rescheduled — the
+ * recipient's counter-proposal hasn't been accepted/declined yet either
+ * way). No notification/email: this is a text correction, not a new
+ * lifecycle event like accept/decline/cancel, so the recipient just sees
+ * the updated content whenever they next open the still-open item.
+ */
+async function editMeetingRequest(
+  meetingRequest: MeetingRequestModel,
+  actingUserId: string,
+  input: { topic: string; message: string | null },
+): Promise<MeetingRequestModel> {
+  if (meetingRequest.senderId !== actingUserId) {
+    throw new MeetingRequestError(403, "Only the requester can edit this meeting request.");
+  }
+  if (
+    meetingRequest.status !== MeetingRequestStatus.pending &&
+    meetingRequest.status !== MeetingRequestStatus.rescheduled
+  ) {
+    throw new MeetingRequestError(409, `This meeting request can't be edited (it's ${meetingRequest.status}).`);
+  }
+
+  return db.meetingRequest.update({
+    where: { id: meetingRequest.id },
+    data: { topic: input.topic, message: input.message },
+  });
+}
 
 /**
  * Resolves the recipient's chosen time into one of the request's own
@@ -115,7 +215,9 @@ function resolveScheduledTime(meetingRequest: MeetingRequestModel, selectedTime:
 /**
  * Applies the recipient's response to a pending meeting request (§4.7):
  * accept, decline, or propose a new time. Only the recipient may act — the
- * requester just watches the status change.
+ * requester just watches the status change. `cancel` and `edit` are the
+ * exceptions — see cancelMeetingRequest/editMeetingRequest — dispatched
+ * here but each with its own, different permission/status rules.
  *
  * Accepting posts two ledger rows (§4.4/§11's resolved open question #12):
  * an already-`confirmed` `spent` row for the requester at the Expert
@@ -136,6 +238,14 @@ export async function resolveMeetingRequest(
 ): Promise<MeetingRequestModel> {
   const meetingRequest = await db.meetingRequest.findUnique({ where: { id: meetingRequestId } });
   if (!meetingRequest) throw new MeetingRequestError(404, "Meeting request not found.");
+
+  if (action.action === "cancel") {
+    return cancelMeetingRequest(meetingRequest, actingUserId);
+  }
+  if (action.action === "edit") {
+    return editMeetingRequest(meetingRequest, actingUserId, { topic: action.topic, message: action.message });
+  }
+
   if (meetingRequest.recipientId !== actingUserId) {
     throw new MeetingRequestError(403, "Only the recipient can respond to this meeting request.");
   }

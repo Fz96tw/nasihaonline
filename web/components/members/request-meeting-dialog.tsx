@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { getLocalTimeZoneAbbreviation } from "@/lib/timezone";
+import { useHasMounted } from "@/lib/use-has-mounted";
 
 const MAX_PROPOSED_TIMES = 5;
 
@@ -60,6 +62,7 @@ export function RequestMeetingDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const hasMounted = useHasMounted();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -143,7 +146,14 @@ export function RequestMeetingDialog({
               />
 
               <div className="flex flex-col gap-2">
-                <FormLabel>Proposed times</FormLabel>
+                <div className="flex items-center gap-2">
+                  <FormLabel>Proposed times</FormLabel>
+                  {hasMounted && (
+                    <span className="text-xs text-muted-foreground">
+                      (your time zone: {getLocalTimeZoneAbbreviation()})
+                    </span>
+                  )}
+                </div>
                 {fields.map((item, index) => (
                   <FormField
                     key={item.id}

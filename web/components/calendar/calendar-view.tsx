@@ -32,20 +32,34 @@ function toFullCalendarEvents(events: MemberEvent[]): EventInput[] {
     title: event.title,
     start: event.startsAt,
     end: event.endsAt ?? undefined,
-    extendedProps: { open: event.open },
+    extendedProps: { kind: "event" as const, open: event.open },
+  }));
+}
+
+// Private meetings on the Month grid, distinguished from community events by
+// a third dot color in renderEventContent — data's already scoped to just
+// the two participants (getUpcomingMeetingsForUser), so there's no audience
+// concern in showing them here too, unlike materializing them as real Event
+// rows would have been (see plan doc).
+function meetingsToFullCalendarEvents(meetings: UpcomingMeeting[]): EventInput[] {
+  return meetings.map((meeting) => ({
+    id: meeting.id,
+    title: meeting.topic,
+    start: meeting.scheduledAt,
+    extendedProps: { kind: "meeting" as const },
   }));
 }
 
 // Custom render instead of FullCalendar's default event pill so open vs.
 // members-only events (the whole point of this view over the public one)
-// stay visually distinguishable at month-grid scale.
+// and private meetings all stay visually distinguishable at month-grid scale.
 function renderEventContent(arg: EventContentArg) {
-  const open = arg.event.extendedProps.open as boolean;
+  const kind = arg.event.extendedProps.kind as "event" | "meeting";
+  const open = arg.event.extendedProps.open as boolean | undefined;
+  const dotColor = kind === "meeting" ? "bg-purple-500" : open ? "bg-emerald-500" : "bg-blue-500";
   return (
     <div className="flex items-center gap-1 overflow-hidden px-1">
-      <span
-        className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${open ? "bg-emerald-500" : "bg-blue-500"}`}
-      />
+      <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dotColor}`} />
       <span className="truncate text-xs">{arg.event.title}</span>
     </div>
   );
@@ -92,12 +106,13 @@ export function CalendarView({
     [events, rsvpState],
   );
 
-  const fcEvents = useMemo(() => toFullCalendarEvents(resolvedEvents), [resolvedEvents]);
+  const fcEvents = useMemo(
+    () => [...toFullCalendarEvents(resolvedEvents), ...meetingsToFullCalendarEvents(meetings)],
+    [resolvedEvents, meetings],
+  );
   // Month grid shows every event (including past ones, so browsing to an
   // earlier month isn't empty); this tab is explicitly "Upcoming List", so
-  // it filters startsAt back down to future-only itself. Private meetings
-  // are merged in here only — never into fcEvents/the Month grid, which
-  // reflects the shared community calendar.
+  // it filters startsAt back down to future-only itself.
   const upcoming = useMemo<UpcomingItem[]>(() => {
     const upcomingEvents: UpcomingItem[] = resolvedEvents
       .filter((event) => event.startsAt >= new Date().toISOString())
@@ -129,6 +144,10 @@ export function CalendarView({
 
   function handleEventClick(arg: EventClickArg) {
     arg.jsEvent.preventDefault();
+    if (arg.event.extendedProps.kind === "meeting") {
+      router.push(`/inbox?item=${arg.event.id}`);
+      return;
+    }
     router.push(`/calendar/${arg.event.id}`);
   }
 

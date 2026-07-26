@@ -8,6 +8,7 @@ export const MEETING_REQUEST_STATUS_LABELS: Record<MeetingRequestStatus, string>
   [MeetingRequestStatus.accepted]: "Accepted",
   [MeetingRequestStatus.declined]: "Declined",
   [MeetingRequestStatus.rescheduled]: "New time proposed",
+  [MeetingRequestStatus.cancelled]: "Cancelled",
 };
 
 export const MEETING_REQUEST_STATUS_BADGE_VARIANT: Record<MeetingRequestStatus, "success" | "warning" | "danger" | "info"> = {
@@ -15,6 +16,7 @@ export const MEETING_REQUEST_STATUS_BADGE_VARIANT: Record<MeetingRequestStatus, 
   [MeetingRequestStatus.accepted]: "success",
   [MeetingRequestStatus.declined]: "danger",
   [MeetingRequestStatus.rescheduled]: "info",
+  [MeetingRequestStatus.cancelled]: "danger",
 };
 
 /**
