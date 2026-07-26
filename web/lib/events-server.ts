@@ -802,9 +802,10 @@ export async function getEventForEdit(eventId: string) {
 
 /**
  * Edits an existing event (§4.6, `PATCH /api/events/:id`), host or admin
- * only. Doesn't touch the linked discussion thread either way — that's a
- * one-time create-time decision (createEvent above), not something an edit
- * can retroactively add or remove.
+ * only. Never adds or removes the linked discussion thread itself — that's
+ * a one-time create-time decision (createEvent above) — but does keep the
+ * thread's title in sync with the event's, same as
+ * updateKnowledgeItem/ForumThread for the Library.
  */
 export async function updateEvent(
   eventId: string,
@@ -873,20 +874,30 @@ export async function updateEvent(
     }
   }
 
-  const updated = await db.event.update({
-    where: { id: event.id },
-    data: {
-      title: input.title,
-      description: input.description,
-      type: input.type,
-      startsAt,
-      endsAt,
-      open: input.open,
-      heroImageUrl,
-      meetingUrl: input.meetingUrl,
-      deidentificationConfirmed: input.deidentificationConfirmed,
-    },
-    select: { id: true },
+  const updated = await db.$transaction(async (tx) => {
+    const result = await tx.event.update({
+      where: { id: event.id },
+      data: {
+        title: input.title,
+        description: input.description,
+        type: input.type,
+        startsAt,
+        endsAt,
+        open: input.open,
+        heroImageUrl,
+        meetingUrl: input.meetingUrl,
+        deidentificationConfirmed: input.deidentificationConfirmed,
+      },
+      select: { id: true },
+    });
+    // Keep the auto-created discussion thread's title (set from
+    // event.title at creation, §4.6) in sync with renames — a no-op
+    // updateMany when the host didn't opt into a thread at creation time.
+    await tx.forumThread.updateMany({
+      where: { eventId: event.id },
+      data: { title: input.title },
+    });
+    return result;
   });
 
   if (input.heroImage && event.heroImageUrl) {
