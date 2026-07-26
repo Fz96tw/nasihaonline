@@ -30,9 +30,10 @@ import {
   UploadValidationError,
 } from "@/lib/storage";
 
-// Absolute, not relative — the auto-created discussion thread's first post
-// (createEvent, below) needs a real URL for lib/linkify.tsx's linkifyText
-// to turn into a clickable link; it only matches absolute http(s) URLs.
+// Absolute, not relative — a discussion thread's first post
+// (startEventDiscussion, below) needs a real URL for lib/linkify.tsx's
+// linkifyText to turn into a clickable link; it only matches absolute
+// http(s) URLs.
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
 // The server-side enforcement point for public event visibility (§4.6):
@@ -640,7 +641,6 @@ export async function createEvent(
     meetingUrl: string | null;
     deidentificationConfirmed: boolean;
     heroImage: File | null;
-    createDiscussionThread: boolean;
     visibility: EventVisibility;
     invitedUserIds: string[];
     meetLinkSource: "auto" | "manual";
@@ -706,15 +706,6 @@ export async function createEvent(
     throw new EventError(400, "Select at least one member to invite.");
   }
 
-  let eventsForumId: string | null = null;
-  if (input.createDiscussionThread) {
-    const eventsForum = await db.forum.findUnique({ where: { slug: EVENTS_FORUM_SLUG }, select: { id: true } });
-    if (!eventsForum) {
-      throw new EventError(400, "The Events discussion forum isn't set up yet — contact an admin.");
-    }
-    eventsForumId = eventsForum.id;
-  }
-
   let heroImageUrl: string | null = null;
   if (input.heroImage) {
     try {
@@ -774,23 +765,6 @@ export async function createEvent(
       },
       select: { id: true },
     });
-
-    // Auto-created discussion thread (§4.6) — the FK lives on ForumThread,
-    // so the Event above is created first and its id is what the thread
-    // (and the thread's own linking first post) refers back to.
-    if (eventsForumId) {
-      const thread = await tx.forumThread.create({
-        data: { forumId: eventsForumId, authorId: hostId, title: input.title, eventId: created.id },
-        select: { id: true },
-      });
-      await tx.forumPost.create({
-        data: {
-          threadId: thread.id,
-          authorId: hostId,
-          body: `Discussion thread for this event. [View event details](${APP_URL}/calendar/${created.id})`,
-        },
-      });
-    }
 
     if (invitedUsers.length > 0) {
       await tx.eventInvitee.createMany({

@@ -40,7 +40,6 @@ const DEFAULT_VALUES: CreateEventValues = {
   open: false,
   meetingUrl: null,
   deidentificationConfirmed: false,
-  createDiscussionThread: false,
   visibility: EventVisibility.community,
   invitedUserIds: [],
   meetLinkSource: "auto",
@@ -75,9 +74,10 @@ type ExistingEvent = {
  * createEvent's comment in lib/events-server.ts); editing doesn't change
  * the host either. Case Discussion events require the de-identification
  * checkbox — createEventSchema/updateEventSchema both block submission
- * without it. createDiscussionThread is create-only (omitted entirely, and
- * from updateEventSchema, when editing) — same "one-time action" rationale
- * as WritePostForm's licenseConsented.
+ * without it. There's no discussion-thread field here at all — a thread is
+ * only ever started on demand from the event detail page's "Start a
+ * Discussion" button (EventDiscussionLink), for any event, whether it was
+ * just created or already exists.
  */
 export function SubmitEventForm({
   existingEvent,
@@ -104,7 +104,6 @@ export function SubmitEventForm({
           open: existingEvent.open,
           meetingUrl: existingEvent.meetingUrl,
           deidentificationConfirmed: existingEvent.deidentificationConfirmed,
-          createDiscussionThread: false,
           // The invited list itself isn't editable from this form
           // (Audience-Restricted Group Events — see ManageInvitees on the
           // event detail page for that) but visibility itself needs to be
@@ -151,7 +150,6 @@ export function SubmitEventForm({
         String(isCaseDiscussion && values.deidentificationConfirmed),
       );
       if (!existingEvent) {
-        formData.append("createDiscussionThread", String(values.createDiscussionThread));
         formData.append("visibility", values.visibility);
         formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
         formData.append("meetLinkSource", values.meetLinkSource);
@@ -431,30 +429,6 @@ export function SubmitEventForm({
                 <FormControl>
                   <Switch checked={field.value} onCheckedChange={field.onChange} />
                 </FormControl>
-              </FormItem>
-            )}
-          />
-        )}
-
-        {!existingEvent && (
-          <FormField
-            control={form.control}
-            name="createDiscussionThread"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-start gap-2 space-y-0 rounded-md border p-4">
-                <FormControl>
-                  <Checkbox checked={field.value} onCheckedChange={(c) => field.onChange(c === true)} />
-                </FormControl>
-                <div className="space-y-1">
-                  <FormLabel className="!mt-0">Create a discussion thread for this event</FormLabel>
-                  <FormDescription>
-                    Posts a linked thread in the Events forum, titled after this event, with a first post
-                    linking back to it.
-                    {isRestricted
-                      ? " Since this event is restricted, the thread is visible only to you and the invited members — not the whole community."
-                      : null}
-                  </FormDescription>
-                </div>
               </FormItem>
             )}
           />

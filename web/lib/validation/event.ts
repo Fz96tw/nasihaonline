@@ -88,7 +88,6 @@ function requireRestrictedEventInvariants(
  */
 export const createEventSchema = eventFieldsSchema
   .extend({
-    createDiscussionThread: z.boolean(),
     visibility: z.nativeEnum(EventVisibility),
     invitedUserIds: z.array(z.string()),
     meetLinkSource: z.enum(["auto", "manual"]),
@@ -100,9 +99,9 @@ export type CreateEventValues = z.infer<typeof createEventSchema>;
 
 /**
  * PATCH /api/events/:id body shape — editing an event (§4.6), host or admin
- * only (enforced in updateEvent). Omits createDiscussionThread: that's a
- * one-time create-time action, not something an edit can retroactively
- * toggle — the linked thread (if any) is untouched by an edit.
+ * only (enforced in updateEvent). The linked discussion thread (if any) is
+ * untouched by an edit — starting one at all is the on-demand "Start a
+ * Discussion" button on the event detail page, not a create/edit form field.
  */
 export const updateEventSchema = eventFieldsSchema.superRefine(requireDeidentificationForCaseDiscussion);
 
