@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { MessageSquare, Pencil, Users } from "lucide-react";
+import { Pencil, Users } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,6 @@ import {
   type EventRsvpAttendee,
   type MemberEvent,
 } from "@/lib/events";
-import { EVENTS_FORUM_SLUG } from "@/lib/forums";
 import { EventVisibility } from "@/lib/generated/prisma/enums";
 import type { DirectoryMember } from "@/lib/members";
 import { useHasMounted } from "@/lib/use-has-mounted";
@@ -156,17 +155,6 @@ export function EventDetail({
         >
           Join session link
         </a>
-      ) : null}
-
-      {event.forumThreadId ? (
-        <Link
-          href={`/forums/${EVENTS_FORUM_SLUG}/${event.forumThreadId}`}
-          className="flex w-fit items-center gap-1.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
-        >
-          <MessageSquare className="h-4 w-4" />
-          Discuss this event
-          {event.forumReplyCount ? ` (${event.forumReplyCount})` : ""}
-        </Link>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3">

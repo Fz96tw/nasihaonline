@@ -3,8 +3,11 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getEventAttendanceChecklist } from "@/lib/attendance-server";
 import { getEventAttendees, getEventRoster, getMemberEventById } from "@/lib/events-server";
-import { getDirectoryMemberById } from "@/lib/members-server";
+import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-server";
+import { getForumThreadDetail } from "@/lib/forums-server";
+import { EVENTS_FORUM_SLUG } from "@/lib/forums";
 import { EventDetail } from "@/components/calendar/event-detail";
+import { ForumThreadView } from "@/components/forums/forum-thread-view";
 import { BackLink } from "@/components/back-link";
 import { EventVisibility, Role } from "@/lib/generated/prisma/enums";
 
@@ -41,6 +44,9 @@ export default async function EventDetailPage({ params }: { params: { eventId: s
     canEdit && isRestricted && isPast ? getEventAttendanceChecklist(event.id) : Promise.resolve(null),
   ]);
 
+  const thread = event.forumThreadId ? await getForumThreadDetail(EVENTS_FORUM_SLUG, event.forumThreadId) : null;
+  const mentionableMembers = thread ? await getMentionableMembers() : [];
+
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
       <BackLink fallbackHref="/calendar" />
@@ -54,6 +60,18 @@ export default async function EventDetailPage({ params }: { params: { eventId: s
         roster={roster}
         attendanceChecklist={attendanceChecklist}
       />
+
+      {thread && (
+        <div className="border-t pt-8">
+          <h2 className="mb-4 text-lg font-semibold">Discussion</h2>
+          <ForumThreadView
+            threadId={thread.id}
+            posts={thread.posts}
+            requireDeidentification={false}
+            mentionableMembers={mentionableMembers}
+          />
+        </div>
+      )}
     </main>
   );
 }
