@@ -37,7 +37,7 @@ export type FeedItem = {
   attendeeCount?: number;
   /** Only events carry a start time (§4.5/§4.6 calendar) — undefined for every other type. */
   eventStartsAt?: string;
-  /** Only events with a linked Events-forum thread (§4.6) carry this — undefined when the event has no thread. */
+  /** Events with a linked Events-forum thread (§4.6) or library items with a started on-demand discussion thread (§4.9) carry this — undefined when there's no thread yet. */
   forumReplyCount?: number;
   /** Only events carry a detail-page unique-visitor count (§4.6) — undefined for every other type. */
   eventViewCount?: number;

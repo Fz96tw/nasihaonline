@@ -61,6 +61,12 @@ export function FeedRow({ item }: { item: FeedItem }) {
                 <Eye className="h-3.5 w-3.5" />
                 {item.libraryViewCount}
               </span>
+              {item.forumReplyCount !== undefined && (
+                <span className="flex items-center gap-1" title="Discussion thread replies">
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  {item.forumReplyCount}
+                </span>
+              )}
             </div>
           )}
           {item.attendeeCount !== undefined && (

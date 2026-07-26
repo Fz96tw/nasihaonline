@@ -144,6 +144,10 @@ export async function getFeedPage(params: {
         createdAt: true,
         contributor: { select: AUTHOR_SELECT },
         _count: { select: { views: true } },
+        // posts includes the thread's own system-authored opening post, so
+        // forumReplyCount below subtracts one — same convention as the
+        // events branch above.
+        forumThread: { select: { _count: { select: { posts: true } } } },
       },
       orderBy: { createdAt: "desc" },
       take: pageSize,
@@ -241,6 +245,7 @@ export async function getFeedPage(params: {
       author: authorOf(item.contributor),
       imageUrl: null,
       libraryViewCount: item._count.views,
+      forumReplyCount: item.forumThread ? item.forumThread._count.posts - 1 : undefined,
     })),
     ...forumThreads.map((thread): FeedItem => ({
       type: "forum_thread",
