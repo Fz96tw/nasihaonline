@@ -4,6 +4,7 @@ import { EventVisibility, KnowledgeStatus, RSVPStatus, SurveyStatus } from "@/li
 import { getProfileAvatarUrl, getPostHeroImageUrl, getEventHeroImageUrl, getAnnouncementHeroImageUrl, getSurveyHeroImageUrl } from "@/lib/storage";
 import { excerptFromHtml } from "@/lib/blog";
 import { withFeedRef, type FeedItem, type FeedCursor } from "@/lib/feed";
+import { youtubeThumbnailUrl } from "@/lib/youtube";
 
 const DEFAULT_PAGE_SIZE = 20;
 const EXCERPT_LENGTH = 180;
@@ -142,6 +143,7 @@ export async function getFeedPage(params: {
         title: true,
         description: true,
         createdAt: true,
+        youtubeUrl: true,
         contributor: { select: AUTHOR_SELECT },
         _count: { select: { views: true } },
         // posts includes the thread's own system-authored opening post, so
@@ -243,7 +245,7 @@ export async function getFeedPage(params: {
       href: withFeedRef(`/library/${item.id}`),
       timestamp: item.createdAt.toISOString(),
       author: authorOf(item.contributor),
-      imageUrl: null,
+      imageUrl: item.youtubeUrl ? youtubeThumbnailUrl(item.youtubeUrl) : null,
       libraryViewCount: item._count.views,
       forumReplyCount: item.forumThread ? item.forumThread._count.posts - 1 : undefined,
     })),

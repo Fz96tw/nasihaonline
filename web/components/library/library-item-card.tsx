@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS, type LibraryCard as LibraryCardData } from "@/lib/library";
 import { KnowledgeContentType, KnowledgeStatus } from "@/lib/generated/prisma/enums";
 import { LibraryFlagButton } from "@/components/library/library-flag-button";
+import { youtubeThumbnailUrl } from "@/lib/youtube";
 
 const CONTENT_TYPE_ICONS: Record<KnowledgeContentType, LucideIcon> = {
   [KnowledgeContentType.recorded_lecture]: PlayCircle,
@@ -27,9 +28,14 @@ function formatDate(iso: string) {
  */
 export function LibraryItemCard({ item, canEdit }: { item: LibraryCardData; canEdit: boolean }) {
   const Icon = CONTENT_TYPE_ICONS[item.contentType] ?? BookOpen;
+  const thumbnailUrl = item.youtubeUrl ? youtubeThumbnailUrl(item.youtubeUrl) : null;
 
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col overflow-hidden">
+      {thumbnailUrl && (
+        // eslint-disable-next-line @next/next/no-img-element -- external YouTube thumbnail, not a next/image-eligible local asset
+        <img src={thumbnailUrl} alt="" className="aspect-video w-full object-cover" />
+      )}
       <CardHeader>
         <div className="flex items-center gap-2">
           <Badge variant="info" className="w-fit">

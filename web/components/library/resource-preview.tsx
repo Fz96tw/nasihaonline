@@ -4,29 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { KnowledgeContentType } from "@/lib/generated/prisma/enums";
-
-/**
- * Extracts a YouTube video id from any of the URL shapes a member might
- * paste into "Submit Resource" (watch?v=, youtu.be/, already an /embed/
- * link) — no oEmbed lookup needed, a standard iframe embed is all §4.9
- * calls for ("no custom player").
- */
-function youtubeEmbedUrl(rawUrl: string): string | null {
-  try {
-    const url = new URL(rawUrl);
-    let id: string | null = null;
-    if (url.hostname.includes("youtu.be")) {
-      id = url.pathname.slice(1);
-    } else if (url.pathname.startsWith("/embed/")) {
-      id = url.pathname.replace("/embed/", "");
-    } else {
-      id = url.searchParams.get("v");
-    }
-    return id ? `https://www.youtube.com/embed/${id}` : null;
-  } catch {
-    return null;
-  }
-}
+import { youtubeEmbedUrl } from "@/lib/youtube";
 
 /**
  * Renders a PDF attachment page-by-page onto a canvas via pdfjs-dist (per
