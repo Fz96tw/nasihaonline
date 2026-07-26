@@ -100,10 +100,12 @@ export function EventDetail({
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>
           <Badge variant="neutral">{EVENT_TYPE_LABELS[event.type]}</Badge>
-          <span className="flex items-center gap-1 text-xs text-muted-foreground" title="Registered or RSVP'd">
-            <Users className="h-3.5 w-3.5" />
-            {event.attendeeCount}
-          </span>
+          {!roster && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground" title="Registered or RSVP'd">
+              <Users className="h-3.5 w-3.5" />
+              {event.attendeeCount}
+            </span>
+          )}
           <EventViewCounter eventId={event.id} initialViews={event.viewCount} />
         </div>
         <h1 className="mb-1 text-3xl font-bold tracking-tight">{event.title}</h1>
@@ -190,7 +192,7 @@ export function EventDetail({
         )
       ) : null}
 
-      {canEdit && attendees ? (
+      {canEdit && !roster && attendees ? (
         <div className="flex flex-col gap-4 border-t pt-6">
           <div>
             <h2 className="mb-2 text-sm font-semibold">RSVP&apos;d members ({attendees.rsvps.length})</h2>

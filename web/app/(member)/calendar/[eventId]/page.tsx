@@ -7,6 +7,7 @@ import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-ser
 import { getForumThreadDetail } from "@/lib/forums-server";
 import { EVENTS_FORUM_SLUG } from "@/lib/forums";
 import { EventDetail } from "@/components/calendar/event-detail";
+import { EventDiscussionLink } from "@/components/calendar/event-discussion-link";
 import { ForumThreadView } from "@/components/forums/forum-thread-view";
 import { BackLink } from "@/components/back-link";
 import { EventVisibility, Role } from "@/lib/generated/prisma/enums";
@@ -56,8 +57,12 @@ export default async function EventDetailPage({ params }: { params: { eventId: s
   // the event has actually happened, same startsAt < now gate the admin
   // queue's getPastEventsForAttendance() already uses.
   const isPast = new Date(event.startsAt) < new Date();
+  // A restricted event has no use for this — RSVP status per invitee is
+  // already covered by the roster/ManageInvitees block above, and
+  // "registered guests" is structurally always empty (a restricted event
+  // can never also be `open`, the only way EventRegistration rows exist).
   const [attendees, hostProfile, roster, attendanceChecklist] = await Promise.all([
-    canEdit ? getEventAttendees(event.id) : Promise.resolve(null),
+    canEdit && !isRestricted ? getEventAttendees(event.id) : Promise.resolve(null),
     getDirectoryMemberById(event.hostId),
     isRestricted ? getEventRoster(event.id) : Promise.resolve(null),
     canEdit && isRestricted && isPast ? getEventAttendanceChecklist(event.id) : Promise.resolve(null),
@@ -81,6 +86,12 @@ export default async function EventDetailPage({ params }: { params: { eventId: s
         roster={roster}
         attendanceChecklist={attendanceChecklist}
       />
+
+      {!event.forumThreadId && (
+        <div className="border-t pt-8">
+          <EventDiscussionLink eventId={event.id} initialThreadId={event.forumThreadId} />
+        </div>
+      )}
 
       {thread && (
         <div className="border-t pt-8">

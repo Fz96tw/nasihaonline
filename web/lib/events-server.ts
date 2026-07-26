@@ -297,6 +297,67 @@ export async function getMemberEventById(userId: string, eventId: string): Promi
 }
 
 /**
+ * On-demand "Start a Discussion" (mirrors startKnowledgeItemDiscussion,
+ * §4.9) for an existing event that wasn't given one at submission time —
+ * the "create a discussion thread" checkbox on Submit Event is opt-in and
+ * create-only, so an event whose host skipped it (or that predates this
+ * button existing at all) would otherwise never get one. Idempotent: a
+ * late click after someone else already started it resolves to the same
+ * thread rather than erroring. Same visibility gate as getMemberEventById
+ * (community, or the host, or an invitee) enforced here directly rather
+ * than left to the caller, since — unlike getEventRoster above — this is
+ * reachable from a POST API route a non-invitee could hit with a guessed
+ * eventId even if the page itself never renders the button for them; 404s
+ * rather than 403s for the same reason getForumThreadDetail does.
+ */
+export async function startEventDiscussion(eventId: string, starterId: string): Promise<{ threadId: string }> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: {
+      id: true,
+      title: true,
+      visibility: true,
+      hostId: true,
+      cancelledAt: true,
+      forumThread: { select: { id: true } },
+      invitees: { select: { userId: true } },
+    },
+  });
+  if (!event) throw new EventError(404, "Event not found.");
+
+  const canView =
+    event.visibility === EventVisibility.community ||
+    event.hostId === starterId ||
+    event.invitees.some((invitee) => invitee.userId === starterId);
+  if (!canView) throw new EventError(404, "Event not found.");
+
+  if (event.cancelledAt) throw new EventError(400, "This event has been cancelled.");
+  if (event.forumThread) return { threadId: event.forumThread.id };
+
+  const forum = await db.forum.findUnique({ where: { slug: EVENTS_FORUM_SLUG }, select: { id: true } });
+  if (!forum) {
+    throw new EventError(400, "The Events discussion forum isn't set up yet — contact an admin.");
+  }
+
+  const thread = await db.$transaction(async (tx) => {
+    const created = await tx.forumThread.create({
+      data: { forumId: forum.id, authorId: starterId, title: event.title, eventId: event.id },
+      select: { id: true },
+    });
+    await tx.forumPost.create({
+      data: {
+        threadId: created.id,
+        authorId: starterId,
+        body: `Discussion thread for this event. [View event details](${APP_URL}/calendar/${event.id})`,
+      },
+    });
+    return created;
+  });
+
+  return { threadId: thread.id };
+}
+
+/**
  * Full per-person invitee roster for a restricted event's detail page
  * (Objective 02) — every invited member, joined against their RSVP row if
  * any. Caller enforces the access gate (same "caller enforces" convention
