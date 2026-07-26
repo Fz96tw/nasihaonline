@@ -53,6 +53,25 @@ function toDatetimeLocalValue(iso: string | null): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+// The three real audiences an event can have (§4.6) — modeled underneath as
+// `visibility` (community | invited) crossed with a separate `open`
+// boolean, but presented here as one choice so they can't be set into a
+// contradictory combination (open + invited is rejected server-side).
+type AudienceChoice = "community" | "invited" | "open";
+
+const AUDIENCE_LABELS: Record<AudienceChoice, string> = {
+  community: "Community — visible to every member",
+  invited: "Restricted — invited members only",
+  open: "Open to the public",
+};
+
+const AUDIENCE_DESCRIPTIONS: Record<AudienceChoice, string> = {
+  community: "Listed on /events, but only members can RSVP.",
+  invited:
+    "Visible only to you and the invited members below — invisible to everyone else, including the public /events listing.",
+  open: "Listed on /events with a \"Register\" action for signed-out visitors, in addition to member RSVP.",
+};
+
 type ExistingEvent = {
   id: string;
   title: string;
@@ -78,6 +97,13 @@ type ExistingEvent = {
  * only ever started on demand from the event detail page's "Start a
  * Discussion" button (EventDiscussionLink), for any event, whether it was
  * just created or already exists.
+ *
+ * Create mode's audience (community / restricted / open) is one Select
+ * driving both the underlying `visibility` and `open` fields together
+ * (see AudienceChoice/handleAudienceChange below) rather than two separate
+ * toggles, so the two can't be set into a contradictory combination in the
+ * UI. Visibility itself is create-only — see updateEvent's comment for why
+ * only `open` stays editable afterward.
  */
 export function SubmitEventForm({
   existingEvent,
@@ -120,7 +146,16 @@ export function SubmitEventForm({
   const isCaseDiscussion = form.watch("type") === EventType.case_discussion;
   const visibility = form.watch("visibility");
   const isRestricted = visibility === EventVisibility.invited;
+  const isOpen = form.watch("open");
   const meetLinkSource = form.watch("meetLinkSource");
+
+  const audience: AudienceChoice = isRestricted ? "invited" : isOpen ? "open" : "community";
+  function handleAudienceChange(value: AudienceChoice) {
+    form.setValue("visibility", value === "invited" ? EventVisibility.invited : EventVisibility.community, {
+      shouldDirty: true,
+    });
+    form.setValue("open", value === "open", { shouldDirty: true });
+  }
 
   async function onSubmit(values: CreateEventValues) {
     setSubmitting(true);
@@ -185,29 +220,24 @@ export function SubmitEventForm({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
         {!existingEvent && (
-          <FormField
-            control={form.control}
-            name="visibility"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-between gap-4 rounded-md border p-4">
-                <div>
-                  <FormLabel>Restrict to specific members</FormLabel>
-                  <FormDescription>
-                    Off keeps this event visible to the whole community. On restricts it to an invited list —
-                    invisible to everyone else, including the public /events listing.
-                  </FormDescription>
-                </div>
-                <FormControl>
-                  <Switch
-                    checked={field.value === EventVisibility.invited}
-                    onCheckedChange={(checked) =>
-                      field.onChange(checked ? EventVisibility.invited : EventVisibility.community)
-                    }
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
+          <FormItem className="rounded-md border p-4">
+            <FormLabel>Audience</FormLabel>
+            <Select value={audience} onValueChange={handleAudienceChange}>
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                {(Object.keys(AUDIENCE_LABELS) as AudienceChoice[]).map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {AUDIENCE_LABELS[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FormDescription>{AUDIENCE_DESCRIPTIONS[audience]}</FormDescription>
+          </FormItem>
         )}
 
         {!existingEvent && isRestricted && (
@@ -414,7 +444,11 @@ export function SubmitEventForm({
           )}
         </div>
 
-        {!isRestricted && (
+        {/* Create mode sets `open` via the Audience selector above.
+            Visibility itself can't change after creation (see updateEvent),
+            but a community event's `open` flag still can — this is the
+            edit-only equivalent of that one setting. */}
+        {existingEvent && !isRestricted && (
           <FormField
             control={form.control}
             name="open"
