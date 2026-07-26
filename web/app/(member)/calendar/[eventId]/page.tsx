@@ -66,7 +66,11 @@ export default async function EventDetailPage({ params }: { params: { eventId: s
           <h2 className="mb-4 text-lg font-semibold">Discussion</h2>
           <ForumThreadView
             threadId={thread.id}
-            posts={thread.posts}
+            // Drop the auto-authored opening post (always posts[0] — created
+            // atomically with the thread in createEvent) linking back to this
+            // event: redundant here since we're already on the event page.
+            // The standalone /forums/[category]/[threadId] view keeps it.
+            posts={thread.posts.slice(1)}
             requireDeidentification={false}
             mentionableMembers={mentionableMembers}
           />

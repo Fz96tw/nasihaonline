@@ -3,7 +3,9 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getPublishedKnowledgeItemById } from "@/lib/library-server";
-import { getDirectoryMemberById } from "@/lib/members-server";
+import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-server";
+import { getForumThreadDetail } from "@/lib/forums-server";
+import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS } from "@/lib/library";
 import { KnowledgeContentType, KnowledgeStatus, Role } from "@/lib/generated/prisma/enums";
 import { Avatar } from "@/components/ui/avatar";
@@ -14,6 +16,7 @@ import { ResourcePreview } from "@/components/library/resource-preview";
 import { LibraryFlagButton } from "@/components/library/library-flag-button";
 import { LibraryDiscussionLink } from "@/components/library/library-discussion-link";
 import { LibraryViewCounter } from "@/components/library/library-view-counter";
+import { ForumThreadView } from "@/components/forums/forum-thread-view";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
@@ -42,6 +45,9 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
 
   const authorProfile = await getDirectoryMemberById(item.contributor.id);
   const canEdit = user.id === item.contributor.id || user.role === Role.moderator || user.role === Role.admin;
+
+  const thread = item.forumThreadId ? await getForumThreadDetail(LIBRARY_FORUM_SLUG, item.forumThreadId) : null;
+  const mentionableMembers = thread ? await getMentionableMembers() : [];
 
   return (
     <main className="mx-auto max-w-3xl px-8 py-16">
@@ -104,13 +110,11 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
         {item.status === KnowledgeStatus.published && <LibraryFlagButton itemId={item.id} initialFlagged={false} />}
       </div>
 
-      <div className="mt-8">
-        <LibraryDiscussionLink
-          itemId={item.id}
-          initialThreadId={item.forumThreadId}
-          initialReplyCount={item.forumReplyCount}
-        />
-      </div>
+      {!item.forumThreadId && (
+        <div className="mt-8">
+          <LibraryDiscussionLink itemId={item.id} initialThreadId={item.forumThreadId} />
+        </div>
+      )}
 
       {item.tags.length > 0 && (
         <div className="mt-8 flex flex-wrap gap-2">
@@ -119,6 +123,23 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
               {tag.name}
             </Badge>
           ))}
+        </div>
+      )}
+
+      {thread && (
+        <div className="mt-10 border-t pt-8">
+          <h2 className="mb-4 text-lg font-semibold">Discussion</h2>
+          <ForumThreadView
+            threadId={thread.id}
+            // Drop the auto-authored opening post (always posts[0] — created
+            // atomically with the thread in startKnowledgeItemDiscussion)
+            // linking back to this resource: redundant here since we're
+            // already on the resource page. The standalone
+            // /forums/[category]/[threadId] view keeps it.
+            posts={thread.posts.slice(1)}
+            requireDeidentification={false}
+            mentionableMembers={mentionableMembers}
+          />
         </div>
       )}
     </main>
