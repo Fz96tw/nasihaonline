@@ -15,7 +15,7 @@ import { EventVisibility, Role } from "@/lib/generated/prisma/enums";
 export async function generateMetadata({ params }: { params: { eventId: string } }): Promise<Metadata> {
   const user = await getSessionUser();
   const event = user ? await getMemberEventById(user.id, params.eventId) : null;
-  return { title: event ? `${event.title} — Calendar — NASIHA` : "Event not found — NASIHA" };
+  return { title: event ? `${event.title} — Calendar — NASIHA` : "Event unavailable — NASIHA" };
 }
 
 /** /calendar/[eventId] (§4.6) — single-event detail, member-only like /calendar itself. */
