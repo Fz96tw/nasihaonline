@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Lock, Rss } from "lucide-react";
+import { LayoutDashboard, Lock, Rss } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { NavDropdown } from "@/components/nav-dropdown";
@@ -54,7 +54,7 @@ export async function SiteHeader() {
         </NavDropdown>
         <NavDropdown label="Community">
           <DropdownMenuItem className="text-base" asChild>
-            <Link href="/events">Events</Link>
+            <Link href={user ? "/calendar" : "/events"}>Events</Link>
           </DropdownMenuItem>
           <DropdownMenuItem className="text-base" asChild>
             <Link href="/blog">Blogs</Link>
@@ -100,13 +100,27 @@ export async function SiteHeader() {
         {user ? (
           <>
             <div className="hidden items-center gap-2 lg:flex">
-              <Button variant="ghost" size="sm" className="text-base font-semibold" asChild>
-                <Link href="/whats-new">What&apos;s New</Link>
+              <Button variant="ghost" size="sm" className="gap-1.5 text-base font-semibold" asChild>
+                <Link href="/whats-new">
+                  <Rss className="h-[18px] w-[18px]" />
+                  What&apos;s New
+                </Link>
+              </Button>
+              <Button variant="ghost" size="sm" className="gap-1.5 text-base font-semibold" asChild>
+                <Link href="/dashboard">
+                  <LayoutDashboard className="h-[18px] w-[18px]" />
+                  My Dashboard
+                </Link>
               </Button>
             </div>
             <Button variant="ghost" size="icon" className="lg:hidden" aria-label="What's New" asChild>
               <Link href="/whats-new">
                 <Rss className="h-[18px] w-[18px]" />
+              </Link>
+            </Button>
+            <Button variant="ghost" size="icon" className="lg:hidden" aria-label="My Dashboard" asChild>
+              <Link href="/dashboard">
+                <LayoutDashboard className="h-[18px] w-[18px]" />
               </Link>
             </Button>
             {user.role === "admin" && <AdminReviewIcon />}

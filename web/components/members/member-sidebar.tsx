@@ -49,7 +49,10 @@ export function MemberSidebar({
         // ordinary page content that happens to set a positive z-index (e.g.
         // FullCalendar's internal grid uses z-index:1/3) — regardless of the
         // z-30 set on the <aside> below, since that's scoped inside this context.
-        "sticky top-[var(--header-height)] z-40 hidden h-[calc(100vh-var(--header-height))] flex-shrink-0 transition-[width,top,height] duration-300 ease-in-out lg:block",
+        // Desktop nav now covers this (Dashboard/What's New icons + dropdowns),
+        // so the sidebar is parked here rather than removed — kept `hidden`
+        // at every breakpoint (was `lg:block` on desktop) until it's needed again.
+        "sticky top-[var(--header-height)] z-40 hidden h-[calc(100vh-var(--header-height))] flex-shrink-0 transition-[width,top,height] duration-300 ease-in-out",
         pinned ? "w-[240px]" : "w-16",
       )}
     >

@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { Award, User } from "lucide-react";
+import { Award, LayoutDashboard, User } from "lucide-react";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { StatsRow } from "@/components/dashboard/stats-row";
@@ -23,7 +23,10 @@ export default async function DashboardPage() {
     <main className="mx-auto flex max-w-[1280px] flex-col gap-8 p-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
+            <LayoutDashboard className="h-7 w-7" />
+            Dashboard
+          </h1>
           <div className="flex items-center gap-2">
             <p className="text-muted-foreground">
               Welcome back, {user.name ?? user.email}
