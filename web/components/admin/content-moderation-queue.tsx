@@ -12,6 +12,9 @@ const TYPE_BADGE_VARIANT: Record<ModerationItem["type"], "info" | "success" | "w
   blog_post: "info",
   library_item: "success",
   forum_post: "warning",
+  // Same domain as blog_post — comments are a sub-type of Blog content,
+  // distinguished by MODERATION_TYPE_LABELS's "Blog Comment" label.
+  blog_comment: "info",
 };
 
 function formatDate(iso: string) {

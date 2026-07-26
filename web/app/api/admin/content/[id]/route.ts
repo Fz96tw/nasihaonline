@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireRole } from "@/lib/auth";
 import { Role } from "@/lib/generated/prisma/enums";
 import { moderationActionSchema } from "@/lib/validation/moderation";
-import { PostError, resolvePostFlag } from "@/lib/blog-server";
+import { PostError, PostCommentError, resolvePostFlag, resolvePostCommentFlag } from "@/lib/blog-server";
 import { KnowledgeItemError, resolveFlaggedKnowledgeItem } from "@/lib/library-server";
 import { ForumError, resolveForumPostFlag } from "@/lib/forums-server";
 import {
@@ -45,11 +45,21 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       return NextResponse.json({ item });
     }
 
+    if (parsed.data.type === "blog_comment") {
+      const comment = await resolvePostCommentFlag(params.id, parsed.data.action);
+      return NextResponse.json({ item: comment });
+    }
+
     const post = await resolveForumPostFlag(params.id, parsed.data.action);
     await enqueueForumThreadIndexSync(post.threadId);
     return NextResponse.json({ item: post });
   } catch (error) {
-    if (error instanceof PostError || error instanceof KnowledgeItemError || error instanceof ForumError) {
+    if (
+      error instanceof PostError ||
+      error instanceof PostCommentError ||
+      error instanceof KnowledgeItemError ||
+      error instanceof ForumError
+    ) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     throw error;

@@ -4,13 +4,14 @@
 // both the API route and the client queue component) never has to pull in
 // a "server-only" module.
 
-export const MODERATION_TYPES = ["blog_post", "library_item", "forum_post"] as const;
+export const MODERATION_TYPES = ["blog_post", "library_item", "forum_post", "blog_comment"] as const;
 export type ModerationType = (typeof MODERATION_TYPES)[number];
 
 export const MODERATION_TYPE_LABELS: Record<ModerationType, string> = {
   blog_post: "Blog",
   library_item: "Library",
   forum_post: "Forum",
+  blog_comment: "Blog Comment",
 };
 
 export type ModerationItem = {

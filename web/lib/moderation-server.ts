@@ -10,7 +10,7 @@ import type { ModerationItem } from "@/lib/moderation";
  * rows into a single list, newest first, rather than three separate tabs.
  */
 export async function getFlaggedContent(): Promise<ModerationItem[]> {
-  const [posts, knowledgeItems, forumPosts] = await Promise.all([
+  const [posts, knowledgeItems, forumPosts, postComments] = await Promise.all([
     db.post.findMany({
       where: { flagged: true },
       select: {
@@ -43,6 +43,17 @@ export async function getFlaggedContent(): Promise<ModerationItem[]> {
         createdAt: true,
         author: { select: { name: true } },
         thread: { select: { id: true, title: true, forum: { select: { slug: true } } } },
+      },
+    }),
+    db.postComment.findMany({
+      where: { flagged: true },
+      select: {
+        id: true,
+        body: true,
+        flagReason: true,
+        createdAt: true,
+        author: { select: { name: true } },
+        post: { select: { slug: true, title: true } },
       },
     }),
   ]);
@@ -78,6 +89,16 @@ export async function getFlaggedContent(): Promise<ModerationItem[]> {
       createdAt: post.createdAt.toISOString(),
       href: `/forums/${post.thread.forum.slug}/${post.thread.id}`,
     })),
+    ...postComments.map((comment) => ({
+      id: comment.id,
+      type: "blog_comment" as const,
+      title: comment.post.title,
+      excerpt: comment.body,
+      authorName: comment.author.name,
+      flagReason: comment.flagReason,
+      createdAt: comment.createdAt.toISOString(),
+      href: `/blog/${comment.post.slug}#comment-${comment.id}`,
+    })),
   ];
 
   return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -85,11 +106,12 @@ export async function getFlaggedContent(): Promise<ModerationItem[]> {
 
 /** Cheap count for the `/admin` dashboard badge — avoids fetching full rows just to size the queue. */
 export async function getFlaggedContentCount(): Promise<number> {
-  const [posts, knowledgeItems, forumPosts] = await Promise.all([
+  const [posts, knowledgeItems, forumPosts, postComments] = await Promise.all([
     db.post.count({ where: { flagged: true } }),
     db.knowledgeItem.count({ where: { status: KnowledgeStatus.flagged } }),
     db.forumPost.count({ where: { flagged: true } }),
+    db.postComment.count({ where: { flagged: true } }),
   ]);
 
-  return posts + knowledgeItems + forumPosts;
+  return posts + knowledgeItems + forumPosts + postComments;
 }

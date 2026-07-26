@@ -380,10 +380,15 @@ export async function getPostComments(postId: string): Promise<PostCommentNode[]
       comment.id,
       {
         id: comment.id,
-        body: comment.body,
+        // A removed comment keeps its row (and its replies' threading)
+        // but never shows its real body again — same "takedown, not
+        // deletion" rule as ForumPost.removed.
+        body: comment.removed ? "[Removed by a moderator]" : comment.body,
         authorId: comment.authorId,
         authorName: comment.author.name,
         createdAt: comment.createdAt.toISOString(),
+        flagged: comment.flagged,
+        removed: comment.removed,
         replies: [],
       },
     ]),
@@ -532,5 +537,49 @@ export async function resolvePostFlag(
         ? { flagged: false, flagReason: null, publishedAt: null }
         : { flagged: false, flagReason: null },
     select: { id: true, flagged: true, publishedAt: true },
+  });
+}
+
+/**
+ * POST /api/blog/comments/:commentId/flag (§4.8) — community flagging on an
+ * individual comment, same "routes into the shared moderation model, stays
+ * visible" rule as flagForumPost. A comment already flagged can't be
+ * flagged again.
+ */
+export async function flagPostComment(id: string, reason: string): Promise<{ id: string; flagged: boolean }> {
+  const comment = await db.postComment.findUnique({ where: { id }, select: { id: true, flagged: true } });
+  if (!comment) throw new PostCommentError(404, "Comment not found.");
+  if (comment.flagged) throw new PostCommentError(400, "This comment has already been flagged.");
+
+  return db.postComment.update({
+    where: { id },
+    data: { flagged: true, flagReason: reason },
+    select: { id: true, flagged: true },
+  });
+}
+
+/**
+ * PATCH /api/admin/content (§4.11) — a moderator/admin resolving a flagged
+ * comment from the shared moderation queue: "dismiss" clears the flag
+ * (comment stays visible, unchanged), "remove" takes it down (body replaced
+ * with a placeholder in getPostComments) without deleting the row, so any
+ * replies threaded under it keep their parentId intact — same convention as
+ * resolveForumPostFlag.
+ */
+export async function resolvePostCommentFlag(
+  id: string,
+  action: "dismiss" | "remove",
+): Promise<{ id: string; flagged: boolean; removed: boolean; postId: string }> {
+  const comment = await db.postComment.findUnique({ where: { id }, select: { id: true, flagged: true } });
+  if (!comment) throw new PostCommentError(404, "Comment not found.");
+  if (!comment.flagged) throw new PostCommentError(400, "This comment is not currently flagged.");
+
+  return db.postComment.update({
+    where: { id },
+    data:
+      action === "remove"
+        ? { flagged: false, flagReason: null, removed: true }
+        : { flagged: false, flagReason: null },
+    select: { id: true, flagged: true, removed: true, postId: true },
   });
 }

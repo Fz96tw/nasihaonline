@@ -3,12 +3,16 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Flag } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FlagContentDialog } from "@/components/flag-content-dialog";
 import { MentionTextarea } from "@/components/mention-textarea";
 import type { PostCommentNode } from "@/lib/blog";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { formatTimestamp } from "@/lib/format-date";
 import { renderTextWithMentions, type MentionCandidate } from "@/lib/mentions";
+import { cn } from "@/lib/utils";
 
 function CommentForm({
   slug,
@@ -88,25 +92,87 @@ function CommentNode({
   mentionableMembers: MentionCandidate[];
   onPosted: () => void;
 }) {
+  const router = useRouter();
   const [replying, setReplying] = useState(false);
+  const [flagDialogOpen, setFlagDialogOpen] = useState(false);
+  const [flagging, setFlagging] = useState(false);
+  const [flagged, setFlagged] = useState(comment.flagged);
+  const [flagError, setFlagError] = useState<string | null>(null);
+
+  async function handleFlag(reason: string) {
+    setFlagging(true);
+    setFlagError(null);
+    try {
+      const csrfToken = await getCsrfToken();
+      const res = await fetch(`/api/blog/comments/${comment.id}/flag`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        body: JSON.stringify({ reason }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        throw new Error(typeof payload?.error === "string" ? payload.error : "Something went wrong.");
+      }
+      setFlagged(true);
+      setFlagDialogOpen(false);
+      router.refresh();
+    } catch (err) {
+      setFlagError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setFlagging(false);
+    }
+  }
 
   return (
     <div id={`comment-${comment.id}`} className="flex flex-col gap-3">
       <div className="rounded-[10px] border bg-muted/40 p-3">
         <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">{comment.authorName ?? "NASIHA Member"}</span>
+          <span className="flex items-center gap-2">
+            <span className="font-medium text-foreground">{comment.authorName ?? "NASIHA Member"}</span>
+            {comment.removed && <Badge variant="neutral">Removed</Badge>}
+            {!comment.removed && flagged && <Badge variant="danger">Flagged</Badge>}
+          </span>
           <span>{formatTimestamp(comment.createdAt)}</span>
         </div>
-        <p className="whitespace-pre-wrap break-words text-sm">{renderTextWithMentions(comment.body, mentionableMembers)}</p>
+        <p
+          className={cn(
+            "whitespace-pre-wrap break-words text-sm",
+            comment.removed && "italic text-muted-foreground",
+          )}
+        >
+          {renderTextWithMentions(comment.body, mentionableMembers)}
+        </p>
         {canComment && (
-          <button
-            type="button"
-            className="mt-2 text-xs font-medium text-primary hover:underline"
-            onClick={() => setReplying((value) => !value)}
-          >
-            {replying ? "Cancel" : "Reply"}
-          </button>
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              type="button"
+              className="text-xs font-medium text-primary hover:underline"
+              onClick={() => setReplying((value) => !value)}
+            >
+              {replying ? "Cancel" : "Reply"}
+            </button>
+            {!comment.removed && !flagged && (
+              <button
+                type="button"
+                title="Flag for moderator review"
+                className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-destructive"
+                onClick={() => setFlagDialogOpen(true)}
+              >
+                <Flag className="h-3 w-3" />
+                Flag
+              </button>
+            )}
+          </div>
         )}
+        {flagError && <p className="mt-1 text-xs text-destructive">{flagError}</p>}
+        <FlagContentDialog
+          open={flagDialogOpen}
+          onOpenChange={setFlagDialogOpen}
+          itemLabel="comment"
+          submitting={flagging}
+          error={flagError}
+          onConfirm={handleFlag}
+        />
       </div>
 
       {replying && (

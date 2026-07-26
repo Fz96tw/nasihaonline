@@ -1002,7 +1002,11 @@ model PostView {
 }
 
 // Threaded comment on a Post (§4.8), mirroring InboxMessage's parentId
-// self-relation convention for replies.
+// self-relation convention for replies. `flagged`/`flagReason`/`removed`
+// (added later) give per-comment moderation the same "takedown, not
+// deletion" shape as ForumPost — a removed comment keeps its row (and its
+// replies' threading intact) but never shows its real body again — while
+// Post.flagged/flagReason above stay reserved for flagging the whole post.
 model PostComment {
   id       String @id @default(cuid())
   postId   String
@@ -1014,6 +1018,10 @@ model PostComment {
   parentId String?
   parent   PostComment?  @relation("PostCommentThread", fields: [parentId], references: [id])
   replies  PostComment[] @relation("PostCommentThread")
+
+  flagged    Boolean @default(false)
+  flagReason String?
+  removed    Boolean @default(false)
 
   createdAt DateTime @default(now())
 

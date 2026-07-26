@@ -44,6 +44,8 @@ export type PostCommentNode = {
   authorId: string;
   authorName: string | null;
   createdAt: string;
+  flagged: boolean;
+  removed: boolean;
   replies: PostCommentNode[];
 };
 
