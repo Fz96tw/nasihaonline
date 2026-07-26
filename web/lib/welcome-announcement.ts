@@ -30,7 +30,8 @@ export async function sendWelcomeAnnouncement(newUser: UserModel): Promise<void>
   });
   if (!author) return;
 
-  const displayName = newUser.name?.trim() || "a new member";
+  const rawName = newUser.name?.trim();
+  const displayName = rawName || "a new member";
 
   // Only link to the Directory if the new member is actually visible there
   // (Friend tier isn't Directory-eligible at all, and listInDirectory is a
@@ -47,13 +48,16 @@ export async function sendWelcomeAnnouncement(newUser: UserModel): Promise<void>
       ? `\n\n[Say hello to ${displayName} in the Member Directory](${APP_URL}/members/${newUser.id})`
       : "";
 
+  const title = rawName ? `Welcome, ${rawName}!` : "Welcome our newest member!";
+
   await createAndSendAnnouncement(author.id, {
-    title: "Welcome our newest member!",
-    body: `Please join us in welcoming ${displayName} to the Nasiha community! We're glad you're here — take a moment to say hello.${directoryLink}`,
+    title,
+    body: `Please join us in welcoming our newest member to the Nasiha community! We're glad you're here — take a moment to say hello.${directoryLink}`,
     heroImage: null,
     templateHeroImageUrl: null,
     showInFeed: settings.welcomeAnnouncementInFeed,
     notifyInApp: settings.welcomeAnnouncementNotify,
     sendEmail: settings.welcomeAnnouncementEmail,
+    welcomeTier: newUser.tier,
   });
 }

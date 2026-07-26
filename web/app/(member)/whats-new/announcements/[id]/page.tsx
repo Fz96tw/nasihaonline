@@ -4,7 +4,9 @@ import { getSessionUser } from "@/lib/auth";
 import { getSentAnnouncement } from "@/lib/feed-server";
 import { formatTimestamp } from "@/lib/format-date";
 import { linkifyText } from "@/lib/linkify";
+import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
 import { Avatar } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { BackLink } from "@/components/back-link";
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
@@ -25,7 +27,14 @@ export default async function AnnouncementDetailPage({ params }: { params: { id:
       <BackLink fallbackHref="/whats-new" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline" />
 
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{announcement.title}</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-bold tracking-tight">{announcement.title}</h1>
+          {announcement.titleTier && (
+            <Badge variant={TIER_BADGE_VARIANT[announcement.titleTier]}>
+              {DIRECTORY_TIER_LABELS[announcement.titleTier]}
+            </Badge>
+          )}
+        </div>
         <div className="mt-3 flex items-center gap-2">
           <Avatar name={announcement.author.name ?? "NASIHA Member"} src={announcement.author.avatarUrl} size="sm" />
           <p className="text-sm text-muted-foreground">

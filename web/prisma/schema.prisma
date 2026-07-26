@@ -1426,6 +1426,11 @@ model Announcement {
   showInFeed    Boolean   @default(true)
   notifyInApp   Boolean   @default(true)
   sendEmail     Boolean   @default(true)
+  // Set only on the auto-generated welcome-new-member Announcement
+  // (lib/welcome-announcement.ts) so the feed/detail views can render a
+  // tier badge after the member's name in the title — null for every other
+  // Announcement.
+  welcomeTier   Tier?
   sentAt        DateTime?
   retractedAt   DateTime?
   retractedById String?

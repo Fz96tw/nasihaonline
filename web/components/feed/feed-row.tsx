@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Eye, MessageSquare, Users } from "lucide-react";
 import { type FeedItem, FEED_TYPE_LABELS } from "@/lib/feed";
 import { formatRelativeTime, formatTimestamp } from "@/lib/format-date";
+import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
@@ -30,7 +31,14 @@ export function FeedRow({ item }: { item: FeedItem }) {
           </div>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="mt-2 text-base font-semibold">{item.title}</div>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-base font-semibold">{item.title}</span>
+            {item.titleTier && (
+              <Badge variant={TIER_BADGE_VARIANT[item.titleTier]} className="flex-shrink-0">
+                {DIRECTORY_TIER_LABELS[item.titleTier]}
+              </Badge>
+            )}
+          </div>
           <div className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{item.excerpt}</div>
           {item.eventStartsAt && (
             <div className="mt-0.5 text-xs text-muted-foreground">Event Date: {formatTimestamp(item.eventStartsAt)}</div>

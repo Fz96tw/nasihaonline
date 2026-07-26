@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { EventVisibility, KnowledgeStatus, RSVPStatus, SurveyStatus } from "@/lib/generated/prisma/enums";
+import { EventVisibility, KnowledgeStatus, RSVPStatus, SurveyStatus, type Tier } from "@/lib/generated/prisma/enums";
 import { getProfileAvatarUrl, getPostHeroImageUrl, getEventHeroImageUrl, getAnnouncementHeroImageUrl, getSurveyHeroImageUrl } from "@/lib/storage";
 import { excerptFromHtml } from "@/lib/blog";
 import { withFeedRef, type FeedItem, type FeedCursor } from "@/lib/feed";
@@ -180,7 +180,7 @@ export async function getFeedPage(params: {
         showInFeed: true,
         ...(before ? { sentAt: { lt: before } } : {}),
       },
-      select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true },
+      select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true, welcomeTier: true },
       orderBy: { sentAt: "desc" },
       take: pageSize,
     }),
@@ -270,6 +270,7 @@ export async function getFeedPage(params: {
       timestamp: (announcement.sentAt as Date).toISOString(),
       author: BOARD_SENDER,
       imageUrl: getAnnouncementHeroImageUrl(announcement.heroImageUrl),
+      titleTier: announcement.welcomeTier,
     })),
     ...surveys.map((survey): FeedItem => ({
       type: "survey",
@@ -299,6 +300,8 @@ export type AnnouncementDetail = {
   sentAt: string;
   author: { name: string | null; avatarUrl: string | null };
   imageUrl: string | null;
+  /** Only the welcome-new-member Announcement carries this — the member's tier, rendered as a badge after their name in the title. */
+  titleTier: Tier | null;
 };
 
 /**
@@ -310,7 +313,7 @@ export type AnnouncementDetail = {
 export async function getSentAnnouncement(id: string): Promise<AnnouncementDetail | null> {
   const announcement = await db.announcement.findUnique({
     where: { id },
-    select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true, retractedAt: true },
+    select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true, retractedAt: true, welcomeTier: true },
   });
   if (!announcement || !announcement.sentAt || announcement.retractedAt) return null;
 
@@ -321,5 +324,6 @@ export async function getSentAnnouncement(id: string): Promise<AnnouncementDetai
     sentAt: announcement.sentAt.toISOString(),
     author: BOARD_SENDER,
     imageUrl: getAnnouncementHeroImageUrl(announcement.heroImageUrl),
+    titleTier: announcement.welcomeTier,
   };
 }

@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { NotificationType, Role } from "@/lib/generated/prisma/enums";
+import { NotificationType, Role, type Tier } from "@/lib/generated/prisma/enums";
 import { uploadAnnouncementHeroImage, getAnnouncementHeroImageUrl } from "@/lib/storage";
 import { sendAnnouncementEmail } from "@/lib/email";
 
@@ -32,6 +32,8 @@ export async function createAndSendAnnouncement(
     showInFeed: boolean;
     notifyInApp: boolean;
     sendEmail: boolean;
+    /** Set only by the welcome-new-member send (lib/welcome-announcement.ts) — renders as a tier badge after the name in the title. */
+    welcomeTier?: Tier | null;
   },
 ): Promise<{ id: string }> {
   let heroImageUrl: string | null = input.templateHeroImageUrl ?? null;
@@ -49,6 +51,7 @@ export async function createAndSendAnnouncement(
       notifyInApp: input.notifyInApp,
       sendEmail: input.sendEmail,
       sentAt: new Date(),
+      welcomeTier: input.welcomeTier ?? null,
     },
   });
 
