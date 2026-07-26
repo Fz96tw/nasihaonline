@@ -23,7 +23,6 @@ import {
   type EventRsvpAttendee,
   type MemberEvent,
 } from "@/lib/events";
-import { EventVisibility } from "@/lib/generated/prisma/enums";
 import type { DirectoryMember } from "@/lib/members";
 import { useHasMounted } from "@/lib/use-has-mounted";
 
@@ -78,7 +77,6 @@ export function EventDetail({
   const hasMounted = useHasMounted();
   const isPast = hasMounted && new Date(event.endsAt ?? event.startsAt) < new Date();
   const hostName = event.hostName ?? "NASIHA Member";
-  const isRestricted = event.visibility === EventVisibility.invited;
   const audienceBadge = getEventAudienceBadge(event);
 
   function handleRsvpToggled(result: { rsvped: boolean; meetingUrl: string | null; attendeeCount?: number }) {
@@ -168,7 +166,7 @@ export function EventDetail({
             </Link>
           </Button>
         )}
-        {canEdit && isRestricted && <CancelEventButton eventId={event.id} title={event.title} />}
+        {canEdit && <CancelEventButton eventId={event.id} title={event.title} />}
       </div>
 
       {roster ? (
