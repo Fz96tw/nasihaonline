@@ -151,11 +151,7 @@ export function SubmitEventForm({
         String(isCaseDiscussion && values.deidentificationConfirmed),
       );
       if (!existingEvent) {
-        // The Events forum has no audience-restriction concept, so a
-        // restricted event can't have a discussion thread there — same
-        // "can't linger as true after switching away" rationale as
-        // deidentificationConfirmed above.
-        formData.append("createDiscussionThread", String(!isRestricted && values.createDiscussionThread));
+        formData.append("createDiscussionThread", String(values.createDiscussionThread));
         formData.append("visibility", values.visibility);
         formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
         formData.append("meetLinkSource", values.meetLinkSource);
@@ -440,7 +436,7 @@ export function SubmitEventForm({
           />
         )}
 
-        {!existingEvent && !isRestricted && (
+        {!existingEvent && (
           <FormField
             control={form.control}
             name="createDiscussionThread"
@@ -453,8 +449,10 @@ export function SubmitEventForm({
                   <FormLabel className="!mt-0">Create a discussion thread for this event</FormLabel>
                   <FormDescription>
                     Posts a linked thread in the Events forum, titled after this event, with a first post
-                    linking back to it. Not available for a restricted event — the Events forum is visible to
-                    the whole community.
+                    linking back to it.
+                    {isRestricted
+                      ? " Since this event is restricted, the thread is visible only to you and the invited members — not the whole community."
+                      : null}
                   </FormDescription>
                 </div>
               </FormItem>

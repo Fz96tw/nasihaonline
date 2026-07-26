@@ -46,7 +46,9 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
   const authorProfile = await getDirectoryMemberById(item.contributor.id);
   const canEdit = user.id === item.contributor.id || user.role === Role.moderator || user.role === Role.admin;
 
-  const thread = item.forumThreadId ? await getForumThreadDetail(LIBRARY_FORUM_SLUG, item.forumThreadId) : null;
+  const thread = item.forumThreadId
+    ? await getForumThreadDetail(LIBRARY_FORUM_SLUG, item.forumThreadId, user.id)
+    : null;
   const mentionableMembers = thread ? await getMentionableMembers() : [];
 
   return (

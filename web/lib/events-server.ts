@@ -610,15 +610,6 @@ export async function createEvent(
 
   const isRestricted = input.visibility === EventVisibility.invited;
 
-  // Belt-and-suspenders, same rationale as the Case Discussion check above —
-  // createEventSchema already blocks this combination, but the Events forum
-  // has no audience-restriction concept, so a thread posted there for a
-  // restricted event would leak its title (and any discussion) to the
-  // whole community regardless of who's invited.
-  if (isRestricted && input.createDiscussionThread) {
-    throw new EventError(400, "Restricted events can't have a public discussion thread.");
-  }
-
   // Belt-and-suspenders, same rationale — createEventSchema already blocks
   // this combination. The real enforcement point against a leftover/bypassed
   // `open: true` on a restricted event is registerForEvent's own visibility

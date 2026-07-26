@@ -48,7 +48,6 @@ function requireRestrictedEventInvariants(
     invitedUserIds: string[];
     meetLinkSource: "auto" | "manual";
     meetingUrl: string | null;
-    createDiscussionThread: boolean;
     open: boolean;
   },
   ctx: z.RefinementCtx,
@@ -79,19 +78,6 @@ function requireRestrictedEventInvariants(
       code: z.ZodIssueCode.custom,
       path: ["meetingUrl"],
       message: "Enter a meeting link, or switch to auto-generate.",
-    });
-  }
-  // The Events forum has no audience-restriction concept at all — a
-  // discussion thread posted there is visible to the whole community
-  // regardless of who's invited to the event, which would leak a
-  // restricted event's title (and any discussion) to everyone. Simplest
-  // correct fix is to not offer it, rather than building per-thread
-  // Forums privacy for this one case.
-  if (data.createDiscussionThread) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["createDiscussionThread"],
-      message: "Restricted events can't have a public discussion thread.",
     });
   }
 }

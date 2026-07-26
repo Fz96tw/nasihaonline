@@ -38,7 +38,7 @@ export default async function MemberProfilePage({ params }: { params: { memberId
     getPublishedPostsByAuthor(params.memberId),
     getEventsHostedByMember(params.memberId),
     getPublishedKnowledgeItemsByContributor(params.memberId),
-    getMemberForumThreads(params.memberId),
+    getMemberForumThreads(params.memberId, user.id),
   ]);
 
   // Every item in libraryItems belongs to this member (params.memberId), so

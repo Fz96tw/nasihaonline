@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { NotificationType } from "@/lib/generated/prisma/enums";
+import { EventVisibility, NotificationType } from "@/lib/generated/prisma/enums";
 import { createNotification } from "@/lib/notifications-server";
 import { searchForumDocuments } from "@/lib/meilisearch";
 import { getDirectoryMembersByIds, getMentionableMembers } from "@/lib/members-server";
@@ -69,6 +69,30 @@ export async function getForumCategories(): Promise<ForumCategory[]> {
   });
 }
 
+// A restricted (invited-only) Event's discussion thread carries the same
+// visibility as the event itself (§4.6 extension) — the Events forum has no
+// per-thread ACL of its own, so every read path that can surface a thread
+// (browse list, search, direct URL, a member's profile, a reply/view POST)
+// has to run its result through this before showing or accepting anything.
+// A thread with no linked event (every non-Events forum, plus an Events
+// forum thread started standalone rather than from event creation) is
+// always visible — only an `invited`-visibility event's thread is gated.
+type EventThreadAccess = {
+  visibility: EventVisibility;
+  hostId: string;
+  invitees: { userId: string }[];
+} | null;
+
+const EVENT_THREAD_ACCESS_SELECT = {
+  select: { visibility: true, hostId: true, invitees: { select: { userId: true } } },
+} as const;
+
+function isEventThreadVisible(event: EventThreadAccess, viewerId: string | undefined): boolean {
+  if (!event || event.visibility !== EventVisibility.invited) return true;
+  if (!viewerId) return false;
+  return event.hostId === viewerId || event.invitees.some((invitee) => invitee.userId === viewerId);
+}
+
 const THREAD_LIST_SELECT = {
   id: true,
   title: true,
@@ -77,6 +101,7 @@ const THREAD_LIST_SELECT = {
   author: { select: { name: true } },
   posts: { select: { createdAt: true }, orderBy: { createdAt: "desc" } as const, take: 1 },
   _count: { select: { posts: true, views: true } },
+  event: EVENT_THREAD_ACCESS_SELECT,
 } as const;
 
 function toThreadListItem(thread: {
@@ -141,7 +166,8 @@ export async function getForumBySlug(
       where: { id: { in: hits.map((hit) => hit.id) } },
       select: THREAD_LIST_SELECT,
     });
-    const byId = new Map(threads.map((thread) => [thread.id, thread]));
+    const visibleThreads = threads.filter((thread) => isEventThreadVisible(thread.event, userId));
+    const byId = new Map(visibleThreads.map((thread) => [thread.id, thread]));
     return {
       forum: forumCategory,
       threads: hits.map((hit) => byId.get(hit.id)).filter((thread) => thread != null).map(toThreadListItem),
@@ -159,10 +185,13 @@ export async function getForumBySlug(
     where: { forumId: forum.id },
     select: THREAD_LIST_SELECT,
   });
-  const items = threads.map(toThreadListItem).sort((a, b) => {
-    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-    return b.lastActivityAt.localeCompare(a.lastActivityAt);
-  });
+  const items = threads
+    .filter((thread) => isEventThreadVisible(thread.event, userId))
+    .map(toThreadListItem)
+    .sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      return b.lastActivityAt.localeCompare(a.lastActivityAt);
+    });
 
   return { forum: forumCategory, threads: items, isFollowing };
 }
@@ -170,11 +199,18 @@ export async function getForumBySlug(
 /**
  * /forums/[category]/[threadId] (§4.13) — fetched flat (cheap at this
  * volume) and assembled into a reply tree by `parentPostId`, same pattern
- * as getPostComments. Returns null if the thread doesn't exist or doesn't
+ * as getPostComments. Returns null if the thread doesn't exist, doesn't
  * belong to the forum the URL claims (so /forums/general/[id-from-another-
- * forum] 404s rather than silently rendering under the wrong category).
+ * forum] 404s rather than silently rendering under the wrong category), or
+ * belongs to a restricted event `viewerId` isn't the host or an invitee of
+ * — same 404-not-403 privacy shape, so a guessed URL can't even confirm the
+ * thread exists.
  */
-export async function getForumThreadDetail(forumSlug: string, threadId: string): Promise<ForumThreadDetail | null> {
+export async function getForumThreadDetail(
+  forumSlug: string,
+  threadId: string,
+  viewerId: string | undefined,
+): Promise<ForumThreadDetail | null> {
   const thread = await db.forumThread.findUnique({
     where: { id: threadId },
     select: {
@@ -185,6 +221,7 @@ export async function getForumThreadDetail(forumSlug: string, threadId: string):
       createdAt: true,
       author: { select: { name: true } },
       forum: { select: { id: true, name: true, slug: true } },
+      event: EVENT_THREAD_ACCESS_SELECT,
       posts: {
         select: {
           id: true,
@@ -202,6 +239,7 @@ export async function getForumThreadDetail(forumSlug: string, threadId: string):
     },
   });
   if (!thread || thread.forum.slug !== forumSlug) return null;
+  if (!isEventThreadVisible(thread.event, viewerId)) return null;
 
   const authorProfiles = await getDirectoryMembersByIds(Array.from(new Set(thread.posts.map((post) => post.authorId))));
 
@@ -252,15 +290,21 @@ export async function getForumThreadDetail(forumSlug: string, threadId: string):
  * member has posted or replied in, newest activity first. Posts are fetched
  * newest-first and deduped by threadId in JS rather than a SQL DISTINCT ON,
  * so each thread's row naturally keeps that member's most recent post time
- * in it (the first occurrence per threadId in createdAt-desc order).
+ * in it (the first occurrence per threadId in createdAt-desc order). `viewerId`
+ * (the profile visitor, distinct from `userId` the profile belongs to) hides
+ * any thread tied to a restricted event neither of them can see — a profile
+ * page is otherwise a side channel for the same leak getForumThreadDetail
+ * blocks directly.
  */
-export async function getMemberForumThreads(userId: string): Promise<MemberForumThread[]> {
+export async function getMemberForumThreads(userId: string, viewerId: string): Promise<MemberForumThread[]> {
   const posts = await db.forumPost.findMany({
     where: { authorId: userId },
     select: {
       threadId: true,
       createdAt: true,
-      thread: { select: { title: true, forum: { select: { slug: true, name: true } } } },
+      thread: {
+        select: { title: true, forum: { select: { slug: true, name: true } }, event: EVENT_THREAD_ACCESS_SELECT },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -270,6 +314,7 @@ export async function getMemberForumThreads(userId: string): Promise<MemberForum
   for (const post of posts) {
     if (seenThreadIds.has(post.threadId)) continue;
     seenThreadIds.add(post.threadId);
+    if (!isEventThreadVisible(post.thread.event, viewerId)) continue;
     threads.push({
       id: post.threadId,
       title: post.thread.title,
@@ -291,11 +336,18 @@ export async function getThreadViewCount(threadId: string): Promise<number> {
  * recordPostView, `userId` is always a real signed-in member (both thread
  * pages redirect a signed-out visitor to /sign-in before this can ever
  * fire), so this dedupes on the `[threadId, userId]` unique constraint
- * directly rather than going through an opaque viewer key.
+ * directly rather than going through an opaque viewer key. Also enforces
+ * the same restricted-event visibility as getForumThreadDetail — a direct
+ * POST with a guessed threadId shouldn't be able to confirm a restricted
+ * thread exists (or inflate its view count) any more than loading the page
+ * itself could.
  */
 export async function recordThreadView(threadId: string, userId: string): Promise<number> {
-  const thread = await db.forumThread.findUnique({ where: { id: threadId }, select: { id: true } });
-  if (!thread) throw new ForumError(404, "Thread not found.");
+  const thread = await db.forumThread.findUnique({
+    where: { id: threadId },
+    select: { id: true, event: EVENT_THREAD_ACCESS_SELECT },
+  });
+  if (!thread || !isEventThreadVisible(thread.event, userId)) throw new ForumError(404, "Thread not found.");
 
   await db.threadView.createMany({ data: { threadId, userId }, skipDuplicates: true });
   return getThreadViewCount(threadId);
@@ -344,10 +396,14 @@ export async function createForumThread(
 /**
  * Posts a reply on a thread and notifies its other participants
  * (`forum_reply_mention`) — every distinct author on the thread plus the
- * thread's own author, minus the replier and minus anyone following the
- * forum (followers wait for the future digest instead, §4.10 Phase 6).
- * Same de-identification gate as createForumThread, keyed off the parent
- * thread's forum.
+ * thread's own author, plus (for a restricted event's thread) every invitee
+ * regardless of whether they've posted yet, so the invited list finds out
+ * about updates without having to already be a participant — minus the
+ * replier and minus anyone following the forum (followers wait for the
+ * future digest instead, §4.10 Phase 6). Same de-identification gate as
+ * createForumThread, keyed off the parent thread's forum. Also 404s (rather
+ * than 403s) a reply to a restricted event's thread from a non-host,
+ * non-invitee, same privacy shape as getForumThreadDetail.
  *
  * Also matches `@Full Name` tags (§4.13) against Directory-eligible members
  * and sends each a distinct `mention` notification instead — a tagged
@@ -360,9 +416,17 @@ export async function createForumPost(
 ): Promise<{ id: string; createdAt: string }> {
   const thread = await db.forumThread.findUnique({
     where: { id: threadId },
-    select: { id: true, title: true, forumId: true, authorId: true, forum: { select: { slug: true } } },
+    select: {
+      id: true,
+      title: true,
+      forumId: true,
+      authorId: true,
+      forum: { select: { slug: true } },
+      event: EVENT_THREAD_ACCESS_SELECT,
+    },
   });
   if (!thread) throw new ForumError(404, "Thread not found.");
+  if (!isEventThreadVisible(thread.event, authorId)) throw new ForumError(404, "Thread not found.");
 
   if (input.parentId) {
     const parent = await db.forumPost.findUnique({ where: { id: input.parentId }, select: { threadId: true } });
@@ -395,6 +459,14 @@ export async function createForumPost(
   });
   const otherParticipantIds = new Set(participants.map((participant) => participant.authorId));
   if (thread.authorId !== authorId) otherParticipantIds.add(thread.authorId);
+  // A restricted event's invitee should hear about thread activity even
+  // before they've posted anything themselves — otherwise the invited list
+  // only finds out once someone else happens to reply and tag them.
+  if (thread.event?.visibility === EventVisibility.invited) {
+    for (const invitee of thread.event.invitees) {
+      if (invitee.userId !== authorId) otherParticipantIds.add(invitee.userId);
+    }
+  }
 
   const mentionableMembers = await getMentionableMembers();
   const mentionedMembers = findMentionedMembers(input.body, mentionableMembers).filter(

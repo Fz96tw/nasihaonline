@@ -63,7 +63,9 @@ export default async function EventDetailPage({ params }: { params: { eventId: s
     canEdit && isRestricted && isPast ? getEventAttendanceChecklist(event.id) : Promise.resolve(null),
   ]);
 
-  const thread = event.forumThreadId ? await getForumThreadDetail(EVENTS_FORUM_SLUG, event.forumThreadId) : null;
+  const thread = event.forumThreadId
+    ? await getForumThreadDetail(EVENTS_FORUM_SLUG, event.forumThreadId, user.id)
+    : null;
   const mentionableMembers = thread ? await getMentionableMembers() : [];
 
   return (

@@ -15,7 +15,8 @@ export async function generateMetadata({
 }: {
   params: { category: string; threadId: string };
 }): Promise<Metadata> {
-  const thread = await getForumThreadDetail(params.category, params.threadId);
+  const user = await getSessionUser();
+  const thread = user ? await getForumThreadDetail(params.category, params.threadId, user.id) : null;
   return { title: thread ? `${thread.title} — Forums — NASIHA` : "Thread not found — NASIHA" };
 }
 
@@ -28,7 +29,7 @@ export default async function ForumThreadPage({
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const thread = await getForumThreadDetail(params.category, params.threadId);
+  const thread = await getForumThreadDetail(params.category, params.threadId, user.id);
   if (!thread) notFound();
 
   const mentionableMembers = await getMentionableMembers();
