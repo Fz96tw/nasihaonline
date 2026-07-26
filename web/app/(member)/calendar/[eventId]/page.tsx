@@ -25,6 +25,25 @@ export default async function EventDetailPage({ params }: { params: { eventId: s
   const event = await getMemberEventById(user.id, params.eventId);
   if (!event) notFound();
 
+  // A cancellation notification links straight here, so this can't 404 once
+  // the organizer cancels (getMemberEventById deliberately doesn't filter
+  // cancelledAt like the /calendar listing does) — show a plain "cancelled"
+  // state instead of the full RSVP/edit/discussion detail view.
+  if (event.cancelled) {
+    return (
+      <main className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
+        <BackLink fallbackHref="/calendar" />
+        <div>
+          <h1 className="mb-1 text-3xl font-bold tracking-tight">{event.title}</h1>
+          {event.hostName ? <p className="text-sm text-muted-foreground">Hosted by {event.hostName}</p> : null}
+        </div>
+        <div className="rounded-lg border bg-muted px-4 py-3 text-sm text-muted-foreground">
+          This event has been cancelled by the organizer.
+        </div>
+      </main>
+    );
+  }
+
   const isHost = user.id === event.hostId;
   const canEdit = isHost || user.role === Role.admin;
   // Full invitee roster (Objective 02) — visible to every invited member,

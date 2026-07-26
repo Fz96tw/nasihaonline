@@ -9,10 +9,9 @@ import { getCsrfToken } from "@/lib/csrf-client";
 /**
  * Host/admin-facing "Cancel Event" action, only rendered for a restricted
  * event (Audience-Restricted Group Events, Objective 03) — cancelling
- * notifies every current invitee. Once cancelled the event no longer
- * resolves via getMemberEventById for anyone (including the host), so this
- * navigates back to /calendar rather than staying on a page that would
- * immediately 404 on refresh.
+ * notifies every current invitee. Once cancelled, the detail page renders a
+ * plain "cancelled" state on refresh rather than the full RSVP/edit view, so
+ * this navigates back to /calendar instead of staying put.
  */
 export function CancelEventButton({ eventId, title }: { eventId: string; title: string }) {
   const router = useRouter();

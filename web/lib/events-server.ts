@@ -216,6 +216,8 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
       hostId: event.hostId,
       hostName: event.host.name,
       rsvped,
+      // This listing query filters cancelledAt: null above, so every result here is live.
+      cancelled: false,
       // The host can always join their own meeting — they never auto-RSVP
       // to their own event, so gating this on `rsvped` alone would hide it
       // from the one person who definitely needs it.
@@ -232,12 +234,15 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
 // /calendar/[eventId] — single-event detail view. Not filtered by startsAt
 // so a past event reached via an "Add to calendar" link, email reminder, or
 // direct navigation still resolves instead of 404ing once its start time
-// has passed.
+// has passed. Also deliberately not filtered on cancelledAt (unlike
+// getMemberEvents' listing query) — a cancellation notification links
+// straight here, and the invitee who just got notified needs the page to
+// resolve with a "this event was cancelled" state rather than 404. The page
+// is responsible for rendering that state off the returned `cancelled` flag.
 export async function getMemberEventById(userId: string, eventId: string): Promise<MemberEvent | null> {
   const event = await db.event.findFirst({
     where: {
       id: eventId,
-      cancelledAt: null,
       OR: [{ visibility: EventVisibility.community }, { hostId: userId }, { invitees: { some: { userId } } }],
     },
     select: {
@@ -251,6 +256,7 @@ export async function getMemberEventById(userId: string, eventId: string): Promi
       heroImageUrl: true,
       meetingUrl: true,
       visibility: true,
+      cancelledAt: true,
       forumThread: { select: { id: true, _count: { select: { posts: true } } } },
       hostId: true,
       host: { select: { name: true } },
@@ -279,6 +285,7 @@ export async function getMemberEventById(userId: string, eventId: string): Promi
     hostId: event.hostId,
     hostName: event.host.name,
     rsvped,
+    cancelled: event.cancelledAt !== null,
     // Same host exception as getMemberEvents above.
     meetingUrl: rsvped || event.hostId === userId ? event.meetingUrl : null,
     attendeeCount: event._count.rsvps + event._count.registrations,

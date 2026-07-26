@@ -52,6 +52,8 @@ export type EventWithRsvp = PublicEvent & {
 // exposed, and only when `rsvped` is true for this viewer.
 export type MemberEvent = EventWithRsvp & {
   meetingUrl: string | null;
+  /** True once the organizer has cancelled this event (getMemberEventById is the only MemberEvent query that ever sets this — listing queries filter cancelled events out entirely). */
+  cancelled: boolean;
   /** Going RSVPs (members) plus EventRegistrations (non-members) — same merge as getEventEngagementForAdmin. */
   attendeeCount: number;
   /** So the detail page can gate its "Edit Event" link to the host or an admin. */
