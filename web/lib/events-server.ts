@@ -1084,12 +1084,15 @@ export async function updateEventInvitees(
 
 /**
  * Cancels an event (host or admin only) — a one-way, soft-delete-style flag
- * (Event.cancelledAt), not a status a host can clear. For a restricted
- * event, notifies every current invitee (bell + email) and, if the Meet
- * link was auto-generated, deletes the underlying Google Calendar event.
- * Community events can be cancelled too (the field/query filtering is
- * generic) but this objective's UI only exposes the action for restricted
- * events — see components/calendar/manage-invitees.tsx.
+ * (Event.cancelledAt), not a status a host can clear. Notifies everyone who
+ * committed to the event, for any visibility: restricted-event invitees and
+ * anyone with a `going` RSVP get a bell notification + email (deduped by
+ * userId, since a restricted-event member can be both invited and RSVP'd);
+ * external `EventRegistration` signups — no `User` account, so no bell
+ * notification is possible — get an email pointing at the public /events
+ * listing instead of the member-only /calendar/[eventId] link, since they
+ * can't sign in to reach it. Also deletes the underlying Google Calendar
+ * event if the Meet link was auto-generated.
  */
 export async function cancelEvent(eventId: string, actingUser: UserModel): Promise<void> {
   const event = await db.event.findUnique({
@@ -1106,32 +1109,58 @@ export async function cancelEvent(eventId: string, actingUser: UserModel): Promi
   }
 
   const isRestricted = event.visibility === EventVisibility.invited;
-  const invitees = isRestricted
-    ? await db.eventInvitee.findMany({
-        where: { eventId },
-        select: { userId: true, user: { select: { email: true, name: true } } },
-      })
-    : [];
+  const [invitees, goingRsvps, registrations] = await Promise.all([
+    isRestricted
+      ? db.eventInvitee.findMany({
+          where: { eventId },
+          select: { userId: true, user: { select: { email: true, name: true } } },
+        })
+      : Promise.resolve([]),
+    db.rSVP.findMany({
+      where: { eventId, status: RSVPStatus.going },
+      select: { userId: true, user: { select: { email: true, name: true } } },
+    }),
+    db.eventRegistration.findMany({ where: { eventId }, select: { email: true, name: true } }),
+  ]);
 
   await db.event.update({ where: { id: eventId }, data: { cancelledAt: new Date() } });
 
-  if (isRestricted && invitees.length > 0) {
+  const message = `${actingUser.name ?? "The host"} cancelled "${event.title}".`;
+
+  // Invitees ∪ RSVP'd members, deduped by userId — a restricted-event
+  // member who is both invited and RSVP'd gets exactly one notification.
+  const members = new Map<string, { email: string; name: string | null }>();
+  for (const invitee of invitees) members.set(invitee.userId, invitee.user);
+  for (const rsvp of goingRsvps) members.set(rsvp.userId, rsvp.user);
+
+  if (members.size > 0) {
     const link = `/calendar/${eventId}`;
-    const message = `${actingUser.name ?? "The host"} cancelled "${event.title}".`;
     await db.notification.createMany({
-      data: invitees.map((invitee) => ({
-        recipientId: invitee.userId,
+      data: Array.from(members.keys()).map((recipientId) => ({
+        recipientId,
         type: NotificationType.event_cancelled,
         message,
         link,
       })),
     });
     await Promise.allSettled(
-      invitees.map((invitee) =>
-        sendEventLifecycleEmail(invitee.user.email, invitee.user.name ?? "there", {
+      Array.from(members.values()).map((member) =>
+        sendEventLifecycleEmail(member.email, member.name ?? "there", {
           subject: `Cancelled: ${event.title}`,
           message,
           link: `${APP_URL}${link}`,
+        }),
+      ),
+    );
+  }
+
+  if (registrations.length > 0) {
+    await Promise.allSettled(
+      registrations.map((registration) =>
+        sendEventLifecycleEmail(registration.email, registration.name ?? "there", {
+          subject: `Cancelled: ${event.title}`,
+          message,
+          link: `${APP_URL}/events`,
         }),
       ),
     );
