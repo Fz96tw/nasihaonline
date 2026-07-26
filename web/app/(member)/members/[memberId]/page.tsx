@@ -16,7 +16,7 @@ import { Role } from "@/lib/generated/prisma/enums";
 
 export async function generateMetadata({ params }: { params: { memberId: string } }): Promise<Metadata> {
   const member = await getDirectoryMemberById(params.memberId);
-  return { title: member ? `${member.name ?? "Member"} — Directory — NASIHA` : "Member not found — NASIHA" };
+  return { title: member ? `${member.name ?? "Member"} — Directory — NASIHA` : "Member not listed — NASIHA" };
 }
 
 /**
