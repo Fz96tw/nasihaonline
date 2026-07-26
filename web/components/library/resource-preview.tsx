@@ -36,11 +36,27 @@ function youtubeEmbedUrl(rawUrl: string): string | null {
  * PDF.js only renders PDFs.
  */
 function PdfPreview({ url, fileName }: { url: string; fileName: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pdfRef = useRef<import("pdfjs-dist").PDFDocumentProxy | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [pageNum, setPageNum] = useState(1);
   const [pageCount, setPageCount] = useState(0);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  // iOS Safari silently fails to paint (and past a hard pixel ceiling,
+  // errors on "Total canvas memory... exceeds the maximum limit") a canvas
+  // wider than its scrollable container — desktop browsers just show a
+  // horizontal scrollbar instead, which is why a fixed scale looked fine
+  // there but rendered a blank canvas on iPhone. Track the container's
+  // width so the render effect below can fit the page to it.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setContainerWidth(entry.contentRect.width));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,25 +87,40 @@ function PdfPreview({ url, fileName }: { url: string; fileName: string }) {
   }, [url]);
 
   useEffect(() => {
-    if (status !== "ready" || !pdfRef.current || !canvasRef.current) return;
+    if (status !== "ready" || !pdfRef.current || !canvasRef.current || containerWidth === 0) return;
     let cancelled = false;
 
     (async () => {
-      const page = await pdfRef.current!.getPage(pageNum);
-      if (cancelled) return;
-      const viewport = page.getViewport({ scale: 1.3 });
-      const canvas = canvasRef.current!;
-      const context = canvas.getContext("2d");
-      if (!context) return;
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      await page.render({ canvasContext: context, viewport, canvas }).promise;
+      try {
+        const page = await pdfRef.current!.getPage(pageNum);
+        if (cancelled) return;
+
+        const unscaled = page.getViewport({ scale: 1 });
+        let scale = Math.min(containerWidth / unscaled.width, 1.3);
+        let viewport = page.getViewport({ scale });
+        // Extra safety margin below iOS Safari's hard ~16,777,216px canvas
+        // backing-store ceiling, for unusually large (e.g. poster-size) pages.
+        const maxPixels = 4_000_000;
+        if (viewport.width * viewport.height > maxPixels) {
+          scale *= Math.sqrt(maxPixels / (viewport.width * viewport.height));
+          viewport = page.getViewport({ scale });
+        }
+
+        const canvas = canvasRef.current!;
+        const context = canvas.getContext("2d");
+        if (!context) return;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await page.render({ canvasContext: context, viewport, canvas }).promise;
+      } catch {
+        if (!cancelled) setStatus("error");
+      }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [status, pageNum]);
+  }, [status, pageNum, containerWidth]);
 
   if (status === "error") {
     return (
@@ -107,15 +138,17 @@ function PdfPreview({ url, fileName }: { url: string; fileName: string }) {
 
   return (
     <div className="flex flex-col items-center gap-3">
-      {status === "loading" ? (
-        <div className="flex h-80 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : (
-        <div className="max-h-[70vh] w-full overflow-auto rounded-md border bg-muted/30">
+      {/* Always mounted (even while loading) so the ResizeObserver above has
+          a container to measure before the first page render runs. */}
+      <div ref={containerRef} className="max-h-[70vh] w-full overflow-auto rounded-md border bg-muted/30">
+        {status === "loading" ? (
+          <div className="flex h-80 items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
           <canvas ref={canvasRef} className="mx-auto" />
-        </div>
-      )}
+        )}
+      </div>
       {status === "ready" && pageCount > 1 && (
         <div className="flex items-center gap-3">
           <Button
