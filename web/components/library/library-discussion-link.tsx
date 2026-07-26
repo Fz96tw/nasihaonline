@@ -2,43 +2,30 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCsrfToken } from "@/lib/csrf-client";
-import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
 
 /**
- * On-demand discussion link on /library/[id] (§4.9) — "Join the Discussion"
- * (a plain Link) when initialThreadId is already set; "Start a Discussion"
- * (a button that POSTs to create the thread, then navigates into it)
- * otherwise. Mirrors EventDetail's "Discuss this event" link, but Events'
- * thread is created eagerly at submission time so it never needs a
- * "start" affordance — only Library's is on-demand.
+ * On-demand "Start a Discussion" button on /library/[id] (§4.9). Once a
+ * thread exists it's rendered inline further down the page (see
+ * ForumThreadView usage in the page component), so this renders nothing
+ * once initialThreadId is set — starting one just refreshes the page so
+ * the newly created thread appears embedded below.
  */
 export function LibraryDiscussionLink({
   itemId,
   initialThreadId,
-  initialReplyCount,
 }: {
   itemId: string;
   initialThreadId: string | null;
-  initialReplyCount: number | null;
 }) {
   const router = useRouter();
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (initialThreadId) {
-    return (
-      <Link
-        href={`/forums/${LIBRARY_FORUM_SLUG}/${initialThreadId}`}
-        className="flex w-fit items-center gap-1.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
-      >
-        <MessageSquare className="h-4 w-4" />
-        Join the Discussion{initialReplyCount ? ` (${initialReplyCount})` : ""}
-      </Link>
-    );
+    return null;
   }
 
   async function handleStart() {
@@ -54,10 +41,10 @@ export function LibraryDiscussionLink({
         const payload = await res.json().catch(() => null);
         throw new Error(typeof payload?.error === "string" ? payload.error : "Something went wrong.");
       }
-      const { threadId } = await res.json();
-      router.push(`/forums/${LIBRARY_FORUM_SLUG}/${threadId}`);
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
       setStarting(false);
     }
   }
