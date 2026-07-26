@@ -1063,14 +1063,15 @@ export async function updateEventInvitees(
       await tx.eventInvitee.deleteMany({ where: { eventId, userId: { in: removeIds } } });
       await tx.rSVP.deleteMany({ where: { eventId, userId: { in: removeIds } } });
 
-      const link = `/calendar/${eventId}`;
       const message = `You are no longer needed for "${event.title}".`;
       await tx.notification.createMany({
         data: removeIds.map((userId) => ({
           recipientId: userId,
           type: NotificationType.event_removed,
           message,
-          link,
+          // No link: removed invitees lose access to the event page, so a
+          // stored link would 404. This is informational-only.
+          link: null,
         })),
       });
     }
@@ -1086,7 +1087,7 @@ export async function updateEventInvitees(
             sendEventLifecycleEmail(row.user.email, row.user.name ?? "there", {
               subject: `Update: ${event.title}`,
               message: `You are no longer needed for "${event.title}".`,
-              link: `${APP_URL}/calendar/${eventId}`,
+              // No link — same rationale as the in-app notification above.
             }),
           ),
         )

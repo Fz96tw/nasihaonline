@@ -17,7 +17,7 @@ type NotificationClient = Prisma.TransactionClient | typeof db;
  * flip, and notification from diverging) can pass `tx` instead of `db`.
  */
 export async function createNotification(
-  input: { recipientId: string; type: NotificationType; message: string; link: string },
+  input: { recipientId: string; type: NotificationType; message: string; link?: string | null },
   client: NotificationClient = db,
 ): Promise<void> {
   await client.notification.create({ data: input });
@@ -41,7 +41,7 @@ export async function getNotificationsForUser(
       id: notification.id,
       type: notification.type,
       message: notification.message,
-      link: notification.link ?? "/inbox",
+      link: notification.link,
       unread: notification.readAt === null,
       createdAt: notification.createdAt.toISOString(),
     })),
@@ -59,7 +59,7 @@ export class NotificationAccessError extends Error {
 }
 
 /** Marks a single notification read, scoped to its recipient. Returns its link so the caller can navigate. */
-export async function markNotificationRead(id: string, userId: string): Promise<{ id: string; link: string }> {
+export async function markNotificationRead(id: string, userId: string): Promise<{ id: string; link: string | null }> {
   const notification = await db.notification.findUnique({ where: { id } });
   if (!notification) throw new NotificationAccessError(404, "Notification not found.");
   if (notification.recipientId !== userId) {
@@ -70,7 +70,7 @@ export async function markNotificationRead(id: string, userId: string): Promise<
     await db.notification.update({ where: { id }, data: { readAt: new Date() } });
   }
 
-  return { id: notification.id, link: notification.link ?? "/inbox" };
+  return { id: notification.id, link: notification.link };
 }
 
 /** Marks every unread notification for this user read in one shot ("mark all read"). */

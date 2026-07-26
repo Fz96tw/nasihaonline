@@ -88,7 +88,7 @@ export function NotificationBell() {
         await refresh();
       }
     }
-    router.push(notification.link);
+    if (notification.link) router.push(notification.link);
   }
 
   async function handleMarkAllRead() {

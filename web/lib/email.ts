@@ -301,7 +301,7 @@ export async function sendEventInviteEmail(
 export async function sendEventLifecycleEmail(
   to: string,
   name: string,
-  event: { subject: string; message: string; link: string },
+  event: { subject: string; message: string; link?: string },
 ) {
   if (!resend) {
     console.warn(`[email] RESEND_API_KEY not set — skipping event lifecycle email to ${to}`);
@@ -309,11 +309,12 @@ export async function sendEventLifecycleEmail(
   }
 
   try {
+    const viewLine = event.link ? `\n\nView it here:\n${event.link}` : "";
     await resend.emails.send({
       from: FROM_EMAIL,
       to,
       subject: event.subject,
-      text: `Hi ${name},\n\n${event.message}\n\nView it here:\n${event.link}\n\n— The NASIHA Team`,
+      text: `Hi ${name},\n\n${event.message}${viewLine}\n\n— The NASIHA Team`,
     });
   } catch (error) {
     console.error("[email] Failed to send event lifecycle email", error);

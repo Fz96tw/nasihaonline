@@ -7,8 +7,8 @@ export type NotificationListItem = {
   id: string;
   type: NotificationType;
   message: string;
-  /** Where opening this notification should navigate — always an Inbox item for this phase. */
-  link: string;
+  /** Where opening this notification should navigate. Null means it's informational only — no page to open (e.g. you lost access to what it refers to). */
+  link: string | null;
   unread: boolean;
   createdAt: string;
 };
