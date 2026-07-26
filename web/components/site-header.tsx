@@ -109,7 +109,7 @@ export async function SiteHeader() {
               <Button variant="ghost" size="sm" className="gap-1.5 text-base font-semibold" asChild>
                 <Link href="/dashboard">
                   <LayoutDashboard className="h-[18px] w-[18px]" />
-                  My Dashboard
+                  Dashboard
                 </Link>
               </Button>
             </div>
@@ -118,7 +118,7 @@ export async function SiteHeader() {
                 <Rss className="h-[18px] w-[18px]" />
               </Link>
             </Button>
-            <Button variant="ghost" size="icon" className="lg:hidden" aria-label="My Dashboard" asChild>
+            <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Dashboard" asChild>
               <Link href="/dashboard">
                 <LayoutDashboard className="h-[18px] w-[18px]" />
               </Link>
