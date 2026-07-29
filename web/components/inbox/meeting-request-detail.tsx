@@ -10,13 +10,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { type MeetingRequestListItem } from "@/lib/inbox";
+import { type MeetingRequestListItem, type MeetingRequestMessageItem } from "@/lib/inbox";
 import { MEETING_REQUEST_STATUS_BADGE_VARIANT, MEETING_REQUEST_STATUS_LABELS } from "@/lib/meeting-requests";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { getLocalTimeZoneAbbreviation } from "@/lib/timezone";
 import { useHasMounted } from "@/lib/use-has-mounted";
+import { cn } from "@/lib/utils";
 
 const MAX_PROPOSED_TIMES = 5;
+
+const MESSAGE_ACTION_LABELS: Record<MeetingRequestMessageItem["action"], string> = {
+  created: "requested a meeting",
+  proposed: "proposed a new time",
+  accepted: "accepted",
+  declined: "declined",
+  cancelled: "cancelled the request",
+};
 
 // timeZoneName makes explicit which zone a bare time means (see lib/timezone.ts)
 // — proposedTimes has no picker of its own, so without this a sender/recipient
@@ -30,6 +39,45 @@ function formatTimestamp(iso: string): string {
     minute: "2-digit",
     timeZoneName: "short",
   });
+}
+
+/**
+ * The full negotiation history (§4.7) — original ask, each proposed-time
+ * counter, and the final accept/decline/cancel — rendered as a timeline,
+ * same chat-bubble convention as InboxDetail's message thread. Replaces
+ * the old single "Message" block, which only ever showed the most recent
+ * note and silently lost everything before it.
+ */
+function MessageTimeline({ messages, currentUserId }: { messages: MeetingRequestMessageItem[]; currentUserId: string }) {
+  const hasMounted = useHasMounted();
+  return (
+    <div className="flex flex-col gap-3">
+      {messages.map((message) => (
+        <div
+          key={message.id}
+          className={cn(
+            "max-w-[90%] rounded-[10px] border p-3",
+            message.senderId === currentUserId ? "ml-auto bg-primary/10" : "bg-muted/40",
+          )}
+        >
+          <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+            <span className="font-medium">
+              {message.senderName} {MESSAGE_ACTION_LABELS[message.action]}
+            </span>
+            <span>{hasMounted ? formatTimestamp(message.createdAt) : null}</span>
+          </div>
+          {message.proposedTimes.length > 0 && (
+            <ul className="mb-1 flex flex-col gap-0.5 text-sm">
+              {message.proposedTimes.map((time) => (
+                <li key={time}>{hasMounted ? formatTimestamp(time) : null}</li>
+              ))}
+            </ul>
+          )}
+          {message.body && <p className="whitespace-pre-wrap text-sm">{message.body}</p>}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 async function patchMeetingRequest(id: string, body: Record<string, unknown>) {
@@ -274,15 +322,22 @@ function EditRequestForm({
  * Detail pane for a meeting-request inbox item (§4.7). Rendered directly
  * from the merged inbox list's inline data — there's no
  * GET /api/inbox/meeting-requests/:id per PRD's route list, so no fetch is
- * needed. Only the recipient of a `pending` request sees accept/decline/
- * propose-new-time actions; the sender just watches the status.
+ * needed.
+ *
+ * `pending`/`rescheduled` double as a turn indicator (see
+ * MeetingRequestStatus's doc comment in schema.prisma): whichever party did
+ * *not* propose the current outstanding time is the one who can
+ * accept/decline/propose again, and either party can keep countering across
+ * unlimited rounds. `canRespond` below derives directly from that.
  */
 export function MeetingRequestDetail({
   item,
+  currentUserId,
   onBack,
   onUpdated,
 }: {
   item: MeetingRequestListItem;
+  currentUserId: string;
   onBack: () => void;
   onUpdated: () => Promise<unknown>;
 }) {
@@ -293,8 +348,16 @@ export function MeetingRequestDetail({
   const [selectedTime, setSelectedTime] = useState(item.proposedTimes[0] ?? "");
   const hasMounted = useHasMounted();
 
-  const canRespond = item.direction === "received" && item.status === "pending";
-  const canEdit = item.direction === "sent" && (item.status === "pending" || item.status === "rescheduled");
+  const canRespond =
+    (item.status === "pending" && item.direction === "received") ||
+    (item.status === "rescheduled" && item.direction === "sent");
+  // Only while status === "pending" — i.e. the sender's own proposal (the
+  // original ask, or a later counter) is still the one on the table. Once
+  // the recipient counters (status "rescheduled"), there's nothing of the
+  // sender's own left to edit; they respond via accept/decline/reschedule.
+  const canEdit = item.direction === "sent" && item.status === "pending";
+  const isOpenNegotiation = item.status === "pending" || item.status === "rescheduled";
+  const latestMessage = item.messages[item.messages.length - 1];
 
   async function handleAccept() {
     setPendingAction("accept");
@@ -358,9 +421,18 @@ export function MeetingRequestDetail({
       </div>
 
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
-        <Badge variant={MEETING_REQUEST_STATUS_BADGE_VARIANT[item.status]} className="w-fit">
-          {MEETING_REQUEST_STATUS_LABELS[item.status]}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant={MEETING_REQUEST_STATUS_BADGE_VARIANT[item.status]} className="w-fit">
+            {MEETING_REQUEST_STATUS_LABELS[item.status]}
+          </Badge>
+          {isOpenNegotiation && (
+            <span className="text-xs text-muted-foreground">
+              {canRespond ? "Waiting on you" : `Waiting on ${item.otherPartyName}`}
+            </span>
+          )}
+        </div>
+
+        <MessageTimeline messages={item.messages} currentUserId={currentUserId} />
 
         {item.status !== "accepted" && (
           <div>
@@ -396,13 +468,6 @@ export function MeetingRequestDetail({
             to both of you. It&apos;ll also appear on your Calendar page&apos;s Upcoming List, visible only to
             the two of you, not the rest of the community.
           </p>
-        )}
-
-        {item.message && (
-          <div>
-            <div className="mb-1 text-xs font-medium text-muted-foreground">Message</div>
-            <p className="whitespace-pre-wrap text-sm">{item.message}</p>
-          </div>
         )}
 
         {item.status === "accepted" && (
@@ -468,17 +533,6 @@ export function MeetingRequestDetail({
             <Button size="sm" variant="outline" onClick={() => setEditingOpen(true)} disabled={pendingAction !== null}>
               Edit
             </Button>
-            {item.status === "pending" && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-destructive hover:text-destructive"
-                onClick={handleCancel}
-                disabled={pendingAction !== null}
-              >
-                {pendingAction === "cancel" ? "Withdrawing…" : "Withdraw request"}
-              </Button>
-            )}
           </div>
         )}
 
@@ -486,10 +540,26 @@ export function MeetingRequestDetail({
           <EditRequestForm
             meetingRequestId={item.id}
             initialTopic={item.topic}
-            initialMessage={item.message}
+            initialMessage={latestMessage?.body ?? null}
             onCancel={() => setEditingOpen(false)}
             onDone={onUpdated}
           />
+        )}
+
+        {/* The original requester may withdraw the whole negotiation at any
+            open (pending/rescheduled) turn, not just when it's their own
+            outstanding proposal — independent of whether it's currently
+            their turn to accept/decline/propose. */}
+        {item.direction === "sent" && isOpenNegotiation && !reschedulingOpen && !editingOpen && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="w-fit text-destructive hover:text-destructive"
+            onClick={handleCancel}
+            disabled={pendingAction !== null}
+          >
+            {pendingAction === "cancel" ? "Withdrawing…" : "Withdraw request"}
+          </Button>
         )}
 
         {canRespond && reschedulingOpen && (

@@ -29,7 +29,13 @@ async function fetchThread(id: string): Promise<InboxThread> {
  * pane (driven by `selectedId`, not just a CSS breakpoint); desktop shows
  * both side by side.
  */
-export function InboxPanel({ initialItems }: { initialItems: InboxListItem[] }) {
+export function InboxPanel({
+  initialItems,
+  currentUserId,
+}: {
+  initialItems: InboxListItem[];
+  currentUserId: string;
+}) {
   const searchParams = useSearchParams();
   // Seeds the selected thread/request from a notification link (`/inbox?item=<id>`, §4.10).
   const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("item"));
@@ -76,7 +82,12 @@ export function InboxPanel({ initialItems }: { initialItems: InboxListItem[] }) 
       </div>
       <div className={cn("min-w-0 flex-1 flex-col sm:flex", selectedId ? "flex" : "hidden")}>
         {selectedItem?.kind === "meeting_request" ? (
-          <MeetingRequestDetail item={selectedItem} onBack={() => setSelectedId(null)} onUpdated={refresh} />
+          <MeetingRequestDetail
+            item={selectedItem}
+            currentUserId={currentUserId}
+            onBack={() => setSelectedId(null)}
+            onUpdated={refresh}
+          />
         ) : (
           <InboxDetail
             thread={thread}

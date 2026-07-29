@@ -60,10 +60,11 @@ model User {
   contributionEventsAsCounterpart ContributionEvent[]  @relation("ContributionEventCounterpart")
 
   // Inbox (§4.7) — directory-originated, two-party only, no live chat.
-  sentInboxMessages       InboxMessage[]   @relation("InboxMessageSender")
-  receivedInboxMessages   InboxMessage[]   @relation("InboxMessageRecipient")
-  sentMeetingRequests     MeetingRequest[] @relation("MeetingRequestSender")
-  receivedMeetingRequests MeetingRequest[] @relation("MeetingRequestRecipient")
+  sentInboxMessages       InboxMessage[]          @relation("InboxMessageSender")
+  receivedInboxMessages   InboxMessage[]          @relation("InboxMessageRecipient")
+  sentMeetingRequests     MeetingRequest[]        @relation("MeetingRequestSender")
+  receivedMeetingRequests MeetingRequest[]        @relation("MeetingRequestRecipient")
+  meetingRequestMessages  MeetingRequestMessage[] @relation("MeetingRequestMessageSender")
 
   notifications Notification[]
 
@@ -545,16 +546,56 @@ model ContributionLedger {
   @@map("contribution_ledger")
 }
 
+// `pending` and `rescheduled` double as a turn indicator, not just a
+// one-shot status — either party can keep proposing new times across
+// unlimited rounds until one side accepts/declines:
+//   pending     — the sender proposed last (the original request, or a
+//                 later counter-proposal); it's the recipient's turn.
+//   rescheduled — the recipient proposed last; it's the sender's turn.
+// See resolveMeetingRequest's turnHolderId in meeting-requests-server.ts.
 enum MeetingRequestStatus {
   pending
   accepted
   declined
   rescheduled
   // Either party may cancel an already-accepted meeting (unlike decline,
-  // which is the recipient's pre-acceptance response to a pending request).
+  // which is the pre-acceptance response to a pending/rescheduled request —
+  // available to whichever party currently holds the turn); the original
+  // sender may additionally withdraw the whole negotiation outright at any
+  // pending/rescheduled turn, not just when it's the recipient's turn.
   // Deletes the Google Calendar event; does not reverse the ContributionLedger
   // rows acceptance already posted.
   cancelled
+}
+
+// One entry per step of a meeting-request negotiation (§4.7) — the
+// original ask, each counter-proposed time, and the final
+// accept/decline/cancel — rendered as a timeline in the Inbox detail pane.
+// Replaces MeetingRequest's old single mutable `message` column, which got
+// silently overwritten (and the original invite text lost) every time
+// either party proposed a new time.
+enum MeetingRequestMessageAction {
+  created
+  proposed
+  accepted
+  declined
+  cancelled
+}
+
+model MeetingRequestMessage {
+  id               String                      @id @default(cuid())
+  meetingRequestId String
+  meetingRequest   MeetingRequest              @relation(fields: [meetingRequestId], references: [id], onDelete: Cascade)
+  senderId         String
+  sender           User                        @relation("MeetingRequestMessageSender", fields: [senderId], references: [id])
+  action           MeetingRequestMessageAction
+  body             String?
+  // Only set for created/proposed — the times on offer as of this step.
+  proposedTimes    DateTime[]
+  createdAt        DateTime                    @default(now())
+
+  @@index([meetingRequestId, createdAt])
+  @@map("meeting_request_messages")
 }
 
 // Directory-originated meeting request (§4.7) — always two-party, no
@@ -568,15 +609,18 @@ enum MeetingRequestStatus {
 // anti-fraud check, so the recipient can't unilaterally credit
 // themselves for a meeting.
 model MeetingRequest {
-  id            String               @id @default(cuid())
+  id            String                  @id @default(cuid())
   senderId      String
-  sender        User                 @relation("MeetingRequestSender", fields: [senderId], references: [id])
+  sender        User                    @relation("MeetingRequestSender", fields: [senderId], references: [id])
   recipientId   String
-  recipient     User                 @relation("MeetingRequestRecipient", fields: [recipientId], references: [id])
+  recipient     User                    @relation("MeetingRequestRecipient", fields: [recipientId], references: [id])
   topic         String
+  // The current outstanding proposed time(s) — kept alongside the full
+  // negotiation history in `messages` because resolveScheduledTime() needs
+  // a quick "what's on the table right now" without walking the log.
   proposedTimes DateTime[]
-  status        MeetingRequestStatus @default(pending)
-  message       String?
+  status        MeetingRequestStatus    @default(pending)
+  messages      MeetingRequestMessage[]
 
   // Set on acceptance — the single confirmed time (chosen from
   // proposedTimes) and the Google Meet link/event id auto-generated for it

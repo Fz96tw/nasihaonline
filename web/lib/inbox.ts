@@ -1,7 +1,7 @@
 // Client-safe Inbox types (PRD §4.7) — kept separate from inbox-server.ts so
 // client components can import them without pulling in the "server-only"
 // query logic.
-import type { MeetingRequestStatus } from "@/lib/generated/prisma/enums";
+import type { MeetingRequestMessageAction, MeetingRequestStatus } from "@/lib/generated/prisma/enums";
 
 /** A row in the inbox list for a message thread — one entry per thread, not per message. */
 export type InboxMessageListItem = {
@@ -21,8 +21,25 @@ export type InboxMessageListItem = {
 };
 
 /**
+ * One step in a meeting request's negotiation timeline (§4.7) — the
+ * original ask, each proposed-new-time counter, and the final
+ * accept/decline/cancel. Chronological order.
+ */
+export type MeetingRequestMessageItem = {
+  id: string;
+  action: MeetingRequestMessageAction;
+  senderId: string;
+  senderName: string;
+  /** Free-text note, if the sender left one — absent for accepted/declined/cancelled. */
+  body: string | null;
+  /** Only set for created/proposed — the times on offer as of this step, ISO. */
+  proposedTimes: string[];
+  createdAt: string;
+};
+
+/**
  * A row in the inbox list for a meeting request (§4.7). Carries its full
- * detail (topic/proposedTimes/message) inline rather than requiring a
+ * detail (topic/proposedTimes/messages) inline rather than requiring a
  * separate detail fetch — PRD's route list has no GET
  * /api/inbox/meeting-requests/:id, so the list is the only read path.
  */
@@ -35,8 +52,9 @@ export type MeetingRequestListItem = {
   /** Whether the current user sent or received this request. */
   direction: "sent" | "received";
   topic: string;
-  message: string | null;
-  /** ISO timestamps. */
+  /** Full negotiation timeline, chronological — see MeetingRequestMessageItem. */
+  messages: MeetingRequestMessageItem[];
+  /** ISO timestamps — the current outstanding proposal. */
   proposedTimes: string[];
   status: MeetingRequestStatus;
   /** Timestamp of the request's most recent status change, for "most recent activity" sort. */

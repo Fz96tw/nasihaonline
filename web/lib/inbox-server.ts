@@ -26,6 +26,10 @@ const MESSAGE_INCLUDE = {
 const MEETING_REQUEST_INCLUDE = {
   sender: { select: PARTY_SELECT },
   recipient: { select: PARTY_SELECT },
+  messages: {
+    orderBy: { createdAt: "asc" as const },
+    include: { sender: { select: { name: true } } },
+  },
 } as const;
 
 /**
@@ -93,7 +97,15 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
       otherPartyAvatarUrl: getProfileAvatarUrl(otherParty.profile?.avatarUrl ?? null),
       direction,
       topic: meetingRequest.topic,
-      message: meetingRequest.message,
+      messages: meetingRequest.messages.map((message) => ({
+        id: message.id,
+        action: message.action,
+        senderId: message.senderId,
+        senderName: message.sender.name ?? "NASIHA Member",
+        body: message.body,
+        proposedTimes: message.proposedTimes.map((time) => time.toISOString()),
+        createdAt: message.createdAt.toISOString(),
+      })),
       proposedTimes: meetingRequest.proposedTimes.map((time) => time.toISOString()),
       status: meetingRequest.status,
       lastActivityAt: meetingRequest.updatedAt.toISOString(),

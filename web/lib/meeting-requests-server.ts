@@ -4,6 +4,7 @@ import {
   ContributionSource,
   LedgerStatus,
   LedgerTransactionType,
+  MeetingRequestMessageAction,
   MeetingRequestStatus,
   NotificationType,
 } from "@/lib/generated/prisma/enums";
@@ -60,14 +61,25 @@ export async function createMeetingRequest(
 
   const proposedTimes = parseProposedTimes(input.proposedTimes);
 
-  const meetingRequest = await db.meetingRequest.create({
-    data: {
-      senderId,
-      recipientId: input.recipientId,
-      topic: input.topic,
-      proposedTimes,
-      message: input.message,
-    },
+  const meetingRequest = await db.$transaction(async (tx) => {
+    const created = await tx.meetingRequest.create({
+      data: {
+        senderId,
+        recipientId: input.recipientId,
+        topic: input.topic,
+        proposedTimes,
+      },
+    });
+    await tx.meetingRequestMessage.create({
+      data: {
+        meetingRequestId: created.id,
+        senderId,
+        action: MeetingRequestMessageAction.created,
+        body: input.message,
+        proposedTimes,
+      },
+    });
+    return created;
   });
 
   const link = `/inbox?item=${meetingRequest.id}`;
@@ -102,26 +114,31 @@ type ResolveAction =
 /**
  * Cancels a meeting request (§4.7 follow-up), in either of two states with
  * different permission rules:
- *  - `pending`: only the sender may withdraw their own request — the
- *    recipient already has "decline" for this case, so allowing them to
- *    "cancel" too would just be a confusing second path to the same thing.
- *    No Google event exists yet at this stage.
+ *  - `pending`/`rescheduled`: only the original sender may withdraw the
+ *    whole negotiation, regardless of whose turn it currently is to
+ *    respond — whichever party currently holds the turn already has
+ *    "decline" for this case, so letting them also "cancel" would just be
+ *    a confusing second path to the same thing. No Google event exists yet
+ *    at this stage.
  *  - `accepted`: either party may cancel — deletes the Google Calendar
  *    event (Google's own cancellation email covers both attendees, same
  *    no-duplicate-email rationale as acceptance).
- * Any other status (declined/rescheduled/already cancelled) is rejected.
- * Never touches the ContributionLedger rows acceptance already posted —
- * reversing those is a separate, more invasive decision this doesn't make.
+ * Any other status (declined/already cancelled) is rejected. Never touches
+ * the ContributionLedger rows acceptance already posted — reversing those
+ * is a separate, more invasive decision this doesn't make.
  */
 async function cancelMeetingRequest(
   meetingRequest: MeetingRequestModel,
   actingUserId: string,
 ): Promise<MeetingRequestModel> {
   let otherPartyId: string;
+  const isNegotiating =
+    meetingRequest.status === MeetingRequestStatus.pending ||
+    meetingRequest.status === MeetingRequestStatus.rescheduled;
 
-  if (meetingRequest.status === MeetingRequestStatus.pending) {
+  if (isNegotiating) {
     if (meetingRequest.senderId !== actingUserId) {
-      throw new MeetingRequestError(403, "Only the requester can withdraw a pending meeting request.");
+      throw new MeetingRequestError(403, "Only the requester can withdraw a meeting request that hasn't been accepted yet.");
     }
     otherPartyId = meetingRequest.recipientId;
   } else if (meetingRequest.status === MeetingRequestStatus.accepted) {
@@ -136,15 +153,14 @@ async function cancelMeetingRequest(
 
   const actor = await db.user.findUnique({ where: { id: actingUserId }, select: { name: true } });
   const actorName = actor?.name ?? "A member";
-  const message =
-    meetingRequest.status === MeetingRequestStatus.pending
-      ? `${actorName} withdrew their meeting request: "${meetingRequest.topic}"`
-      : `${actorName} cancelled the meeting: "${meetingRequest.topic}"`;
+  const message = isNegotiating
+    ? `${actorName} withdrew their meeting request: "${meetingRequest.topic}"`
+    : `${actorName} cancelled the meeting: "${meetingRequest.topic}"`;
   const link = `/inbox?item=${meetingRequest.id}`;
 
   // External network call — kept outside the DB transaction, same
   // best-effort philosophy as createMeetingCalendarEvent. Only reachable
-  // for the `accepted` branch above — a pending request never had one.
+  // for the `accepted` branch above — a still-negotiating request never had one.
   if (meetingRequest.googleEventId) {
     await cancelMeetingCalendarEvent(meetingRequest.googleEventId);
   }
@@ -153,6 +169,13 @@ async function cancelMeetingRequest(
     const updated = await tx.meetingRequest.update({
       where: { id: meetingRequest.id },
       data: { status: MeetingRequestStatus.cancelled },
+    });
+    await tx.meetingRequestMessage.create({
+      data: {
+        meetingRequestId: meetingRequest.id,
+        senderId: actingUserId,
+        action: MeetingRequestMessageAction.cancelled,
+      },
     });
     await createNotification(
       { recipientId: otherPartyId, type: NotificationType.meeting_request_cancelled, message, link },
@@ -163,10 +186,14 @@ async function cancelMeetingRequest(
 }
 
 /**
- * Lets the sender correct/expand their own request's topic or message
- * while the interaction is still open (pending, or rescheduled — the
- * recipient's counter-proposal hasn't been accepted/declined yet either
- * way). No notification/email: this is a text correction, not a new
+ * Lets the sender correct/expand the topic/message of their own request
+ * while it's still their own outstanding ask — `status === pending` means
+ * the sender proposed last (the original request, or a later
+ * counter-proposal) and the recipient hasn't responded to *that* yet. Once
+ * the recipient counter-proposes (`rescheduled`), the outstanding proposal
+ * on the table is theirs, not the sender's, so there's nothing of the
+ * sender's left to edit — they respond via accept/decline/reschedule
+ * instead. No notification/email: this is a text correction, not a new
  * lifecycle event like accept/decline/cancel, so the recipient just sees
  * the updated content whenever they next open the still-open item.
  */
@@ -178,16 +205,32 @@ async function editMeetingRequest(
   if (meetingRequest.senderId !== actingUserId) {
     throw new MeetingRequestError(403, "Only the requester can edit this meeting request.");
   }
-  if (
-    meetingRequest.status !== MeetingRequestStatus.pending &&
-    meetingRequest.status !== MeetingRequestStatus.rescheduled
-  ) {
-    throw new MeetingRequestError(409, `This meeting request can't be edited (it's ${meetingRequest.status}).`);
+  if (meetingRequest.status !== MeetingRequestStatus.pending) {
+    throw new MeetingRequestError(
+      409,
+      meetingRequest.status === MeetingRequestStatus.rescheduled
+        ? "This meeting request can't be edited while you're the one who owes a response to a proposed time."
+        : `This meeting request can't be edited (it's ${meetingRequest.status}).`,
+    );
   }
 
-  return db.meetingRequest.update({
-    where: { id: meetingRequest.id },
-    data: { topic: input.topic, message: input.message },
+  return db.$transaction(async (tx) => {
+    // status === pending guarantees the sender authored the latest message
+    // (their own still-outstanding proposal) — that's the one being edited.
+    const latestMessage = await tx.meetingRequestMessage.findFirst({
+      where: { meetingRequestId: meetingRequest.id },
+      orderBy: { createdAt: "desc" },
+    });
+    if (latestMessage && latestMessage.senderId === actingUserId) {
+      await tx.meetingRequestMessage.update({
+        where: { id: latestMessage.id },
+        data: { body: input.message },
+      });
+    }
+    return tx.meetingRequest.update({
+      where: { id: meetingRequest.id },
+      data: { topic: input.topic },
+    });
   });
 }
 
@@ -213,23 +256,29 @@ function resolveScheduledTime(meetingRequest: MeetingRequestModel, selectedTime:
 }
 
 /**
- * Applies the recipient's response to a pending meeting request (§4.7):
- * accept, decline, or propose a new time. Only the recipient may act — the
- * requester just watches the status change. `cancel` and `edit` are the
- * exceptions — see cancelMeetingRequest/editMeetingRequest — dispatched
- * here but each with its own, different permission/status rules.
+ * Applies the current turn-holder's response to a still-negotiating
+ * meeting request (§4.7): accept, decline, or propose a new time.
+ * `pending`/`rescheduled` double as a turn indicator (see
+ * MeetingRequestStatus's doc comment in schema.prisma) — whichever party
+ * did *not* propose last is the one allowed to act, and either party can
+ * keep proposing new times across unlimited rounds until one side accepts
+ * or declines. `cancel` and `edit` are the exceptions — see
+ * cancelMeetingRequest/editMeetingRequest — dispatched here but each with
+ * its own, different permission/status rules that don't depend on turn.
  *
  * Accepting posts two ledger rows (§4.4/§11's resolved open question #12):
  * an already-`confirmed` `spent` row for the requester at the Expert
  * Consultation rate (no separate confirmation step — the system has full
  * ground truth here), and a system-generated but still `pending` `earned`
  * row for the recipient at the Knowledge discussion rate, naming the
- * requester as counterpart. The recipient doesn't type anything to create
- * their entry, but it still needs the requester's peer confirmation before
- * counting toward the recipient's balance — a deliberate anti-fraud check
- * so the recipient can't unilaterally credit themselves for a meeting.
- * Both links are set in the same transaction as the status flip so none of
- * the three can diverge.
+ * requester as counterpart. These are always keyed off the meeting
+ * request's fixed senderId/recipientId, never off which party happened to
+ * click "Accept" — either can, once it's their turn. The recipient doesn't
+ * type anything to create their entry, but it still needs the requester's
+ * peer confirmation before counting toward the recipient's balance — a
+ * deliberate anti-fraud check so the recipient can't unilaterally credit
+ * themselves for a meeting. Both links are set in the same transaction as
+ * the status flip so none of the three can diverge.
  */
 export async function resolveMeetingRequest(
   meetingRequestId: string,
@@ -246,16 +295,23 @@ export async function resolveMeetingRequest(
     return editMeetingRequest(meetingRequest, actingUserId, { topic: action.topic, message: action.message });
   }
 
-  if (meetingRequest.recipientId !== actingUserId) {
-    throw new MeetingRequestError(403, "Only the recipient can respond to this meeting request.");
-  }
-  if (meetingRequest.status !== MeetingRequestStatus.pending) {
+  if (
+    meetingRequest.status !== MeetingRequestStatus.pending &&
+    meetingRequest.status !== MeetingRequestStatus.rescheduled
+  ) {
     throw new MeetingRequestError(409, `This meeting request is already ${meetingRequest.status}.`);
   }
+  const turnHolderId =
+    meetingRequest.status === MeetingRequestStatus.pending ? meetingRequest.recipientId : meetingRequest.senderId;
+  if (actingUserId !== turnHolderId) {
+    throw new MeetingRequestError(403, "It's not your turn to respond to this meeting request yet.");
+  }
+  const otherPartyId =
+    actingUserId === meetingRequest.senderId ? meetingRequest.recipientId : meetingRequest.senderId;
 
-  const [actor, requester] = await Promise.all([
+  const [actor, otherParty] = await Promise.all([
     db.user.findUnique({ where: { id: actingUserId }, select: { email: true, name: true } }),
-    db.user.findUnique({ where: { id: meetingRequest.senderId }, select: { email: true, name: true } }),
+    db.user.findUnique({ where: { id: otherPartyId }, select: { email: true, name: true } }),
   ]);
   const actorName = actor?.name ?? "A member";
   const link = `/inbox?item=${meetingRequestId}`;
@@ -267,14 +323,17 @@ export async function resolveMeetingRequest(
         where: { id: meetingRequestId },
         data: { status: MeetingRequestStatus.declined },
       });
+      await tx.meetingRequestMessage.create({
+        data: { meetingRequestId, senderId: actingUserId, action: MeetingRequestMessageAction.declined },
+      });
       await createNotification(
-        { recipientId: meetingRequest.senderId, type: NotificationType.meeting_request_declined, message, link },
+        { recipientId: otherPartyId, type: NotificationType.meeting_request_declined, message, link },
         tx,
       );
       return updated;
     });
-    if (requester) {
-      await sendMeetingRequestEmail(requester.email, requester.name ?? "there", {
+    if (otherParty) {
+      await sendMeetingRequestEmail(otherParty.email, otherParty.name ?? "there", {
         subject: `Meeting request declined: ${meetingRequest.topic}`,
         message,
         link: `${APP_URL}${link}`,
@@ -285,20 +344,34 @@ export async function resolveMeetingRequest(
 
   if (action.action === "reschedule") {
     const proposedTimes = parseProposedTimes(action.proposedTimes);
+    // Flips the turn to the other party — see MeetingRequestStatus's doc
+    // comment: pending = sender proposed last (recipient's turn next),
+    // rescheduled = recipient proposed last (sender's turn next).
+    const newStatus =
+      actingUserId === meetingRequest.senderId ? MeetingRequestStatus.pending : MeetingRequestStatus.rescheduled;
     const message = `${actorName} proposed a new time for: "${meetingRequest.topic}"`;
     const updated = await db.$transaction(async (tx) => {
       const updated = await tx.meetingRequest.update({
         where: { id: meetingRequestId },
-        data: { status: MeetingRequestStatus.rescheduled, proposedTimes, message: action.message },
+        data: { status: newStatus, proposedTimes },
+      });
+      await tx.meetingRequestMessage.create({
+        data: {
+          meetingRequestId,
+          senderId: actingUserId,
+          action: MeetingRequestMessageAction.proposed,
+          body: action.message,
+          proposedTimes,
+        },
       });
       await createNotification(
-        { recipientId: meetingRequest.senderId, type: NotificationType.meeting_request_rescheduled, message, link },
+        { recipientId: otherPartyId, type: NotificationType.meeting_request_rescheduled, message, link },
         tx,
       );
       return updated;
     });
-    if (requester) {
-      await sendMeetingRequestEmail(requester.email, requester.name ?? "there", {
+    if (otherParty) {
+      await sendMeetingRequestEmail(otherParty.email, otherParty.name ?? "there", {
         subject: `New time proposed: ${meetingRequest.topic}`,
         message,
         link: `${APP_URL}${link}`,
@@ -307,9 +380,14 @@ export async function resolveMeetingRequest(
     return updated;
   }
 
-  const [spendRule, earnRule] = await Promise.all([
+  // Remaining case per the discriminated union: "accept".
+  const [spendRule, earnRule, createdMessage] = await Promise.all([
     db.contributionRule.findUnique({ where: { activityKey: EXPERT_CONSULTATION_ACTIVITY_KEY } }),
     db.contributionRule.findUnique({ where: { activityKey: KNOWLEDGE_DISCUSSION_ACTIVITY_KEY } }),
+    db.meetingRequestMessage.findFirst({
+      where: { meetingRequestId, action: MeetingRequestMessageAction.created },
+      select: { body: true },
+    }),
   ]);
   if (!spendRule || !spendRule.active || spendRule.type !== LedgerTransactionType.spent) {
     throw new MeetingRequestError(409, "Expert Consultation rate isn't configured.");
@@ -321,20 +399,26 @@ export async function resolveMeetingRequest(
   const acceptedMessage = `${actorName} accepted your meeting request: "${meetingRequest.topic}"`;
   const scheduledAt = resolveScheduledTime(meetingRequest, action.selectedTime);
 
+  // Fixed identities, independent of who happened to click "Accept" — the
+  // calendar invite must always go to the sender and recipient by role,
+  // not "requester + actor" (actor may now be either one).
+  const senderUser = actingUserId === meetingRequest.senderId ? actor : otherParty;
+  const recipientUser = actingUserId === meetingRequest.recipientId ? actor : otherParty;
+
   // External network call — kept outside the DB transaction below, and
   // best-effort (see google-calendar.ts): a failed/unconfigured Google call
   // must never block acceptance, since the ledger rows are the source of
   // truth for the meeting having happened.
   const { meetingUrl, googleEventId } =
-    requester && actor
+    senderUser && recipientUser
       ? await createMeetingCalendarEvent({
           topic: meetingRequest.topic,
           startsAt: scheduledAt,
           attendees: [
-            { email: requester.email, name: requester.name ?? "there" },
-            { email: actor.email, name: actorName },
+            { email: senderUser.email, name: senderUser.name ?? "there" },
+            { email: recipientUser.email, name: recipientUser.name ?? "there" },
           ],
-          description: meetingRequest.message ?? undefined,
+          description: createdMessage?.body ?? undefined,
         })
       : { meetingUrl: null, googleEventId: null };
 
@@ -394,9 +478,13 @@ export async function resolveMeetingRequest(
       },
     });
 
+    await tx.meetingRequestMessage.create({
+      data: { meetingRequestId, senderId: actingUserId, action: MeetingRequestMessageAction.accepted },
+    });
+
     await createNotification(
       {
-        recipientId: meetingRequest.senderId,
+        recipientId: otherPartyId,
         type: NotificationType.meeting_request_accepted,
         message: acceptedMessage,
         link,
