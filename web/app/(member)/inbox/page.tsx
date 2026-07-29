@@ -31,7 +31,7 @@ export default async function InboxPage() {
 
       <section className="mx-auto flex max-w-[1120px] flex-col gap-8 px-8 py-16">
         <Suspense fallback={null}>
-          <InboxPanel initialItems={items} />
+          <InboxPanel initialItems={items} currentUserId={user.id} />
         </Suspense>
       </section>
     </main>
