@@ -216,7 +216,7 @@ Routes: `POST /api/contributions/earn`, `POST /api/contributions/spend`, `GET /a
 
 ### 4.5 Member Directory
 
-- Grid of member cards: avatar thumbnail next to the member's name — the member's uploaded profile photo if set, otherwise the initials + brand-color fallback (§4.3) — title, country, tier badge, expertise tags, and two actions — **"Send Message"** and **"Request Meeting"** (both open into the Inbox domain, §4.7; there is no live chat entry point from the directory). **Friend-tier members are excluded from the Directory entirely** — not listed, searched, or filterable (§2.2) — so no Friend card ever appears in this grid.
+- Grid of member cards: avatar thumbnail next to the member's name — the member's uploaded profile photo if set, otherwise the initials + brand-color fallback (§4.3) — title, country, tier badge, expertise tags, and two actions — **"Send Message"** and **"Request Meeting"** (both open into the Inbox domain, §4.7; there is no live chat entry point, from the Directory or from the Inbox page's own picker shortcuts, §4.7). **Friend-tier members are excluded from the Directory entirely** — not listed, searched, or filterable (§2.2) — so no Friend card ever appears in this grid.
 - Search: free-text across name, title, country, expertise.
 - Filter: by tier (All / Active / Associate / Student-Trainee) — Friend tier is excluded from the Directory (§2.2), so it has no filter option here.
 - Must respect per-user directory visibility preference (§4.3).
@@ -241,12 +241,12 @@ Routes: `POST /api/contributions/earn`, `POST /api/contributions/spend`, `GET /a
 
 ### 4.7 Inbox (Messages & Meeting Requests)
 
-**Correction vs. system-design.md:** there is no peer-to-peer direct-messaging/chat feature (no live conversation threads, no typing indicators, no presence). Messaging is **inbox-based**, one level removed from a live DM system, and it is entered exclusively from the Member Directory:
+**Correction vs. system-design.md:** there is no peer-to-peer direct-messaging/chat feature (no live conversation threads, no typing indicators, no presence). Messaging is **inbox-based**, one level removed from a live DM system, and a new conversation is always initiated toward a specific Directory-eligible member (non-Friend tier, opted into Directory listing, §4.5). There are two entry points:
 
-1. A member finds another member in the Directory.
-2. From that member's card/profile, they can either:
+1. **From the Member Directory** — a member finds another member's card/profile and, from there, can either:
    - **Send a Message** — a single asynchronous message delivered to the recipient's inbox, or
    - **Request a Meeting** — a structured request (proposed topic + one or more proposed times) delivered to the recipient's inbox as a distinct, actionable item.
+2. **From the Inbox page itself** — "Message" and "Request Meeting" shortcuts each open a search-by-name picker over the same Directory-eligible member set, for when the sender already knows who they want to reach and doesn't need to browse the Directory grid first. Same two actions, same dialogs, as the Directory-card entry point — just without the intermediate page visit.
 3. The recipient sees both message and meeting-request items in their Inbox, can reply (replies thread under the original item, email-style — not real-time), and, for meeting requests, can **accept**, **decline**, or **propose a new time**.
 
 **Why this matters for the ledger:** an accepted meeting request is the natural trigger for a Knowledge Hours "spend" transaction (e.g., Expert Consultation, 1.0 hr) — the Inbox and Contribution Credit domains should be linked at the meeting-acceptance step, not left as two disconnected features. Simple messages do not touch the ledger.
@@ -257,13 +257,13 @@ Routes: `POST /api/contributions/earn`, `POST /api/contributions/spend`, `GET /a
 - No requirement for real-time delivery (Socket.IO/typing indicators/presence are **not needed**); new-item notification can be handled entirely through the existing Notification domain (§4.10) — in-app + email — on a request/response cycle rather than a persistent socket connection.
 - Attachments and read receipts (per system-design.md) still apply, scoped to individual inbox items rather than a live thread.
 
-**Entities:** `InboxMessage` (sender, recipient, subject/body, parent item for threaded replies, read state), `MeetingRequest` (sender, recipient, proposed topic, proposed time(s), status, two optional linked `ContributionLedger` transactions on acceptance — the requester's confirmed spend and the recipient's pending-until-confirmed earn, §4.4). This replaces system-design.md's `Conversation`/`Participant`/`MessageReadReceipt` realtime model — recommend simplifying the DB schema accordingly (no conversation/participant join tables needed since every thread is strictly two-party and directory-originated).
+**Entities:** `InboxMessage` (sender, recipient, subject/body, parent item for threaded replies, read state), `MeetingRequest` (sender, recipient, proposed topic, proposed time(s), status, two optional linked `ContributionLedger` transactions on acceptance — the requester's confirmed spend and the recipient's pending-until-confirmed earn, §4.4). This replaces system-design.md's `Conversation`/`Participant`/`MessageReadReceipt` realtime model — recommend simplifying the DB schema accordingly (no conversation/participant join tables needed since every thread is strictly two-party and initiated toward a Directory-eligible member, whether from a Directory card or the Inbox page's own picker).
 
 **Routes:** `GET /api/inbox`, `POST /api/inbox/messages`, `POST /api/inbox/meeting-requests`, `PATCH /api/inbox/meeting-requests/:id` (accept/decline/reschedule).
 
-**UI:** single inbox list view (not a 3-column live-chat layout) with a detail pane per selected item; mobile collapses to a single column (list → detail on tap, back to return).
+**UI:** single inbox list view (not a 3-column live-chat layout) with a detail pane per selected item; mobile collapses to a single column (list → detail on tap, back to return). "Message" and "Request Meeting" buttons on the Inbox page each open a search-by-name picker (same underlying member listing as the Directory) rather than requiring a full Directory page visit.
 
-**Resolved (§2.2):** Friend-tier members are excluded from the Member Directory entirely (§4.5 — not listed, searched, or filterable), so there's no card for Send Message/Request Meeting to appear on in the first place; the Inbox API also rejects both a Friend-tier sender and a Friend-tier recipient regardless of entry point. Directory and Inbox are the two domains Friend tier is excluded from; every other domain (Dashboard, Library, Blog, Forums, Contributions, Calendar) is full member access.
+**Resolved (§2.2):** Friend-tier members are excluded from the Member Directory entirely (§4.5 — not listed, searched, or filterable), so there's no card for Send Message/Request Meeting to appear on in the first place, and the Inbox page's own pickers draw from the same filtered member listing so Friend tier never appears there either; the Inbox API also rejects both a Friend-tier sender and a Friend-tier recipient regardless of entry point. Directory and Inbox are the two domains Friend tier is excluded from; every other domain (Dashboard, Library, Blog, Forums, Contributions, Calendar) is full member access.
 
 ### 4.8 Blog
 
@@ -670,6 +670,7 @@ MVP is considered feature-complete when:
 - [ ] A member can view their Knowledge Hours balance (confirmed transactions only) and full transaction history including pending/rejected items; hosting an attended event auto-posts a confirmed earn transaction; an accepted meeting request auto-posts a confirmed spend transaction for the requester *and* a pending earn transaction for the recipient that requires the requester's confirmation; other activities post as `pending` via "Log Contribution" and require counterpart or admin confirmation before counting toward the balance (§4.4).
 - [ ] The Member Directory is searchable/filterable, respects each member's visibility preferences, and shows each member's uploaded photo (or initials fallback) as a thumbnail next to their name.
 - [ ] A member can find another member in the Directory and send them a message or request a meeting; the recipient sees it in their Inbox and can respond (including accept/decline/reschedule for meeting requests).
+- [ ] From the Inbox page itself, a member can open a "Message" or "Request Meeting" picker, search for a Directory-eligible member by name, and send them a message or meeting request without visiting the Directory page first (§4.7).
 - [ ] A Friend-tier member has full access to every other member feature (Dashboard, Library, Blog, Forums, Contributions, Calendar), but is excluded from the Member Directory entirely (not listed, searched, or filterable) and cannot send/receive Inbox messages or meeting requests (§2.2).
 - [ ] The Calendar shows real events; a member can RSVP and the event's attendee state updates.
 - [ ] On the public `/events` listing, a signed-out visitor sees a "Register" action on `open` events (not on members-only events) that captures their email/name into `event_registrations` without creating an account; a signed-in member sees the RSVP toggle on `open` events instead. An admin or moderator can view/export captured registrations from `/admin/event-registrations`.

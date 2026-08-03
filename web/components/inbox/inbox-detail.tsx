@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/ui/avatar";
 import { type InboxThread } from "@/lib/inbox";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { linkifyText } from "@/lib/linkify";
 import { cn } from "@/lib/utils";
 
 function formatTimestamp(iso: string): string {
@@ -102,7 +103,7 @@ export function InboxDetail({
               <span className="font-medium">{message.senderName}</span>
               <span>{formatTimestamp(message.createdAt)}</span>
             </div>
-            <p className="whitespace-pre-wrap text-sm">{message.body}</p>
+            <p className="whitespace-pre-wrap text-sm">{linkifyText(message.body)}</p>
           </div>
         ))}
       </div>

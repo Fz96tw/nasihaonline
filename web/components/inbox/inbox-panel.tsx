@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { InboxList } from "@/components/inbox/inbox-list";
 import { InboxDetail } from "@/components/inbox/inbox-detail";
 import { MeetingRequestDetail } from "@/components/inbox/meeting-request-detail";
+import { NewConversationActions } from "@/components/inbox/new-conversation-actions";
 import { type InboxListItem, type InboxThread } from "@/lib/inbox";
 import { cn } from "@/lib/utils";
 
@@ -71,32 +72,38 @@ export function InboxPanel({
   }
 
   return (
-    <Card className="flex h-[600px] overflow-hidden p-0">
-      <div
-        className={cn(
-          "w-full flex-shrink-0 flex-col border-r sm:flex sm:w-[320px]",
-          selectedId ? "hidden" : "flex",
-        )}
-      >
-        <InboxList items={items} selectedId={selectedId} onSelect={setSelectedId} />
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Inbox</h2>
+        <NewConversationActions currentUserId={currentUserId} />
       </div>
-      <div className={cn("min-w-0 flex-1 flex-col sm:flex", selectedId ? "flex" : "hidden")}>
-        {selectedItem?.kind === "meeting_request" ? (
-          <MeetingRequestDetail
-            item={selectedItem}
-            currentUserId={currentUserId}
-            onBack={() => setSelectedId(null)}
-            onUpdated={refresh}
-          />
-        ) : (
-          <InboxDetail
-            thread={thread}
-            isLoading={threadLoading}
-            onBack={() => setSelectedId(null)}
-            onReplySent={refresh}
-          />
-        )}
-      </div>
-    </Card>
+      <Card className="flex h-[600px] overflow-hidden p-0">
+        <div
+          className={cn(
+            "w-full flex-shrink-0 flex-col border-r sm:flex sm:w-[320px]",
+            selectedId ? "hidden" : "flex",
+          )}
+        >
+          <InboxList items={items} selectedId={selectedId} onSelect={setSelectedId} />
+        </div>
+        <div className={cn("min-w-0 flex-1 flex-col sm:flex", selectedId ? "flex" : "hidden")}>
+          {selectedItem?.kind === "meeting_request" ? (
+            <MeetingRequestDetail
+              item={selectedItem}
+              currentUserId={currentUserId}
+              onBack={() => setSelectedId(null)}
+              onUpdated={refresh}
+            />
+          ) : (
+            <InboxDetail
+              thread={thread}
+              isLoading={threadLoading}
+              onBack={() => setSelectedId(null)}
+              onReplySent={refresh}
+            />
+          )}
+        </div>
+      </Card>
+    </div>
   );
 }
