@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/form";
 import { EventType, EventVisibility } from "@/lib/generated/prisma/enums";
 import { EVENT_TYPE_LABELS } from "@/lib/events";
-import { createEventSchema, type CreateEventValues } from "@/lib/validation/event";
+import { createEventSchema, updateEventSchema, type CreateEventValues } from "@/lib/validation/event";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { InviteePicker } from "@/components/calendar/invitee-picker";
 
@@ -119,7 +119,16 @@ export function SubmitEventForm({
   const [heroImage, setHeroImage] = useState<File | null>(null);
 
   const form = useForm<CreateEventValues>({
-    resolver: zodResolver(createEventSchema),
+    // Edit mode validates against updateEventSchema, not createEventSchema:
+    // createEventSchema's requireRestrictedEventInvariants demands a
+    // non-empty invitedUserIds, but that field is intentionally hardcoded to
+    // [] and hidden from the UI in edit mode (see defaultValues below) —
+    // validating against it here silently blocked every save on a
+    // restricted event, since its FormField/FormMessage isn't even rendered
+    // to show why.
+    resolver: (existingEvent ? zodResolver(updateEventSchema) : zodResolver(createEventSchema)) as Resolver<
+      CreateEventValues
+    >,
     defaultValues: existingEvent
       ? {
           title: existingEvent.title,
