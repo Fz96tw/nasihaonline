@@ -122,6 +122,48 @@ export async function updateMeetingCalendarEventAttendees(
 }
 
 /**
+ * Patches the start/end time on a Calendar event created by
+ * createMeetingCalendarEvent() — used when a restricted Event with an
+ * auto-generated Meet link is rescheduled, so attendees' own Google
+ * Calendar entries (and the Meet invite Google originally emailed them)
+ * move too instead of silently going stale. sendUpdates: "all" makes
+ * Google email each attendee an updated invite. Best-effort, same
+ * non-fatal philosophy as the rest of this file: a failed/unconfigured
+ * Google call must never block the reschedule itself, since Event.startsAt/
+ * endsAt is the source of truth.
+ */
+export async function updateMeetingCalendarEventTime(
+  googleEventId: string,
+  startsAt: Date,
+  endsAt: Date | null,
+): Promise<void> {
+  const auth = getOAuthClient();
+  if (!auth) {
+    console.warn("[google-calendar] Google Calendar isn't configured — skipping event time sync");
+    return;
+  }
+
+  // Mirrors createMeetingCalendarEvent's fallback: an Event without an
+  // explicit endsAt still needs a real end time for the Calendar API.
+  const resolvedEndsAt = endsAt ?? new Date(startsAt.getTime() + DEFAULT_MEETING_DURATION_MINUTES * 60_000);
+
+  try {
+    const calendar = google.calendar({ version: "v3", auth });
+    await calendar.events.patch({
+      calendarId: CALENDAR_ID,
+      eventId: googleEventId,
+      sendUpdates: "all",
+      requestBody: {
+        start: { dateTime: startsAt.toISOString() },
+        end: { dateTime: resolvedEndsAt.toISOString() },
+      },
+    });
+  } catch (error) {
+    console.error("[google-calendar] Failed to sync meeting calendar event time", error);
+  }
+}
+
+/**
  * Deletes a Calendar event created by createMeetingCalendarEvent(), used
  * when either party cancels an accepted meeting request. sendUpdates: "all"
  * makes Google email both attendees a cancellation notice — same

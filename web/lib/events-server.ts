@@ -19,6 +19,7 @@ import {
   cancelMeetingCalendarEvent,
   createMeetingCalendarEvent,
   updateMeetingCalendarEventAttendees,
+  updateMeetingCalendarEventTime,
 } from "@/lib/google-calendar";
 import { createNotification } from "@/lib/notifications-server";
 import { sendEventInviteEmail, sendEventLifecycleEmail } from "@/lib/email";
@@ -857,7 +858,15 @@ export async function updateEvent(
 ): Promise<{ id: string }> {
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { id: true, hostId: true, heroImageUrl: true, startsAt: true, endsAt: true, visibility: true },
+    select: {
+      id: true,
+      hostId: true,
+      heroImageUrl: true,
+      startsAt: true,
+      endsAt: true,
+      visibility: true,
+      googleEventId: true,
+    },
   });
   if (!event) throw new EventError(404, "Event not found.");
 
@@ -937,14 +946,26 @@ export async function updateEvent(
     await deleteEventHeroImage(event.heroImageUrl);
   }
 
+  // Compares against the pre-update values fetched above, not the input
+  // strings, so e.g. re-submitting the form with the same time never fires
+  // any of the below.
+  const timeChanged =
+    event.startsAt.getTime() !== startsAt.getTime() ||
+    (event.endsAt?.getTime() ?? null) !== (endsAt?.getTime() ?? null);
+
+  // Keep the underlying Google Calendar event's time in sync so Meet-linked
+  // attendees' own calendars move too and Google emails them an updated
+  // invite — applies to any event with an auto-generated Meet link
+  // (googleEventId), not just restricted ones (see createEvent: Meet
+  // auto-generation isn't restricted-only). Best-effort, same non-fatal
+  // philosophy as every other Google call in this file.
+  if (timeChanged && event.googleEventId) {
+    await updateMeetingCalendarEventTime(event.googleEventId, startsAt, endsAt);
+  }
+
   // Reschedule notification (Objective 03) — restricted events only,
-  // community events keep today's silent-edit behavior unchanged. Compares
-  // against the pre-update values fetched above, not the input strings, so
-  // e.g. re-submitting the form with the same time never fires this.
-  const rescheduled =
-    event.visibility === EventVisibility.invited &&
-    (event.startsAt.getTime() !== startsAt.getTime() ||
-      (event.endsAt?.getTime() ?? null) !== (endsAt?.getTime() ?? null));
+  // community events keep today's silent-edit behavior unchanged.
+  const rescheduled = event.visibility === EventVisibility.invited && timeChanged;
   if (rescheduled) {
     const invitees = await db.eventInvitee.findMany({
       where: { eventId },
