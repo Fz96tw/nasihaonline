@@ -121,6 +121,12 @@ const ADMIN_SECTIONS = [
     description: "Community, engagement, and organizational KPIs.",
     group: "Programs & Reports",
   },
+  {
+    href: "/admin/activity",
+    title: "Activity Log",
+    description: "See which admin resolved each flagged item, application, or report, and when.",
+    group: "Programs & Reports",
+  },
 ] as const;
 
 /**
