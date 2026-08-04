@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { provisionMemberAccount } from "@/lib/clerk-admin";
 import { sendWelcomeEmail } from "@/lib/email";
 import { applicationReviewActionSchema } from "@/lib/validation/application-review";
+import { recordAdminAction } from "@/lib/audit-server";
 
 const PENDING_STATUSES = new Set(["submitted", "under_review"]);
 
@@ -45,14 +46,21 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       application.lastName,
     );
 
-    const updated = await db.membershipApplication.update({
-      where: { id: application.id },
-      data: {
-        status: "approved",
-        assignedTier: parsed.data.tier,
-        reviewedAt: new Date(),
-        reviewedByEmail: admin.email,
-      },
+    const updated = await db.$transaction(async (tx) => {
+      const application_ = await tx.membershipApplication.update({
+        where: { id: application.id },
+        data: {
+          status: "approved",
+          assignedTier: parsed.data.tier,
+          reviewedAt: new Date(),
+          reviewedByEmail: admin.email,
+        },
+      });
+      await recordAdminAction(
+        { actorId: admin.id, action: "application.approved", entityType: "MembershipApplication", entityId: application.id },
+        tx,
+      );
+      return application_;
     });
 
     if (invitation.url) {
@@ -66,15 +74,22 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ application: updated });
   }
 
-  const updated = await db.membershipApplication.update({
-    where: { id: application.id },
-    data: {
-      status: "rejected",
-      adminNote: parsed.data.adminNote,
-      adminNoteVisibleToApplicant: parsed.data.visibleToApplicant,
-      reviewedAt: new Date(),
-      reviewedByEmail: admin.email,
-    },
+  const updated = await db.$transaction(async (tx) => {
+    const application_ = await tx.membershipApplication.update({
+      where: { id: application.id },
+      data: {
+        status: "rejected",
+        adminNote: parsed.data.adminNote,
+        adminNoteVisibleToApplicant: parsed.data.visibleToApplicant,
+        reviewedAt: new Date(),
+        reviewedByEmail: admin.email,
+      },
+    });
+    await recordAdminAction(
+      { actorId: admin.id, action: "application.rejected", entityType: "MembershipApplication", entityId: application.id },
+      tx,
+    );
+    return application_;
   });
 
   return NextResponse.json({ application: updated });

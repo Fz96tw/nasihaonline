@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { PrivacyRequestStatus, type PrivacyRequestType } from "@/lib/generated/prisma/enums";
 import type { PrivacyDataRequestModel } from "@/lib/generated/prisma/models/PrivacyDataRequest";
+import { recordAdminAction } from "@/lib/audit-server";
 
 export class PrivacyError extends Error {
   constructor(
@@ -128,8 +129,15 @@ export async function fulfillPrivacyDataRequest(
     throw new PrivacyError(409, "This request has already been handled.");
   }
 
-  return db.privacyDataRequest.update({
-    where: { id },
-    data: { status: PrivacyRequestStatus.fulfilled, handledByUserId: adminId, fulfilledAt: new Date() },
+  return db.$transaction(async (tx) => {
+    const updated = await tx.privacyDataRequest.update({
+      where: { id },
+      data: { status: PrivacyRequestStatus.fulfilled, handledByUserId: adminId, fulfilledAt: new Date() },
+    });
+    await recordAdminAction(
+      { actorId: adminId, action: "privacy.fulfilled", entityType: "PrivacyDataRequest", entityId: id },
+      tx,
+    );
+    return updated;
   });
 }

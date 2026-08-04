@@ -100,6 +100,9 @@ export async function recordConductAction(
       where: { id },
       data: { actionTaken: action, handledByUserId: adminId, actionTakenAt: new Date() },
     }),
+    db.adminActionLog.create({
+      data: { actorId: adminId, action: `conduct.${action}`, entityType: "CodeOfConductViolation", entityId: id },
+    }),
     ...(action === ConductActionTaken.suspension || action === ConductActionTaken.removal
       ? [
           db.user.update({
