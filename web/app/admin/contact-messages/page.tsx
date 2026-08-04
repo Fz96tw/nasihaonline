@@ -2,17 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { markAllContactMessagesRead } from "@/lib/contact-server";
-import { CONTACT_SERVICE_LABELS } from "@/lib/validation/contact";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { getAdminActionLogForEntities } from "@/lib/audit-server";
+import type { AdminActionLogEntryView } from "@/lib/audit";
+import type { ContactMessageView } from "@/lib/contact";
+import { ContactMessagesTable } from "@/components/admin/contact-messages-table";
 
 export default async function AdminContactMessagesPage() {
   const user = await getSessionUser();
@@ -28,8 +21,32 @@ export default async function AdminContactMessagesPage() {
   }
 
   const messages = await db.contactMessage.findMany({ orderBy: { createdAt: "desc" } });
-  const unreadIds = new Set(messages.filter((message) => !message.readAt).map((message) => message.id));
-  if (unreadIds.size > 0) await markAllContactMessagesRead();
+  const historyByMessageId = await getAdminActionLogForEntities(
+    "ContactMessage",
+    messages.map((message) => message.id),
+  );
+
+  const messageViews: ContactMessageView[] = messages.map((message) => ({
+    id: message.id,
+    name: message.name,
+    email: message.email,
+    services: message.services,
+    subject: message.subject,
+    message: message.message,
+    createdAt: message.createdAt.toISOString(),
+    readAt: message.readAt?.toISOString() ?? null,
+  }));
+
+  const historyViews: Record<string, AdminActionLogEntryView[]> = {};
+  historyByMessageId.forEach((entries, entityId) => {
+    historyViews[entityId] = entries.map((entry) => ({
+      id: entry.id,
+      action: entry.action,
+      createdAt: entry.createdAt.toISOString(),
+      actor: { name: entry.actor.name, email: entry.actor.email },
+      metadata: (entry.metadata as Record<string, unknown> | null) ?? null,
+    }));
+  });
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 p-8">
@@ -44,62 +61,7 @@ export default async function AdminContactMessagesPage() {
         </p>
       </div>
 
-      <div className="rounded-[10px] border shadow-sm">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>From</TableHead>
-              <TableHead>Services</TableHead>
-              <TableHead>Subject</TableHead>
-              <TableHead>Message</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {messages.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
-                  No messages yet.
-                </TableCell>
-              </TableRow>
-            )}
-            {messages.map((message) => (
-              <TableRow key={message.id}>
-                <TableCell className="whitespace-nowrap text-muted-foreground">
-                  {message.createdAt.toLocaleDateString()}
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{message.name}</span>
-                      {unreadIds.has(message.id) && (
-                        <Badge variant="info" className="shrink-0 whitespace-nowrap">
-                          New
-                        </Badge>
-                      )}
-                    </div>
-                    <a
-                      href={`mailto:${message.email}`}
-                      className="text-xs text-muted-foreground underline underline-offset-2"
-                    >
-                      {message.email}
-                    </a>
-                  </div>
-                </TableCell>
-                <TableCell className="max-w-[160px] text-muted-foreground">
-                  {message.services.length
-                    ? message.services.map((service) => CONTACT_SERVICE_LABELS[service]).join(", ")
-                    : "—"}
-                </TableCell>
-                <TableCell className="max-w-xs">{message.subject}</TableCell>
-                <TableCell className="max-w-md whitespace-pre-wrap text-muted-foreground">
-                  {message.message}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      <ContactMessagesTable initialMessages={messageViews} initialHistory={historyViews} />
     </main>
   );
 }

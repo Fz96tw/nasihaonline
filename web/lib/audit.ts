@@ -30,3 +30,12 @@ const ENTITY_HREF: Record<string, (entityId: string | null) => string> = {
 export function adminActionEntityHref(entityType: string, entityId: string | null): string | null {
   return ENTITY_HREF[entityType]?.(entityId) ?? null;
 }
+
+/** Client-safe shape for rendering an inline per-entity history list (e.g. on /admin/contact-messages). */
+export type AdminActionLogEntryView = {
+  id: string;
+  action: string;
+  createdAt: string;
+  actor: { name: string | null; email: string };
+  metadata: Record<string, unknown> | null;
+};

@@ -6,6 +6,7 @@ import { CONTACT_SERVICE_LABELS } from "@/lib/validation/contact";
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "NASIHA <no-reply@mail.nasihaforyou.org>";
 const CONTACT_EMAIL = process.env.CONTACT_INBOX_EMAIL ?? "info@nasihaforyou.org";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
 /**
  * Best-effort: a failed/unconfigured email send must not fail application
@@ -349,4 +350,31 @@ export async function sendContactMessageEmail(message: {
   } catch (error) {
     console.error("[email] Failed to send contact notification email", error);
   }
+}
+
+/**
+ * An admin's one-way reply to a /contact submission (§4.15's admin audit
+ * trail work — see lib/contact-server.ts's replyToContactMessage). Unlike
+ * every other function in this file, this is NOT best-effort: sending IS
+ * the action the admin took, so a failed/unconfigured send must throw and
+ * surface as an error rather than being silently swallowed, which would
+ * otherwise leave the message marked read and logged as replied with no
+ * email ever having gone out. No inbound reply-to-this-address path exists
+ * (the apex domain has no receiving/forwarding set up), hence the footer
+ * pointing back to /contact for any follow-up.
+ */
+export async function sendContactMessageReplyEmail(to: string, originalSubject: string, body: string): Promise<void> {
+  if (!resend) {
+    throw new Error("RESEND_API_KEY not set — cannot send a reply email.");
+  }
+
+  const contactUrl = `${APP_URL}/contact`;
+  const footer = `\n\n---\nThis is a one-way message — please do not reply to this email. If you have another question, use our Contact Us page:\n${contactUrl}`;
+
+  await resend.emails.send({
+    from: FROM_EMAIL,
+    to,
+    subject: `Re: ${originalSubject}`,
+    text: `${body}${footer}`,
+  });
 }
