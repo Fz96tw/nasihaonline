@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { markAllContactMessagesRead } from "@/lib/contact-server";
 import { CONTACT_SERVICE_LABELS } from "@/lib/validation/contact";
 import {
   Table,
@@ -11,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 
 export default async function AdminContactMessagesPage() {
   const user = await getSessionUser();
@@ -26,6 +28,8 @@ export default async function AdminContactMessagesPage() {
   }
 
   const messages = await db.contactMessage.findMany({ orderBy: { createdAt: "desc" } });
+  const unreadIds = new Set(messages.filter((message) => !message.readAt).map((message) => message.id));
+  if (unreadIds.size > 0) await markAllContactMessagesRead();
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 p-8">
@@ -65,8 +69,15 @@ export default async function AdminContactMessagesPage() {
                   {message.createdAt.toLocaleDateString()}
                 </TableCell>
                 <TableCell>
-                  <div className="flex flex-col">
-                    <span className="font-medium">{message.name}</span>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{message.name}</span>
+                      {unreadIds.has(message.id) && (
+                        <Badge variant="info" className="shrink-0 whitespace-nowrap">
+                          New
+                        </Badge>
+                      )}
+                    </div>
                     <a
                       href={`mailto:${message.email}`}
                       className="text-xs text-muted-foreground underline underline-offset-2"

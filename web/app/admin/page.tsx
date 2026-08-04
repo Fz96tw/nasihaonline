@@ -8,6 +8,7 @@ import { getPendingLedgerCountForAdmin } from "@/lib/contributions-server";
 import { getReviewQueueCount } from "@/lib/library-server";
 import { getOpenConductReportCount } from "@/lib/conduct-server";
 import { getOpenPrivacyRequestCount } from "@/lib/privacy-server";
+import { getUnreadContactMessageCount } from "@/lib/contact-server";
 import { getPendingApplicationsCount } from "@/lib/admin-review-server";
 import { AdminPhaseForm } from "@/components/admin-phase-form";
 import { WelcomeAnnouncementSettingsForm } from "@/components/admin/welcome-announcement-settings-form";
@@ -105,6 +106,7 @@ const ADMIN_SECTIONS = [
     href: "/admin/contact-messages",
     title: "Contact Messages",
     description: "Review messages submitted via the public contact form.",
+    countKey: "contact",
     group: "Communications",
   },
   {
@@ -152,6 +154,7 @@ export default async function AdminPage() {
     libraryReviewCount,
     conductCount,
     privacyCount,
+    contactCount,
   ] = await Promise.all([
     getAdmissionPhase(),
     getWelcomeAnnouncementSettings(),
@@ -161,6 +164,7 @@ export default async function AdminPage() {
     getReviewQueueCount(),
     getOpenConductReportCount(),
     getOpenPrivacyRequestCount(),
+    getUnreadContactMessageCount(),
   ]);
 
   const counts: Record<string, number> = {
@@ -170,6 +174,7 @@ export default async function AdminPage() {
     libraryReview: libraryReviewCount,
     conduct: conductCount,
     privacy: privacyCount,
+    contact: contactCount,
   };
 
   const needsAttention = ADMIN_SECTIONS.filter(

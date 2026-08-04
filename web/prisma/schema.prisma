@@ -342,8 +342,10 @@ model ContactMessage {
   subject   String
   message   String
   services  ContactService[]  @default([])
+  readAt    DateTime?
   createdAt DateTime          @default(now())
 
+  @@index([readAt])
   @@map("contact_messages")
 }
 
