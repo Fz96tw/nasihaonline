@@ -20,8 +20,9 @@ import {
  * /admin/library/review-queue (not admin-only like most of /admin).
  */
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+  let admin;
   try {
-    await requireRole([Role.moderator, Role.admin]);
+    admin = await requireRole([Role.moderator, Role.admin]);
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
     throw error;
@@ -34,23 +35,23 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
   try {
     if (parsed.data.type === "blog_post") {
-      const post = await resolvePostFlag(params.id, parsed.data.action);
+      const post = await resolvePostFlag(params.id, parsed.data.action, admin.id);
       await enqueuePostIndexSync(post.id);
       return NextResponse.json({ item: post });
     }
 
     if (parsed.data.type === "library_item") {
-      const item = await resolveFlaggedKnowledgeItem(params.id, parsed.data.action);
+      const item = await resolveFlaggedKnowledgeItem(params.id, parsed.data.action, admin.id);
       await enqueueKnowledgeItemIndexSync(item.id);
       return NextResponse.json({ item });
     }
 
     if (parsed.data.type === "blog_comment") {
-      const comment = await resolvePostCommentFlag(params.id, parsed.data.action);
+      const comment = await resolvePostCommentFlag(params.id, parsed.data.action, admin.id);
       return NextResponse.json({ item: comment });
     }
 
-    const post = await resolveForumPostFlag(params.id, parsed.data.action);
+    const post = await resolveForumPostFlag(params.id, parsed.data.action, admin.id);
     await enqueueForumThreadIndexSync(post.threadId);
     return NextResponse.json({ item: post });
   } catch (error) {

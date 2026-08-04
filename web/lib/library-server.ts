@@ -19,6 +19,7 @@ import {
 } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import { createNotification } from "@/lib/notifications-server";
+import { recordAdminAction } from "@/lib/audit-server";
 import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import type {
   KnowledgeCategoryOption,
@@ -686,6 +687,7 @@ export async function flagKnowledgeItem(
 export async function resolveFlaggedKnowledgeItem(
   id: string,
   action: "dismiss" | "remove",
+  adminId: string,
 ): Promise<{ id: string; status: KnowledgeStatus }> {
   const item = await db.knowledgeItem.findUnique({ where: { id }, select: { id: true, status: true } });
   if (!item) throw new KnowledgeItemError(404, "Resource not found.");
@@ -693,12 +695,24 @@ export async function resolveFlaggedKnowledgeItem(
     throw new KnowledgeItemError(400, "This resource is not currently flagged.");
   }
 
-  return db.knowledgeItem.update({
-    where: { id },
-    data: {
-      status: action === "remove" ? KnowledgeStatus.rejected : KnowledgeStatus.published,
-      flagReason: null,
-    },
-    select: { id: true, status: true },
+  return db.$transaction(async (tx) => {
+    const updated = await tx.knowledgeItem.update({
+      where: { id },
+      data: {
+        status: action === "remove" ? KnowledgeStatus.rejected : KnowledgeStatus.published,
+        flagReason: null,
+      },
+      select: { id: true, status: true },
+    });
+    await recordAdminAction(
+      {
+        actorId: adminId,
+        action: action === "remove" ? "content.removed" : "content.dismissed",
+        entityType: "KnowledgeItem",
+        entityId: id,
+      },
+      tx,
+    );
+    return updated;
   });
 }

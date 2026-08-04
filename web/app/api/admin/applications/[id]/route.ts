@@ -35,13 +35,14 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   }
 
   if (parsed.data.action === "approve") {
+    const { tier } = parsed.data;
     // Clerk provisioning happens before the DB write: if it fails, the
     // application stays in the pending queue for retry rather than being
     // marked approved with no account behind it.
     const invitation = await provisionMemberAccount(
       application.email,
       Role.member,
-      parsed.data.tier,
+      tier,
       application.firstName,
       application.lastName,
     );
@@ -51,7 +52,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         where: { id: application.id },
         data: {
           status: "approved",
-          assignedTier: parsed.data.tier,
+          assignedTier: tier,
           reviewedAt: new Date(),
           reviewedByEmail: admin.email,
         },
@@ -64,7 +65,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     });
 
     if (invitation.url) {
-      await sendWelcomeEmail(application.email, application.firstName, parsed.data.tier, invitation.url);
+      await sendWelcomeEmail(application.email, application.firstName, tier, invitation.url);
     } else {
       console.error(
         `[email] Clerk invitation ${invitation.id} for ${application.email} has no url — skipping welcome email`,
@@ -74,13 +75,14 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ application: updated });
   }
 
+  const { adminNote, visibleToApplicant } = parsed.data;
   const updated = await db.$transaction(async (tx) => {
     const application_ = await tx.membershipApplication.update({
       where: { id: application.id },
       data: {
         status: "rejected",
-        adminNote: parsed.data.adminNote,
-        adminNoteVisibleToApplicant: parsed.data.visibleToApplicant,
+        adminNote,
+        adminNoteVisibleToApplicant: visibleToApplicant,
         reviewedAt: new Date(),
         reviewedByEmail: admin.email,
       },

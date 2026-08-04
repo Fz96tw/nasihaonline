@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { EventVisibility, NotificationType } from "@/lib/generated/prisma/enums";
 import { createNotification } from "@/lib/notifications-server";
+import { recordAdminAction } from "@/lib/audit-server";
 import { searchForumDocuments } from "@/lib/meilisearch";
 import { getDirectoryMembersByIds, getMentionableMembers } from "@/lib/members-server";
 import { findMentionedMembers } from "@/lib/mentions";
@@ -562,17 +563,30 @@ export async function flagForumPost(id: string, reason: string): Promise<{ id: s
 export async function resolveForumPostFlag(
   id: string,
   action: "dismiss" | "remove",
+  adminId: string,
 ): Promise<{ id: string; flagged: boolean; removed: boolean; threadId: string }> {
   const post = await db.forumPost.findUnique({ where: { id }, select: { id: true, flagged: true } });
   if (!post) throw new ForumError(404, "Post not found.");
   if (!post.flagged) throw new ForumError(400, "This post is not currently flagged.");
 
-  return db.forumPost.update({
-    where: { id },
-    data:
-      action === "remove"
-        ? { flagged: false, flagReason: null, removed: true }
-        : { flagged: false, flagReason: null },
-    select: { id: true, flagged: true, removed: true, threadId: true },
+  return db.$transaction(async (tx) => {
+    const updated = await tx.forumPost.update({
+      where: { id },
+      data:
+        action === "remove"
+          ? { flagged: false, flagReason: null, removed: true }
+          : { flagged: false, flagReason: null },
+      select: { id: true, flagged: true, removed: true, threadId: true },
+    });
+    await recordAdminAction(
+      {
+        actorId: adminId,
+        action: action === "remove" ? "content.removed" : "content.dismissed",
+        entityType: "ForumPost",
+        entityId: id,
+      },
+      tx,
+    );
+    return updated;
   });
 }

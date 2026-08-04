@@ -17,6 +17,7 @@ import {
 } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import { createNotification } from "@/lib/notifications-server";
+import { recordAdminAction } from "@/lib/audit-server";
 import { getMentionableMembers } from "@/lib/members-server";
 import { findMentionedMembers } from "@/lib/mentions";
 import type { PostCard, PostDetail, PostCategoryOption, PostTagOption, PostCommentNode, PostSort } from "@/lib/blog";
@@ -525,18 +526,31 @@ export async function flagPost(id: string, reason: string): Promise<{ id: string
 export async function resolvePostFlag(
   id: string,
   action: "dismiss" | "remove",
+  adminId: string,
 ): Promise<{ id: string; flagged: boolean; publishedAt: Date | null }> {
   const post = await db.post.findUnique({ where: { id }, select: { id: true, flagged: true } });
   if (!post) throw new PostError(404, "Post not found.");
   if (!post.flagged) throw new PostError(400, "This post is not currently flagged.");
 
-  return db.post.update({
-    where: { id },
-    data:
-      action === "remove"
-        ? { flagged: false, flagReason: null, publishedAt: null }
-        : { flagged: false, flagReason: null },
-    select: { id: true, flagged: true, publishedAt: true },
+  return db.$transaction(async (tx) => {
+    const updated = await tx.post.update({
+      where: { id },
+      data:
+        action === "remove"
+          ? { flagged: false, flagReason: null, publishedAt: null }
+          : { flagged: false, flagReason: null },
+      select: { id: true, flagged: true, publishedAt: true },
+    });
+    await recordAdminAction(
+      {
+        actorId: adminId,
+        action: action === "remove" ? "content.removed" : "content.dismissed",
+        entityType: "Post",
+        entityId: id,
+      },
+      tx,
+    );
+    return updated;
   });
 }
 
@@ -569,17 +583,30 @@ export async function flagPostComment(id: string, reason: string): Promise<{ id:
 export async function resolvePostCommentFlag(
   id: string,
   action: "dismiss" | "remove",
+  adminId: string,
 ): Promise<{ id: string; flagged: boolean; removed: boolean; postId: string }> {
   const comment = await db.postComment.findUnique({ where: { id }, select: { id: true, flagged: true } });
   if (!comment) throw new PostCommentError(404, "Comment not found.");
   if (!comment.flagged) throw new PostCommentError(400, "This comment is not currently flagged.");
 
-  return db.postComment.update({
-    where: { id },
-    data:
-      action === "remove"
-        ? { flagged: false, flagReason: null, removed: true }
-        : { flagged: false, flagReason: null },
-    select: { id: true, flagged: true, removed: true, postId: true },
+  return db.$transaction(async (tx) => {
+    const updated = await tx.postComment.update({
+      where: { id },
+      data:
+        action === "remove"
+          ? { flagged: false, flagReason: null, removed: true }
+          : { flagged: false, flagReason: null },
+      select: { id: true, flagged: true, removed: true, postId: true },
+    });
+    await recordAdminAction(
+      {
+        actorId: adminId,
+        action: action === "remove" ? "content.removed" : "content.dismissed",
+        entityType: "PostComment",
+        entityId: id,
+      },
+      tx,
+    );
+    return updated;
   });
 }
