@@ -97,6 +97,7 @@ model User {
   conductViolationsHandled   CodeOfConductViolation[] @relation("ConductViolationHandledBy")
   privacyDataRequests        PrivacyDataRequest[]     @relation("PrivacyRequestUser")
   privacyDataRequestsHandled PrivacyDataRequest[]     @relation("PrivacyRequestHandledBy")
+  adminActionLogs            AdminActionLog[]         @relation("AdminActionLogActor")
   notificationPreferences    NotificationPreference[]
   announcementsAuthored      Announcement[]           @relation("AnnouncementAuthor")
   announcementsRetracted     Announcement[]           @relation("AnnouncementRetractedBy")
@@ -1433,6 +1434,38 @@ model PrivacyDataRequest {
 
   @@index([userId])
   @@map("privacy_data_requests")
+}
+
+// Generic cross-domain admin/moderator action audit trail — "who did what,
+// when" for the several domains sharing one admin panel (applications,
+// conduct, privacy requests, content moderation, contact messages). An
+// admin resolving an alert-worthy item clears that alert for every admin,
+// so this exists to make the resolution itself visible and attributable.
+// Deliberately domain-agnostic (entityType/entityId discriminator + a
+// free-form action string + optional metadata) rather than a
+// TierHistory-style dedicated table per domain, since a fixed-subject
+// relation table would need its own migration for every new domain covered.
+model AdminActionLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  actor      User     @relation("AdminActionLogActor", fields: [actorId], references: [id])
+  // Free-form, dotted, e.g. "conduct.warning", "content.removed",
+  // "contact_message.read" — a plain String (not an enum) so a new action
+  // verb never needs a migration; human-readable labels live in lib/audit.ts.
+  action     String
+  // Discriminator naming the Prisma model the action was taken on, e.g.
+  // "MembershipApplication", "CodeOfConductViolation", "ContactMessage".
+  entityType String
+  // Nullable for forward-compatibility only — every call site today
+  // populates this.
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@map("admin_action_log")
 }
 
 // ===== Notifications (§4.10) =====
