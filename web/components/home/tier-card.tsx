@@ -87,8 +87,16 @@ export function TierCard({
           </div>
 
           <div className={cn(faceClasses, tier.gradient, "[transform:rotateY(180deg)]")}>
+            <h4
+              className={cn(
+                "relative font-semibold text-primary-foreground",
+                compact ? "text-xs" : "text-lg",
+              )}
+            >
+              {tier.name}
+            </h4>
             {!compact && (
-              <p className="relative text-base leading-relaxed text-primary-foreground/90">
+              <p className="relative mt-2 text-base leading-relaxed text-primary-foreground/90">
                 {tier.description}
               </p>
             )}
