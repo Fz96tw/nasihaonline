@@ -14,8 +14,10 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Checkbox } from "@/components/ui/checkbox";
 import { getCsrfToken } from "@/lib/csrf-client";
-import { contactSchema, type ContactFormValues } from "@/lib/validation/contact";
+import { ContactService } from "@/lib/generated/prisma/enums";
+import { CONTACT_SERVICE_LABELS, contactSchema, type ContactFormValues } from "@/lib/validation/contact";
 
 export function ContactForm({
   defaultName,
@@ -34,6 +36,7 @@ export function ContactForm({
     defaultValues: {
       name: defaultName ?? "",
       email: defaultEmail ?? "",
+      services: [],
       subject: "",
       message: "",
     },
@@ -63,7 +66,7 @@ export function ContactForm({
 
   if (submitted) {
     return (
-      <div className="mx-auto max-w-xl rounded-[10px] border bg-card p-8 text-center shadow-sm">
+      <div className="mx-auto my-12 max-w-xl rounded-[10px] border bg-card p-8 text-center shadow-sm">
         <h1 className="text-2xl font-bold tracking-tight">Message sent</h1>
         <p className="mt-2 text-muted-foreground">
           Thanks for reaching out — we&rsquo;ll get back to you as soon as we can.
@@ -76,7 +79,7 @@ export function ContactForm({
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className="mx-auto flex max-w-xl flex-col gap-6 p-8"
+        className="mx-auto my-12 flex max-w-xl flex-col gap-6 rounded-[10px] border bg-muted p-8 shadow-sm"
         noValidate
       >
         {showHeader && (
@@ -111,6 +114,34 @@ export function ContactForm({
               <FormControl>
                 <Input type="email" placeholder="you@example.com" {...field} />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="services"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Which of our services is this about?</FormLabel>
+              <div className="flex flex-col gap-2">
+                {Object.values(ContactService).map((value) => (
+                  <label key={value} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={field.value.includes(value)}
+                      onCheckedChange={(checked) =>
+                        field.onChange(
+                          checked
+                            ? [...field.value, value]
+                            : field.value.filter((v) => v !== value)
+                        )
+                      }
+                    />
+                    {CONTACT_SERVICE_LABELS[value]}
+                  </label>
+                ))}
+              </div>
               <FormMessage />
             </FormItem>
           )}

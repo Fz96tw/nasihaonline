@@ -1,6 +1,7 @@
 import { Resend } from "resend";
-import { Tier } from "@/lib/generated/prisma/enums";
+import { Tier, ContactService } from "@/lib/generated/prisma/enums";
 import { TIER_LABELS } from "@/lib/validation/application-review";
+import { CONTACT_SERVICE_LABELS } from "@/lib/validation/contact";
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "NASIHA <no-reply@mail.nasihaforyou.org>";
@@ -324,6 +325,7 @@ export async function sendEventLifecycleEmail(
 export async function sendContactMessageEmail(message: {
   name: string;
   email: string;
+  services: ContactService[];
   subject: string;
   message: string;
 }) {
@@ -332,13 +334,17 @@ export async function sendContactMessageEmail(message: {
     return;
   }
 
+  const servicesLine = message.services.length
+    ? `Services: ${message.services.map((service) => CONTACT_SERVICE_LABELS[service]).join(", ")}\n`
+    : "";
+
   try {
     await resend.emails.send({
       from: FROM_EMAIL,
       to: CONTACT_EMAIL,
       replyTo: message.email,
       subject: `[Contact form] ${message.subject}`,
-      text: `From: ${message.name} <${message.email}>\n\n${message.message}`,
+      text: `From: ${message.name} <${message.email}>\n${servicesLine}\n${message.message}`,
     });
   } catch (error) {
     console.error("[email] Failed to send contact notification email", error);

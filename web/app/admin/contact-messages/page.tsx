@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { CONTACT_SERVICE_LABELS } from "@/lib/validation/contact";
 import {
   Table,
   TableBody,
@@ -45,6 +46,7 @@ export default async function AdminContactMessagesPage() {
             <TableRow>
               <TableHead>Date</TableHead>
               <TableHead>From</TableHead>
+              <TableHead>Services</TableHead>
               <TableHead>Subject</TableHead>
               <TableHead>Message</TableHead>
             </TableRow>
@@ -52,7 +54,7 @@ export default async function AdminContactMessagesPage() {
           <TableBody>
             {messages.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
                   No messages yet.
                 </TableCell>
               </TableRow>
@@ -72,6 +74,11 @@ export default async function AdminContactMessagesPage() {
                       {message.email}
                     </a>
                   </div>
+                </TableCell>
+                <TableCell className="max-w-[160px] text-muted-foreground">
+                  {message.services.length
+                    ? message.services.map((service) => CONTACT_SERVICE_LABELS[service]).join(", ")
+                    : "—"}
                 </TableCell>
                 <TableCell className="max-w-xs">{message.subject}</TableCell>
                 <TableCell className="max-w-md whitespace-pre-wrap text-muted-foreground">

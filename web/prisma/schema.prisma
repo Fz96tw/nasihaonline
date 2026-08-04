@@ -336,14 +336,21 @@ model Donation {
 // fails or RESEND_API_KEY isn't configured — the email is the fast path,
 // this row is the fallback so nothing is silently lost.
 model ContactMessage {
-  id        String   @id @default(cuid())
+  id        String            @id @default(cuid())
   name      String
   email     String
   subject   String
   message   String
-  createdAt DateTime @default(now())
+  services  ContactService[]  @default([])
+  createdAt DateTime          @default(now())
 
   @@map("contact_messages")
+}
+
+enum ContactService {
+  research_curation
+  peer_review_feedback
+  teaching_sharing
 }
 
 model MembershipApplication {
