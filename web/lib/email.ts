@@ -1,7 +1,9 @@
 import { Resend } from "resend";
 import { Tier, ContactService } from "@/lib/generated/prisma/enums";
+import type { MembershipApplicationModel } from "@/lib/generated/prisma/models/MembershipApplication";
 import { TIER_LABELS } from "@/lib/validation/application-review";
 import { CONTACT_SERVICE_LABELS } from "@/lib/validation/contact";
+import { HOW_HEARD_LABELS } from "@/lib/validation/application";
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "NASIHA <no-reply@mail.nasihaforyou.org>";
@@ -13,7 +15,30 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
  * submission, since the MembershipApplication record is already persisted
  * by the time this runs. Logs instead of throwing.
  */
-export async function sendApplicationConfirmationEmail(to: string, firstName: string) {
+function formatApplicationSummary(application: MembershipApplicationModel): string {
+  const lines: Array<[string, string]> = [
+    ["Name", `${application.firstName} ${application.lastName}`],
+    ["Email", application.email],
+    ["Professional title / specialty", application.professionalTitle || "—"],
+    ["LinkedIn", application.linkedinUrl || "—"],
+    ["Requested tier", application.requestedTier ? TIER_LABELS[application.requestedTier] : "—"],
+    ["Country / region", application.countryRegion],
+    [
+      "How did you hear about NASIHA?",
+      application.howHeardSource
+        ? [HOW_HEARD_LABELS[application.howHeardSource], application.howHeardMemberName, application.howHeardOtherDetail]
+            .filter(Boolean)
+            .join(" — ")
+        : "—",
+    ],
+    ["Email updates opt-in", application.emailUpdatesOptIn ? "Yes" : "No"],
+  ];
+
+  return lines.map(([label, value]) => `${label}: ${value}`).join("\n");
+}
+
+export async function sendApplicationConfirmationEmail(application: MembershipApplicationModel) {
+  const to = application.email;
   if (!resend) {
     console.warn(`[email] RESEND_API_KEY not set — skipping confirmation email to ${to}`);
     return;
@@ -24,7 +49,7 @@ export async function sendApplicationConfirmationEmail(to: string, firstName: st
       from: FROM_EMAIL,
       to,
       subject: "Your NASIHA membership application was received",
-      text: `Hi ${firstName},\n\nThank you for applying to NASIHA. The Board will review your application and be in touch within 7 days.\n\n— The NASIHA Team`,
+      text: `Hi ${application.firstName},\n\nThank you for applying to NASIHA. The Board will review your application and be in touch within 7 days.\n\n— The NASIHA Team\n\n---\nA copy of your submitted application:\n\n${formatApplicationSummary(application)}`,
     });
   } catch (error) {
     console.error("[email] Failed to send application confirmation email", error);

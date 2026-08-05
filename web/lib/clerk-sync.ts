@@ -47,6 +47,7 @@ export async function upsertUserFromClerkData(
       name: nameFromMetadata(publicMetadata),
       role: roleFromMetadata(publicMetadata),
       tier: tierFromMetadata(publicMetadata),
+      requiresProfileOnboarding: true,
       profile: { create: {} },
     },
     update: { email, role: roleFromMetadata(publicMetadata), tier: tierFromMetadata(publicMetadata) },

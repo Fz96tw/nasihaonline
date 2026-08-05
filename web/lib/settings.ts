@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { AdmissionPhase } from "@/lib/generated/prisma/enums";
 
-export { ADMISSION_PHASE_LABELS, professionalReferenceRequired } from "@/lib/admission-phase";
+export { ADMISSION_PHASE_LABELS } from "@/lib/admission-phase";
 
 const SETTINGS_ROW_ID = 1;
 

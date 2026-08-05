@@ -4,8 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { STATUS_LABELS, STATUS_BADGE_VARIANT } from "@/lib/applications";
 import { TIER_LABELS } from "@/lib/validation/application-review";
-import { CAREER_STAGE_LABELS, AVAILABILITY_LABELS } from "@/lib/validation/application";
-import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
+import { HOW_HEARD_LABELS } from "@/lib/validation/application";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminApplicationReviewForm } from "@/components/admin-application-review-form";
@@ -58,7 +57,7 @@ export default async function AdminApplicationDetailPage({
             {STATUS_LABELS[application.status]}
           </Badge>
           {application.sourcedFromDonation && (
-            <Badge variant="info" title="Auto-submitted from the donate form's Friend of NASIHA checkbox — career/interest fields below were never collected.">
+            <Badge variant="info" title="Auto-submitted from the donate form's Friend of NASIHA checkbox — professional title and how-heard were never collected.">
               From donation
             </Badge>
           )}
@@ -74,43 +73,42 @@ export default async function AdminApplicationDetailPage({
             <Field label="Email" value={application.email} />
             <Field label="Professional title / Specialty" value={application.professionalTitle} />
             <Field
+              label="LinkedIn"
+              value={
+                application.linkedinUrl ? (
+                  <a
+                    href={application.linkedinUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    {application.linkedinUrl}
+                  </a>
+                ) : null
+              }
+            />
+            <Field
               label="Requested tier"
               value={application.requestedTier ? TIER_LABELS[application.requestedTier] : "No preference"}
             />
-            <Field
-              label="Career stage"
-              value={application.careerStage ? CAREER_STAGE_LABELS[application.careerStage] : null}
-            />
-            <Field
-              label="Availability"
-              value={application.availability.map((v) => AVAILABILITY_LABELS[v]).join(", ")}
-            />
-            <Field
-              label="Interest areas"
-              value={application.interestAreas.map((v) => INTEREST_AREA_LABELS[v]).join(", ")}
-            />
             <Field label="Country / Region" value={application.countryRegion} />
-            <Field label="Referral" value={application.referral} />
             <Field
-              label="Professional reference"
+              label="How did you hear about NASIHA?"
               value={
-                application.professionalReferenceName || application.professionalReferenceContact
-                  ? `${application.professionalReferenceName ?? ""} ${
-                      application.professionalReferenceContact
-                        ? `(${application.professionalReferenceContact})`
-                        : ""
-                    }`.trim()
+                application.howHeardSource
+                  ? [
+                      HOW_HEARD_LABELS[application.howHeardSource],
+                      application.howHeardMemberName,
+                      application.howHeardOtherDetail,
+                    ]
+                      .filter(Boolean)
+                      .join(" — ")
                   : null
               }
             />
             <Field label="Submitted" value={application.createdAt.toLocaleString()} />
             <Field label="Email updates opt-in" value={application.emailUpdatesOptIn ? "Yes" : "No"} />
           </dl>
-          <div className="mt-4 grid gap-4">
-            <Field label="Why do you want to join NASIHA?" value={application.whyJoin} />
-            <Field label="Areas of expertise to share" value={application.expertiseToShare} />
-            <Field label="Topics most want to learn" value={application.topicsToLearn} />
-          </div>
         </CardContent>
       </Card>
 

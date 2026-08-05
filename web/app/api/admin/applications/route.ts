@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const where = buildApplicationFilterWhere(
     searchParams.get("status"),
-    searchParams.get("referral"),
+    searchParams.get("referredBy"),
   );
 
   const applications = await db.membershipApplication.findMany({

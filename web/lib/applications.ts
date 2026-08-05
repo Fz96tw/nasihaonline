@@ -57,14 +57,14 @@ export const STATUS_BADGE_VARIANT: Record<
  */
 export function buildApplicationFilterWhere(
   status: string | null,
-  referral: string | null,
+  referredBy: string | null,
 ): Prisma.MembershipApplicationWhereInput {
   const where: Prisma.MembershipApplicationWhereInput = {};
   if (status && KNOWN_STATUSES.has(status)) {
     where.status = status as ApplicationStatus;
   }
-  if (referral) {
-    where.referral = { contains: referral, mode: "insensitive" };
+  if (referredBy) {
+    where.howHeardMemberName = { contains: referredBy, mode: "insensitive" };
   }
   return where;
 }

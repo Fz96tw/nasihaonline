@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
+import { getOrCreateProfile, getMissingRequiredProfileFields, withResolvedAvatarUrl } from "@/lib/profile-server";
 import { getAllSkills } from "@/lib/skills-server";
 import { ProfileForm } from "@/components/profile/profile-form";
 import { joinList } from "@/lib/validation/profile";
@@ -17,7 +17,9 @@ export default async function ProfilePage() {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const profile = withResolvedAvatarUrl(await getOrCreateProfile(user.id));
+  const rawProfile = await getOrCreateProfile(user.id);
+  const missingFields = getMissingRequiredProfileFields(rawProfile);
+  const profile = withResolvedAvatarUrl(rawProfile);
   const skills = await getAllSkills();
 
   return (
@@ -34,6 +36,21 @@ export default async function ProfilePage() {
           This information appears wherever your identity shows up across NASIHA.
         </p>
       </div>
+
+      {missingFields.length > 0 && (
+        <div className="rounded-[10px] border border-primary/40 bg-primary/5 p-4 text-sm">
+          <p className="font-medium">Finish setting up your profile to continue</p>
+          <p className="mt-1 text-muted-foreground">
+            Your application only asked for the basics. Fill in the following below before you
+            can access the rest of NASIHA:
+          </p>
+          <ul className="mt-2 list-disc space-y-0.5 pl-4 text-muted-foreground">
+            {missingFields.map((field) => (
+              <li key={field}>{field}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <ProfileForm
         email={user.email}

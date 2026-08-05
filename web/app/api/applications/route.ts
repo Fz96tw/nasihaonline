@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getAdmissionPhase } from "@/lib/settings";
 import { applicationSchema } from "@/lib/validation/application";
 import { sendApplicationConfirmationEmail } from "@/lib/email";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
@@ -20,13 +19,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Too many applications. Please try again later." }, { status: 429 });
   }
 
-  const phase = await getAdmissionPhase();
-  const parsed = applicationSchema(phase).safeParse(await request.json());
+  const parsed = applicationSchema.safeParse(await request.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { codeOfConductAccepted, requestedTier, ...applicationFields } = parsed.data;
+  const { codeOfConductAccepted, requestedTier, howHeardMemberName, howHeardOtherDetail, ...applicationFields } =
+    parsed.data;
   if (!codeOfConductAccepted) {
     return NextResponse.json({ error: "Code of Conduct acceptance is required" }, { status: 400 });
   }
@@ -42,12 +41,28 @@ export async function POST(request: Request) {
   const application = await db.membershipApplication.create({
     data: {
       ...applicationFields,
+      professionalTitle: applicationFields.professionalTitle || null,
+      linkedinUrl: applicationFields.linkedinUrl || null,
+      howHeardMemberName: howHeardMemberName || null,
+      howHeardOtherDetail: howHeardOtherDetail || null,
       requestedTier: requestedTier || null,
       codeOfConductAcceptedAt: new Date(),
+      // Legacy vetting fields (see MembershipApplication's schema comment)
+      // are no longer collected on /join — explicitly blanked, same
+      // convention as autoSubmitFriendApplication.
+      careerStage: null,
+      availability: [],
+      interestAreas: [],
+      referral: null,
+      whyJoin: null,
+      expertiseToShare: null,
+      topicsToLearn: null,
+      professionalReferenceName: null,
+      professionalReferenceContact: null,
     },
   });
 
-  await sendApplicationConfirmationEmail(application.email, application.firstName);
+  await sendApplicationConfirmationEmail(application);
 
   return NextResponse.json({ id: application.id }, { status: 201 });
 }

@@ -43,14 +43,15 @@ export async function autoSubmitFriendApplication({
       firstName,
       lastName,
       email: donorEmail,
-      professionalTitle: "",
+      professionalTitle: null,
+      countryRegion: "",
+      howHeardSource: null,
       careerStage: null,
       availability: [],
-      countryRegion: "",
       referral: null,
-      whyJoin: "",
-      expertiseToShare: "",
-      topicsToLearn: "",
+      whyJoin: null,
+      expertiseToShare: null,
+      topicsToLearn: null,
       professionalReferenceName: null,
       professionalReferenceContact: null,
       codeOfConductAcceptedAt: new Date(),
@@ -60,5 +61,5 @@ export async function autoSubmitFriendApplication({
     },
   });
 
-  await sendApplicationConfirmationEmail(application.email, application.firstName);
+  await sendApplicationConfirmationEmail(application);
 }

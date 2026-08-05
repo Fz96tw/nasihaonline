@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { buildApplicationFilterWhere, STATUS_LABELS, STATUS_BADGE_VARIANT } from "@/lib/applications";
 import { ApplicationStatus } from "@/lib/generated/prisma/enums";
+import { HOW_HEARD_LABELS } from "@/lib/validation/application";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,7 @@ import {
 export default async function AdminApplicationsPage({
   searchParams,
 }: {
-  searchParams: { status?: string; referral?: string };
+  searchParams: { status?: string; referredBy?: string };
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
@@ -39,8 +40,8 @@ export default async function AdminApplicationsPage({
   }
 
   const status = searchParams.status ?? "";
-  const referral = searchParams.referral ?? "";
-  const where = buildApplicationFilterWhere(status || null, referral || null);
+  const referredBy = searchParams.referredBy ?? "";
+  const where = buildApplicationFilterWhere(status || null, referredBy || null);
   const applications = await db.membershipApplication.findMany({
     where,
     orderBy: { createdAt: "desc" },
@@ -76,13 +77,19 @@ export default async function AdminApplicationsPage({
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label htmlFor="referral" className="text-xs font-medium text-muted-foreground">
-            Referral source
+          <label htmlFor="referredBy" className="text-xs font-medium text-muted-foreground">
+            Referred by (member)
           </label>
-          <Input id="referral" name="referral" defaultValue={referral} placeholder="Search referral name…" className="w-64" />
+          <Input
+            id="referredBy"
+            name="referredBy"
+            defaultValue={referredBy}
+            placeholder="Search referring member's name…"
+            className="w-64"
+          />
         </div>
         <Button type="submit">Filter</Button>
-        {(status || referral) && (
+        {(status || referredBy) && (
           <Button asChild variant="ghost">
             <Link href="/admin/applications">Clear</Link>
           </Button>
@@ -96,7 +103,7 @@ export default async function AdminApplicationsPage({
               <TableHead>Applicant</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Referral</TableHead>
+              <TableHead>How heard</TableHead>
               <TableHead>Submitted</TableHead>
             </TableRow>
           </TableHeader>
@@ -129,7 +136,16 @@ export default async function AdminApplicationsPage({
                     {STATUS_LABELS[application.status]}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-muted-foreground">{application.referral || "—"}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {application.howHeardSource
+                    ? [
+                        HOW_HEARD_LABELS[application.howHeardSource],
+                        application.howHeardMemberName,
+                      ]
+                        .filter(Boolean)
+                        .join(": ")
+                    : "—"}
+                </TableCell>
                 <TableCell className="text-muted-foreground">
                   {application.createdAt.toLocaleDateString()}
                 </TableCell>

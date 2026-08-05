@@ -44,6 +44,16 @@ model User {
   // First-sign-in (not registration) welcome shout-out fire-once guard —
   // set atomically in getSessionUser() so concurrent requests can't double-post.
   welcomeAnnouncementSentAt DateTime?
+  // True only for accounts created after the /join field-reduction (§3.1,
+  // set explicitly in the `create` branch of upsertUserFromClerkData) —
+  // subjects them to the (member) layout's hard onboarding gate
+  // (getMissingRequiredProfileFields, lib/profile-server.ts) until their
+  // Profile has the fields /join no longer collects. Defaults false so
+  // every pre-existing member is grandfathered in: Profile rows have
+  // historically been created empty regardless of what a member answered
+  // on their original application, so gating on completeness retroactively
+  // would lock real, already-approved members out of the app.
+  requiresProfileOnboarding Boolean    @default(false)
   profile                   Profile?
   // Denormalized donation attribution only (§4.14) — never joined against
   // for Knowledge Hours/tier logic. See Donation model for the guarantee.
@@ -271,10 +281,6 @@ enum ApplicationStatus {
   rejected
 }
 
-// Public membership application (PRD §3.1). professionalReference* is
-// collected unconditionally but only *required* once admissionPhase =
-// open_applications — enforced in application code (lib/validation), not
-// the DB, since the requirement changes at runtime via SiteSettings.
 enum TeamRoleBadge {
   founder
   board_member
@@ -356,29 +362,53 @@ enum ContactService {
   teaching_sharing
 }
 
+// Source selected on the /join form's "How did you hear about NASIHA?"
+// field. `member` requires howHeardMemberName; `other` requires
+// howHeardOtherDetail — enforced in lib/validation/application.ts, not here.
+enum HowHeardSource {
+  online_search
+  colleague
+  member
+  other
+}
+
 model MembershipApplication {
-  id                           String                    @id @default(cuid())
-  firstName                    String
-  lastName                     String
-  email                        String
-  professionalTitle            String
-  // Nullable only because donation-triggered auto-applications (see
-  // sourcedFromDonation below) don't collect it — a manually-submitted
-  // application always has this required by applicationSchema's Zod
-  // validation regardless of DB nullability.
+  id                 String @id @default(cuid())
+  firstName          String
+  lastName           String
+  email              String
+  // Optional as of the join-form field reduction below — the applicant can
+  // fill this in later from their Profile (§4.3) instead.
+  professionalTitle  String?
+  linkedinUrl        String?
+  countryRegion      String
+  howHeardSource     HowHeardSource?
+  // Set only when howHeardSource = member.
+  howHeardMemberName String?
+  // Set only when howHeardSource = other.
+  howHeardOtherDetail String?
+
+  // ===== Legacy vetting fields =====
+  // Collected on /join until the join-form field reduction (applicant now
+  // fills these into their Profile post-approval instead, §4.3): the Board
+  // reviews and approves/rejects on identity alone (name/email/title/
+  // country/how-heard) rather than this detail. Columns kept nullable
+  // (rather than dropped) so already-submitted applications retain their
+  // historical answers for admin viewing — never populated by new
+  // submissions going forward.
   careerStage                  CareerStage?
   availability                 ApplicationAvailability[]
   interestAreas                InterestArea[]
-  countryRegion                String
   referral                     String?
-  whyJoin                      String
-  expertiseToShare             String
-  topicsToLearn                String
+  whyJoin                      String?
+  expertiseToShare             String?
+  topicsToLearn                String?
   professionalReferenceName    String?
   professionalReferenceContact String?
-  codeOfConductAcceptedAt      DateTime
-  emailUpdatesOptIn            Boolean                   @default(false)
-  status                       ApplicationStatus         @default(submitted)
+
+  codeOfConductAcceptedAt DateTime
+  emailUpdatesOptIn       Boolean           @default(false)
+  status                  ApplicationStatus @default(submitted)
 
   // True when this application was auto-submitted from the donate form's
   // "also apply as a Friend" checkbox (PRD §4.14) rather than filled out
