@@ -37,16 +37,15 @@ const baseApplicationSchema = z.object({
   firstName: z.string().trim().min(1, "First name is required"),
   lastName: z.string().trim().min(1, "Last name is required"),
   email: z.string().trim().email("Enter a valid email address"),
-  // Optional — the applicant can add this to their Profile later.
-  professionalTitle: z.string().trim(),
+  professionalTitle: z.string().trim().min(1, "Professional title / specialty is required"),
+  // The only optional field on this form — the applicant can add this to
+  // their Profile later if they skip it here.
   linkedinUrl: z.string().trim(),
   countryRegion: z.string().trim().min(1, "Country / region is required"),
   // Applicant's own tier preference — a non-binding hint only (see
-  // requestedTier on MembershipApplication). Optional, so "" (unselected)
-  // must be a valid value alongside the real Tier enum members; kept as a
-  // plain union rather than z.optional() to match the RHF Select's string
-  // value type.
-  requestedTier: z.union([z.nativeEnum(Tier), z.literal("")]),
+  // requestedTier on MembershipApplication) but required at submission time
+  // regardless, same as every other field but linkedinUrl.
+  requestedTier: z.nativeEnum(Tier, { message: "Select a tier" }),
   howHeardSource: z.nativeEnum(HowHeardSource, { message: "Let us know how you heard about NASIHA" }),
   // Requiredness depends on howHeardSource — see superRefine below. Kept as
   // plain (non-optional-typed) strings, same RHF/zodResolver rationale as

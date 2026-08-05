@@ -40,7 +40,7 @@ const emptyValues: ApplicationFormValues = {
   professionalTitle: "",
   linkedinUrl: "",
   countryRegion: "",
-  requestedTier: "",
+  requestedTier: "" as Tier,
   howHeardSource: "" as HowHeardSource,
   howHeardMemberName: "",
   howHeardOtherDetail: "",
@@ -200,7 +200,7 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
           name="professionalTitle"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Professional title / Specialty (optional)</FormLabel>
+              <FormLabel>Professional title / Specialty</FormLabel>
               <FormControl>
                 <Input
                   placeholder="e.g. Cardiologist, Medical Student, Public Health Researcher"
@@ -217,7 +217,7 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
           name="linkedinUrl"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>LinkedIn profile (optional)</FormLabel>
+              <FormLabel>LinkedIn or other online profile (optional)</FormLabel>
               <FormControl>
                 <Input placeholder="https://linkedin.com/in/…" {...field} />
               </FormControl>
@@ -231,11 +231,11 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
           name="requestedTier"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Which tier are you hoping for? (optional)</FormLabel>
+              <FormLabel>Which tier are you hoping for?</FormLabel>
               <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder="No preference" />
+                    <SelectValue placeholder="Select a tier" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>

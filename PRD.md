@@ -90,10 +90,10 @@ visitor → submits application → applicant (pending)
 **Application form fields — identity-minimum only (current):** `/join` collects only what's needed to identify an applicant and route the Board's decision:
 - First name, last name, email
 - Country / region
-- Professional title / specialty (optional free text)
-- LinkedIn profile URL (optional)
-- Which tier are you hoping for? (optional, non-binding preference)
+- Professional title / specialty
+- Which tier are you hoping for? (non-binding preference, but required to submit)
 - How did you hear about NASIHA? (select: Online search / A colleague / A NASIHA member — requires the member's name / Other — requires a short detail)
+- LinkedIn or other online profile — **the only optional field on the form**
 - Email updates opt-in
 - Code of Conduct acceptance (required)
 
