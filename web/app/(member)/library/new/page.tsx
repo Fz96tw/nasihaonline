@@ -27,7 +27,7 @@ export default async function NewLibraryItemPage() {
         </p>
       </div>
 
-      <SubmitResourceForm categories={categories} tags={tags} />
+      <SubmitResourceForm categories={categories} tags={tags} currentUserId={user.id} />
     </main>
   );
 }

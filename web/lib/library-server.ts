@@ -12,11 +12,13 @@ import {
   KnowledgeContentType,
   KnowledgeLevel,
   KnowledgeStatus,
+  KnowledgeVisibility,
   Role,
   ContributionSource,
   LedgerStatus,
   LedgerTransactionType,
 } from "@/lib/generated/prisma/enums";
+import { DIRECTORY_TIERS } from "@/lib/members";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import { createNotification } from "@/lib/notifications-server";
 import { recordAdminAction } from "@/lib/audit-server";
@@ -131,6 +133,18 @@ export class KnowledgeItemError extends Error {
  * requires binary and which requires youtubeUrl also has to be checked here
  * (not expressible in createKnowledgeItemSchema, since "was a file actually
  * attached" depends on the multipart FormData, not the parsed JSON-ish body).
+ *
+ * Restricted Knowledge Library Submissions, Objective 03: `visibility`/
+ * `invitedUserIds` mirror createEvent's restricted-audience handling —
+ * invitees are re-resolved against the same DIRECTORY_TIERS +
+ * listInDirectory eligibility (belt-and-suspenders against
+ * createKnowledgeItemSchema's own invariant), the contributor is excluded
+ * (already implicitly "in" as the submitter), and KnowledgeItemInvitee rows
+ * are created in the same write as the item. Unlike createEvent, no
+ * notification/email is sent here — the item is pending_review and
+ * invisible to everyone (including invitees) until a Steward publishes it,
+ * so notifying now would point at content invitees can't see yet
+ * (deferred to Objective 05).
  */
 export async function createKnowledgeItem(
   contributorId: string,
@@ -145,6 +159,8 @@ export async function createKnowledgeItem(
     externalUrl: string | null;
     deidentificationConfirmed: boolean;
     licenseConsented: boolean;
+    visibility: KnowledgeVisibility;
+    invitedUserIds: string[];
     file: File | null;
   },
 ): Promise<{ id: string }> {
@@ -153,6 +169,21 @@ export async function createKnowledgeItem(
   }
   if (input.contentType === KnowledgeContentType.case_study && !input.deidentificationConfirmed) {
     throw new KnowledgeItemError(400, "You must confirm all patient information has been de-identified.");
+  }
+
+  const isRestricted = input.visibility === KnowledgeVisibility.restricted;
+  const invitedUsers = isRestricted
+    ? await db.user.findMany({
+        where: {
+          id: { in: input.invitedUserIds, notIn: [contributorId] },
+          tier: { in: DIRECTORY_TIERS },
+          profile: { listInDirectory: true },
+        },
+        select: { id: true },
+      })
+    : [];
+  if (isRestricted && invitedUsers.length === 0) {
+    throw new KnowledgeItemError(400, "Select at least one member to invite.");
   }
 
   const category = await db.knowledgeCategory.findUnique({ where: { id: input.categoryId }, select: { id: true } });
@@ -196,8 +227,10 @@ export async function createKnowledgeItem(
       deidentificationConfirmed: input.deidentificationConfirmed,
       licenseConsented: true,
       status: KnowledgeStatus.pending_review,
+      visibility: input.visibility,
       tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
       attachments: attachment ? { create: [attachment] } : undefined,
+      invitees: invitedUsers.length > 0 ? { create: invitedUsers.map((user) => ({ userId: user.id })) } : undefined,
     },
     select: { id: true },
   });
