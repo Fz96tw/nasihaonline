@@ -178,10 +178,14 @@ export type AnnouncementHistoryItem = {
  * which display the fixed "NASIHA Board" identity instead (lib/feed-server.ts).
  * Includes retracted announcements (with who/when) so the record persists
  * even once an announcement is hidden from members.
+ * Excludes auto-generated welcome-new-member posts (welcomeTier set) — this
+ * is a record of infrequent, high-signal Board sends, and welcome shout-outs
+ * would swamp it. They're still visible via the feed/notifications/email,
+ * and their channels are configurable from the welcome-announcement settings.
  */
 export async function listAnnouncementHistory(): Promise<AnnouncementHistoryItem[]> {
   const announcements = await db.announcement.findMany({
-    where: { sentAt: { not: null } },
+    where: { sentAt: { not: null }, welcomeTier: null },
     orderBy: { sentAt: "desc" },
     select: {
       id: true,
