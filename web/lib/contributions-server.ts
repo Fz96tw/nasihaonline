@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { recordAdminAction } from "@/lib/audit-server";
 import { ContributionSource, LedgerStatus, LedgerTransactionType, Role } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import type {
@@ -230,6 +231,11 @@ export class ContributionResolutionError extends Error {
  * their own peer-confirmation entry doesn't need one; that includes an
  * admin who happens to be the named counterpart, since they're acting in
  * the peer role there, not the admin one.
+ *
+ * That same admin-vs-peer distinction gates the AdminActionLog write below:
+ * only a resolution made in admin capacity (`isAdmin && !isNamedCounterpart`)
+ * is logged, so /admin/ledger's resolution-history table reflects admin
+ * decisions, not every peer's own confirmations.
  */
 export async function resolveContribution(
   ledgerId: string,
@@ -239,7 +245,7 @@ export async function resolveContribution(
 ) {
   const entry = await db.contributionLedger.findUnique({
     where: { id: ledgerId },
-    include: { event: true },
+    include: { event: { include: { rule: true } }, user: { select: { name: true, email: true } } },
   });
 
   if (!entry) throw new ContributionResolutionError(404, "Contribution not found.");
@@ -265,14 +271,37 @@ export async function resolveContribution(
     throw new ContributionResolutionError(400, "A reason is required to reject this contribution.");
   }
 
-  return db.contributionLedger.update({
-    where: { id: ledgerId },
-    data: {
-      status: decision,
-      resolvedByUserId: actingUser.id,
-      resolvedAt: new Date(),
-      ...(trimmedReason ? { reason: trimmedReason } : {}),
-    },
+  return db.$transaction(async (tx) => {
+    const updated = await tx.contributionLedger.update({
+      where: { id: ledgerId },
+      data: {
+        status: decision,
+        resolvedByUserId: actingUser.id,
+        resolvedAt: new Date(),
+        ...(trimmedReason ? { reason: trimmedReason } : {}),
+      },
+    });
+
+    if (isAdmin && !isNamedCounterpart) {
+      await recordAdminAction(
+        {
+          actorId: actingUser.id,
+          action: `ledger.${decision}`,
+          entityType: "ContributionLedger",
+          entityId: ledgerId,
+          metadata: {
+            targetUserId: entry.userId,
+            targetUserName: entry.user.name ?? entry.user.email,
+            hours: entry.hours.toNumber(),
+            activity: entry.event?.rule.label ?? entry.type,
+            reason: trimmedReason ?? null,
+          },
+        },
+        tx,
+      );
+    }
+
+    return updated;
   });
 }
 
@@ -301,16 +330,38 @@ export async function createLedgerAdjustment(
   const target = await db.user.findUnique({ where: { id: targetUserId } });
   if (!target) throw new LedgerAdjustmentError(404, "Member not found.");
 
-  return db.contributionLedger.create({
-    data: {
-      userId: targetUserId,
-      type: LedgerTransactionType.adjusted,
-      status: LedgerStatus.confirmed,
-      hours,
-      reason: reason.trim(),
-      createdByUserId: admin.id,
-      resolvedByUserId: admin.id,
-      resolvedAt: new Date(),
-    },
+  const trimmedReason = reason.trim();
+
+  return db.$transaction(async (tx) => {
+    const entry = await tx.contributionLedger.create({
+      data: {
+        userId: targetUserId,
+        type: LedgerTransactionType.adjusted,
+        status: LedgerStatus.confirmed,
+        hours,
+        reason: trimmedReason,
+        createdByUserId: admin.id,
+        resolvedByUserId: admin.id,
+        resolvedAt: new Date(),
+      },
+    });
+
+    await recordAdminAction(
+      {
+        actorId: admin.id,
+        action: "ledger.adjusted",
+        entityType: "ContributionLedger",
+        entityId: entry.id,
+        metadata: {
+          targetUserId,
+          targetUserName: target.name ?? target.email,
+          hours,
+          reason: trimmedReason,
+        },
+      },
+      tx,
+    );
+
+    return entry;
   });
 }

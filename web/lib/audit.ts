@@ -9,6 +9,9 @@ export const ADMIN_ACTION_LABELS: Record<string, string> = {
   "content.removed": "Removed flagged content",
   "contact_message.read": "Marked a contact message as read",
   "contact_message.replied": "Replied to a contact message",
+  "ledger.confirmed": "Confirmed knowledge hours",
+  "ledger.rejected": "Rejected knowledge hours",
+  "ledger.adjusted": "Adjusted a member's ledger balance",
 };
 
 export function formatAdminAction(action: string): string {

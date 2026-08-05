@@ -42,13 +42,27 @@ export type AdminActionLogEntry = AdminActionLogModel & {
   actor: { id: string; name: string | null; email: string };
 };
 
-/** Reverse-chronological feed for /admin/activity. Fetches `take + 1` to know if there's a next page without a separate count(). */
+/**
+ * Reverse-chronological feed for /admin/activity. Fetches `take + 1` to know
+ * if there's a next page without a separate count(). `entityType`/`action`
+ * are optional narrowing filters — e.g. /admin/ledger's resolution-history
+ * table passes `entityType: "ContributionLedger"` to show only ledger
+ * actions instead of every domain's. `entityType` also accepts an array,
+ * since /admin/activity's "Content Moderation" filter spans several Prisma
+ * models (Post, PostComment, KnowledgeItem, ForumPost) under one domain.
+ */
 export async function getAdminActionLog(
-  params: { take?: number; before?: Date } = {},
+  params: { take?: number; before?: Date; entityType?: string | string[]; action?: string } = {},
 ): Promise<{ items: AdminActionLogEntry[]; hasMore: boolean }> {
   const take = params.take ?? 50;
   const rows = await db.adminActionLog.findMany({
-    where: params.before ? { createdAt: { lt: params.before } } : undefined,
+    where: {
+      ...(params.entityType
+        ? { entityType: Array.isArray(params.entityType) ? { in: params.entityType } : params.entityType }
+        : {}),
+      ...(params.action ? { action: params.action } : {}),
+      ...(params.before ? { createdAt: { lt: params.before } } : {}),
+    },
     orderBy: { createdAt: "desc" },
     take: take + 1,
     include: { actor: { select: { id: true, name: true, email: true } } },
