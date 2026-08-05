@@ -422,6 +422,8 @@ export async function getPublishedKnowledgeItems(params: {
   categorySlug?: string;
   q?: string;
   sort?: LibrarySort;
+  userId: string;
+  isPrivileged: boolean;
 }): Promise<LibraryCard[]> {
   const visibleStatuses = [KnowledgeStatus.published, KnowledgeStatus.flagged];
   const filters = {
@@ -429,6 +431,15 @@ export async function getPublishedKnowledgeItems(params: {
     ...(params.level ? { level: params.level } : {}),
     ...(params.categorySlug ? { category: { slug: params.categorySlug } } : {}),
   };
+  const visibilityFilter = params.isPrivileged
+    ? {}
+    : {
+        OR: [
+          { visibility: KnowledgeVisibility.public },
+          { contributorId: params.userId },
+          { invitees: { some: { userId: params.userId } } },
+        ],
+      };
   const sort = params.sort ?? "recent";
 
   if (params.q?.trim()) {
@@ -440,7 +451,7 @@ export async function getPublishedKnowledgeItems(params: {
     if (hits.length === 0) return [];
 
     const items = await db.knowledgeItem.findMany({
-      where: { id: { in: hits.map((hit) => hit.id) }, status: { in: visibleStatuses } },
+      where: { id: { in: hits.map((hit) => hit.id) }, status: { in: visibleStatuses }, ...visibilityFilter },
       select: LIBRARY_CARD_SELECT,
     });
     const byId = new Map(items.map((item) => [item.id, item]));
@@ -449,7 +460,7 @@ export async function getPublishedKnowledgeItems(params: {
   }
 
   const items = await db.knowledgeItem.findMany({
-    where: { status: { in: visibleStatuses }, ...filters },
+    where: { status: { in: visibleStatuses }, ...filters, ...visibilityFilter },
     select: LIBRARY_CARD_SELECT,
     orderBy: { createdAt: "desc" },
   });
@@ -465,9 +476,25 @@ export async function getPublishedKnowledgeItems(params: {
  * forumReplyCount subtracts one, same derivation as
  * getMemberEventById's forumReplyCount.
  */
-export async function getPublishedKnowledgeItemById(id: string): Promise<KnowledgeItemDetail | null> {
-  const item = await db.knowledgeItem.findUnique({
-    where: { id },
+export async function getPublishedKnowledgeItemById(
+  id: string,
+  userId: string,
+  isPrivileged: boolean,
+): Promise<KnowledgeItemDetail | null> {
+  const item = await db.knowledgeItem.findFirst({
+    where: {
+      id,
+      status: { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] },
+      ...(isPrivileged
+        ? {}
+        : {
+            OR: [
+              { visibility: KnowledgeVisibility.public },
+              { contributorId: userId },
+              { invitees: { some: { userId } } },
+            ],
+          }),
+    },
     select: {
       ...LIBRARY_CARD_SELECT,
       deidentificationConfirmed: true,
@@ -477,7 +504,6 @@ export async function getPublishedKnowledgeItemById(id: string): Promise<Knowled
     },
   });
   if (!item) return null;
-  if (item.status !== KnowledgeStatus.published && item.status !== KnowledgeStatus.flagged) return null;
 
   return {
     ...toLibraryCard(item),
@@ -562,19 +588,42 @@ export async function startKnowledgeItemDiscussion(
  * as getPublishedKnowledgeItems; a still-pending_review or rejected
  * submission stays private to /library/mine.
  */
-export async function getPublishedKnowledgeItemsByContributor(contributorId: string): Promise<LibraryCard[]> {
+export async function getPublishedKnowledgeItemsByContributor(
+  contributorId: string,
+  viewerId: string,
+  isPrivileged: boolean,
+): Promise<LibraryCard[]> {
   const items = await db.knowledgeItem.findMany({
-    where: { contributorId, status: { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] } },
+    where: {
+      contributorId,
+      status: { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] },
+      ...(isPrivileged
+        ? {}
+        : {
+            OR: [
+              { visibility: KnowledgeVisibility.public },
+              { contributorId: viewerId },
+              { invitees: { some: { userId: viewerId } } },
+            ],
+          }),
+    },
     select: LIBRARY_CARD_SELECT,
     orderBy: { createdAt: "desc" },
   });
   return items.map(toLibraryCard);
 }
 
-/** Dashboard "recently added to the library" widget (§4.10). */
+/**
+ * Dashboard "recently added to the library" widget (§4.10) — restricted
+ * items are excluded outright rather than per-viewer filtered, since this
+ * widget has no per-viewer context to filter with.
+ */
 export async function getRecentlyPublishedKnowledgeItems(limit = 5): Promise<RecentLibraryItem[]> {
   const items = await db.knowledgeItem.findMany({
-    where: { status: { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] } },
+    where: {
+      status: { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] },
+      visibility: KnowledgeVisibility.public,
+    },
     select: { id: true, title: true, contentType: true, createdAt: true },
     orderBy: { createdAt: "desc" },
     take: limit,
@@ -616,12 +665,18 @@ export async function getReviewQueue(): Promise<ReviewQueueItem[]> {
       youtubeUrl: true,
       externalUrl: true,
       attachments: { select: { id: true, fileName: true, mimeType: true, sizeBytes: true, objectKey: true } },
+      visibility: true,
+      invitees: { select: { user: { select: { name: true } } } },
       createdAt: true,
     },
     orderBy: { createdAt: "asc" },
   });
 
-  return items.map((item) => ({ ...item, createdAt: item.createdAt.toISOString() }));
+  return items.map((item) => ({
+    ...item,
+    invitees: item.invitees.map((invitee) => invitee.user),
+    createdAt: item.createdAt.toISOString(),
+  }));
 }
 
 /** Cheap count for the `/admin` dashboard badge — mirrors getReviewQueue's filter. */

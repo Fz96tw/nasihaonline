@@ -23,7 +23,9 @@ function formatDate(iso: string) {
 }
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const item = await getPublishedKnowledgeItemById(params.id);
+  const user = await getSessionUser();
+  const isPrivileged = user?.role === Role.moderator || user?.role === Role.admin;
+  const item = user ? await getPublishedKnowledgeItemById(params.id, user.id, isPrivileged) : null;
   return { title: item ? `${item.title} — Knowledge Library — NASIHA` : "Resource not found — NASIHA" };
 }
 
@@ -40,11 +42,12 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const item = await getPublishedKnowledgeItemById(params.id);
+  const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
+  const item = await getPublishedKnowledgeItemById(params.id, user.id, isPrivileged);
   if (!item) notFound();
 
   const authorProfile = await getDirectoryMemberById(item.contributor.id);
-  const canEdit = user.id === item.contributor.id || user.role === Role.moderator || user.role === Role.admin;
+  const canEdit = user.id === item.contributor.id || isPrivileged;
 
   const thread = item.forumThreadId
     ? await getForumThreadDetail(LIBRARY_FORUM_SLUG, item.forumThreadId, user.id)

@@ -1,7 +1,7 @@
 // Client-safe Knowledge Library types/constants (PRD §4.9) — kept separate
 // from library-server.ts so client components can import them without
 // pulling in the "server-only" query logic, same split as lib/events.ts.
-import { KnowledgeContentType, KnowledgeLevel, KnowledgeStatus } from "@/lib/generated/prisma/enums";
+import { KnowledgeContentType, KnowledgeLevel, KnowledgeStatus, KnowledgeVisibility } from "@/lib/generated/prisma/enums";
 
 export const CONTENT_TYPE_LABELS: Record<KnowledgeContentType, string> = {
   [KnowledgeContentType.recorded_lecture]: "Recorded Lecture",
@@ -133,5 +133,7 @@ export type ReviewQueueItem = {
   youtubeUrl: string | null;
   externalUrl: string | null;
   attachments: { id: string; fileName: string; mimeType: string; sizeBytes: number; objectKey: string }[];
+  visibility: KnowledgeVisibility;
+  invitees: { name: string | null }[];
   createdAt: string;
 };
