@@ -12,7 +12,10 @@ export function TeamMemberCard({ member }: { member: TeamMemberWithPhotoUrl }) {
       <Badge variant={TEAM_ROLE_BADGE_VARIANT[member.roleBadge]} className="mb-2">
         {TEAM_ROLE_LABELS[member.roleBadge]}
       </Badge>
-      <div className="mb-3 text-sm text-muted-foreground">{member.title}</div>
+      <div className="mb-3 text-sm text-muted-foreground">
+        {member.title}
+        {member.affiliation ? ` · ${member.affiliation}` : ""}
+      </div>
       <CardContent className="p-0 text-sm leading-relaxed text-muted-foreground">
         {member.bio}
       </CardContent>

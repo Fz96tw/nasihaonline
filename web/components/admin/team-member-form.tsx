@@ -38,6 +38,7 @@ export function TeamMemberForm({
     name: string;
     roleBadge: TeamRoleBadge;
     title: string;
+    affiliation: string | null;
     bio: string;
     active: boolean;
     photoUrl: string | null;
@@ -55,6 +56,7 @@ export function TeamMemberForm({
       name: member?.name ?? "",
       roleBadge: member?.roleBadge ?? ("" as TeamRoleBadge),
       title: member?.title ?? "",
+      affiliation: member?.affiliation ?? "",
       bio: member?.bio ?? "",
       active: member?.active ?? true,
     },
@@ -69,6 +71,7 @@ export function TeamMemberForm({
       body.set("name", values.name);
       body.set("roleBadge", values.roleBadge);
       body.set("title", values.title);
+      body.set("affiliation", values.affiliation ?? "");
       body.set("bio", values.bio);
       body.set("active", String(values.active));
       if (photoFile) body.set("photo", photoFile);
@@ -176,9 +179,23 @@ export function TeamMemberForm({
           name="title"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Title / affiliation</FormLabel>
+              <FormLabel>Title</FormLabel>
               <FormControl>
                 <Input placeholder="e.g. Physician" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="affiliation"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Affiliation</FormLabel>
+              <FormControl>
+                <Input placeholder="e.g. Johns Hopkins Hospital" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>

@@ -32,6 +32,7 @@ export async function POST(request: Request) {
     name: formData.get("name"),
     roleBadge: formData.get("roleBadge"),
     title: formData.get("title"),
+    affiliation: formData.get("affiliation"),
     bio: formData.get("bio"),
     active: formData.get("active"),
   });
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
       name: parsed.data.name,
       roleBadge: parsed.data.roleBadge,
       title: parsed.data.title,
+      affiliation: parsed.data.affiliation,
       bio: parsed.data.bio,
       active: parsed.data.active,
       photoUrl,

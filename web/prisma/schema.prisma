@@ -296,6 +296,7 @@ model TeamMember {
   name         String
   roleBadge    TeamRoleBadge
   title        String
+  affiliation  String?
   bio          String
   photoUrl     String?
   displayOrder Int           @default(0)

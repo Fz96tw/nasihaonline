@@ -56,6 +56,7 @@ export function TeamMemberTable({ members }: { members: TeamMemberWithPhotoUrl[]
       body.set("name", member.name);
       body.set("roleBadge", member.roleBadge);
       body.set("title", member.title);
+      body.set("affiliation", member.affiliation ?? "");
       body.set("bio", member.bio);
       body.set("active", String(!member.active));
       const res = await fetch(`/api/admin/team/${member.id}`, {
@@ -102,6 +103,7 @@ export function TeamMemberTable({ members }: { members: TeamMemberWithPhotoUrl[]
               <TableHead>Member</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Title</TableHead>
+              <TableHead>Affiliation</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -109,7 +111,7 @@ export function TeamMemberTable({ members }: { members: TeamMemberWithPhotoUrl[]
           <TableBody>
             {members.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
                   No team members yet.
                 </TableCell>
               </TableRow>
@@ -152,6 +154,7 @@ export function TeamMemberTable({ members }: { members: TeamMemberWithPhotoUrl[]
                   </Badge>
                 </TableCell>
                 <TableCell className="text-muted-foreground">{member.title}</TableCell>
+                <TableCell className="text-muted-foreground">{member.affiliation ?? "—"}</TableCell>
                 <TableCell>
                   <Badge variant={member.active ? "success" : "neutral"}>
                     {member.active ? "Visible" : "Hidden"}

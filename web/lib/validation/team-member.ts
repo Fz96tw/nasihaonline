@@ -5,6 +5,7 @@ export const teamMemberSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
   roleBadge: z.nativeEnum(TeamRoleBadge, { message: "Select a role" }),
   title: z.string().trim().min(1, "Title is required").max(120),
+  affiliation: z.string().trim().max(120).optional(),
   bio: z.string().trim().min(1, "Bio is required").max(2000),
   active: z.boolean(),
 });
@@ -21,6 +22,14 @@ export const teamMemberFormDataSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
   roleBadge: z.nativeEnum(TeamRoleBadge, { message: "Select a role" }),
   title: z.string().trim().min(1, "Title is required").max(120),
+  // FormData.get() returns null for an absent/empty key; store as null
+  // (rather than "") to match the nullable Prisma column.
+  affiliation: z
+    .string()
+    .trim()
+    .max(120)
+    .nullish()
+    .transform((v) => (v ? v : null)),
   bio: z.string().trim().min(1, "Bio is required").max(2000),
   active: z.enum(["true", "false"]).transform((v) => v === "true"),
   // FormData.get() returns null (not undefined) for an absent key — e.g.
