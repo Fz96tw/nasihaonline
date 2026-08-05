@@ -726,18 +726,48 @@ export async function getKnowledgeItemViewCount(knowledgeItemId: string): Promis
 }
 
 /**
+ * Action-level visibility re-check for a restricted item (Authorization
+ * re-checks, Objective 08) — mirrors the exact OR-shape
+ * getPublishedKnowledgeItemById's read path already gates on (Objective 04):
+ * public, the contributor, an invitee, or Steward/admin. Every action route
+ * below that takes an item id from an untrusted caller re-checks this
+ * independently rather than trusting that the page itself only ever renders
+ * the button for someone who can see the item — same "every action route
+ * re-checks independently" convention rsvpToEvent/startEventDiscussion
+ * already follow for restricted events.
+ */
+function canViewKnowledgeItem(
+  item: { visibility: KnowledgeVisibility; contributorId: string; invitees: { userId: string }[] },
+  actingUser: UserModel,
+): boolean {
+  const isPrivileged = actingUser.role === Role.admin || actingUser.role === Role.moderator;
+  return (
+    item.visibility === KnowledgeVisibility.public ||
+    item.contributorId === actingUser.id ||
+    item.invitees.some((invitee) => invitee.userId === actingUser.id) ||
+    isPrivileged
+  );
+}
+
+/**
  * Records a unique visit to a resource's detail page for the eye-icon
  * count, called from POST /api/library/:id/view on every page load. Mirrors
  * recordEventView — /library/[id] redirects a signed-out visitor to
- * /sign-in before this can ever fire, so `userId` is always a real member
- * and this dedupes on the `[knowledgeItemId, userId]` unique constraint
- * directly.
+ * /sign-in before this can ever fire, so `actingUser` is always a real
+ * member and this dedupes on the `[knowledgeItemId, userId]` unique
+ * constraint directly. 404s (not 403s) for a restricted item this viewer
+ * can't see, same as the discussion/flag re-checks below, so a guessed id
+ * doesn't confirm the item's existence.
  */
-export async function recordKnowledgeItemView(knowledgeItemId: string, userId: string): Promise<number> {
-  const item = await db.knowledgeItem.findUnique({ where: { id: knowledgeItemId }, select: { id: true } });
+export async function recordKnowledgeItemView(knowledgeItemId: string, actingUser: UserModel): Promise<number> {
+  const item = await db.knowledgeItem.findUnique({
+    where: { id: knowledgeItemId },
+    select: { id: true, visibility: true, contributorId: true, invitees: { select: { userId: true } } },
+  });
   if (!item) throw new KnowledgeItemError(404, "Resource not found.");
+  if (!canViewKnowledgeItem(item, actingUser)) throw new KnowledgeItemError(404, "Resource not found.");
 
-  await db.knowledgeItemView.createMany({ data: { knowledgeItemId, userId }, skipDuplicates: true });
+  await db.knowledgeItemView.createMany({ data: { knowledgeItemId, userId: actingUser.id }, skipDuplicates: true });
   return getKnowledgeItemViewCount(knowledgeItemId);
 }
 
@@ -753,13 +783,22 @@ export async function recordKnowledgeItemView(knowledgeItemId: string, userId: s
  */
 export async function startKnowledgeItemDiscussion(
   itemId: string,
-  starterId: string,
+  actingUser: UserModel,
 ): Promise<{ threadId: string }> {
   const item = await db.knowledgeItem.findUnique({
     where: { id: itemId },
-    select: { id: true, title: true, status: true, forumThread: { select: { id: true } } },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      visibility: true,
+      contributorId: true,
+      invitees: { select: { userId: true } },
+      forumThread: { select: { id: true } },
+    },
   });
   if (!item) throw new KnowledgeItemError(404, "Resource not found.");
+  if (!canViewKnowledgeItem(item, actingUser)) throw new KnowledgeItemError(404, "Resource not found.");
   if (item.status !== KnowledgeStatus.published && item.status !== KnowledgeStatus.flagged) {
     throw new KnowledgeItemError(400, "Only a published resource can have a discussion thread.");
   }
@@ -772,13 +811,13 @@ export async function startKnowledgeItemDiscussion(
 
   const thread = await db.$transaction(async (tx) => {
     const created = await tx.forumThread.create({
-      data: { forumId: forum.id, authorId: starterId, title: item.title, knowledgeItemId: item.id },
+      data: { forumId: forum.id, authorId: actingUser.id, title: item.title, knowledgeItemId: item.id },
       select: { id: true },
     });
     await tx.forumPost.create({
       data: {
         threadId: created.id,
-        authorId: starterId,
+        authorId: actingUser.id,
         body: `Discussion thread for this resource. [View resource details](${APP_URL}/library/${item.id})`,
       },
     });
@@ -1009,14 +1048,22 @@ export async function reviewKnowledgeItem(id: string, action: "publish" | "rejec
  * `published` item can be flagged (not pending_review/rejected, and not a
  * second time while already flagged) — a Steward resolves a flagged item
  * back to published or removes it, which is out of scope for this
- * objective (no admin tooling for it yet).
+ * objective (no admin tooling for it yet). Re-checks canViewKnowledgeItem
+ * (Objective 08) before the status gate, same 404-not-403 rationale as
+ * startKnowledgeItemDiscussion — a non-invitee flagging a restricted item's
+ * guessed id shouldn't learn it exists.
  */
 export async function flagKnowledgeItem(
   id: string,
+  actingUser: UserModel,
   reason: string,
 ): Promise<{ id: string; status: KnowledgeStatus }> {
-  const item = await db.knowledgeItem.findUnique({ where: { id }, select: { id: true, status: true } });
+  const item = await db.knowledgeItem.findUnique({
+    where: { id },
+    select: { id: true, status: true, visibility: true, contributorId: true, invitees: { select: { userId: true } } },
+  });
   if (!item) throw new KnowledgeItemError(404, "Resource not found.");
+  if (!canViewKnowledgeItem(item, actingUser)) throw new KnowledgeItemError(404, "Resource not found.");
   if (item.status !== KnowledgeStatus.published) {
     throw new KnowledgeItemError(400, "Only a published resource can be flagged.");
   }
