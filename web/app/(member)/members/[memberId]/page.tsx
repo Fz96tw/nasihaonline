@@ -38,7 +38,7 @@ export default async function MemberProfilePage({ params }: { params: { memberId
 
   const [posts, events, libraryItems, forumThreads] = await Promise.all([
     getPublishedPostsByAuthor(params.memberId),
-    getEventsHostedByMember(params.memberId),
+    getEventsHostedByMember(params.memberId, user.id),
     getPublishedKnowledgeItemsByContributor(params.memberId, user.id, isPrivileged),
     getMemberForumThreads(params.memberId, user.id, isPrivileged),
   ]);
