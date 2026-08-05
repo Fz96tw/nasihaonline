@@ -44,6 +44,8 @@ export interface AdjustableUser {
   email: string;
 }
 
+type Direction = "credit" | "debit";
+
 /**
  * Admin-only manual ledger correction (§4.4/§4.11 "ledger auditing") — the
  * only way a balance changes outside normal earn/spend. Unlike
@@ -58,13 +60,22 @@ export function AdminLedgerAdjustmentDialog({ users }: { users: AdjustableUser[]
   const [pickerOpen, setPickerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hoursText, setHoursText] = useState("");
+  const [direction, setDirection] = useState<Direction>("credit");
+  const [magnitudeText, setMagnitudeText] = useState("");
 
   const form = useForm<AdjustLedgerValues>({
     resolver: zodResolver(adjustLedgerSchema),
     defaultValues: { userId: "", hours: 0, reason: "" },
     mode: "onTouched",
   });
+
+  function applyMagnitude(rawMagnitude: string, dir: Direction) {
+    const magnitude = rawMagnitude === "" ? NaN : Number(rawMagnitude);
+    const signed = dir === "debit" ? -magnitude : magnitude;
+    form.setValue("hours", signed, {
+      shouldValidate: form.formState.isSubmitted || form.getFieldState("hours").isTouched,
+    });
+  }
 
   async function onSubmit(values: AdjustLedgerValues) {
     setSubmitting(true);
@@ -83,7 +94,8 @@ export function AdminLedgerAdjustmentDialog({ users }: { users: AdjustableUser[]
         );
       }
       form.reset({ userId: "", hours: 0, reason: "" });
-      setHoursText("");
+      setDirection("credit");
+      setMagnitudeText("");
       setOpen(false);
       router.refresh();
     } catch (err) {
@@ -101,7 +113,8 @@ export function AdminLedgerAdjustmentDialog({ users }: { users: AdjustableUser[]
         if (!next) {
           setError(null);
           form.reset({ userId: "", hours: 0, reason: "" });
-          setHoursText("");
+          setDirection("credit");
+          setMagnitudeText("");
         }
       }}
     >
@@ -185,23 +198,51 @@ export function AdminLedgerAdjustmentDialog({ users }: { users: AdjustableUser[]
               name="hours"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Hours (positive to credit, negative to debit)</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      step="0.25"
-                      inputMode="decimal"
-                      name={field.name}
-                      ref={field.ref}
-                      onBlur={field.onBlur}
-                      value={hoursText}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        setHoursText(raw);
-                        field.onChange(raw === "" ? NaN : e.target.valueAsNumber);
-                      }}
-                    />
-                  </FormControl>
+                  <FormLabel>Hours</FormLabel>
+                  <div className="flex gap-2">
+                    <div
+                      role="group"
+                      aria-label="Adjustment direction"
+                      className="inline-flex rounded-md border p-0.5"
+                    >
+                      {(["credit", "debit"] as const).map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          aria-pressed={direction === option}
+                          onClick={() => {
+                            setDirection(option);
+                            applyMagnitude(magnitudeText, option);
+                          }}
+                          className={cn(
+                            "rounded-[5px] px-3 py-1.5 text-sm font-medium capitalize transition-colors",
+                            direction === option
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:bg-muted",
+                          )}
+                        >
+                          {option}
+                        </button>
+                      ))}
+                    </div>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.25"
+                        min="0"
+                        inputMode="decimal"
+                        name={field.name}
+                        ref={field.ref}
+                        onBlur={field.onBlur}
+                        value={magnitudeText}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/[+-]/g, "");
+                          setMagnitudeText(raw);
+                          applyMagnitude(raw, direction);
+                        }}
+                      />
+                    </FormControl>
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
