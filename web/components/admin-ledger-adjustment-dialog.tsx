@@ -58,6 +58,7 @@ export function AdminLedgerAdjustmentDialog({ users }: { users: AdjustableUser[]
   const [pickerOpen, setPickerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hoursText, setHoursText] = useState("");
 
   const form = useForm<AdjustLedgerValues>({
     resolver: zodResolver(adjustLedgerSchema),
@@ -82,6 +83,7 @@ export function AdminLedgerAdjustmentDialog({ users }: { users: AdjustableUser[]
         );
       }
       form.reset({ userId: "", hours: 0, reason: "" });
+      setHoursText("");
       setOpen(false);
       router.refresh();
     } catch (err) {
@@ -99,6 +101,7 @@ export function AdminLedgerAdjustmentDialog({ users }: { users: AdjustableUser[]
         if (!next) {
           setError(null);
           form.reset({ userId: "", hours: 0, reason: "" });
+          setHoursText("");
         }
       }}
     >
@@ -191,8 +194,12 @@ export function AdminLedgerAdjustmentDialog({ users }: { users: AdjustableUser[]
                       name={field.name}
                       ref={field.ref}
                       onBlur={field.onBlur}
-                      value={field.value}
-                      onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
+                      value={hoursText}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setHoursText(raw);
+                        field.onChange(raw === "" ? NaN : e.target.valueAsNumber);
+                      }}
                     />
                   </FormControl>
                   <FormMessage />
