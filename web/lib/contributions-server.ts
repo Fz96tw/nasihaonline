@@ -49,17 +49,31 @@ export async function getActiveEarnRules(): Promise<ContributionRuleOption[]> {
  * (§4.4) — pending/rejected rows never affect these numbers. `hours` is
  * signed in the ledger (positive earned, negative spent, either sign for
  * adjusted), so balance is a plain sum and lifetimeSpent is reported as a
- * positive magnitude for display.
+ * positive magnitude for display. Upward admin adjustments count toward
+ * lifetimeEarned too (downward corrections still only affect balance) so a
+ * manually-credited member sees it reflected the same way an earned session
+ * would be.
  */
 export async function getContributionSummary(userId: string): Promise<ContributionSummary> {
-  const grouped = await db.contributionLedger.groupBy({
-    by: ["type"],
-    where: { userId, status: LedgerStatus.confirmed },
-    _sum: { hours: true },
-  });
+  const [grouped, positiveAdjusted] = await Promise.all([
+    db.contributionLedger.groupBy({
+      by: ["type"],
+      where: { userId, status: LedgerStatus.confirmed },
+      _sum: { hours: true },
+    }),
+    db.contributionLedger.aggregate({
+      where: {
+        userId,
+        status: LedgerStatus.confirmed,
+        type: LedgerTransactionType.adjusted,
+        hours: { gt: 0 },
+      },
+      _sum: { hours: true },
+    }),
+  ]);
 
   let balance = 0;
-  let lifetimeEarned = 0;
+  let lifetimeEarned = positiveAdjusted._sum.hours?.toNumber() ?? 0;
   let lifetimeSpent = 0;
 
   for (const group of grouped) {

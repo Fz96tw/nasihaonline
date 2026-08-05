@@ -16,7 +16,13 @@ export async function HeroSection() {
   const [memberCount, confirmedHoursEarned] = await Promise.all([
     db.user.count(),
     db.contributionLedger.aggregate({
-      where: { status: LedgerStatus.confirmed, type: LedgerTransactionType.earned },
+      where: {
+        status: LedgerStatus.confirmed,
+        OR: [
+          { type: LedgerTransactionType.earned },
+          { type: LedgerTransactionType.adjusted, hours: { gt: 0 } },
+        ],
+      },
       _sum: { hours: true },
     }),
   ]);
