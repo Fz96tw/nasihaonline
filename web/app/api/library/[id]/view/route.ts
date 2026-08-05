@@ -17,7 +17,7 @@ export async function POST(_request: Request, { params }: { params: { id: string
   }
 
   try {
-    const views = await recordKnowledgeItemView(params.id, user.id);
+    const views = await recordKnowledgeItemView(params.id, user);
     return NextResponse.json({ views });
   } catch (error) {
     if (error instanceof KnowledgeItemError) {

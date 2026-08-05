@@ -10,13 +10,12 @@ import type { DirectoryMember } from "@/lib/members";
 const SUGGESTION_LIMIT = 8;
 
 /**
- * Multi-select invitee picker for a restricted Event (Audience-Restricted
- * Group Events, Objective 01) — built on the same `/api/members` search +
- * directory-eligibility backend as MentionTextarea's `@` autocomplete
- * (components/mention-textarea.tsx), the reuse this objective requires. A
- * dedicated chip picker rather than a literal `@Name`-in-text field: a
- * restricted event's invited list is a fixed set of members, not free text,
- * so ids (not parsed names) are the source of truth passed to onChange.
+ * Shared multi-select member picker — built on the same `/api/members`
+ * search + directory-eligibility backend as MentionTextarea's `@`
+ * autocomplete (components/mention-textarea.tsx). A dedicated chip picker
+ * rather than a literal `@Name`-in-text field: callers need a fixed set of
+ * member ids, not free text, so ids (not parsed names) are the source of
+ * truth passed to onChange.
  */
 export function InviteePicker({
   value,

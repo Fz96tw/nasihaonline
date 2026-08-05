@@ -345,6 +345,36 @@ export function getSurveyHeroImageUrl(key: string | null): string | null {
 }
 
 /**
+ * Same validation/storage shape as uploadPostHeroImage, for a Knowledge
+ * Library item's optional cover image (§4.9). Returns the object key to
+ * persist on KnowledgeItem.heroImageUrl.
+ */
+export async function uploadKnowledgeItemHeroImage(file: File): Promise<string> {
+  const { buffer, ext, mime } = await validateImageUpload(file);
+
+  await ensureBucket(BUCKET_ATTACHMENTS);
+  const key = `library-hero/${crypto.randomUUID()}.${ext}`;
+  const minio = getClient();
+  await minio.putObject(BUCKET_ATTACHMENTS, key, buffer, buffer.length, {
+    "Content-Type": mime,
+  });
+  return key;
+}
+
+export function getKnowledgeItemHeroImageUrl(key: string | null): string | null {
+  if (!key) return null;
+  return `/api/library/hero/${key}`;
+}
+
+/** Same shape/rationale as deleteEventHeroImage — called when an edit replaces a library item's existing hero image. */
+export async function deleteKnowledgeItemHeroImage(key: string | null): Promise<void> {
+  if (!key) return;
+  await ensureBucket(BUCKET_ATTACHMENTS);
+  const minio = getClient();
+  await minio.removeObject(BUCKET_ATTACHMENTS, key).catch(() => undefined);
+}
+
+/**
  * Fetches a stored blog hero image (attachments/ bucket) for streaming
  * through the /api/blog/hero proxy — same shape/rationale as
  * getAvatarObject, just the other bucket.

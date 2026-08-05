@@ -6,6 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Activity, Clock, Flame, Pin } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getForumBySlug } from "@/lib/forums-server";
+import { Role } from "@/lib/generated/prisma/enums";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -53,7 +54,8 @@ export default async function ForumCategoryPage({
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const result = await getForumBySlug(params.category, user.id, searchParams.q);
+  const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
+  const result = await getForumBySlug(params.category, user.id, isPrivileged, searchParams.q);
   if (!result) notFound();
   const { forum, isFollowing } = result;
 

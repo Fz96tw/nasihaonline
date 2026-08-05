@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getForumBySlug } from "@/lib/forums-server";
 import { NewThreadForm } from "@/components/forums/new-thread-form";
 import { CLINICAL_DISCUSSIONS_SLUG } from "@/lib/forums";
+import { Role } from "@/lib/generated/prisma/enums";
 
 export const metadata: Metadata = {
   title: "New Thread — NASIHA",
@@ -14,7 +15,8 @@ export default async function NewForumThreadPage({ params }: { params: { categor
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const result = await getForumBySlug(params.category, user.id);
+  const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
+  const result = await getForumBySlug(params.category, user.id, isPrivileged);
   if (!result) notFound();
   const { forum } = result;
 

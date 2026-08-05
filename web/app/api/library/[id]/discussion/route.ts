@@ -19,7 +19,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
 
   try {
-    const { threadId } = await startKnowledgeItemDiscussion(params.id, user.id);
+    const { threadId } = await startKnowledgeItemDiscussion(params.id, user);
     return NextResponse.json({ threadId });
   } catch (error) {
     if (error instanceof KnowledgeItemError) {

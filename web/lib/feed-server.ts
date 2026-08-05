@@ -1,7 +1,21 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { EventVisibility, KnowledgeStatus, RSVPStatus, SurveyStatus, type Tier } from "@/lib/generated/prisma/enums";
-import { getProfileAvatarUrl, getPostHeroImageUrl, getEventHeroImageUrl, getAnnouncementHeroImageUrl, getSurveyHeroImageUrl } from "@/lib/storage";
+import {
+  EventVisibility,
+  KnowledgeStatus,
+  KnowledgeVisibility,
+  RSVPStatus,
+  SurveyStatus,
+  type Tier,
+} from "@/lib/generated/prisma/enums";
+import {
+  getProfileAvatarUrl,
+  getPostHeroImageUrl,
+  getEventHeroImageUrl,
+  getAnnouncementHeroImageUrl,
+  getSurveyHeroImageUrl,
+  getKnowledgeItemHeroImageUrl,
+} from "@/lib/storage";
 import { excerptFromHtml } from "@/lib/blog";
 import { withFeedRef, type FeedItem, type FeedCursor } from "@/lib/feed";
 import { youtubeThumbnailUrl } from "@/lib/youtube";
@@ -137,13 +151,27 @@ export async function getFeedPage(params: {
       take: pageSize,
     }),
     !wants("library") ? Promise.resolve([]) : db.knowledgeItem.findMany({
-      where: { status: KnowledgeStatus.published, ...(before ? { createdAt: { lt: before } } : {}) },
+      where: {
+        status: KnowledgeStatus.published,
+        ...(before ? { createdAt: { lt: before } } : {}),
+        // Same restricted-audience shape as the events branch above
+        // (Objective 04's read-path filter, mirrored here): a restricted
+        // item only ever reaches an invited member's feed, never its own
+        // contributor's — the contributor already knows they submitted it,
+        // same "not new activity for them" rationale as restricted events.
+        OR: [
+          { visibility: KnowledgeVisibility.public },
+          ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
+        ],
+      },
       select: {
         id: true,
         title: true,
         description: true,
         createdAt: true,
         youtubeUrl: true,
+        heroImageUrl: true,
+        visibility: true,
         contributor: { select: AUTHOR_SELECT },
         _count: { select: { views: true } },
         // posts includes the thread's own system-authored opening post, so
@@ -159,7 +187,14 @@ export async function getFeedPage(params: {
       // those already surface as their parent Event's own feed row (with
       // forumReplyCount above), so listing them again here would be a
       // duplicate, bodiless-looking "Forum" row for the same activity.
-      where: { eventId: null, ...(before ? { createdAt: { lt: before } } : {}) },
+      // knowledgeItemId: null excludes the Library's on-demand discussion
+      // threads for the same reason — but critically, unlike the eventId
+      // exclusion, this isn't just de-duplication: this branch has no
+      // per-viewer visibility filter at all (every thread it returns is
+      // shown to every viewer unconditionally), so a restricted item's
+      // thread title/excerpt would otherwise leak to non-invitees here even
+      // though the item's own "library" feed row above is correctly scoped.
+      where: { eventId: null, knowledgeItemId: null, ...(before ? { createdAt: { lt: before } } : {}) },
       select: {
         id: true,
         title: true,
@@ -241,11 +276,21 @@ export async function getFeedPage(params: {
       type: "library",
       id: item.id,
       title: item.title,
-      excerpt: truncate(item.description),
+      // Restricted items only ever reach a viewer who is an invited member
+      // (the where clause above), so this framing is always correct for
+      // whoever sees it — no per-viewer branching needed, same rationale as
+      // the events branch's excerpt swap.
+      excerpt:
+        item.visibility === KnowledgeVisibility.restricted
+          ? `${item.contributor.name ?? "A member"} shared this with you.`
+          : truncate(item.description),
       href: withFeedRef(`/library/${item.id}`),
       timestamp: item.createdAt.toISOString(),
       author: authorOf(item.contributor),
-      imageUrl: item.youtubeUrl ? youtubeThumbnailUrl(item.youtubeUrl) : null,
+      // A custom hero image always wins; a recorded_lecture with none set
+      // falls back to its video's YouTube thumbnail as the default cover —
+      // same precedence as LibraryItemCard's browse-grid thumbnail.
+      imageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl) ?? (item.youtubeUrl ? youtubeThumbnailUrl(item.youtubeUrl) : null),
       libraryViewCount: item._count.views,
       forumReplyCount: item.forumThread ? item.forumThread._count.posts - 1 : undefined,
     })),

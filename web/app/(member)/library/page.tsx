@@ -85,12 +85,22 @@ export default async function LibraryPage({
     : cookies().get(LIBRARY_SORT_COOKIE)?.value;
   const sort: LibrarySort = isLibrarySort(requestedSort) ? requestedSort : "recent";
 
+  const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
+
   const [items, categories] = await Promise.all([
-    getPublishedKnowledgeItems({ categorySlug: searchParams.category, contentType, level, q: searchParams.q, sort }),
+    getPublishedKnowledgeItems({
+      categorySlug: searchParams.category,
+      contentType,
+      level,
+      q: searchParams.q,
+      sort,
+      userId: user.id,
+      isPrivileged,
+    }),
     getKnowledgeCategories(),
   ]);
 
-  const canEditAny = user.role === Role.moderator || user.role === Role.admin;
+  const canEditAny = isPrivileged;
 
   return (
     <main className="min-h-screen">

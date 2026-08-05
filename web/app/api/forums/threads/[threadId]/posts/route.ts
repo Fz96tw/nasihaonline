@@ -3,6 +3,7 @@ import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { ForumError, createForumPost } from "@/lib/forums-server";
 import { createForumPostSchema } from "@/lib/validation/forum";
 import { enqueueForumThreadIndexSync } from "@/lib/queues/search-index-queue";
+import { Role } from "@/lib/generated/prisma/enums";
 
 /**
  * POST /api/forums/threads/:threadId/posts — post/reply on a thread
@@ -23,8 +24,10 @@ export async function POST(request: Request, { params }: { params: { threadId: s
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  const isPrivileged = user.role === Role.admin || user.role === Role.moderator;
+
   try {
-    const post = await createForumPost(params.threadId, user.id, parsed.data);
+    const post = await createForumPost(params.threadId, user.id, parsed.data, isPrivileged);
     await enqueueForumThreadIndexSync(params.threadId);
     return NextResponse.json(post, { status: 201 });
   } catch (error) {

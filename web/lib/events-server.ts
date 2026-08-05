@@ -403,11 +403,26 @@ export async function getEventViewCount(eventId: string): Promise<number> {
  * /members/[memberId]'s Events section (§4.5) — events this member has
  * hosted, newest first. The profile page's viewer is always a signed-in
  * member, so unlike getPublicUpcomingEvents there's no need to filter out
- * members-only events here.
+ * members-only events here — but a restricted (`invited`-visibility) event
+ * still needs the same viewer-aware OR filter getEventsForViewer/
+ * getMemberEventById apply, so an uninvited profile visitor can't discover
+ * a restricted event's existence, title, or hero image just by browsing its
+ * host's profile. Host viewing their own profile always sees their own
+ * restricted events (`{ hostId: viewerId }` below); no admin/Steward
+ * bypass, matching every other events read path's convention — an admin
+ * discovers a restricted event only if they're independently the host or
+ * invited, same as any other member.
  */
-export async function getEventsHostedByMember(hostId: string): Promise<MemberHostedEvent[]> {
+export async function getEventsHostedByMember(hostId: string, viewerId: string): Promise<MemberHostedEvent[]> {
   const events = await db.event.findMany({
-    where: { hostId },
+    where: {
+      hostId,
+      OR: [
+        { visibility: EventVisibility.community },
+        { hostId: viewerId },
+        { invitees: { some: { userId: viewerId } } },
+      ],
+    },
     select: { id: true, title: true, type: true, startsAt: true, open: true, heroImageUrl: true },
     orderBy: { startsAt: "desc" },
   });

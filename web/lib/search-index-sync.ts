@@ -13,7 +13,7 @@ import {
 } from "@/lib/meilisearch";
 import { DIRECTORY_TIERS } from "@/lib/members";
 import { excerptFromHtml } from "@/lib/blog";
-import { KnowledgeStatus } from "@/lib/generated/prisma/enums";
+import { KnowledgeStatus, KnowledgeVisibility } from "@/lib/generated/prisma/enums";
 
 /**
  * Re-derives directory eligibility from the DB rather than trusting the
@@ -91,7 +91,10 @@ export async function syncPostToIndex(postId: string): Promise<void> {
  * caller, same "re-derive, don't trust" rule as syncProfileToIndex/
  * syncPostToIndex. `published` and `flagged` are both eligible — flagged
  * items "stay visible" per the community-flagging model (§4.9), including
- * in search; `pending_review`/`rejected` are removed.
+ * in search; `pending_review`/`rejected` are removed. Restricted-visibility
+ * items are excluded from search entirely, mirroring restricted events
+ * never appearing in public listings — visibility is immutable post-creation,
+ * so there's no "already indexed, then flipped restricted" case to handle.
  */
 export async function syncKnowledgeItemToIndex(knowledgeItemId: string): Promise<void> {
   const item = await db.knowledgeItem.findUnique({
@@ -101,6 +104,7 @@ export async function syncKnowledgeItemToIndex(knowledgeItemId: string): Promise
       title: true,
       description: true,
       status: true,
+      visibility: true,
       contentType: true,
       level: true,
       contributor: { select: { name: true } },
@@ -109,7 +113,10 @@ export async function syncKnowledgeItemToIndex(knowledgeItemId: string): Promise
     },
   });
 
-  const eligible = item && (item.status === KnowledgeStatus.published || item.status === KnowledgeStatus.flagged);
+  const eligible =
+    item &&
+    (item.status === KnowledgeStatus.published || item.status === KnowledgeStatus.flagged) &&
+    item.visibility === KnowledgeVisibility.public;
   if (!eligible) {
     await deleteLibraryDocument(knowledgeItemId);
     return;

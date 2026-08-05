@@ -1,7 +1,7 @@
 // Client-safe Knowledge Library types/constants (PRD §4.9) — kept separate
 // from library-server.ts so client components can import them without
 // pulling in the "server-only" query logic, same split as lib/events.ts.
-import { KnowledgeContentType, KnowledgeLevel, KnowledgeStatus } from "@/lib/generated/prisma/enums";
+import { KnowledgeContentType, KnowledgeLevel, KnowledgeStatus, KnowledgeVisibility } from "@/lib/generated/prisma/enums";
 
 export const CONTENT_TYPE_LABELS: Record<KnowledgeContentType, string> = {
   [KnowledgeContentType.recorded_lecture]: "Recorded Lecture",
@@ -61,10 +61,15 @@ export type LibraryCard = {
   contentType: KnowledgeContentType;
   level: KnowledgeLevel;
   status: KnowledgeStatus;
+  visibility: KnowledgeVisibility;
   category: { name: string; slug: string };
   contributor: { id: string; name: string | null };
   createdAt: string;
   youtubeUrl: string | null;
+  // Custom cover image (§4.9), pre-resolved server-side to a proxied URL —
+  // null means "no custom image", which renderers fall back to the video's
+  // YouTube thumbnail for, not "broken image".
+  heroImageUrl: string | null;
   // Alternative to `attachment` for article/case_study/guideline items — a
   // link to a resource hosted elsewhere, mutually exclusive with it.
   externalUrl: string | null;
@@ -95,6 +100,19 @@ export type KnowledgeItemDetail = LibraryCard & {
   viewCount: number;
 };
 
+/**
+ * Full per-person invited-member roster for a restricted item's detail page
+ * (Restricted Knowledge Library Submissions, Objective 05) — mirrors
+ * EventRosterMember, minus the RSVP-derived `status` field: there's no
+ * RSVP analog for the Library, so every invitee is presented flat, with no
+ * per-person state to distinguish them by.
+ */
+export type KnowledgeItemRosterMember = {
+  userId: string;
+  name: string | null;
+  avatarUrl: string | null;
+};
+
 /** /library/[id]/edit's data load — a submission's full editable field set, at any status. */
 export type KnowledgeItemForEdit = {
   id: string;
@@ -106,6 +124,7 @@ export type KnowledgeItemForEdit = {
   categoryId: string;
   tagIds: string[];
   youtubeUrl: string | null;
+  heroImageUrl: string | null;
   externalUrl: string | null;
   deidentificationConfirmed: boolean;
   contributorId: string;
@@ -133,5 +152,7 @@ export type ReviewQueueItem = {
   youtubeUrl: string | null;
   externalUrl: string | null;
   attachments: { id: string; fileName: string; mimeType: string; sizeBytes: number; objectKey: string }[];
+  visibility: KnowledgeVisibility;
+  invitees: { name: string | null }[];
   createdAt: string;
 };

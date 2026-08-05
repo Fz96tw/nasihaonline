@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { getPublishedKnowledgeItemById } from "@/lib/library-server";
+import { getKnowledgeItemRoster, getPublishedKnowledgeItemById } from "@/lib/library-server";
 import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-server";
 import { getForumThreadDetail } from "@/lib/forums-server";
 import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS } from "@/lib/library";
-import { KnowledgeContentType, KnowledgeStatus, Role } from "@/lib/generated/prisma/enums";
+import { youtubeThumbnailUrl } from "@/lib/youtube";
+import { KnowledgeContentType, KnowledgeStatus, KnowledgeVisibility, Role } from "@/lib/generated/prisma/enums";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import { ResourcePreview } from "@/components/library/resource-preview";
 import { LibraryFlagButton } from "@/components/library/library-flag-button";
 import { LibraryDiscussionLink } from "@/components/library/library-discussion-link";
 import { LibraryViewCounter } from "@/components/library/library-view-counter";
+import { ManageLibraryInvitees } from "@/components/library/manage-invitees";
 import { ForumThreadView } from "@/components/forums/forum-thread-view";
 
 function formatDate(iso: string) {
@@ -23,7 +25,9 @@ function formatDate(iso: string) {
 }
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const item = await getPublishedKnowledgeItemById(params.id);
+  const user = await getSessionUser();
+  const isPrivileged = user?.role === Role.moderator || user?.role === Role.admin;
+  const item = user ? await getPublishedKnowledgeItemById(params.id, user.id, isPrivileged) : null;
   return { title: item ? `${item.title} — Knowledge Library — NASIHA` : "Resource not found — NASIHA" };
 }
 
@@ -40,20 +44,35 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const item = await getPublishedKnowledgeItemById(params.id);
+  const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
+  const item = await getPublishedKnowledgeItemById(params.id, user.id, isPrivileged);
   if (!item) notFound();
 
   const authorProfile = await getDirectoryMemberById(item.contributor.id);
-  const canEdit = user.id === item.contributor.id || user.role === Role.moderator || user.role === Role.admin;
+  const canEdit = user.id === item.contributor.id || isPrivileged;
+  const isRestricted = item.visibility === KnowledgeVisibility.restricted;
+  const roster = isRestricted ? await getKnowledgeItemRoster(item.id) : null;
 
   const thread = item.forumThreadId
-    ? await getForumThreadDetail(LIBRARY_FORUM_SLUG, item.forumThreadId, user.id)
+    ? await getForumThreadDetail(LIBRARY_FORUM_SLUG, item.forumThreadId, user.id, isPrivileged)
     : null;
   const mentionableMembers = thread ? await getMentionableMembers() : [];
+
+  // A custom hero image always wins; a recorded_lecture with none set falls
+  // back to its video's YouTube thumbnail as the default cover — same
+  // precedence as LibraryItemCard's browse-grid thumbnail.
+  const heroImageUrl = item.heroImageUrl ?? (item.youtubeUrl ? youtubeThumbnailUrl(item.youtubeUrl) : null);
 
   return (
     <main className="mx-auto max-w-3xl px-8 py-16">
       <BackLink fallbackHref="/library" className="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline" />
+
+      {heroImageUrl && (
+        <div className="mb-6 flex h-72 w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
+          {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied or external YouTube URL, not a next/image-eligible local asset */}
+          <img src={heroImageUrl} alt={item.title} className="h-full w-full object-contain" />
+        </div>
+      )}
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Badge variant="info" className="w-fit">
@@ -112,6 +131,26 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
         )}
         {item.status === KnowledgeStatus.published && <LibraryFlagButton itemId={item.id} initialFlagged={false} />}
       </div>
+
+      {roster ? (
+        canEdit ? (
+          <div className="mt-8">
+            <ManageLibraryInvitees itemId={item.id} initialRoster={roster} />
+          </div>
+        ) : (
+          <div className="mt-8 flex flex-col gap-2 border-t pt-6">
+            <h2 className="text-sm font-semibold">Invited members ({roster.length})</h2>
+            <ul className="flex flex-col divide-y">
+              {roster.map((member) => (
+                <li key={member.userId} className="flex items-center gap-2 py-2">
+                  <Avatar name={member.name ?? "Member"} src={member.avatarUrl} size="xs" />
+                  <span className="text-sm">{member.name ?? "A member"}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )
+      ) : null}
 
       {!item.forumThreadId && (
         <div className="mt-8">

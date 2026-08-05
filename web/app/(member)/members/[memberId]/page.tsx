@@ -34,18 +34,19 @@ export default async function MemberProfilePage({ params }: { params: { memberId
   const member = await getDirectoryMemberById(params.memberId);
   if (!member) notFound();
 
+  const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
+
   const [posts, events, libraryItems, forumThreads] = await Promise.all([
     getPublishedPostsByAuthor(params.memberId),
-    getEventsHostedByMember(params.memberId),
-    getPublishedKnowledgeItemsByContributor(params.memberId),
-    getMemberForumThreads(params.memberId, user.id),
+    getEventsHostedByMember(params.memberId, user.id),
+    getPublishedKnowledgeItemsByContributor(params.memberId, user.id, isPrivileged),
+    getMemberForumThreads(params.memberId, user.id, isPrivileged),
   ]);
 
   // Every item in libraryItems belongs to this member (params.memberId), so
   // edit eligibility is the same for all of them — either the viewer is this
   // member (self), or a Steward/admin, same gate updateKnowledgeItem enforces.
-  const canEditLibraryItems =
-    user.id === params.memberId || user.role === Role.moderator || user.role === Role.admin;
+  const canEditLibraryItems = user.id === params.memberId || isPrivileged;
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-8 p-8">

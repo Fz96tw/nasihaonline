@@ -9,6 +9,7 @@ import { ForumThreadView } from "@/components/forums/forum-thread-view";
 import { ThreadViewCounter } from "@/components/forums/thread-view-counter";
 import { BackLink } from "@/components/back-link";
 import { CLINICAL_DISCUSSIONS_SLUG } from "@/lib/forums";
+import { Role } from "@/lib/generated/prisma/enums";
 
 export async function generateMetadata({
   params,
@@ -16,7 +17,8 @@ export async function generateMetadata({
   params: { category: string; threadId: string };
 }): Promise<Metadata> {
   const user = await getSessionUser();
-  const thread = user ? await getForumThreadDetail(params.category, params.threadId, user.id) : null;
+  const isPrivileged = user?.role === Role.moderator || user?.role === Role.admin;
+  const thread = user ? await getForumThreadDetail(params.category, params.threadId, user.id, isPrivileged) : null;
   return { title: thread ? `${thread.title} — Forums — NASIHA` : "Thread not found — NASIHA" };
 }
 
@@ -29,7 +31,8 @@ export default async function ForumThreadPage({
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const thread = await getForumThreadDetail(params.category, params.threadId, user.id);
+  const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
+  const thread = await getForumThreadDetail(params.category, params.threadId, user.id, isPrivileged);
   if (!thread) notFound();
 
   const mentionableMembers = await getMentionableMembers();

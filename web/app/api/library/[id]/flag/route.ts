@@ -12,8 +12,9 @@ import { flagContentSchema } from "@/lib/validation/flag";
  * flagged for a Steward to review.
  */
 export async function POST(request: Request, { params }: { params: { id: string } }) {
+  let user;
   try {
-    await requireUser();
+    user = await requireUser();
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
     throw error;
@@ -25,7 +26,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   }
 
   try {
-    const item = await flagKnowledgeItem(params.id, parsed.data.reason);
+    const item = await flagKnowledgeItem(params.id, user, parsed.data.reason);
     await enqueueKnowledgeItemIndexSync(item.id);
     return NextResponse.json({ item });
   } catch (error) {

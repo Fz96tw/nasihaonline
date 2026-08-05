@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { KnowledgeContentType, KnowledgeLevel } from "@/lib/generated/prisma/enums";
+import { KnowledgeContentType, KnowledgeLevel, KnowledgeVisibility } from "@/lib/generated/prisma/enums";
 
 /**
  * Fields shared by "Submit Resource" (create) and editing a submission
@@ -61,14 +61,34 @@ function withContentTypeRefinements<Schema extends z.ZodType<z.infer<typeof know
   });
 }
 
+// Restricted Knowledge Library Submissions, Objective 03 — mirrors
+// requireRestrictedEventInvariants in lib/validation/event.ts. Create-only
+// (see KnowledgeVisibility's schema comment): updateKnowledgeItemSchema
+// below never gains these fields.
+function requireRestrictedKnowledgeItemInvariants(
+  data: { visibility: KnowledgeVisibility; invitedUserIds: string[] },
+  ctx: z.RefinementCtx,
+) {
+  if (data.visibility !== KnowledgeVisibility.restricted) return;
+  if (data.invitedUserIds.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["invitedUserIds"],
+      message: "Select at least one member to invite.",
+    });
+  }
+}
+
 /** POST /api/library body shape (§4.9) — shared with the client form (zodResolver). */
 export const createKnowledgeItemSchema = withContentTypeRefinements(
   knowledgeItemBaseSchema.extend({
     licenseConsented: z
       .boolean()
       .refine((value) => value === true, "You must acknowledge the content licensing terms to submit."),
+    visibility: z.nativeEnum(KnowledgeVisibility),
+    invitedUserIds: z.array(z.string()),
   }),
-);
+).superRefine(requireRestrictedKnowledgeItemInvariants);
 export type CreateKnowledgeItemValues = z.infer<typeof createKnowledgeItemSchema>;
 
 /** PATCH /api/library/:id body shape (editing a submission) — same fields minus licenseConsented. */

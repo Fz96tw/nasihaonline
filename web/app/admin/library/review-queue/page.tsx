@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getReviewQueue } from "@/lib/library-server";
 import { getKnowledgeDocumentUrl } from "@/lib/storage";
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS } from "@/lib/library";
+import { KnowledgeVisibility } from "@/lib/generated/prisma/enums";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ReviewQueueActions } from "@/components/library/review-queue-actions";
@@ -73,6 +74,15 @@ export default async function LibraryReviewQueuePage() {
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               <p className="text-sm">{item.description}</p>
+
+              {item.visibility === KnowledgeVisibility.restricted && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="warning">Restricted</Badge>
+                  <p className="text-sm text-muted-foreground">
+                    Invited: {item.invitees.map((invitee) => invitee.name ?? "Unnamed member").join(", ")}
+                  </p>
+                </div>
+              )}
 
               <div className="flex flex-wrap items-center gap-2">
                 {item.deidentificationConfirmed && <Badge variant="info">De-identification confirmed</Badge>}

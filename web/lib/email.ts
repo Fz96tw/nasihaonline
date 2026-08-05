@@ -348,6 +348,69 @@ export async function sendEventLifecycleEmail(
   }
 }
 
+/**
+ * Sent to each invitee when a restricted Knowledge Library item becomes
+ * visible to them — either because a Steward publishes an item they were
+ * already invited to, or because they're added to an already-published
+ * restricted item's invited list (Restricted Knowledge Library
+ * Submissions, Objective 05) — mirrors sendEventInviteEmail's two-channel
+ * pattern (always paired with an in-app library_item_shared Notification).
+ * Best-effort, same rationale as every other function here: the
+ * KnowledgeItem/KnowledgeItemInvitee/Notification rows already exist by
+ * the time this runs.
+ */
+export async function sendLibraryInviteEmail(
+  to: string,
+  name: string,
+  item: { contributorName: string; title: string; link: string },
+) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping library invite email to ${to}`);
+    return;
+  }
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: `You now have access: ${item.title}`,
+      text: `Hi ${name},\n\n${item.contributorName} has shared "${item.title}" in the Knowledge Library with you.\n\nView it here:\n${item.link}\n\n— The NASIHA Team`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send library invite email", error);
+  }
+}
+
+/**
+ * Sent when a member is removed from a restricted Knowledge Library item's
+ * invited list (Restricted Knowledge Library Submissions, Objective 05) —
+ * mirrors sendEventLifecycleEmail's shared lifecycle shape. Best-effort,
+ * same rationale as every other function here: the
+ * KnowledgeItem/Notification rows already exist by the time this runs.
+ */
+export async function sendLibraryLifecycleEmail(
+  to: string,
+  name: string,
+  item: { subject: string; message: string; link?: string },
+) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping library lifecycle email to ${to}`);
+    return;
+  }
+
+  try {
+    const viewLine = item.link ? `\n\nView it here:\n${item.link}` : "";
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: item.subject,
+      text: `Hi ${name},\n\n${item.message}${viewLine}\n\n— The NASIHA Team`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send library lifecycle email", error);
+  }
+}
+
 export async function sendContactMessageEmail(message: {
   name: string;
   email: string;

@@ -20,6 +20,19 @@ export async function POST(request: Request) {
   }
 
   const formData = await request.formData();
+  // invitedUserIds travels as a JSON-encoded array within the same
+  // multipart body as everything else — falls back to [] for a malformed
+  // value rather than erroring, same handling as POST /api/events.
+  let invitedUserIds: unknown = [];
+  const invitedUserIdsRaw = formData.get("invitedUserIds");
+  if (typeof invitedUserIdsRaw === "string" && invitedUserIdsRaw.length > 0) {
+    try {
+      invitedUserIds = JSON.parse(invitedUserIdsRaw);
+    } catch {
+      invitedUserIds = [];
+    }
+  }
+
   const parsed = createKnowledgeItemSchema.safeParse({
     title: formData.get("title"),
     description: formData.get("description"),
@@ -31,6 +44,8 @@ export async function POST(request: Request) {
     externalUrl: formData.get("externalUrl") || null,
     deidentificationConfirmed: formData.get("deidentificationConfirmed") === "true",
     licenseConsented: formData.get("licenseConsented") === "true",
+    visibility: formData.get("visibility") || "public",
+    invitedUserIds,
   });
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -38,9 +53,11 @@ export async function POST(request: Request) {
 
   const fileField = formData.get("file");
   const file = fileField instanceof File && fileField.size > 0 ? fileField : null;
+  const heroImageField = formData.get("heroImage");
+  const heroImage = heroImageField instanceof File && heroImageField.size > 0 ? heroImageField : null;
 
   try {
-    const item = await createKnowledgeItem(user.id, { ...parsed.data, file });
+    const item = await createKnowledgeItem(user.id, { ...parsed.data, file, heroImage });
     return NextResponse.json({ id: item.id }, { status: 201 });
   } catch (error) {
     if (error instanceof KnowledgeItemError) {

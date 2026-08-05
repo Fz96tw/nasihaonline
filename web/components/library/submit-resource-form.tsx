@@ -9,8 +9,16 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { KnowledgeContentType, KnowledgeLevel } from "@/lib/generated/prisma/enums";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { KnowledgeContentType, KnowledgeLevel, KnowledgeVisibility } from "@/lib/generated/prisma/enums";
 import {
   CONTENT_TYPE_LABELS,
   LEVEL_LABELS,
@@ -20,6 +28,7 @@ import {
 } from "@/lib/library";
 import { createKnowledgeItemSchema, type CreateKnowledgeItemValues } from "@/lib/validation/knowledge";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { InviteePicker } from "@/components/members/invitee-picker";
 
 const DEFAULT_VALUES: CreateKnowledgeItemValues = {
   title: "",
@@ -32,6 +41,13 @@ const DEFAULT_VALUES: CreateKnowledgeItemValues = {
   externalUrl: null,
   deidentificationConfirmed: false,
   licenseConsented: false,
+  visibility: KnowledgeVisibility.public,
+  invitedUserIds: [],
+};
+
+const VISIBILITY_LABELS: Record<KnowledgeVisibility, string> = {
+  [KnowledgeVisibility.public]: "Public — visible to every member",
+  [KnowledgeVisibility.restricted]: "Restricted — invited members only",
 };
 
 /**
@@ -49,21 +65,32 @@ const DEFAULT_VALUES: CreateKnowledgeItemValues = {
  * an edit able to leave the existing attachment in place instead of
  * replacing it; case_study additionally requires the de-identification
  * checkbox, re-affirmed on every edit rather than carried forward silently.
+ *
+ * Restricted Knowledge Library Submissions, Objective 03: `visibility` is a
+ * create-only 2-way choice (public / restricted), mirroring
+ * SubmitEventForm's audience picker — edit mode hides the section entirely
+ * and always submits it as public with no invitees (KnowledgeItemForEdit
+ * doesn't carry the real visibility, since editing can't change it anyway;
+ * see requireRestrictedKnowledgeItemInvariants in lib/validation/knowledge.ts).
  */
 export function SubmitResourceForm({
   categories,
   tags,
   existingItem,
+  currentUserId,
 }: {
   categories: KnowledgeCategoryOption[];
   tags: KnowledgeTagOption[];
   existingItem?: KnowledgeItemForEdit;
+  /** Current user's id — excludes them from the invitee picker's suggestions (create mode only). */
+  currentUserId?: string;
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [sourceMode, setSourceMode] = useState<"file" | "link">(existingItem?.externalUrl ? "link" : "file");
+  const [heroImage, setHeroImage] = useState<File | null>(null);
 
   const form = useForm<CreateKnowledgeItemValues>({
     resolver: zodResolver(createKnowledgeItemSchema),
@@ -79,6 +106,11 @@ export function SubmitResourceForm({
           externalUrl: existingItem.externalUrl,
           deidentificationConfirmed: existingItem.deidentificationConfirmed,
           licenseConsented: true,
+          // Visibility isn't editable from this form (create-only) — hidden
+          // from the UI and hardcoded here, same "harmless placeholder"
+          // pattern as SubmitEventForm's edit-mode invitedUserIds.
+          visibility: KnowledgeVisibility.public,
+          invitedUserIds: [],
         }
       : DEFAULT_VALUES,
     mode: "onTouched",
@@ -87,6 +119,8 @@ export function SubmitResourceForm({
   const contentType = form.watch("contentType");
   const isRecordedLecture = contentType === KnowledgeContentType.recorded_lecture;
   const isCaseStudy = contentType === KnowledgeContentType.case_study;
+  const visibility = form.watch("visibility");
+  const isRestricted = visibility === KnowledgeVisibility.restricted;
 
   async function onSubmit(values: CreateKnowledgeItemValues) {
     setSubmitting(true);
@@ -105,8 +139,13 @@ export function SubmitResourceForm({
         formData.append("externalUrl", values.externalUrl);
       }
       formData.append("deidentificationConfirmed", String(isCaseStudy && values.deidentificationConfirmed));
-      if (!existingItem) formData.append("licenseConsented", String(values.licenseConsented));
+      if (!existingItem) {
+        formData.append("licenseConsented", String(values.licenseConsented));
+        formData.append("visibility", values.visibility);
+        formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
+      }
       if (!isRecordedLecture && sourceMode === "file" && file) formData.append("file", file);
+      if (heroImage) formData.append("heroImage", heroImage);
 
       const res = await fetch(existingItem ? `/api/library/${existingItem.id}` : "/api/library", {
         method: existingItem ? "PATCH" : "POST",
@@ -135,6 +174,53 @@ export function SubmitResourceForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
+        {!existingItem && (
+          <FormField
+            control={form.control}
+            name="visibility"
+            render={({ field }) => (
+              <FormItem className="rounded-md border p-4">
+                <FormLabel>Access</FormLabel>
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {Object.values(KnowledgeVisibility).map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {VISIBILITY_LABELS[value]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  {isRestricted
+                    ? "Once published, only you and the invited members below can view this resource."
+                    : "Once published, visible to every member in the Library."}
+                </FormDescription>
+              </FormItem>
+            )}
+          />
+        )}
+
+        {!existingItem && isRestricted && (
+          <FormField
+            control={form.control}
+            name="invitedUserIds"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Invited members</FormLabel>
+                <FormControl>
+                  <InviteePicker value={field.value} onChange={field.onChange} excludeUserId={currentUserId} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
         <FormField
           control={form.control}
           name="title"
@@ -362,6 +448,35 @@ export function SubmitResourceForm({
             )}
           </div>
         )}
+
+        <div className="flex flex-col gap-2">
+          <label htmlFor="hero-image" className="text-sm font-medium">
+            Hero image (optional)
+          </label>
+          {existingItem?.heroImageUrl && !heroImage && (
+            // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
+            <img
+              src={existingItem.heroImageUrl}
+              alt="Current hero image"
+              className="h-32 w-full max-w-xs rounded-md object-cover"
+            />
+          )}
+          <input
+            id="hero-image"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(e) => setHeroImage(e.target.files?.[0] ?? null)}
+            className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
+          />
+          {existingItem?.heroImageUrl && (
+            <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
+          )}
+          {isRecordedLecture && (
+            <p className="text-xs text-muted-foreground">
+              Leave blank to use the video&apos;s YouTube thumbnail (default).
+            </p>
+          )}
+        </div>
 
         {isCaseStudy && (
           <FormField

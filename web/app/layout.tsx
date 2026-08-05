@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Montserrat, Mulish } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 import { cn } from "@/lib/utils";
-import { SiteHeader } from "@/components/site-header";
+import { SiteHeader, SiteHeaderSkeleton } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 
 const montserrat = Montserrat({ subsets: ["latin"], variable: "--font-sans" });
@@ -29,7 +30,9 @@ export default function RootLayout({
     <ClerkProvider signInUrl="/sign-in" signUpUrl="/accept-invite">
       <html lang="en" className={cn("font-sans", montserrat.variable, mulish.variable)}>
         <body className="flex min-h-screen flex-col antialiased">
-          <SiteHeader />
+          <Suspense fallback={<SiteHeaderSkeleton />}>
+            <SiteHeader />
+          </Suspense>
           <div className="flex-1">{children}</div>
           <SiteFooter />
         </body>
