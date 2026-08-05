@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getMySubmissions } from "@/lib/library-server";
@@ -30,6 +31,13 @@ export default async function MyLibrarySubmissionsPage() {
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 p-8">
       <div className="flex items-center justify-between">
         <div>
+          <Link
+            href="/library"
+            className="mb-1 inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Library
+          </Link>
           <h1 className="text-3xl font-bold tracking-tight">My Submissions</h1>
           <p className="text-muted-foreground">Resources you&apos;ve submitted to the Knowledge Library.</p>
         </div>
