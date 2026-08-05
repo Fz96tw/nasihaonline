@@ -4,6 +4,7 @@ import {
   uploadKnowledgeDocument,
   getKnowledgeDocumentUrl,
   deleteKnowledgeDocument,
+  getProfileAvatarUrl,
   UploadValidationError,
 } from "@/lib/storage";
 import { searchLibraryDocuments } from "@/lib/meilisearch";
@@ -18,15 +19,18 @@ import {
   LedgerStatus,
   LedgerTransactionType,
 } from "@/lib/generated/prisma/enums";
+import type { Prisma } from "@/lib/generated/prisma/client";
 import { DIRECTORY_TIERS } from "@/lib/members";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import { createNotification } from "@/lib/notifications-server";
 import { recordAdminAction } from "@/lib/audit-server";
 import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
+import { sendLibraryInviteEmail, sendLibraryLifecycleEmail } from "@/lib/email";
 import type {
   KnowledgeCategoryOption,
   KnowledgeItemDetail,
   KnowledgeItemForEdit,
+  KnowledgeItemRosterMember,
   KnowledgeTagOption,
   LibraryCard,
   LibrarySort,
@@ -46,6 +50,7 @@ const LIBRARY_CARD_SELECT = {
   contentType: true,
   level: true,
   status: true,
+  visibility: true,
   createdAt: true,
   youtubeUrl: true,
   externalUrl: true,
@@ -63,6 +68,7 @@ function toLibraryCard(item: {
   contentType: KnowledgeContentType;
   level: KnowledgeLevel;
   status: KnowledgeStatus;
+  visibility: KnowledgeVisibility;
   createdAt: Date;
   youtubeUrl: string | null;
   externalUrl: string | null;
@@ -79,6 +85,7 @@ function toLibraryCard(item: {
     contentType: item.contentType,
     level: item.level,
     status: item.status,
+    visibility: item.visibility,
     category: item.category,
     contributor: item.contributor,
     createdAt: item.createdAt.toISOString(),
@@ -515,6 +522,205 @@ export async function getPublishedKnowledgeItemById(
   };
 }
 
+/**
+ * Full per-person invited-member roster for a restricted item's detail page
+ * (Restricted Knowledge Library Submissions, Objective 05) — every invited
+ * member, no RSVP-equivalent to join against (see KnowledgeItemRosterMember's
+ * doc comment). Caller enforces the access gate, same "caller enforces"
+ * convention as getEventRoster — the page only calls this for a restricted
+ * item it has already confirmed the viewer can see via
+ * getPublishedKnowledgeItemById.
+ */
+export async function getKnowledgeItemRoster(knowledgeItemId: string): Promise<KnowledgeItemRosterMember[]> {
+  const invitees = await db.knowledgeItemInvitee.findMany({
+    where: { knowledgeItemId },
+    select: {
+      userId: true,
+      user: { select: { name: true, profile: { select: { avatarUrl: true } } } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return invitees.map((invitee) => ({
+    userId: invitee.userId,
+    name: invitee.user.name,
+    avatarUrl: getProfileAvatarUrl(invitee.user.profile?.avatarUrl ?? null),
+  }));
+}
+
+/**
+ * Bell-notifies invitees that a restricted item is now visible to them
+ * (Restricted Knowledge Library Submissions, Objective 05) — reused by
+ * reviewKnowledgeItem's publish branch (every current invitee, first time
+ * the item becomes visible) and updateKnowledgeItemInvitees (a newly-added
+ * invitee on an already-visible item), same "shared helper, two call
+ * sites" precedent as events-server.ts's notifyInvitedUsers. Takes a
+ * transaction client so callers can post it alongside other writes in the
+ * same transaction.
+ */
+async function notifyInvitedLibraryUsers(
+  tx: Prisma.TransactionClient,
+  params: { knowledgeItemId: string; title: string; contributorName: string; userIds: string[] },
+): Promise<void> {
+  if (params.userIds.length === 0) return;
+  const link = `/library/${params.knowledgeItemId}`;
+  const message = `${params.contributorName} shared "${params.title}" with you in the Knowledge Library.`;
+  await tx.notification.createMany({
+    data: params.userIds.map((userId) => ({
+      recipientId: userId,
+      type: NotificationType.library_item_shared,
+      message,
+      link,
+    })),
+  });
+}
+
+/**
+ * Emails invitees the same "shared with you" copy, best-effort — reused by
+ * reviewKnowledgeItem and updateKnowledgeItemInvitees, same split as
+ * notifyInvitedLibraryUsers.
+ */
+async function emailInvitedLibraryUsers(
+  users: { email: string; name: string | null }[],
+  params: { knowledgeItemId: string; title: string; contributorName: string },
+): Promise<void> {
+  if (users.length === 0) return;
+  const link = `${APP_URL}/library/${params.knowledgeItemId}`;
+  await Promise.allSettled(
+    users.map((user) =>
+      sendLibraryInviteEmail(user.email, user.name ?? "there", {
+        contributorName: params.contributorName,
+        title: params.title,
+        link,
+      }),
+    ),
+  );
+}
+
+/**
+ * PATCH /api/library/:id/invitees — adds and/or removes members from a
+ * restricted item's invited list after submission (Restricted Knowledge
+ * Library Submissions, Objective 05), mirrors updateEventInvitees. Both
+ * add and remove notifications are gated on the item already being
+ * visible (published/flagged) — a still-pending_review item's invited
+ * list changes silently either way, since nothing is visible to notify
+ * anyone *about* yet (same rationale as createKnowledgeItem's doc comment:
+ * notifying about content invitees can't see would be worse than useless,
+ * it'd leak the existence of an unreviewed submission). reviewKnowledgeItem's
+ * publish branch is the sole "first time visible" notification site.
+ */
+export async function updateKnowledgeItemInvitees(
+  itemId: string,
+  actingUser: UserModel,
+  input: { addUserIds: string[]; removeUserIds: string[] },
+): Promise<{ added: number; removed: number }> {
+  const item = await db.knowledgeItem.findUnique({
+    where: { id: itemId },
+    select: { id: true, title: true, status: true, visibility: true, contributorId: true },
+  });
+  if (!item) throw new KnowledgeItemError(404, "Resource not found.");
+  if (item.visibility !== KnowledgeVisibility.restricted) {
+    throw new KnowledgeItemError(400, "Only a restricted item has an invited list.");
+  }
+
+  const isPrivileged = actingUser.role === Role.admin || actingUser.role === Role.moderator;
+  const isContributor = actingUser.id === item.contributorId;
+  if (!isPrivileged && !isContributor) {
+    throw new KnowledgeItemError(403, "Only the submitter or a Library Steward/admin can manage invitees.");
+  }
+
+  const contributor = await db.user.findUnique({ where: { id: item.contributorId }, select: { name: true } });
+  const contributorName = contributor?.name ?? "A member";
+
+  // Re-resolved against directory eligibility, same rationale as
+  // createKnowledgeItem — ids that aren't eligible (or already invited, or
+  // the contributor) are silently dropped rather than erroring.
+  const [addCandidates, alreadyInvited, removeCandidates] = await Promise.all([
+    input.addUserIds.length > 0
+      ? db.user.findMany({
+          where: {
+            id: { in: input.addUserIds, notIn: [item.contributorId] },
+            tier: { in: DIRECTORY_TIERS },
+            profile: { listInDirectory: true },
+          },
+          select: { id: true, email: true, name: true },
+        })
+      : Promise.resolve([]),
+    input.addUserIds.length > 0
+      ? db.knowledgeItemInvitee.findMany({
+          where: { knowledgeItemId: itemId, userId: { in: input.addUserIds } },
+          select: { userId: true },
+        })
+      : Promise.resolve([]),
+    input.removeUserIds.length > 0
+      ? db.knowledgeItemInvitee.findMany({
+          where: { knowledgeItemId: itemId, userId: { in: input.removeUserIds } },
+          select: { userId: true, user: { select: { email: true, name: true } } },
+        })
+      : Promise.resolve([]),
+  ]);
+  const alreadyInvitedIds = new Set(alreadyInvited.map((row) => row.userId));
+  const newInvitees = addCandidates.filter((user) => !alreadyInvitedIds.has(user.id));
+  const itemIsVisible = item.status === KnowledgeStatus.published || item.status === KnowledgeStatus.flagged;
+
+  await db.$transaction(async (tx) => {
+    if (newInvitees.length > 0) {
+      await tx.knowledgeItemInvitee.createMany({
+        data: newInvitees.map((user) => ({ knowledgeItemId: itemId, userId: user.id })),
+      });
+      if (itemIsVisible) {
+        await notifyInvitedLibraryUsers(tx, {
+          knowledgeItemId: itemId,
+          title: item.title,
+          contributorName,
+          userIds: newInvitees.map((user) => user.id),
+        });
+      }
+    }
+
+    if (removeCandidates.length > 0) {
+      const removeIds = removeCandidates.map((row) => row.userId);
+      await tx.knowledgeItemInvitee.deleteMany({ where: { knowledgeItemId: itemId, userId: { in: removeIds } } });
+
+      if (itemIsVisible) {
+        const message = `You no longer have access to "${item.title}" in the Knowledge Library.`;
+        await tx.notification.createMany({
+          data: removeIds.map((userId) => ({
+            recipientId: userId,
+            type: NotificationType.library_item_removed,
+            message,
+            // No link: a removed invitee loses access to the item's
+            // detail page, so a stored link would 404. Informational-only,
+            // same rationale as event_removed.
+            link: null,
+          })),
+        });
+      }
+    }
+  });
+
+  // Best-effort, same rationale as every other email call in this file —
+  // the DB rows already reflect the new invited list by this point.
+  await Promise.all([
+    itemIsVisible
+      ? emailInvitedLibraryUsers(newInvitees, { knowledgeItemId: itemId, title: item.title, contributorName })
+      : Promise.resolve(),
+    itemIsVisible && removeCandidates.length > 0
+      ? Promise.allSettled(
+          removeCandidates.map((row) =>
+            sendLibraryLifecycleEmail(row.user.email, row.user.name ?? "there", {
+              subject: `Update: ${item.title}`,
+              message: `You no longer have access to "${item.title}" in the Knowledge Library.`,
+              // No link — same rationale as the in-app notification above.
+            }),
+          ),
+        )
+      : Promise.resolve(),
+  ]);
+
+  return { added: newInvitees.length, removed: removeCandidates.length };
+}
+
 export async function getKnowledgeItemViewCount(knowledgeItemId: string): Promise<number> {
   return db.knowledgeItemView.count({ where: { knowledgeItemId } });
 }
@@ -702,7 +908,14 @@ const CURATE_RESOURCE_ACTIVITY_KEY = "curate_resource";
 export async function reviewKnowledgeItem(id: string, action: "publish" | "reject"): Promise<{ id: string; status: KnowledgeStatus }> {
   const item = await db.knowledgeItem.findUnique({
     where: { id },
-    select: { id: true, title: true, status: true, contributorId: true },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      contributorId: true,
+      visibility: true,
+      contributor: { select: { name: true } },
+    },
   });
   if (!item) throw new KnowledgeItemError(404, "Resource not found.");
   if (item.status !== KnowledgeStatus.pending_review) {
@@ -710,12 +923,13 @@ export async function reviewKnowledgeItem(id: string, action: "publish" | "rejec
   }
 
   const status = action === "publish" ? KnowledgeStatus.published : KnowledgeStatus.rejected;
+  const contributorName = item.contributor.name ?? "A member";
   const curateResourceRule =
     action === "publish"
       ? await db.contributionRule.findUnique({ where: { activityKey: CURATE_RESOURCE_ACTIVITY_KEY } })
       : null;
 
-  const updated = await db.$transaction(async (tx) => {
+  const { updated, invitees } = await db.$transaction(async (tx) => {
     const result = await tx.knowledgeItem.update({
       where: { id },
       data: { status },
@@ -744,7 +958,33 @@ export async function reviewKnowledgeItem(id: string, action: "publish" | "rejec
       });
     }
 
-    return result;
+    // Restricted Knowledge Library Submissions, Objective 05: the sole
+    // "new restricted submission" notification site, deferred from
+    // creation (createKnowledgeItem's doc comment) since a pending_review
+    // item is invisible to everyone, invitees included, until this
+    // publish transition makes it visible for the first time. Read fresh
+    // from the DB inside the transaction rather than trusting any
+    // caller-supplied list.
+    let notifiedInvitees: { userId: string; email: string; name: string | null }[] = [];
+    if (action === "publish" && item.visibility === KnowledgeVisibility.restricted) {
+      const currentInvitees = await tx.knowledgeItemInvitee.findMany({
+        where: { knowledgeItemId: item.id },
+        select: { userId: true, user: { select: { email: true, name: true } } },
+      });
+      notifiedInvitees = currentInvitees.map((invitee) => ({
+        userId: invitee.userId,
+        email: invitee.user.email,
+        name: invitee.user.name,
+      }));
+      await notifyInvitedLibraryUsers(tx, {
+        knowledgeItemId: item.id,
+        title: item.title,
+        contributorName,
+        userIds: notifiedInvitees.map((invitee) => invitee.userId),
+      });
+    }
+
+    return { updated: result, invitees: notifiedInvitees };
   });
 
   await createNotification({
@@ -756,6 +996,10 @@ export async function reviewKnowledgeItem(id: string, action: "publish" | "rejec
         : `Your submission "${item.title}" was not approved for the Knowledge Library.`,
     link: "/library/mine",
   });
+
+  if (invitees.length > 0) {
+    await emailInvitedLibraryUsers(invitees, { knowledgeItemId: item.id, title: item.title, contributorName });
+  }
 
   return updated;
 }

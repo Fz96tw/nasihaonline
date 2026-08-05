@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { getPublishedKnowledgeItemById } from "@/lib/library-server";
+import { getKnowledgeItemRoster, getPublishedKnowledgeItemById } from "@/lib/library-server";
 import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-server";
 import { getForumThreadDetail } from "@/lib/forums-server";
 import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS } from "@/lib/library";
-import { KnowledgeContentType, KnowledgeStatus, Role } from "@/lib/generated/prisma/enums";
+import { KnowledgeContentType, KnowledgeStatus, KnowledgeVisibility, Role } from "@/lib/generated/prisma/enums";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { ResourcePreview } from "@/components/library/resource-preview";
 import { LibraryFlagButton } from "@/components/library/library-flag-button";
 import { LibraryDiscussionLink } from "@/components/library/library-discussion-link";
 import { LibraryViewCounter } from "@/components/library/library-view-counter";
+import { ManageLibraryInvitees } from "@/components/library/manage-invitees";
 import { ForumThreadView } from "@/components/forums/forum-thread-view";
 
 function formatDate(iso: string) {
@@ -48,6 +49,8 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
 
   const authorProfile = await getDirectoryMemberById(item.contributor.id);
   const canEdit = user.id === item.contributor.id || isPrivileged;
+  const isRestricted = item.visibility === KnowledgeVisibility.restricted;
+  const roster = isRestricted ? await getKnowledgeItemRoster(item.id) : null;
 
   const thread = item.forumThreadId
     ? await getForumThreadDetail(LIBRARY_FORUM_SLUG, item.forumThreadId, user.id)
@@ -115,6 +118,26 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
         )}
         {item.status === KnowledgeStatus.published && <LibraryFlagButton itemId={item.id} initialFlagged={false} />}
       </div>
+
+      {roster ? (
+        canEdit ? (
+          <div className="mt-8">
+            <ManageLibraryInvitees itemId={item.id} initialRoster={roster} />
+          </div>
+        ) : (
+          <div className="mt-8 flex flex-col gap-2 border-t pt-6">
+            <h2 className="text-sm font-semibold">Invited members ({roster.length})</h2>
+            <ul className="flex flex-col divide-y">
+              {roster.map((member) => (
+                <li key={member.userId} className="flex items-center gap-2 py-2">
+                  <Avatar name={member.name ?? "Member"} src={member.avatarUrl} size="xs" />
+                  <span className="text-sm">{member.name ?? "A member"}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )
+      ) : null}
 
       {!item.forumThreadId && (
         <div className="mt-8">

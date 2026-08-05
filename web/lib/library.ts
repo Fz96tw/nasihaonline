@@ -61,6 +61,7 @@ export type LibraryCard = {
   contentType: KnowledgeContentType;
   level: KnowledgeLevel;
   status: KnowledgeStatus;
+  visibility: KnowledgeVisibility;
   category: { name: string; slug: string };
   contributor: { id: string; name: string | null };
   createdAt: string;
@@ -93,6 +94,19 @@ export type KnowledgeItemDetail = LibraryCard & {
   forumThreadId: string | null;
   forumReplyCount: number | null;
   viewCount: number;
+};
+
+/**
+ * Full per-person invited-member roster for a restricted item's detail page
+ * (Restricted Knowledge Library Submissions, Objective 05) — mirrors
+ * EventRosterMember, minus the RSVP-derived `status` field: there's no
+ * RSVP analog for the Library, so every invitee is presented flat, with no
+ * per-person state to distinguish them by.
+ */
+export type KnowledgeItemRosterMember = {
+  userId: string;
+  name: string | null;
+  avatarUrl: string | null;
 };
 
 /** /library/[id]/edit's data load — a submission's full editable field set, at any status. */
