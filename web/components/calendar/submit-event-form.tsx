@@ -29,7 +29,7 @@ import { EventType, EventVisibility } from "@/lib/generated/prisma/enums";
 import { EVENT_TYPE_LABELS } from "@/lib/events";
 import { createEventSchema, updateEventSchema, type CreateEventValues } from "@/lib/validation/event";
 import { getCsrfToken } from "@/lib/csrf-client";
-import { InviteePicker } from "@/components/calendar/invitee-picker";
+import { InviteePicker } from "@/components/members/invitee-picker";
 
 const DEFAULT_VALUES: CreateEventValues = {
   title: "",
