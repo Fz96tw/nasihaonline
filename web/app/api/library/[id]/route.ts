@@ -37,9 +37,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
   const fileField = formData.get("file");
   const file = fileField instanceof File && fileField.size > 0 ? fileField : null;
+  const heroImageField = formData.get("heroImage");
+  const heroImage = heroImageField instanceof File && heroImageField.size > 0 ? heroImageField : null;
 
   try {
-    const item = await updateKnowledgeItem(params.id, user, { ...parsed.data, file });
+    const item = await updateKnowledgeItem(params.id, user, { ...parsed.data, file, heroImage });
     await enqueueKnowledgeItemIndexSync(item.id);
     return NextResponse.json({ id: item.id });
   } catch (error) {

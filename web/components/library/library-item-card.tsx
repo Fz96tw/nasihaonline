@@ -28,12 +28,14 @@ function formatDate(iso: string) {
  */
 export function LibraryItemCard({ item, canEdit }: { item: LibraryCardData; canEdit: boolean }) {
   const Icon = CONTENT_TYPE_ICONS[item.contentType] ?? BookOpen;
-  const thumbnailUrl = item.youtubeUrl ? youtubeThumbnailUrl(item.youtubeUrl) : null;
+  // A custom hero image always wins; a recorded_lecture with none set falls
+  // back to its video's YouTube thumbnail as the default cover.
+  const thumbnailUrl = item.heroImageUrl ?? (item.youtubeUrl ? youtubeThumbnailUrl(item.youtubeUrl) : null);
 
   return (
     <Card className="flex flex-col overflow-hidden">
       {thumbnailUrl && (
-        // eslint-disable-next-line @next/next/no-img-element -- external YouTube thumbnail, not a next/image-eligible local asset
+        // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied or external YouTube URL, not a next/image-eligible local asset
         <img src={thumbnailUrl} alt="" className="aspect-video w-full object-cover" />
       )}
       <CardHeader>

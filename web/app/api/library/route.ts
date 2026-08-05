@@ -53,9 +53,11 @@ export async function POST(request: Request) {
 
   const fileField = formData.get("file");
   const file = fileField instanceof File && fileField.size > 0 ? fileField : null;
+  const heroImageField = formData.get("heroImage");
+  const heroImage = heroImageField instanceof File && heroImageField.size > 0 ? heroImageField : null;
 
   try {
-    const item = await createKnowledgeItem(user.id, { ...parsed.data, file });
+    const item = await createKnowledgeItem(user.id, { ...parsed.data, file, heroImage });
     return NextResponse.json({ id: item.id }, { status: 201 });
   } catch (error) {
     if (error instanceof KnowledgeItemError) {

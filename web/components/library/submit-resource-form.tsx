@@ -90,6 +90,7 @@ export function SubmitResourceForm({
   const [error, setError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [sourceMode, setSourceMode] = useState<"file" | "link">(existingItem?.externalUrl ? "link" : "file");
+  const [heroImage, setHeroImage] = useState<File | null>(null);
 
   const form = useForm<CreateKnowledgeItemValues>({
     resolver: zodResolver(createKnowledgeItemSchema),
@@ -144,6 +145,7 @@ export function SubmitResourceForm({
         formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
       }
       if (!isRecordedLecture && sourceMode === "file" && file) formData.append("file", file);
+      if (heroImage) formData.append("heroImage", heroImage);
 
       const res = await fetch(existingItem ? `/api/library/${existingItem.id}` : "/api/library", {
         method: existingItem ? "PATCH" : "POST",
@@ -446,6 +448,35 @@ export function SubmitResourceForm({
             )}
           </div>
         )}
+
+        <div className="flex flex-col gap-2">
+          <label htmlFor="hero-image" className="text-sm font-medium">
+            Hero image (optional)
+          </label>
+          {existingItem?.heroImageUrl && !heroImage && (
+            // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
+            <img
+              src={existingItem.heroImageUrl}
+              alt="Current hero image"
+              className="h-32 w-full max-w-xs rounded-md object-cover"
+            />
+          )}
+          <input
+            id="hero-image"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(e) => setHeroImage(e.target.files?.[0] ?? null)}
+            className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
+          />
+          {existingItem?.heroImageUrl && (
+            <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
+          )}
+          {isRecordedLecture && (
+            <p className="text-xs text-muted-foreground">
+              Leave blank to use the video&apos;s YouTube thumbnail (default).
+            </p>
+          )}
+        </div>
 
         {isCaseStudy && (
           <FormField

@@ -8,7 +8,14 @@ import {
   SurveyStatus,
   type Tier,
 } from "@/lib/generated/prisma/enums";
-import { getProfileAvatarUrl, getPostHeroImageUrl, getEventHeroImageUrl, getAnnouncementHeroImageUrl, getSurveyHeroImageUrl } from "@/lib/storage";
+import {
+  getProfileAvatarUrl,
+  getPostHeroImageUrl,
+  getEventHeroImageUrl,
+  getAnnouncementHeroImageUrl,
+  getSurveyHeroImageUrl,
+  getKnowledgeItemHeroImageUrl,
+} from "@/lib/storage";
 import { excerptFromHtml } from "@/lib/blog";
 import { withFeedRef, type FeedItem, type FeedCursor } from "@/lib/feed";
 import { youtubeThumbnailUrl } from "@/lib/youtube";
@@ -163,6 +170,7 @@ export async function getFeedPage(params: {
         description: true,
         createdAt: true,
         youtubeUrl: true,
+        heroImageUrl: true,
         visibility: true,
         contributor: { select: AUTHOR_SELECT },
         _count: { select: { views: true } },
@@ -272,7 +280,10 @@ export async function getFeedPage(params: {
       href: withFeedRef(`/library/${item.id}`),
       timestamp: item.createdAt.toISOString(),
       author: authorOf(item.contributor),
-      imageUrl: item.youtubeUrl ? youtubeThumbnailUrl(item.youtubeUrl) : null,
+      // A custom hero image always wins; a recorded_lecture with none set
+      // falls back to its video's YouTube thumbnail as the default cover —
+      // same precedence as LibraryItemCard's browse-grid thumbnail.
+      imageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl) ?? (item.youtubeUrl ? youtubeThumbnailUrl(item.youtubeUrl) : null),
       libraryViewCount: item._count.views,
       forumReplyCount: item.forumThread ? item.forumThread._count.posts - 1 : undefined,
     })),

@@ -1225,6 +1225,13 @@ model KnowledgeItem {
   categoryId                String
   category                  KnowledgeCategory    @relation(fields: [categoryId], references: [id])
   youtubeUrl                String?
+  // Optional cover image (§4.9), same object-storage-key convention as
+  // Event/Post/Announcement/Survey.heroImageUrl. For a recorded_lecture
+  // item this is an override, not a requirement — the browse card/detail
+  // page/feed fall back to the video's YouTube thumbnail when it's null,
+  // so leaving it blank is a legitimate "just use the default" choice, not
+  // a missing-data state.
+  heroImageUrl              String?
   // Alternative to a KnowledgeAttachment for article/case_study/guideline
   // items — a link to a resource hosted elsewhere (e.g. a Google Doc),
   // mutually exclusive with an attachment, same "store the link, not the

@@ -4,6 +4,9 @@ import {
   uploadKnowledgeDocument,
   getKnowledgeDocumentUrl,
   deleteKnowledgeDocument,
+  uploadKnowledgeItemHeroImage,
+  getKnowledgeItemHeroImageUrl,
+  deleteKnowledgeItemHeroImage,
   getProfileAvatarUrl,
   UploadValidationError,
 } from "@/lib/storage";
@@ -53,6 +56,7 @@ const LIBRARY_CARD_SELECT = {
   visibility: true,
   createdAt: true,
   youtubeUrl: true,
+  heroImageUrl: true,
   externalUrl: true,
   category: { select: { name: true, slug: true } },
   contributor: { select: { id: true, name: true } },
@@ -71,6 +75,7 @@ function toLibraryCard(item: {
   visibility: KnowledgeVisibility;
   createdAt: Date;
   youtubeUrl: string | null;
+  heroImageUrl: string | null;
   externalUrl: string | null;
   category: { name: string; slug: string };
   contributor: { id: string; name: string | null };
@@ -90,6 +95,11 @@ function toLibraryCard(item: {
     contributor: item.contributor,
     createdAt: item.createdAt.toISOString(),
     youtubeUrl: item.youtubeUrl,
+    // Custom cover image, if the contributor uploaded one — null falls
+    // back to the video's YouTube thumbnail in every renderer (browse
+    // card, detail page, feed), not resolved here since those already
+    // have their own youtubeThumbnailUrl(youtubeUrl) fallback logic.
+    heroImageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl),
     externalUrl: item.externalUrl,
     attachment: item.attachments[0]
       ? {
@@ -169,6 +179,7 @@ export async function createKnowledgeItem(
     visibility: KnowledgeVisibility;
     invitedUserIds: string[];
     file: File | null;
+    heroImage: File | null;
   },
 ): Promise<{ id: string }> {
   if (!input.licenseConsented) {
@@ -221,6 +232,21 @@ export async function createKnowledgeItem(
     }
   }
 
+  // Optional cover image, any content type — for a recorded_lecture, this
+  // is purely an override: leaving it unset isn't a missing-data state,
+  // every renderer falls back to the video's own YouTube thumbnail.
+  let heroImageUrl: string | null = null;
+  if (input.heroImage) {
+    try {
+      heroImageUrl = await uploadKnowledgeItemHeroImage(input.heroImage);
+    } catch (error) {
+      if (error instanceof UploadValidationError) {
+        throw new KnowledgeItemError(400, error.message);
+      }
+      throw error;
+    }
+  }
+
   const item = await db.knowledgeItem.create({
     data: {
       title: input.title,
@@ -230,6 +256,7 @@ export async function createKnowledgeItem(
       contributorId,
       categoryId: input.categoryId,
       youtubeUrl: isRecordedLecture ? input.youtubeUrl : null,
+      heroImageUrl,
       externalUrl: isRecordedLecture ? null : input.externalUrl,
       deidentificationConfirmed: input.deidentificationConfirmed,
       licenseConsented: true,
@@ -264,6 +291,7 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
       status: true,
       categoryId: true,
       youtubeUrl: true,
+      heroImageUrl: true,
       externalUrl: true,
       deidentificationConfirmed: true,
       contributorId: true,
@@ -283,6 +311,7 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
     categoryId: item.categoryId,
     tagIds: item.tags.map(({ tagId }) => tagId),
     youtubeUrl: item.youtubeUrl,
+    heroImageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl),
     externalUrl: item.externalUrl,
     deidentificationConfirmed: item.deidentificationConfirmed,
     contributorId: item.contributorId,
@@ -317,6 +346,7 @@ export async function updateKnowledgeItem(
     externalUrl: string | null;
     deidentificationConfirmed: boolean;
     file: File | null;
+    heroImage: File | null;
   },
 ): Promise<{ id: string; status: KnowledgeStatus }> {
   const item = await db.knowledgeItem.findUnique({
@@ -325,6 +355,7 @@ export async function updateKnowledgeItem(
       id: true,
       contributorId: true,
       status: true,
+      heroImageUrl: true,
       attachments: { select: { id: true, objectKey: true }, take: 1 },
     },
   });
@@ -368,6 +399,22 @@ export async function updateKnowledgeItem(
     }
   }
 
+  // Same "upload the replacement, then delete the old object afterward"
+  // shape as updateEvent's heroImageUrl handling — a new upload replaces
+  // whatever's there; no new file provided keeps the existing one as-is
+  // (there's no separate "remove image" action, same as Event's hero image).
+  let heroImageUrl = item.heroImageUrl;
+  if (input.heroImage) {
+    try {
+      heroImageUrl = await uploadKnowledgeItemHeroImage(input.heroImage);
+    } catch (error) {
+      if (error instanceof UploadValidationError) {
+        throw new KnowledgeItemError(400, error.message);
+      }
+      throw error;
+    }
+  }
+
   const nextStatus = item.status === KnowledgeStatus.rejected ? KnowledgeStatus.pending_review : item.status;
   // Drop the old attachment when it's being replaced by a new file, when
   // contentType moved to recorded_lecture (which stores youtubeUrl instead),
@@ -390,6 +437,7 @@ export async function updateKnowledgeItem(
         level: input.level,
         categoryId: input.categoryId,
         youtubeUrl: isRecordedLecture ? input.youtubeUrl : null,
+        heroImageUrl,
         externalUrl: isRecordedLecture ? null : input.externalUrl,
         deidentificationConfirmed: input.deidentificationConfirmed,
         status: nextStatus,
@@ -407,6 +455,10 @@ export async function updateKnowledgeItem(
     });
     return result;
   });
+
+  if (input.heroImage && item.heroImageUrl) {
+    await deleteKnowledgeItemHeroImage(item.heroImageUrl);
+  }
 
   if (dropsExistingAttachment) {
     await deleteKnowledgeDocument(existingAttachment!.objectKey);

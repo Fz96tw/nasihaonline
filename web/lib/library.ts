@@ -66,6 +66,10 @@ export type LibraryCard = {
   contributor: { id: string; name: string | null };
   createdAt: string;
   youtubeUrl: string | null;
+  // Custom cover image (§4.9), pre-resolved server-side to a proxied URL —
+  // null means "no custom image", which renderers fall back to the video's
+  // YouTube thumbnail for, not "broken image".
+  heroImageUrl: string | null;
   // Alternative to `attachment` for article/case_study/guideline items — a
   // link to a resource hosted elsewhere, mutually exclusive with it.
   externalUrl: string | null;
@@ -120,6 +124,7 @@ export type KnowledgeItemForEdit = {
   categoryId: string;
   tagIds: string[];
   youtubeUrl: string | null;
+  heroImageUrl: string | null;
   externalUrl: string | null;
   deidentificationConfirmed: boolean;
   contributorId: string;

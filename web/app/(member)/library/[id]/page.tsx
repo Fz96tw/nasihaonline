@@ -7,6 +7,7 @@ import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-ser
 import { getForumThreadDetail } from "@/lib/forums-server";
 import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS } from "@/lib/library";
+import { youtubeThumbnailUrl } from "@/lib/youtube";
 import { KnowledgeContentType, KnowledgeStatus, KnowledgeVisibility, Role } from "@/lib/generated/prisma/enums";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -57,9 +58,21 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
     : null;
   const mentionableMembers = thread ? await getMentionableMembers() : [];
 
+  // A custom hero image always wins; a recorded_lecture with none set falls
+  // back to its video's YouTube thumbnail as the default cover — same
+  // precedence as LibraryItemCard's browse-grid thumbnail.
+  const heroImageUrl = item.heroImageUrl ?? (item.youtubeUrl ? youtubeThumbnailUrl(item.youtubeUrl) : null);
+
   return (
     <main className="mx-auto max-w-3xl px-8 py-16">
       <BackLink fallbackHref="/library" className="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline" />
+
+      {heroImageUrl && (
+        <div className="mb-6 flex h-72 w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
+          {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied or external YouTube URL, not a next/image-eligible local asset */}
+          <img src={heroImageUrl} alt={item.title} className="h-full w-full object-contain" />
+        </div>
+      )}
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Badge variant="info" className="w-fit">
