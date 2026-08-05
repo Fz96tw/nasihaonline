@@ -87,11 +87,12 @@ model User {
   eventInvitations EventInvitee[] @relation("EventInvitee")
 
   // Blog / Knowledge Library / Forums (§4.8/§4.9/§4.13).
-  postsAuthored             Post[]              @relation("PostAuthor")
-  postComments              PostComment[]       @relation("PostCommentAuthor")
-  knowledgeItemsContributed KnowledgeItem[]     @relation("KnowledgeContributor")
-  forumThreads              ForumThread[]       @relation("ForumThreadAuthor")
-  forumPosts                ForumPost[]         @relation("ForumPostAuthor")
+  postsAuthored             Post[]                 @relation("PostAuthor")
+  postComments              PostComment[]          @relation("PostCommentAuthor")
+  knowledgeItemsContributed KnowledgeItem[]        @relation("KnowledgeContributor")
+  knowledgeItemInvitations  KnowledgeItemInvitee[] @relation("KnowledgeItemInvitee")
+  forumThreads              ForumThread[]          @relation("ForumThreadAuthor")
+  forumPosts                ForumPost[]            @relation("ForumPostAuthor")
   forumFollows              ForumFollow[]
   threadViews               ThreadView[]
   eventViews                EventView[]
@@ -344,14 +345,14 @@ model Donation {
 // fails or RESEND_API_KEY isn't configured — the email is the fast path,
 // this row is the fallback so nothing is silently lost.
 model ContactMessage {
-  id        String            @id @default(cuid())
+  id        String           @id @default(cuid())
   name      String
   email     String
   subject   String
   message   String
-  services  ContactService[]  @default([])
+  services  ContactService[] @default([])
   readAt    DateTime?
-  createdAt DateTime          @default(now())
+  createdAt DateTime         @default(now())
 
   @@index([readAt])
   @@map("contact_messages")
@@ -374,18 +375,18 @@ enum HowHeardSource {
 }
 
 model MembershipApplication {
-  id                 String @id @default(cuid())
-  firstName          String
-  lastName           String
-  email              String
+  id                  String          @id @default(cuid())
+  firstName           String
+  lastName            String
+  email               String
   // Optional as of the join-form field reduction below — the applicant can
   // fill this in later from their Profile (§4.3) instead.
-  professionalTitle  String?
-  linkedinUrl        String?
-  countryRegion      String
-  howHeardSource     HowHeardSource?
+  professionalTitle   String?
+  linkedinUrl         String?
+  countryRegion       String
+  howHeardSource      HowHeardSource?
   // Set only when howHeardSource = member.
-  howHeardMemberName String?
+  howHeardMemberName  String?
   // Set only when howHeardSource = other.
   howHeardOtherDetail String?
 
@@ -760,6 +761,15 @@ enum NotificationType {
   // Objective 03 — sent to every current invitee when the host changes a
   // restricted event's startsAt/endsAt (paired with email).
   event_rescheduled
+  // Restricted Knowledge Library Submissions — sent to a newly-added
+  // invitee of a restricted, already-published library item (paired with
+  // email, like event_invited). Never fires for a still-pending_review
+  // item — no notification until the item is actually visible.
+  library_item_shared
+  // Sent to a member removed from a restricted library item's invited
+  // list (paired with email, like event_removed). No link — a removed
+  // invitee loses access to the item's detail page.
+  library_item_removed
 }
 
 // Homegrown in-app notification feed (§4.10) — no third-party vendor.
@@ -1147,6 +1157,24 @@ enum KnowledgeLevel {
   all_levels
 }
 
+// Restricted Knowledge Library Submissions initiative, Objective 01.
+// `public` preserves every pre-existing item's behavior unchanged (visible
+// to the whole membership once published, same as today). `restricted` is
+// visible only to the contributor, the invitees listed in
+// KnowledgeItemInvitee, and Steward/admin reviewers — enforced in every
+// member-facing query in lib/library-server.ts/lib/feed-server.ts, never in
+// the DB layer. Applies only once status reaches published/flagged — the
+// Steward moderation gate (KnowledgeStatus) is unaffected, restriction is
+// layered on top of it, not a bypass of it. Excluded from Meilisearch
+// entirely (search-index-sync.ts) — an invitee finds a restricted item only
+// via the regular browse/detail queries, not search-as-you-type.
+// Create-only, mirroring Event.visibility — nothing in the edit path
+// (updateKnowledgeItem) ever changes it after creation.
+enum KnowledgeVisibility {
+  public
+  restricted
+}
+
 model KnowledgeCategory {
   id        String   @id @default(cuid())
   name      String   @unique
@@ -1191,6 +1219,7 @@ model KnowledgeItem {
   contentType               KnowledgeContentType
   status                    KnowledgeStatus      @default(pending_review)
   level                     KnowledgeLevel
+  visibility                KnowledgeVisibility  @default(public)
   contributorId             String
   contributor               User                 @relation("KnowledgeContributor", fields: [contributorId], references: [id])
   categoryId                String
@@ -1223,11 +1252,31 @@ model KnowledgeItem {
   // EventView) — the Library is member-only like Events, so this dedupes on
   // real userId rather than an opaque viewer key like PostView does.
   views             KnowledgeItemView[]
+  invitees          KnowledgeItemInvitee[]
 
   @@index([contributorId])
   @@index([categoryId])
   @@index([status])
   @@map("knowledge_items")
+}
+
+// Who was invited to a visibility = restricted KnowledgeItem — mirrors
+// EventInvitee exactly. One row per invited member; rows are added/removed
+// independently after creation via updateKnowledgeItemInvitees. No RSVP
+// analog exists for the Library (nothing to respond to), so unlike
+// EventInvitee this table has no corresponding "response" table to keep
+// in step with.
+model KnowledgeItemInvitee {
+  id              String        @id @default(cuid())
+  knowledgeItemId String
+  knowledgeItem   KnowledgeItem @relation(fields: [knowledgeItemId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User          @relation("KnowledgeItemInvitee", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+
+  @@unique([knowledgeItemId, userId])
+  @@index([userId])
+  @@map("knowledge_item_invitees")
 }
 
 // One row per unique member visit to a KnowledgeItem's detail page, for the
