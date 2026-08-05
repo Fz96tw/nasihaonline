@@ -1,6 +1,13 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { EventVisibility, KnowledgeStatus, RSVPStatus, SurveyStatus, type Tier } from "@/lib/generated/prisma/enums";
+import {
+  EventVisibility,
+  KnowledgeStatus,
+  KnowledgeVisibility,
+  RSVPStatus,
+  SurveyStatus,
+  type Tier,
+} from "@/lib/generated/prisma/enums";
 import { getProfileAvatarUrl, getPostHeroImageUrl, getEventHeroImageUrl, getAnnouncementHeroImageUrl, getSurveyHeroImageUrl } from "@/lib/storage";
 import { excerptFromHtml } from "@/lib/blog";
 import { withFeedRef, type FeedItem, type FeedCursor } from "@/lib/feed";
@@ -137,13 +144,26 @@ export async function getFeedPage(params: {
       take: pageSize,
     }),
     !wants("library") ? Promise.resolve([]) : db.knowledgeItem.findMany({
-      where: { status: KnowledgeStatus.published, ...(before ? { createdAt: { lt: before } } : {}) },
+      where: {
+        status: KnowledgeStatus.published,
+        ...(before ? { createdAt: { lt: before } } : {}),
+        // Same restricted-audience shape as the events branch above
+        // (Objective 04's read-path filter, mirrored here): a restricted
+        // item only ever reaches an invited member's feed, never its own
+        // contributor's — the contributor already knows they submitted it,
+        // same "not new activity for them" rationale as restricted events.
+        OR: [
+          { visibility: KnowledgeVisibility.public },
+          ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
+        ],
+      },
       select: {
         id: true,
         title: true,
         description: true,
         createdAt: true,
         youtubeUrl: true,
+        visibility: true,
         contributor: { select: AUTHOR_SELECT },
         _count: { select: { views: true } },
         // posts includes the thread's own system-authored opening post, so
@@ -241,7 +261,14 @@ export async function getFeedPage(params: {
       type: "library",
       id: item.id,
       title: item.title,
-      excerpt: truncate(item.description),
+      // Restricted items only ever reach a viewer who is an invited member
+      // (the where clause above), so this framing is always correct for
+      // whoever sees it — no per-viewer branching needed, same rationale as
+      // the events branch's excerpt swap.
+      excerpt:
+        item.visibility === KnowledgeVisibility.restricted
+          ? `${item.contributor.name ?? "A member"} shared this with you.`
+          : truncate(item.description),
       href: withFeedRef(`/library/${item.id}`),
       timestamp: item.createdAt.toISOString(),
       author: authorOf(item.contributor),
