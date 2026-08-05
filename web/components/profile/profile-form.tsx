@@ -29,6 +29,7 @@ import {
   type ProfileFormValues,
 } from "@/lib/validation/profile";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { isProfileComplete } from "@/lib/profile-completeness";
 
 const INTEREST_AREA_OPTIONS: TagOption[] = Object.values(InterestArea).map((value) => ({
   id: value,
@@ -40,11 +41,18 @@ export function ProfileForm({
   avatarUrl,
   defaultValues,
   availableSkills,
+  isOnboarding,
 }: {
   email: string;
   avatarUrl: string | null;
   defaultValues: ProfileFormValues;
   availableSkills: TagOption[];
+  // True while this member is still subject to the first-sign-in onboarding
+  // gate (User.requiresProfileOnboarding, §4.3) — only then does a save that
+  // completes every required field redirect straight into the app instead
+  // of just refreshing in place, since an already-onboarded member editing
+  // their profile normally shouldn't be redirected away on save.
+  isOnboarding: boolean;
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -87,6 +95,11 @@ export function ProfileForm({
         throw new Error(
           typeof payload?.error === "string" ? payload.error : "Something went wrong. Please try again.",
         );
+      }
+      const { profile } = await res.json();
+      if (isOnboarding && isProfileComplete(profile)) {
+        router.push("/whats-new");
+        return;
       }
       setSaved(true);
       router.refresh();

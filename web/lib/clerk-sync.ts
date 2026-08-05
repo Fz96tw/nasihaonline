@@ -1,6 +1,6 @@
 import { createClerkClient } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { Role, Tier } from "@/lib/generated/prisma/enums";
+import { ApplicationStatus, Role, Tier } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import { enqueueProfileIndexSync } from "@/lib/queues/search-index-queue";
 
@@ -33,12 +33,24 @@ function nameFromMetadata(publicMetadata: Record<string, unknown>): string | und
  * provisionMemberAccount) only on creation, then owned entirely by the
  * member via PATCH /api/profile — a later metadata sync must not clobber
  * an edit they've made there.
+ *
+ * The Profile is pre-filled (create branch only, same rationale) from the
+ * applicant's own approved MembershipApplication where the two overlap
+ * (country/region, professional title, LinkedIn) — /join already asked for
+ * these once (§3.1); the first-sign-in onboarding gate (§4.3) should only
+ * be asking for what's genuinely still missing, not fields the member
+ * already answered.
  */
 export async function upsertUserFromClerkData(
   clerkUserId: string,
   email: string,
   publicMetadata: Record<string, unknown>,
 ): Promise<UserModel> {
+  const approvedApplication = await db.membershipApplication.findFirst({
+    where: { email, status: ApplicationStatus.approved },
+    orderBy: { createdAt: "desc" },
+  });
+
   const user = await db.user.upsert({
     where: { clerkUserId },
     create: {
@@ -48,7 +60,13 @@ export async function upsertUserFromClerkData(
       role: roleFromMetadata(publicMetadata),
       tier: tierFromMetadata(publicMetadata),
       requiresProfileOnboarding: true,
-      profile: { create: {} },
+      profile: {
+        create: {
+          countryRegion: approvedApplication?.countryRegion || undefined,
+          titleSpecialty: approvedApplication?.professionalTitle || undefined,
+          linkedinUrl: approvedApplication?.linkedinUrl || undefined,
+        },
+      },
     },
     update: { email, role: roleFromMetadata(publicMetadata), tier: tierFromMetadata(publicMetadata) },
   });

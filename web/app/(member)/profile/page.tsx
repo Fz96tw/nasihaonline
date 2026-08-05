@@ -56,6 +56,7 @@ export default async function ProfilePage() {
         email={user.email}
         avatarUrl={profile.avatarUrl}
         availableSkills={skills}
+        isOnboarding={user.requiresProfileOnboarding}
         defaultValues={{
           name: user.name ?? "",
           bio: profile.bio ?? "",
