@@ -1195,6 +1195,11 @@ model KnowledgeItem {
   categoryId                String
   category                  KnowledgeCategory    @relation(fields: [categoryId], references: [id])
   youtubeUrl                String?
+  // Alternative to a KnowledgeAttachment for article/case_study/guideline
+  // items — a link to a resource hosted elsewhere (e.g. a Google Doc),
+  // mutually exclusive with an attachment, same "store the link, not the
+  // binary" idea as youtubeUrl.
+  externalUrl               String?
   deidentificationConfirmed Boolean              @default(false)
   licenseConsented          Boolean              @default(false)
   // Required reason the flagging member gave (§4.9) — same "flag is

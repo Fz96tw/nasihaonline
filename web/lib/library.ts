@@ -65,6 +65,9 @@ export type LibraryCard = {
   contributor: { id: string; name: string | null };
   createdAt: string;
   youtubeUrl: string | null;
+  // Alternative to `attachment` for article/case_study/guideline items — a
+  // link to a resource hosted elsewhere, mutually exclusive with it.
+  externalUrl: string | null;
   // url is pre-resolved server-side (getKnowledgeDocumentUrl lives in the
   // server-only lib/storage.ts) so client components never need to import
   // that module themselves.
@@ -103,6 +106,7 @@ export type KnowledgeItemForEdit = {
   categoryId: string;
   tagIds: string[];
   youtubeUrl: string | null;
+  externalUrl: string | null;
   deidentificationConfirmed: boolean;
   contributorId: string;
   attachment: { fileName: string; url: string } | null;
@@ -127,6 +131,7 @@ export type ReviewQueueItem = {
   contributor: { name: string | null; email: string };
   deidentificationConfirmed: boolean;
   youtubeUrl: string | null;
+  externalUrl: string | null;
   attachments: { id: string; fileName: string; mimeType: string; sizeBytes: number; objectKey: string }[];
   createdAt: string;
 };

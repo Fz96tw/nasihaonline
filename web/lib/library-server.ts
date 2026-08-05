@@ -46,6 +46,7 @@ const LIBRARY_CARD_SELECT = {
   status: true,
   createdAt: true,
   youtubeUrl: true,
+  externalUrl: true,
   category: { select: { name: true, slug: true } },
   contributor: { select: { id: true, name: true } },
   attachments: { select: { fileName: true, mimeType: true, objectKey: true }, take: 1 },
@@ -62,6 +63,7 @@ function toLibraryCard(item: {
   status: KnowledgeStatus;
   createdAt: Date;
   youtubeUrl: string | null;
+  externalUrl: string | null;
   category: { name: string; slug: string };
   contributor: { id: string; name: string | null };
   attachments: { fileName: string; mimeType: string; objectKey: string }[];
@@ -79,6 +81,7 @@ function toLibraryCard(item: {
     contributor: item.contributor,
     createdAt: item.createdAt.toISOString(),
     youtubeUrl: item.youtubeUrl,
+    externalUrl: item.externalUrl,
     attachment: item.attachments[0]
       ? {
           fileName: item.attachments[0].fileName,
@@ -139,6 +142,7 @@ export async function createKnowledgeItem(
     categoryId: string;
     tagIds: string[];
     youtubeUrl: string | null;
+    externalUrl: string | null;
     deidentificationConfirmed: boolean;
     licenseConsented: boolean;
     file: File | null;
@@ -160,8 +164,11 @@ export async function createKnowledgeItem(
   if (isRecordedLecture && !input.youtubeUrl) {
     throw new KnowledgeItemError(400, "A YouTube URL is required for a recorded lecture.");
   }
-  if (!isRecordedLecture && !input.file) {
-    throw new KnowledgeItemError(400, "A file upload is required for this content type.");
+  if (!isRecordedLecture && input.file && input.externalUrl) {
+    throw new KnowledgeItemError(400, "Choose either a file upload or an external link, not both.");
+  }
+  if (!isRecordedLecture && !input.file && !input.externalUrl) {
+    throw new KnowledgeItemError(400, "A file upload or external link is required for this content type.");
   }
 
   let attachment: { objectKey: string; fileName: string; mimeType: string; sizeBytes: number } | null = null;
@@ -185,6 +192,7 @@ export async function createKnowledgeItem(
       contributorId,
       categoryId: input.categoryId,
       youtubeUrl: isRecordedLecture ? input.youtubeUrl : null,
+      externalUrl: isRecordedLecture ? null : input.externalUrl,
       deidentificationConfirmed: input.deidentificationConfirmed,
       licenseConsented: true,
       status: KnowledgeStatus.pending_review,
@@ -216,6 +224,7 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
       status: true,
       categoryId: true,
       youtubeUrl: true,
+      externalUrl: true,
       deidentificationConfirmed: true,
       contributorId: true,
       tags: { select: { tagId: true } },
@@ -234,6 +243,7 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
     categoryId: item.categoryId,
     tagIds: item.tags.map(({ tagId }) => tagId),
     youtubeUrl: item.youtubeUrl,
+    externalUrl: item.externalUrl,
     deidentificationConfirmed: item.deidentificationConfirmed,
     contributorId: item.contributorId,
     attachment: item.attachments[0]
@@ -264,6 +274,7 @@ export async function updateKnowledgeItem(
     categoryId: string;
     tagIds: string[];
     youtubeUrl: string | null;
+    externalUrl: string | null;
     deidentificationConfirmed: boolean;
     file: File | null;
   },
@@ -297,9 +308,12 @@ export async function updateKnowledgeItem(
   if (isRecordedLecture && !input.youtubeUrl) {
     throw new KnowledgeItemError(400, "A YouTube URL is required for a recorded lecture.");
   }
+  if (!isRecordedLecture && input.file && input.externalUrl) {
+    throw new KnowledgeItemError(400, "Choose either a file upload or an external link, not both.");
+  }
   const existingAttachment = item.attachments[0] ?? null;
-  if (!isRecordedLecture && !input.file && !existingAttachment) {
-    throw new KnowledgeItemError(400, "A file upload is required for this content type.");
+  if (!isRecordedLecture && !input.file && !existingAttachment && !input.externalUrl) {
+    throw new KnowledgeItemError(400, "A file upload or external link is required for this content type.");
   }
 
   let newAttachment: { objectKey: string; fileName: string; mimeType: string; sizeBytes: number } | null = null;
@@ -315,9 +329,12 @@ export async function updateKnowledgeItem(
   }
 
   const nextStatus = item.status === KnowledgeStatus.rejected ? KnowledgeStatus.pending_review : item.status;
-  // Drop the old attachment when it's being replaced by a new file, or when
-  // contentType moved to recorded_lecture (which stores youtubeUrl instead).
-  const dropsExistingAttachment = existingAttachment !== null && (isRecordedLecture || newAttachment !== null);
+  // Drop the old attachment when it's being replaced by a new file, when
+  // contentType moved to recorded_lecture (which stores youtubeUrl instead),
+  // or when the edit switches from a file to an external link.
+  const dropsExistingAttachment =
+    existingAttachment !== null &&
+    (isRecordedLecture || newAttachment !== null || (!isRecordedLecture && input.externalUrl !== null));
 
   const updated = await db.$transaction(async (tx) => {
     await tx.knowledgeItemTag.deleteMany({ where: { knowledgeItemId: item.id } });
@@ -333,6 +350,7 @@ export async function updateKnowledgeItem(
         level: input.level,
         categoryId: input.categoryId,
         youtubeUrl: isRecordedLecture ? input.youtubeUrl : null,
+        externalUrl: isRecordedLecture ? null : input.externalUrl,
         deidentificationConfirmed: input.deidentificationConfirmed,
         status: nextStatus,
         tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
@@ -563,6 +581,7 @@ export async function getReviewQueue(): Promise<ReviewQueueItem[]> {
       contributor: { select: { name: true, email: true } },
       deidentificationConfirmed: true,
       youtubeUrl: true,
+      externalUrl: true,
       attachments: { select: { id: true, fileName: true, mimeType: true, sizeBytes: true, objectKey: true } },
       createdAt: true,
     },

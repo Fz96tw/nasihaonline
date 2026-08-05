@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, ExternalLink, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { KnowledgeContentType } from "@/lib/generated/prisma/enums";
 import { youtubeEmbedUrl } from "@/lib/youtube";
@@ -158,20 +158,23 @@ function PdfPreview({ url, fileName }: { url: string; fileName: string }) {
 
 /**
  * Inline (non-modal) resource preview — PDF.js pager for document
- * attachments, YouTube embed for recorded lectures. Used on /library/[id];
- * previously lived inside a Dialog (ResourcePreviewDialog, now retired)
- * opened from the /library browse grid, which links to the detail page
- * instead.
+ * attachments, YouTube embed for recorded lectures, or a link-out card for
+ * an externalUrl (no iframe embed — doesn't depend on the linked resource's
+ * sharing settings). Used on /library/[id]; previously lived inside a
+ * Dialog (ResourcePreviewDialog, now retired) opened from the /library
+ * browse grid, which links to the detail page instead.
  */
 export function ResourcePreview({
   title,
   contentType,
   youtubeUrl,
+  externalUrl,
   attachment,
 }: {
   title: string;
   contentType: KnowledgeContentType;
   youtubeUrl: string | null;
+  externalUrl: string | null;
   attachment: { fileName: string; mimeType: string; url: string } | null;
 }) {
   const isRecordedLecture = contentType === KnowledgeContentType.recorded_lecture;
@@ -205,6 +208,21 @@ export function ResourcePreview({
 
   if (attachment) {
     return <PdfPreview url={attachment.url} fileName={attachment.fileName} />;
+  }
+
+  if (externalUrl) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-10 text-center">
+        <ExternalLink className="h-6 w-6 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">This resource is hosted externally.</p>
+        <Button asChild variant="outline" size="sm">
+          <a href={externalUrl} target="_blank" rel="noreferrer">
+            <ExternalLink className="mr-2 h-4 w-4" />
+            Open resource
+          </a>
+        </Button>
+      </div>
+    );
   }
 
   return <p className="py-6 text-center text-sm text-muted-foreground">No preview is available for this resource.</p>;

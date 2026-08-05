@@ -100,6 +100,7 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
         title={item.title}
         contentType={item.contentType}
         youtubeUrl={item.youtubeUrl}
+        externalUrl={item.externalUrl}
         attachment={item.attachment}
       />
 

@@ -29,6 +29,7 @@ const DEFAULT_VALUES: CreateKnowledgeItemValues = {
   categoryId: "",
   tagIds: [],
   youtubeUrl: null,
+  externalUrl: null,
   deidentificationConfirmed: false,
   licenseConsented: false,
 };
@@ -41,12 +42,13 @@ const DEFAULT_VALUES: CreateKnowledgeItemValues = {
  * licenseConsented is a one-time consent from the original submission, so
  * it defaults to `true` and is hidden entirely when editing, and isn't sent
  * in the PATCH body (the server validates edits with updateKnowledgeItemSchema,
- * which omits it). contentType still drives the same two conditional fields
- * as create: a YouTube URL input for recorded_lecture (no file), or a file
- * input for every other type (no youtubeUrl, but an edit can leave the
- * existing attachment in place instead of replacing it); case_study
- * additionally requires the de-identification checkbox, re-affirmed on every
- * edit rather than carried forward silently.
+ * which omits it). contentType still drives the same conditional fields as
+ * create: a YouTube URL input for recorded_lecture (no file/link), or for
+ * every other type a `sourceMode` toggle between a file input and an
+ * `externalUrl` input (mutually exclusive — toggling clears the other), with
+ * an edit able to leave the existing attachment in place instead of
+ * replacing it; case_study additionally requires the de-identification
+ * checkbox, re-affirmed on every edit rather than carried forward silently.
  */
 export function SubmitResourceForm({
   categories,
@@ -61,6 +63,7 @@ export function SubmitResourceForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [sourceMode, setSourceMode] = useState<"file" | "link">(existingItem?.externalUrl ? "link" : "file");
 
   const form = useForm<CreateKnowledgeItemValues>({
     resolver: zodResolver(createKnowledgeItemSchema),
@@ -73,6 +76,7 @@ export function SubmitResourceForm({
           categoryId: existingItem.categoryId,
           tagIds: existingItem.tagIds,
           youtubeUrl: existingItem.youtubeUrl,
+          externalUrl: existingItem.externalUrl,
           deidentificationConfirmed: existingItem.deidentificationConfirmed,
           licenseConsented: true,
         }
@@ -97,9 +101,12 @@ export function SubmitResourceForm({
       formData.append("categoryId", values.categoryId);
       values.tagIds.forEach((tagId) => formData.append("tagIds", tagId));
       if (isRecordedLecture && values.youtubeUrl) formData.append("youtubeUrl", values.youtubeUrl);
+      if (!isRecordedLecture && sourceMode === "link" && values.externalUrl) {
+        formData.append("externalUrl", values.externalUrl);
+      }
       formData.append("deidentificationConfirmed", String(isCaseStudy && values.deidentificationConfirmed));
       if (!existingItem) formData.append("licenseConsented", String(values.licenseConsented));
-      if (!isRecordedLecture && file) formData.append("file", file);
+      if (!isRecordedLecture && sourceMode === "file" && file) formData.append("file", file);
 
       const res = await fetch(existingItem ? `/api/library/${existingItem.id}` : "/api/library", {
         method: existingItem ? "PATCH" : "POST",
@@ -283,28 +290,75 @@ export function SubmitResourceForm({
             )}
           />
         ) : (
-          <div className="flex flex-col gap-2">
-            <label htmlFor="resource-file" className="text-sm font-medium">
-              File
-            </label>
-            {existingItem?.attachment && !file && (
-              <a
-                href={existingItem.attachment.url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-sm text-primary hover:underline"
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={sourceMode === "file" ? "default" : "outline"}
+                onClick={() => {
+                  setSourceMode("file");
+                  form.setValue("externalUrl", null);
+                }}
               >
-                {existingItem.attachment.fileName}
-              </a>
-            )}
-            <input
-              id="resource-file"
-              type="file"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
-            />
-            {existingItem?.attachment && (
-              <p className="text-xs text-muted-foreground">Choose a new file to replace the current one.</p>
+                Upload a file
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={sourceMode === "link" ? "default" : "outline"}
+                onClick={() => {
+                  setSourceMode("link");
+                  setFile(null);
+                }}
+              >
+                Link to an external resource
+              </Button>
+            </div>
+
+            {sourceMode === "file" ? (
+              <div className="flex flex-col gap-2">
+                <label htmlFor="resource-file" className="text-sm font-medium">
+                  File
+                </label>
+                {existingItem?.attachment && !file && (
+                  <a
+                    href={existingItem.attachment.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm text-primary hover:underline"
+                  >
+                    {existingItem.attachment.fileName}
+                  </a>
+                )}
+                <input
+                  id="resource-file"
+                  type="file"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
+                />
+                {existingItem?.attachment && (
+                  <p className="text-xs text-muted-foreground">Choose a new file to replace the current one.</p>
+                )}
+              </div>
+            ) : (
+              <FormField
+                control={form.control}
+                name="externalUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>External URL</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="https://docs.google.com/document/d/…"
+                        value={field.value ?? ""}
+                        onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             )}
           </div>
         )}

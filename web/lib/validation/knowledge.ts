@@ -25,6 +25,17 @@ const knowledgeItemBaseSchema = z.object({
     .max(500)
     .refine((value) => /^https?:\/\//i.test(value), "Enter a valid URL (starting with http:// or https://)")
     .nullable(),
+  // Alternative to a file upload for article/case_study/guideline items — a
+  // link to a resource hosted elsewhere (e.g. a Google Doc). Mutually
+  // exclusive with a file, enforced in lib/library-server.ts alongside the
+  // youtubeUrl/file requirement, for the same "depends on the multipart
+  // FormData" reason noted above.
+  externalUrl: z
+    .string()
+    .trim()
+    .max(500)
+    .refine((value) => /^https?:\/\//i.test(value), "Enter a valid URL (starting with http:// or https://)")
+    .nullable(),
   deidentificationConfirmed: z.boolean(),
 });
 

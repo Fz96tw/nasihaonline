@@ -28,6 +28,7 @@ export async function POST(request: Request) {
     categoryId: formData.get("categoryId"),
     tagIds: formData.getAll("tagIds"),
     youtubeUrl: formData.get("youtubeUrl") || null,
+    externalUrl: formData.get("externalUrl") || null,
     deidentificationConfirmed: formData.get("deidentificationConfirmed") === "true",
     licenseConsented: formData.get("licenseConsented") === "true",
   });

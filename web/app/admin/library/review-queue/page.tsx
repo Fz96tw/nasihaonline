@@ -86,6 +86,16 @@ export default async function LibraryReviewQueuePage() {
                     View YouTube link
                   </a>
                 )}
+                {item.externalUrl && (
+                  <a
+                    href={item.externalUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm text-primary hover:underline"
+                  >
+                    View external link
+                  </a>
+                )}
                 {item.attachments.map((attachment) => (
                   <a
                     key={attachment.id}

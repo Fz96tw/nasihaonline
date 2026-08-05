@@ -28,6 +28,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     categoryId: formData.get("categoryId"),
     tagIds: formData.getAll("tagIds"),
     youtubeUrl: formData.get("youtubeUrl") || null,
+    externalUrl: formData.get("externalUrl") || null,
     deidentificationConfirmed: formData.get("deidentificationConfirmed") === "true",
   });
   if (!parsed.success) {
