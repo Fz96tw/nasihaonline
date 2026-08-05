@@ -187,7 +187,14 @@ export async function getFeedPage(params: {
       // those already surface as their parent Event's own feed row (with
       // forumReplyCount above), so listing them again here would be a
       // duplicate, bodiless-looking "Forum" row for the same activity.
-      where: { eventId: null, ...(before ? { createdAt: { lt: before } } : {}) },
+      // knowledgeItemId: null excludes the Library's on-demand discussion
+      // threads for the same reason — but critically, unlike the eventId
+      // exclusion, this isn't just de-duplication: this branch has no
+      // per-viewer visibility filter at all (every thread it returns is
+      // shown to every viewer unconditionally), so a restricted item's
+      // thread title/excerpt would otherwise leak to non-invitees here even
+      // though the item's own "library" feed row above is correctly scoped.
+      where: { eventId: null, knowledgeItemId: null, ...(before ? { createdAt: { lt: before } } : {}) },
       select: {
         id: true,
         title: true,
