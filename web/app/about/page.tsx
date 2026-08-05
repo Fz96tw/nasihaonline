@@ -93,11 +93,13 @@ export default function AboutPage() {
               experts committed to sharing what they know.
             </p>
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-6">
-              <p className="mb-2 text-lg font-bold text-primary">Dedicated To</p>
-              <p className="text-lg italic leading-[1.7] text-foreground/80">
-                NASIHA — Dedicated to Narjis and Syed Iftikhar Hussain Abidi, who guided us toward a
-                life of learning.
+              <p className="mb-2 text-sm font-bold uppercase tracking-[.1em] text-primary">
+                Founder&rsquo;s Message
               </p>
+              <blockquote className="border-l-[3px] border-primary pl-5 text-[1.35rem] italic leading-[1.8] text-foreground/80">
+                &ldquo;NASIHA is dedicated to Narjis and Syed Iftikhar Hussain Abidi, who guided me
+                toward a life of learning.&rdquo;
+              </blockquote>
             </div>
           </Reveal>
         </div>

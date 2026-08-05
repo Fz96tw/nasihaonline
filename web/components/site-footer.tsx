@@ -27,10 +27,6 @@ export function SiteFooter() {
             A non-profit community dedicated to free, reciprocal knowledge exchange
             among learners and teachers worldwide.
           </p>
-          <p className="mt-3 max-w-[300px] text-sm leading-[1.7]">
-            NASIHA — Dedicated to Narjis and Syed Iftikhar Hussain Abidi, who guided
-            us toward a life of learning.
-          </p>
         </div>
         <div>
           <p className="mb-4 text-xs font-bold uppercase tracking-[.08em] text-white/50">
