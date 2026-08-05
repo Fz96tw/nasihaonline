@@ -54,7 +54,7 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
   const roster = isRestricted ? await getKnowledgeItemRoster(item.id) : null;
 
   const thread = item.forumThreadId
-    ? await getForumThreadDetail(LIBRARY_FORUM_SLUG, item.forumThreadId, user.id)
+    ? await getForumThreadDetail(LIBRARY_FORUM_SLUG, item.forumThreadId, user.id, isPrivileged)
     : null;
   const mentionableMembers = thread ? await getMentionableMembers() : [];
 

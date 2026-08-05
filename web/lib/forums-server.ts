@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { EventVisibility, NotificationType } from "@/lib/generated/prisma/enums";
+import { EventVisibility, KnowledgeVisibility, NotificationType } from "@/lib/generated/prisma/enums";
 import { createNotification } from "@/lib/notifications-server";
 import { recordAdminAction } from "@/lib/audit-server";
 import { searchForumDocuments } from "@/lib/meilisearch";
@@ -94,6 +94,50 @@ function isEventThreadVisible(event: EventThreadAccess, viewerId: string | undef
   return event.hostId === viewerId || event.invitees.some((invitee) => invitee.userId === viewerId);
 }
 
+// Same idea as EventThreadAccess/isEventThreadVisible above, for a
+// restricted Knowledge Library item's on-demand discussion thread
+// (§4.9) — mirrors canViewKnowledgeItem in library-server.ts (Authorization
+// re-checks, Objective 08): public, the contributor, an invitee, or
+// Steward/admin. Every read path that can surface a thread (browse list,
+// search, direct URL, a member's profile, a reply/view POST) has to run its
+// result through this — a thread with no linked item (every non-Library
+// forum, plus a Library thread's parent item being public) is always
+// visible; only a `restricted`-visibility item's thread is gated, and a
+// removed invitee loses access exactly when they lose it on the item's own
+// detail page — Steward/admin retain theirs regardless, same blanket
+// moderation visibility as every other Library read path.
+type KnowledgeItemThreadAccess = {
+  visibility: KnowledgeVisibility;
+  contributorId: string;
+  invitees: { userId: string }[];
+} | null;
+
+const KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT = {
+  select: { visibility: true, contributorId: true, invitees: { select: { userId: true } } },
+} as const;
+
+function isKnowledgeItemThreadVisible(
+  item: KnowledgeItemThreadAccess,
+  viewerId: string | undefined,
+  isPrivileged: boolean,
+): boolean {
+  if (!item || item.visibility !== KnowledgeVisibility.restricted) return true;
+  if (isPrivileged) return true;
+  if (!viewerId) return false;
+  return item.contributorId === viewerId || item.invitees.some((invitee) => invitee.userId === viewerId);
+}
+
+function isThreadVisible(
+  thread: { event: EventThreadAccess; knowledgeItem: KnowledgeItemThreadAccess },
+  viewerId: string | undefined,
+  isPrivileged: boolean,
+): boolean {
+  return (
+    isEventThreadVisible(thread.event, viewerId) &&
+    isKnowledgeItemThreadVisible(thread.knowledgeItem, viewerId, isPrivileged)
+  );
+}
+
 const THREAD_LIST_SELECT = {
   id: true,
   title: true,
@@ -103,6 +147,7 @@ const THREAD_LIST_SELECT = {
   posts: { select: { createdAt: true }, orderBy: { createdAt: "desc" } as const, take: 1 },
   _count: { select: { posts: true, views: true } },
   event: EVENT_THREAD_ACCESS_SELECT,
+  knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
 } as const;
 
 function toThreadListItem(thread: {
@@ -134,11 +179,14 @@ function toThreadListItem(thread: {
  * getPublishedKnowledgeItems — completes PRD §10's section-scoped search
  * across all three Phase 5 content domains. `userId` is optional so a
  * signed-out visitor can't reach this (page-level redirect handles that)
- * but the function itself doesn't require it.
+ * but the function itself doesn't require it. `isPrivileged` (Steward/admin)
+ * mirrors the blanket bypass every other Library read path gives them —
+ * defaults false for a signed-out visitor.
  */
 export async function getForumBySlug(
   slug: string,
   userId?: string,
+  isPrivileged = false,
   q?: string,
 ): Promise<{ forum: ForumCategory; threads: ForumThreadListItem[]; isFollowing: boolean } | null> {
   const forum = await db.forum.findUnique({
@@ -167,7 +215,7 @@ export async function getForumBySlug(
       where: { id: { in: hits.map((hit) => hit.id) } },
       select: THREAD_LIST_SELECT,
     });
-    const visibleThreads = threads.filter((thread) => isEventThreadVisible(thread.event, userId));
+    const visibleThreads = threads.filter((thread) => isThreadVisible(thread, userId, isPrivileged));
     const byId = new Map(visibleThreads.map((thread) => [thread.id, thread]));
     return {
       forum: forumCategory,
@@ -187,7 +235,7 @@ export async function getForumBySlug(
     select: THREAD_LIST_SELECT,
   });
   const items = threads
-    .filter((thread) => isEventThreadVisible(thread.event, userId))
+    .filter((thread) => isThreadVisible(thread, userId, isPrivileged))
     .map(toThreadListItem)
     .sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
@@ -203,14 +251,16 @@ export async function getForumBySlug(
  * as getPostComments. Returns null if the thread doesn't exist, doesn't
  * belong to the forum the URL claims (so /forums/general/[id-from-another-
  * forum] 404s rather than silently rendering under the wrong category), or
- * belongs to a restricted event `viewerId` isn't the host or an invitee of
- * — same 404-not-403 privacy shape, so a guessed URL can't even confirm the
- * thread exists.
+ * belongs to a restricted event `viewerId` isn't the host or an invitee of,
+ * or a restricted Library item `viewerId` isn't the contributor, an
+ * invitee, or Steward/admin of — same 404-not-403 privacy shape, so a
+ * guessed URL can't even confirm the thread exists.
  */
 export async function getForumThreadDetail(
   forumSlug: string,
   threadId: string,
   viewerId: string | undefined,
+  isPrivileged = false,
 ): Promise<ForumThreadDetail | null> {
   const thread = await db.forumThread.findUnique({
     where: { id: threadId },
@@ -223,6 +273,7 @@ export async function getForumThreadDetail(
       author: { select: { name: true } },
       forum: { select: { id: true, name: true, slug: true } },
       event: EVENT_THREAD_ACCESS_SELECT,
+      knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
       posts: {
         select: {
           id: true,
@@ -240,7 +291,7 @@ export async function getForumThreadDetail(
     },
   });
   if (!thread || thread.forum.slug !== forumSlug) return null;
-  if (!isEventThreadVisible(thread.event, viewerId)) return null;
+  if (!isThreadVisible(thread, viewerId, isPrivileged)) return null;
 
   const authorProfiles = await getDirectoryMembersByIds(Array.from(new Set(thread.posts.map((post) => post.authorId))));
 
@@ -293,18 +344,28 @@ export async function getForumThreadDetail(
  * so each thread's row naturally keeps that member's most recent post time
  * in it (the first occurrence per threadId in createdAt-desc order). `viewerId`
  * (the profile visitor, distinct from `userId` the profile belongs to) hides
- * any thread tied to a restricted event neither of them can see — a profile
- * page is otherwise a side channel for the same leak getForumThreadDetail
- * blocks directly.
+ * any thread tied to a restricted event or Library item neither of them can
+ * see (`isPrivileged` reflects the viewer's own Steward/admin status) — a
+ * profile page is otherwise a side channel for the same leak
+ * getForumThreadDetail blocks directly.
  */
-export async function getMemberForumThreads(userId: string, viewerId: string): Promise<MemberForumThread[]> {
+export async function getMemberForumThreads(
+  userId: string,
+  viewerId: string,
+  isPrivileged = false,
+): Promise<MemberForumThread[]> {
   const posts = await db.forumPost.findMany({
     where: { authorId: userId },
     select: {
       threadId: true,
       createdAt: true,
       thread: {
-        select: { title: true, forum: { select: { slug: true, name: true } }, event: EVENT_THREAD_ACCESS_SELECT },
+        select: {
+          title: true,
+          forum: { select: { slug: true, name: true } },
+          event: EVENT_THREAD_ACCESS_SELECT,
+          knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
+        },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -315,7 +376,7 @@ export async function getMemberForumThreads(userId: string, viewerId: string): P
   for (const post of posts) {
     if (seenThreadIds.has(post.threadId)) continue;
     seenThreadIds.add(post.threadId);
-    if (!isEventThreadVisible(post.thread.event, viewerId)) continue;
+    if (!isThreadVisible(post.thread, viewerId, isPrivileged)) continue;
     threads.push({
       id: post.threadId,
       title: post.thread.title,
@@ -338,17 +399,17 @@ export async function getThreadViewCount(threadId: string): Promise<number> {
  * pages redirect a signed-out visitor to /sign-in before this can ever
  * fire), so this dedupes on the `[threadId, userId]` unique constraint
  * directly rather than going through an opaque viewer key. Also enforces
- * the same restricted-event visibility as getForumThreadDetail — a direct
- * POST with a guessed threadId shouldn't be able to confirm a restricted
- * thread exists (or inflate its view count) any more than loading the page
- * itself could.
+ * the same restricted-event/restricted-Library-item visibility as
+ * getForumThreadDetail — a direct POST with a guessed threadId shouldn't be
+ * able to confirm a restricted thread exists (or inflate its view count)
+ * any more than loading the page itself could.
  */
-export async function recordThreadView(threadId: string, userId: string): Promise<number> {
+export async function recordThreadView(threadId: string, userId: string, isPrivileged = false): Promise<number> {
   const thread = await db.forumThread.findUnique({
     where: { id: threadId },
-    select: { id: true, event: EVENT_THREAD_ACCESS_SELECT },
+    select: { id: true, event: EVENT_THREAD_ACCESS_SELECT, knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT },
   });
-  if (!thread || !isEventThreadVisible(thread.event, userId)) throw new ForumError(404, "Thread not found.");
+  if (!thread || !isThreadVisible(thread, userId, isPrivileged)) throw new ForumError(404, "Thread not found.");
 
   await db.threadView.createMany({ data: { threadId, userId }, skipDuplicates: true });
   return getThreadViewCount(threadId);
@@ -404,7 +465,9 @@ export async function createForumThread(
  * future digest instead, §4.10 Phase 6). Same de-identification gate as
  * createForumThread, keyed off the parent thread's forum. Also 404s (rather
  * than 403s) a reply to a restricted event's thread from a non-host,
- * non-invitee, same privacy shape as getForumThreadDetail.
+ * non-invitee, or to a restricted Library item's thread from a non-
+ * contributor, non-invitee, non-Steward/admin — same privacy shape as
+ * getForumThreadDetail.
  *
  * Also matches `@Full Name` tags (§4.13) against Directory-eligible members
  * and sends each a distinct `mention` notification instead — a tagged
@@ -414,6 +477,7 @@ export async function createForumPost(
   threadId: string,
   authorId: string,
   input: { body: string; parentId: string | null; deidentificationConfirmed: boolean },
+  isPrivileged = false,
 ): Promise<{ id: string; createdAt: string }> {
   const thread = await db.forumThread.findUnique({
     where: { id: threadId },
@@ -424,10 +488,11 @@ export async function createForumPost(
       authorId: true,
       forum: { select: { slug: true } },
       event: EVENT_THREAD_ACCESS_SELECT,
+      knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
     },
   });
   if (!thread) throw new ForumError(404, "Thread not found.");
-  if (!isEventThreadVisible(thread.event, authorId)) throw new ForumError(404, "Thread not found.");
+  if (!isThreadVisible(thread, authorId, isPrivileged)) throw new ForumError(404, "Thread not found.");
 
   if (input.parentId) {
     const parent = await db.forumPost.findUnique({ where: { id: input.parentId }, select: { threadId: true } });

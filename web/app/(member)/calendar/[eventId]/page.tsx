@@ -68,8 +68,16 @@ export default async function EventDetailPage({ params }: { params: { eventId: s
     canEdit && isRestricted && isPast ? getEventAttendanceChecklist(event.id) : Promise.resolve(null),
   ]);
 
+  // Inert for an Events-forum thread specifically (isKnowledgeItemThreadVisible
+  // short-circuits true when there's no linked KnowledgeItem), but passed
+  // for consistency with every other getForumThreadDetail call site.
   const thread = event.forumThreadId
-    ? await getForumThreadDetail(EVENTS_FORUM_SLUG, event.forumThreadId, user.id)
+    ? await getForumThreadDetail(
+        EVENTS_FORUM_SLUG,
+        event.forumThreadId,
+        user.id,
+        user.role === Role.admin || user.role === Role.moderator,
+      )
     : null;
   const mentionableMembers = thread ? await getMentionableMembers() : [];
 
