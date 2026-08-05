@@ -38,7 +38,7 @@ export function HeroSection() {
           <em className="text-blue-300 not-italic">share what we know</em>.
         </h1>
         <p className="mx-auto max-w-[640px] text-[1.25rem] leading-[1.7] text-primary-foreground [text-shadow:0_1px_10px_rgba(0,10,40,.6)]">
-          NASIHA is a global community where members are dedicated to free, reciprocal
+          NASIHA is a community where members are dedicated to free, reciprocal
           knowledge exchange — because every person who learns becomes a person who can
           teach.
         </p>
