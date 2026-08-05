@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { BackLink } from "@/components/back-link";
 import { getSessionUser } from "@/lib/auth";
 import { getAdmissionPhase, getWelcomeAnnouncementSettings } from "@/lib/settings";
 import { getFlaggedContentCount } from "@/lib/moderation-server";
@@ -194,7 +193,9 @@ export default async function AdminPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-8 p-8">
       <div>
-        <BackLink fallbackHref="/dashboard" />
+        <Link href="/dashboard" className="text-sm text-muted-foreground hover:underline">
+          ← Back to Dashboard
+        </Link>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">Admin</h1>
         <p className="text-muted-foreground">Signed in as {user.email} (admin)</p>
       </div>
