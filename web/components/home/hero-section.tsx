@@ -1,38 +1,30 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { CountUp } from "@/components/home/count-up";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
-import { db } from "@/lib/db";
-import { LedgerStatus, LedgerTransactionType, Tier } from "@/lib/generated/prisma/enums";
+import { HeroStats } from "@/components/home/hero-stats";
+import { StatItem } from "@/components/home/stat-item";
+import { Tier } from "@/lib/generated/prisma/enums";
 
 const MEMBERSHIP_TIER_COUNT = Object.keys(Tier).length;
 
-const STATIC_STATS: { val: number | string; lbl: string }[] = [
-  { val: MEMBERSHIP_TIER_COUNT, lbl: "Membership Tiers" },
-  { val: "Free", lbl: "Always & Forever" },
-];
+function HeroStatsSkeleton() {
+  return (
+    <>
+      <div>
+        <Skeleton className="mx-auto h-9 w-14 bg-primary-foreground/20" />
+        <Skeleton className="mx-auto mt-2 h-3 w-16 bg-primary-foreground/20" />
+      </div>
+      <div>
+        <Skeleton className="mx-auto h-9 w-20 bg-primary-foreground/20" />
+        <Skeleton className="mx-auto mt-2 h-3 w-32 bg-primary-foreground/20" />
+      </div>
+    </>
+  );
+}
 
-export async function HeroSection() {
-  const [memberCount, confirmedHoursEarned] = await Promise.all([
-    db.user.count(),
-    db.contributionLedger.aggregate({
-      where: {
-        status: LedgerStatus.confirmed,
-        OR: [
-          { type: LedgerTransactionType.earned },
-          { type: LedgerTransactionType.adjusted, hours: { gt: 0 } },
-        ],
-      },
-      _sum: { hours: true },
-    }),
-  ]);
-  const totalKnowledgeHours = Math.round(confirmedHoursEarned._sum.hours?.toNumber() ?? 0);
-  const stats = [
-    { val: memberCount, lbl: "Members" },
-    { val: totalKnowledgeHours, lbl: "Knowledge Hours Shared" },
-    ...STATIC_STATS,
-  ];
-
+export function HeroSection() {
   return (
     <section className="relative overflow-hidden px-8 pb-12 pt-14 text-center text-primary-foreground">
       <ParallaxHeroImage src="/images/lighthouse.jpg" priority />
@@ -68,16 +60,11 @@ export async function HeroSection() {
           </Button>
         </div>
         <div className="mt-14 flex flex-wrap justify-center gap-12 border-t border-primary-foreground/20 pt-8">
-          {stats.map((stat) => (
-            <div key={stat.lbl}>
-              <div className="text-[2.25rem] font-extrabold text-blue-300 [text-shadow:0_2px_12px_rgba(0,10,40,.6)]">
-                {typeof stat.val === "number" ? <CountUp value={stat.val} /> : stat.val}
-              </div>
-              <div className="text-sm font-semibold uppercase tracking-[.06em] text-primary-foreground [text-shadow:0_1px_8px_rgba(0,10,40,.55)]">
-                {stat.lbl}
-              </div>
-            </div>
-          ))}
+          <Suspense fallback={<HeroStatsSkeleton />}>
+            <HeroStats />
+          </Suspense>
+          <StatItem val={MEMBERSHIP_TIER_COUNT} lbl="Membership Tiers" />
+          <StatItem val="Free" lbl="Always & Forever" />
         </div>
       </div>
     </section>

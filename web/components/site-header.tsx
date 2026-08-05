@@ -9,9 +9,28 @@ import { AdminReviewIcon } from "@/components/admin/admin-review-icon";
 import { UserMenu } from "@/components/user-menu";
 import { MobileNav } from "@/components/mobile-nav";
 import { ScrollHeader } from "@/components/scroll-header";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getSessionUser } from "@/lib/auth";
 import { getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
 import { cn } from "@/lib/utils";
+
+// Placeholder shown while SiteHeader resolves the session/profile lookup —
+// keeps the layout's Suspense boundary from blocking every page's initial
+// HTML on that lookup. State-agnostic (doesn't guess signed-in vs guest).
+export function SiteHeaderSkeleton() {
+  return (
+    <ScrollHeader>
+      <div className="flex flex-shrink-0 items-center gap-[.65rem]">
+        <Skeleton className="h-9 w-9 rounded-full" />
+        <Skeleton className="h-5 w-24" />
+      </div>
+      <div className="ml-auto flex items-center gap-2 sm:gap-3">
+        <Skeleton className="h-9 w-20 rounded-md" />
+        <Skeleton className="h-9 w-28 rounded-md" />
+      </div>
+    </ScrollHeader>
+  );
+}
 
 export async function SiteHeader() {
   const user = await getSessionUser();
