@@ -19,9 +19,9 @@ export const AVAILABILITY_LABELS: Record<ApplicationAvailability, string> = {
 };
 
 export const HOW_HEARD_LABELS: Record<HowHeardSource, string> = {
-  [HowHeardSource.online_search]: "Online search",
-  [HowHeardSource.colleague]: "A colleague",
-  [HowHeardSource.member]: "A NASIHA member",
+  [HowHeardSource.online_search]: "From online search",
+  [HowHeardSource.colleague]: "From a colleague",
+  [HowHeardSource.member]: "From another NASIHA member",
   [HowHeardSource.other]: "Other",
 };
 
