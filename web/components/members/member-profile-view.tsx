@@ -7,6 +7,7 @@ import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT, type DirectoryMember } from "@/lib/members";
 import { MemberCardActions } from "@/components/members/member-card-actions";
 import { AVAILABILITY_LABELS } from "@/lib/validation/application";
+import { getProfileLinkLabel } from "@/lib/profile-link";
 
 /**
  * /members/[memberId] (§4.5) — the full profile section of the page, same
@@ -42,7 +43,7 @@ export function MemberProfileView({
                 rel="noopener noreferrer"
                 className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
               >
-                LinkedIn <ExternalLink className="size-3" />
+                {getProfileLinkLabel(member.linkedinUrl)} <ExternalLink className="size-3" />
               </a>
             )}
           </div>

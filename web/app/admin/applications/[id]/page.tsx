@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { STATUS_LABELS, STATUS_BADGE_VARIANT } from "@/lib/applications";
 import { TIER_LABELS } from "@/lib/validation/application-review";
 import { HOW_HEARD_LABELS } from "@/lib/validation/application";
+import { getProfileLinkLabel } from "@/lib/profile-link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminApplicationReviewForm } from "@/components/admin-application-review-form";
@@ -73,7 +74,7 @@ export default async function AdminApplicationDetailPage({
             <Field label="Email" value={application.email} />
             <Field label="Professional title / Specialty" value={application.professionalTitle} />
             <Field
-              label="LinkedIn"
+              label={application.linkedinUrl ? getProfileLinkLabel(application.linkedinUrl) : "LinkedIn / Website"}
               value={
                 application.linkedinUrl ? (
                   <a
