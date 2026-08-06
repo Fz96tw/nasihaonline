@@ -115,7 +115,7 @@ export async function SiteHeader() {
           <Link href="/donate">Support Us</Link>
         </Button>
       </div>
-      <div className="ml-auto flex items-center gap-2 sm:gap-3">
+      <div className="ml-auto flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] sm:gap-3 [&::-webkit-scrollbar]:hidden">
         {user ? (
           <>
             <div className="hidden items-center gap-2 lg:flex">
@@ -132,14 +132,14 @@ export async function SiteHeader() {
                 </Link>
               </Button>
             </div>
-            <Button variant="ghost" size="icon" className="lg:hidden" aria-label="What's New" asChild>
+            <Button variant="ghost" size="icon" className="h-9 w-9 lg:hidden" aria-label="What's New" asChild>
               <Link href="/whats-new">
-                <Rss className="h-[18px] w-[18px]" />
+                <Rss className="h-4 w-4" />
               </Link>
             </Button>
-            <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Dashboard" asChild>
+            <Button variant="ghost" size="icon" className="h-9 w-9 lg:hidden" aria-label="Dashboard" asChild>
               <Link href="/dashboard">
-                <LayoutDashboard className="h-[18px] w-[18px]" />
+                <LayoutDashboard className="h-4 w-4" />
               </Link>
             </Button>
             {user.role === "admin" && <AdminReviewIcon />}

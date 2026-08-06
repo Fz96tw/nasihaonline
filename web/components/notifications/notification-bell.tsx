@@ -117,8 +117,8 @@ export function NotificationBell() {
   return (
     <DropdownMenu onOpenChange={(open) => open && refresh()}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
-          <Bell className="h-[18px] w-[18px]" />
+        <Button variant="ghost" size="icon" className="relative h-9 w-9 lg:h-10 lg:w-10" aria-label="Notifications">
+          <Bell className="h-4 w-4 lg:h-[18px] lg:w-[18px]" />
           {unreadCount > 0 ? (
             <span
               className={cn(

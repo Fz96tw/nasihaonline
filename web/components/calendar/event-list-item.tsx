@@ -41,7 +41,7 @@ export function EventListItem({
         {event.heroImageUrl ? (
           <Link
             href={`/calendar/${event.id}`}
-            className="block aspect-video w-full overflow-hidden rounded-md bg-muted sm:aspect-auto sm:h-16 sm:w-24 sm:flex-shrink-0"
+            className="block aspect-video w-full overflow-hidden rounded-md bg-muted sm:aspect-auto sm:h-[9rem] sm:w-64 sm:flex-shrink-0"
           >
             {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
             <img src={event.heroImageUrl} alt="" className="h-full w-full object-cover" />

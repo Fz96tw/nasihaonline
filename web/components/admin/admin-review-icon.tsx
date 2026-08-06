@@ -19,7 +19,9 @@ async function fetchPendingCount(): Promise<number> {
  * Nav-bar shield icon for admins: badges the total pending-review count
  * across /admin sections (applications, content, ledger, library, conduct,
  * privacy — see lib/admin-review-server.ts) and links to /admin. Polls like
- * NotificationBell rather than sharing a socket/subscription.
+ * NotificationBell rather than sharing a socket/subscription. Renders nothing
+ * when the count is zero, so it only ever occupies nav space when there's
+ * something to act on.
  */
 export function AdminReviewIcon() {
   const [count, setCount] = useState(0);
@@ -38,19 +40,25 @@ export function AdminReviewIcon() {
     return () => clearInterval(interval);
   }, [refresh]);
 
+  if (count === 0) return null;
+
   return (
-    <Button variant="ghost" size="icon" className="relative" aria-label="Pending admin review items" asChild>
+    <Button
+      variant="ghost"
+      size="icon"
+      className="relative h-9 w-9 lg:h-10 lg:w-10"
+      aria-label="Pending admin review items"
+      asChild
+    >
       <Link href="/admin">
-        <Shield className="h-[18px] w-[18px]" />
-        {count > 0 ? (
-          <span
-            className={cn(
-              "absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-destructive-foreground",
-            )}
-          >
-            {count > 9 ? "9+" : count}
-          </span>
-        ) : null}
+        <Shield className="h-4 w-4 lg:h-[18px] lg:w-[18px]" />
+        <span
+          className={cn(
+            "absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-destructive-foreground",
+          )}
+        >
+          {count > 9 ? "9+" : count}
+        </span>
       </Link>
     </Button>
   );

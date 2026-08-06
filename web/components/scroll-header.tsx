@@ -21,7 +21,7 @@ export function ScrollHeader({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <header className="sticky top-0 z-50 flex h-[var(--header-height)] items-center gap-6 border-b bg-background px-4 shadow-sm transition-[height] duration-300 ease-in-out lg:px-8">
+    <header className="sticky top-0 z-50 flex h-[var(--header-height)] items-center gap-3 border-b bg-background px-4 shadow-sm transition-[height] duration-300 ease-in-out lg:gap-6 lg:px-8">
       {children}
     </header>
   );

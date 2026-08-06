@@ -68,8 +68,8 @@ export function MobileNav({
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open menu">
-          <Menu className="h-5 w-5" />
+        <Button variant="ghost" size="icon" className="h-9 w-9 lg:hidden" aria-label="Open menu">
+          <Menu className="h-4 w-4" />
         </Button>
       </SheetTrigger>
       <SheetContent side="left" className="flex w-3/4 flex-col gap-1 overflow-y-auto sm:max-w-xs">
