@@ -644,7 +644,7 @@ The plan below regroups work so each phase ships a coherent, demonstrable slice 
 ## 11. Open Questions / Risks
 
 1. **Admin review states:** should there be an explicit `needs_more_info` state between `under_review` and `approved/rejected`? The current three-state workflow may be too coarse for real review conversations.
-2. **Event creation permission:** which tiers can submit events — Active only, or Active + Associate? Not specified in source docs.
+2. ~~**Event creation permission:** which tiers can submit events — Active only, or Active + Associate? Not specified in source docs.~~ **Resolved:** Active, Associate, and Student can all submit events (§4.6); Friend tier cannot.
 3. ~~**Inbox access by tier:** should Friend-tier members be reachable via the Directory's Send Message / Request Meeting actions?~~ **Resolved:** no — Friend tier is excluded from the Member Directory entirely (§4.5: not listed, searched, or filterable), and Friend-tier accounts can neither send nor receive Inbox items (§4.7). Directory and Inbox are Friend tier's only feature exclusions; every other domain (Dashboard, Library, Blog, Forums, Contributions, Calendar) is full member access (§2.2).
 4. **Re-application policy:** can a rejected applicant reapply, and after what cooldown?
 5. **Tier promotion:** system implies Associate → Active progression ("growing toward Active status") but no promotion trigger/workflow is specified — manual admin action, automatic threshold on lifetime hours, or hybrid?

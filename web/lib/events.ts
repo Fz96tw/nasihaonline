@@ -4,11 +4,9 @@
 import { EventType, EventVisibility, Tier } from "@/lib/generated/prisma/enums";
 
 // §11 open question #2 ("which tiers can submit events — Active only, or
-// Active + Associate? Not specified") — defaulted to Active tier per this
-// objective's build instruction. Active is already §2.2's top tier (nothing
-// ranks above it), so "Active and above" resolves to just this one tier.
-// Revisit if the org confirms Associate should also be able to submit.
-export const EVENT_SUBMISSION_TIERS: Tier[] = [Tier.active];
+// Active + Associate? Not specified") — resolved: Active, Associate, and
+// Student can all submit events. Friend tier is excluded.
+export const EVENT_SUBMISSION_TIERS: Tier[] = [Tier.active, Tier.associate, Tier.student];
 
 export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   [EventType.webinar]: "Webinar",
