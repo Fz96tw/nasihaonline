@@ -142,7 +142,11 @@ export async function SiteHeader() {
                 <LayoutDashboard className="h-4 w-4" />
               </Link>
             </Button>
-            {user.role === "admin" && <AdminReviewIcon />}
+            {user.role === "admin" && (
+              <div className="hidden lg:block">
+                <AdminReviewIcon />
+              </div>
+            )}
             <NotificationBell />
             <UserMenu name={user.name ?? user.email} avatarUrl={profile?.avatarUrl ?? null} />
           </>
