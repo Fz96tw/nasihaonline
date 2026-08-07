@@ -32,12 +32,14 @@ function MemberPickerButton({
   variant,
   members,
   onSelect,
+  hideLabelOnMobile,
 }: {
   label: string;
   icon: typeof MessageSquare;
   variant: ButtonProps["variant"];
   members: DirectoryMember[];
   onSelect: (recipient: Recipient) => void;
+  hideLabelOnMobile?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -46,7 +48,7 @@ function MemberPickerButton({
       <PopoverTrigger asChild>
         <Button variant={variant} size="sm" className="gap-1.5">
           <Icon className="h-4 w-4" />
-          {label}
+          {hideLabelOnMobile ? <span className="hidden sm:inline">{label}</span> : label}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-0" align="end">
@@ -100,13 +102,15 @@ export function NewConversationActions({ currentUserId }: { currentUserId: strin
         variant="default"
         members={options}
         onSelect={setMessageRecipient}
+        hideLabelOnMobile
       />
       <MemberPickerButton
-        label="Request Meeting"
+        label="1-on-1 Meeting"
         icon={CalendarPlus}
         variant="secondary"
         members={options}
         onSelect={setMeetingRecipient}
+        hideLabelOnMobile
       />
 
       {messageRecipient && (
