@@ -73,7 +73,21 @@ From the repo root:
 docker compose up
 ```
 
-This starts the Next.js app, PostgreSQL, Redis, MinIO, Meilisearch, and the search-index worker together. On startup the app container generates the Prisma client and applies any pending migrations automatically. Once ready, open [http://localhost:3010](http://localhost:3010) (the app container's port 3000 is published as 3010 on the host).
+This starts the Next.js app, PostgreSQL, Redis, MinIO, Meilisearch, and the search-index worker together. The `app`/`worker` images are self-contained — `prisma generate` and `next build` run once at `docker build` time (baked into the image), not on every container start — so startup is just `prisma migrate deploy` (applying any pending migrations against the live DB) followed by `next start`. Once ready, open [http://localhost:3010](http://localhost:3010) (the app container's port 3000 is published as 3010 on the host).
+
+### Redeploying after a code change
+
+The `app`/`worker` containers do **not** bind-mount `./web` — their filesystem is baked into the image at build time. `docker compose restart app` (or a container crash/restart) just relaunches the *existing* image; it won't pick up new code. After pulling or committing changes, rebuild and recreate:
+
+```bash
+docker compose up -d --build app worker
+```
+
+`NEXT_PUBLIC_*` vars and `DATABASE_URL` are passed in as Docker build args (`docker-compose.yml`'s `build.args`, sourced from the root `.env`) so they're correctly inlined into the client bundle at build time. If you add a new `NEXT_PUBLIC_*` env var, add it to both the `ARG`/`ENV` list in `web/Dockerfile` and `build.args` in `docker-compose.yml`.
+
+Because the build no longer runs inside an already-running, fully-configured container, any route that needs a live DB/Redis connection has to be marked `export const dynamic = "force-dynamic";` (see `app/api/team/route.ts`, `app/api/health/route.ts`) — otherwise Next.js tries to statically prerender it during `docker build`, before Postgres/Redis are reachable, and the build fails outright (or, worse, a handler that swallows its own errors — like the health check — would silently freeze a stale response into the image instead of failing loudly).
+
+One side effect worth knowing: it's now safe to run `npm run dev` locally in `web/` alongside these containers. Before this change, the container's `.next` build output was bind-mounted from the host, so a local dev server writing into the same directory could corrupt the live container's build — that's no longer possible.
 
 ## Getting Started (local, without Docker)
 
