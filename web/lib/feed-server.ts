@@ -310,7 +310,10 @@ export async function getFeedPage(params: {
       href: withFeedRef(`/forums/${thread.forum.slug}/${thread.id}`),
       timestamp: thread.createdAt.toISOString(),
       author: authorOf(thread.author),
-      imageUrl: null,
+      // Forum threads have no per-thread hero image (no upload UI, no
+      // schema column) — every thread shows the same static default so the
+      // feed row still gets a thumbnail (see FeedRow's forum_thread layout).
+      imageUrl: "/images/forum-thread.jpg",
       stats: { views: thread._count.views, comments: thread._count.posts - 1 },
     })),
     ...announcements.map((announcement): FeedItem => ({
