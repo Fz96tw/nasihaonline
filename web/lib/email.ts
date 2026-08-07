@@ -466,3 +466,32 @@ export async function sendContactMessageReplyEmail(to: string, originalSubject: 
     text: `${body}${footer}`,
   });
 }
+
+/**
+ * Fires whenever createMeetingCalendarEvent's Google Calendar API call fails
+ * for an already-configured integration (see lib/google-calendar.ts) —
+ * catches a dead/expired GOOGLE_CALENDAR_REFRESH_TOKEN (invalid_grant) within
+ * minutes instead of only being discovered when a member notices a missing
+ * Meet link days later, as happened before this alert existed. One email to
+ * every admin rather than a per-admin loop — the recipient list is small and
+ * internal, so seeing each other in `to` is expected. Best-effort like every
+ * other function here: the caller already treats the underlying Google
+ * failure as best-effort, so this alert must not throw on top of it.
+ */
+export async function sendCalendarIntegrationAlertEmail(
+  admins: { email: string; name: string | null }[],
+  details: { topic: string; errorMessage: string },
+) {
+  if (!resend || admins.length === 0) return;
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: admins.map((admin) => admin.email),
+      subject: "[NASIHA] URGENT — Admin action required: Google Meet link generation failed",
+      text: `Auto-generating a Google Meet link failed for "${details.topic}".\n\nError: ${details.errorMessage}\n\nThis usually means GOOGLE_CALENDAR_REFRESH_TOKEN has expired or been revoked and needs to be re-issued (see web/scripts/get-google-refresh-token.ts). The event/meeting itself was still created successfully, just without a Meet link.`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send calendar integration alert email", error);
+  }
+}

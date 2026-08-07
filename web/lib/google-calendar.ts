@@ -1,6 +1,9 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { google } from "googleapis";
+import { db } from "@/lib/db";
+import { Role } from "@/lib/generated/prisma/enums";
+import { sendCalendarIntegrationAlertEmail } from "@/lib/email";
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -22,6 +25,26 @@ function getOAuthClient() {
   const client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET);
   client.setCredentials({ refresh_token: REFRESH_TOKEN });
   return client;
+}
+
+/**
+ * Surfaces a createMeetingCalendarEvent failure to every admin within
+ * minutes instead of it only being discovered when a member notices a
+ * missing Meet link days later (see the "Future is here convo" incident,
+ * 2026-08-07, caused by an expired GOOGLE_CALENDAR_REFRESH_TOKEN). Not
+ * called from the `!auth`/unconfigured branch below — that's an expected,
+ * often-permanent state in dev/staging environments, not a "something that
+ * used to work just broke" signal worth paging admins over. Best-effort on
+ * top of an already-best-effort caller: this must never throw either.
+ */
+async function notifyAdminsOfMeetLinkFailure(topic: string, error: unknown): Promise<void> {
+  try {
+    const admins = await db.user.findMany({ where: { role: Role.admin }, select: { email: true, name: true } });
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    await sendCalendarIntegrationAlertEmail(admins, { topic, errorMessage });
+  } catch (alertError) {
+    console.error("[google-calendar] Failed to notify admins of Meet link failure", alertError);
+  }
 }
 
 export type CreatedMeetingEvent = { meetingUrl: string | null; googleEventId: string | null };
@@ -81,6 +104,7 @@ export async function createMeetingCalendarEvent(input: {
     };
   } catch (error) {
     console.error("[google-calendar] Failed to create meeting calendar event", error);
+    await notifyAdminsOfMeetLinkFailure(input.topic, error);
     return { meetingUrl: null, googleEventId: null };
   }
 }
