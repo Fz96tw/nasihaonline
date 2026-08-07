@@ -54,7 +54,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: { r
         <div className="flex justify-end gap-2">
           <Button asChild variant={mine ? "secondary" : "outline"}>
             <Link href={mineHref} scroll={false}>
-              Mine
+              My Events
             </Link>
           </Button>
           {canSubmitEvent && (

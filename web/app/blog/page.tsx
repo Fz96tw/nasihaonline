@@ -116,7 +116,7 @@ export default async function BlogPage({
         <div className="relative mx-auto max-w-[580px]">
           <h1 className="mb-3 text-[2.5rem] font-extrabold leading-[1.1] tracking-[-.02em] [text-shadow:0_2px_16px_rgba(0,10,40,.55)] md:text-[3.5rem]">Blogs</h1>
           <p className="text-xl leading-[1.6] opacity-[.88] [text-shadow:0_1px_10px_rgba(0,10,40,.6)] md:text-2xl">
-            Member-written posts on clinical practice, research, and community life.
+            Member-written posts on the ideas, skills, and experiences worth sharing.
           </p>
         </div>
       </section>
@@ -143,7 +143,7 @@ export default async function BlogPage({
               <div className="flex gap-2">
                 <Button asChild variant={mine ? "secondary" : "outline"}>
                   <Link href={mineHref} scroll={false}>
-                    Mine
+                    My Posts
                   </Link>
                 </Button>
                 <Button asChild>

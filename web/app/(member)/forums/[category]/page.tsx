@@ -104,7 +104,7 @@ export default async function ForumCategoryPage({
           <FollowForumButton forumId={forum.id} initialFollowing={isFollowing} />
           <Button asChild variant={mine ? "secondary" : "outline"}>
             <Link href={mineHref} scroll={false}>
-              Mine
+              My Threads
             </Link>
           </Button>
           <Button asChild>
