@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { SurveyStatus, type SurveyQuestionType } from "@/lib/generated/prisma/enums";
 import { openSurveyNow } from "@/lib/surveys-lifecycle";
 import { enqueueOpenSurvey, enqueueAutoClose } from "@/lib/queues/survey-queue";
-import { uploadSurveyHeroImage, getSurveyHeroImageUrl } from "@/lib/storage";
+import { uploadSurveyHeroImage, getSurveyHeroImageUrl, DEFAULT_SURVEY_HERO_KEY } from "@/lib/storage";
 
 export class SurveyError extends Error {
   constructor(
@@ -73,6 +73,8 @@ export async function createSurvey(
   let heroImageUrl: string | null = hero.templateHeroImageUrl ?? null;
   if (hero.heroImage) {
     heroImageUrl = await uploadSurveyHeroImage(hero.heroImage);
+  } else if (!heroImageUrl) {
+    heroImageUrl = DEFAULT_SURVEY_HERO_KEY;
   }
 
   const survey = await db.survey.create({

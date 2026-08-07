@@ -27,6 +27,7 @@ import {
   deleteEventHeroImage,
   getEventHeroImageUrl,
   getProfileAvatarUrl,
+  RESTRICTED_EVENT_DEFAULT_HERO_KEY,
   uploadEventHeroImage,
   UploadValidationError,
 } from "@/lib/storage";
@@ -733,6 +734,8 @@ export async function createEvent(
       }
       throw error;
     }
+  } else if (isRestricted) {
+    heroImageUrl = RESTRICTED_EVENT_DEFAULT_HERO_KEY;
   }
 
   const host = await db.user.findUnique({ where: { id: hostId }, select: { email: true, name: true } });
