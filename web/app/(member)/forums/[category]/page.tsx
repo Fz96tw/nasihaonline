@@ -10,7 +10,6 @@ import { Role } from "@/lib/generated/prisma/enums";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { FollowForumButton } from "@/components/forums/follow-forum-button";
 import { SortButton } from "@/components/forums/sort-button";
 
 export const metadata: Metadata = {
@@ -57,7 +56,7 @@ export default async function ForumCategoryPage({
   const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
   const result = await getForumBySlug(params.category, user.id, isPrivileged, searchParams.q);
   if (!result) notFound();
-  const { forum, isFollowing } = result;
+  const { forum } = result;
 
   const requestedSort = isThreadSort(searchParams.sort) ? searchParams.sort : cookies().get(THREAD_SORT_COOKIE)?.value;
   const sort: ThreadSort = isThreadSort(requestedSort) ? requestedSort : "recent";
@@ -101,7 +100,6 @@ export default async function ForumCategoryPage({
           {forum.description && <p className="text-muted-foreground">{forum.description}</p>}
         </div>
         <div className="flex gap-2">
-          <FollowForumButton forumId={forum.id} initialFollowing={isFollowing} />
           <Button asChild variant={mine ? "secondary" : "outline"}>
             <Link href={mineHref} scroll={false}>
               My Threads
