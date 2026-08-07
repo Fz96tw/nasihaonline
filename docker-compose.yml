@@ -61,15 +61,10 @@ services:
     build:
       context: ./web
       dockerfile: Dockerfile
-    # Matches the host dev user's UID:GID so files this container writes into
-    # the bind-mounted ./web (.next, lib/generated/prisma, etc.) come out
-    # host-owned instead of root-owned — the container image's own build
-    # steps (npm ci) still run as root regardless, since `user:` only
-    # affects the runtime process, not `docker build`. Hardcoded to this
-    # host's UID (1000) rather than derived, since docker-compose has no
-    # built-in "current host user" substitution — adjust if your UID differs
-    # (`id -u`).
-    user: "1000:1000"
+      args:
+        DATABASE_URL: postgresql://nasiha:nasiha@postgres:5432/nasiha?schema=public
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3010}
     ports:
       - "3010:3000"
     environment:
@@ -101,9 +96,6 @@ services:
       GOOGLE_CALENDAR_REFRESH_TOKEN: ${GOOGLE_CALENDAR_REFRESH_TOKEN}
       GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID:-primary}
       NODE_OPTIONS: --max-old-space-size=4096
-    volumes:
-      - ./web:/app
-      - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -118,19 +110,15 @@ services:
     build:
       context: ./web
       dockerfile: Dockerfile
-    command: ["sh", "-c", "npx prisma generate && npm run worker"]
-    # Same rationale as the app service above — this also runs `prisma
-    # generate`, writing into the bind-mounted web/lib/generated/prisma.
-    user: "1000:1000"
+      args:
+        DATABASE_URL: postgresql://nasiha:nasiha@postgres:5432/nasiha?schema=public
+    command: ["npm", "run", "worker"]
     environment:
       DATABASE_URL: postgresql://nasiha:nasiha@postgres:5432/nasiha?schema=public
       REDIS_URL: redis://redis:6379
       NODE_ENV: production
       MEILI_HOST: http://meilisearch:7700
       MEILI_MASTER_KEY: nasiha-dev-master-key
-    volumes:
-      - ./web:/app
-      - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { redis } from "@/lib/redis";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const [dbOk, redisOk] = await Promise.all([
     db.$queryRaw`SELECT 1`.then(() => true).catch(() => false),

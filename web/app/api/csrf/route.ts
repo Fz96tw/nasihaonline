@@ -7,6 +7,8 @@ import { NextResponse } from "next/server";
  * /api/applications — without an already-authenticated GET having primed
  * it, call this first.
  */
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   return NextResponse.json({ ok: true });
 }

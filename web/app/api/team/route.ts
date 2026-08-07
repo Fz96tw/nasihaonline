@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { withSignedPhotoUrls } from "@/lib/team-server";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const members = await db.teamMember.findMany({
     where: { active: true },
