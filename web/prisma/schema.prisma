@@ -1017,9 +1017,22 @@ model PostCategory {
   slug      String   @unique
   createdAt DateTime @default(now())
 
-  posts Post[]
+  posts PostCategoryOnPost[]
 
   @@map("post_categories")
+}
+
+// A Post can belong to more than one category (§4.8) — same many-to-many
+// join shape as PostTagOnPost, just against PostCategory instead of PostTag.
+model PostCategoryOnPost {
+  postId     String
+  post       Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   PostCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([postId, categoryId])
+  @@index([categoryId])
+  @@map("post_categories_on_posts")
 }
 
 model PostTag {
@@ -1059,8 +1072,6 @@ model Post {
   body             String
   authorId         String
   author           User         @relation("PostAuthor", fields: [authorId], references: [id])
-  categoryId       String
-  category         PostCategory @relation(fields: [categoryId], references: [id])
   heroImageUrl     String?
   licenseConsented Boolean      @default(false)
   publishedAt      DateTime?
@@ -1069,6 +1080,7 @@ model Post {
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
+  categories        PostCategoryOnPost[]
   tags              PostTagOnPost[]
   comments          PostComment[]
   views             PostView[]
@@ -1076,7 +1088,6 @@ model Post {
   contributionEvent ContributionEvent?
 
   @@index([authorId])
-  @@index([categoryId])
   @@index([publishedAt])
   @@map("posts")
 }
@@ -1181,9 +1192,23 @@ model KnowledgeCategory {
   slug      String   @unique
   createdAt DateTime @default(now())
 
-  items KnowledgeItem[]
+  items KnowledgeItemCategory[]
 
   @@map("knowledge_categories")
+}
+
+// A KnowledgeItem can belong to more than one category (§4.9) — same
+// many-to-many join shape as KnowledgeItemTag, just against
+// KnowledgeCategory instead of KnowledgeTag.
+model KnowledgeItemCategory {
+  knowledgeItemId String
+  knowledgeItem   KnowledgeItem     @relation(fields: [knowledgeItemId], references: [id], onDelete: Cascade)
+  categoryId      String
+  category        KnowledgeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([knowledgeItemId, categoryId])
+  @@index([categoryId])
+  @@map("knowledge_item_categories")
 }
 
 model KnowledgeTag {
@@ -1222,8 +1247,6 @@ model KnowledgeItem {
   visibility                KnowledgeVisibility  @default(public)
   contributorId             String
   contributor               User                 @relation("KnowledgeContributor", fields: [contributorId], references: [id])
-  categoryId                String
-  category                  KnowledgeCategory    @relation(fields: [categoryId], references: [id])
   youtubeUrl                String?
   // Optional cover image (§4.9), same object-storage-key convention as
   // Event/Post/Announcement/Survey.heroImageUrl. For a recorded_lecture
@@ -1246,6 +1269,7 @@ model KnowledgeItem {
   createdAt                 DateTime             @default(now())
   updatedAt                 DateTime             @updatedAt
 
+  categories        KnowledgeItemCategory[]
   tags              KnowledgeItemTag[]
   attachments       KnowledgeAttachment[]
   // On-demand discussion thread in the Research & Resources forum (§4.9),
@@ -1262,7 +1286,6 @@ model KnowledgeItem {
   invitees          KnowledgeItemInvitee[]
 
   @@index([contributorId])
-  @@index([categoryId])
   @@index([status])
   @@map("knowledge_items")
 }

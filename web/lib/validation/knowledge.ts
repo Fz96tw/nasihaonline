@@ -17,7 +17,7 @@ const knowledgeItemBaseSchema = z.object({
   description: z.string().trim().min(1, "Description is required").max(2000),
   contentType: z.nativeEnum(KnowledgeContentType, { message: "Select a content type" }),
   level: z.nativeEnum(KnowledgeLevel, { message: "Select a career-stage level" }),
-  categoryId: z.string().trim().min(1, "Select a category"),
+  categoryIds: z.array(z.string()).min(1, "Select at least one category"),
   tagIds: z.array(z.string()),
   youtubeUrl: z
     .string()

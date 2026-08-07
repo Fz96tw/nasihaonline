@@ -23,7 +23,7 @@ export async function PATCH(request: Request, { params }: { params: { slug: stri
   const parsed = updatePostSchema.safeParse({
     title: formData.get("title"),
     body: formData.get("body"),
-    categoryId: formData.get("categoryId"),
+    categoryIds: formData.getAll("categoryIds"),
     tagIds: formData.getAll("tagIds"),
   });
   if (!parsed.success) {

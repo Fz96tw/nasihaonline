@@ -35,7 +35,7 @@ const DEFAULT_VALUES: CreateKnowledgeItemValues = {
   description: "",
   contentType: "" as KnowledgeContentType,
   level: "" as KnowledgeLevel,
-  categoryId: "",
+  categoryIds: [],
   tagIds: [],
   youtubeUrl: null,
   externalUrl: null,
@@ -100,7 +100,7 @@ export function SubmitResourceForm({
           description: existingItem.description,
           contentType: existingItem.contentType,
           level: existingItem.level,
-          categoryId: existingItem.categoryId,
+          categoryIds: existingItem.categoryIds,
           tagIds: existingItem.tagIds,
           youtubeUrl: existingItem.youtubeUrl,
           externalUrl: existingItem.externalUrl,
@@ -132,7 +132,7 @@ export function SubmitResourceForm({
       formData.append("description", values.description);
       formData.append("contentType", values.contentType);
       formData.append("level", values.level);
-      formData.append("categoryId", values.categoryId);
+      values.categoryIds.forEach((categoryId) => formData.append("categoryIds", categoryId));
       values.tagIds.forEach((tagId) => formData.append("tagIds", tagId));
       if (isRecordedLecture && values.youtubeUrl) formData.append("youtubeUrl", values.youtubeUrl);
       if (!isRecordedLecture && sourceMode === "link" && values.externalUrl) {
@@ -303,24 +303,30 @@ export function SubmitResourceForm({
 
         <FormField
           control={form.control}
-          name="categoryId"
+          name="categoryIds"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Category</FormLabel>
-              <Select value={field.value} onValueChange={field.onChange}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a category" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
+              <FormLabel>Categories</FormLabel>
+              <div className="flex flex-wrap gap-4">
+                {categories.map((category) => {
+                  const checked = field.value.includes(category.id);
+                  return (
+                    <label key={category.id} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(c) =>
+                          field.onChange(
+                            c === true
+                              ? [...field.value, category.id]
+                              : field.value.filter((id) => id !== category.id),
+                          )
+                        }
+                      />
                       {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    </label>
+                  );
+                })}
+              </div>
               <FormMessage />
             </FormItem>
           )}

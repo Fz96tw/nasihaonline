@@ -37,7 +37,7 @@ export default async function WhatsNewPage({
     );
 
   return (
-    <main className="mx-auto flex max-w-[720px] flex-col gap-6 p-8">
+    <main className="mx-auto flex max-w-[720px] flex-col gap-6 px-[2px] py-8 sm:px-8">
       <div>
         <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
           <Rss className="h-7 w-7" aria-hidden="true" />

@@ -36,6 +36,7 @@ export type ForumThreadListItem = {
   id: string;
   title: string;
   pinned: boolean;
+  authorId: string;
   authorName: string | null;
   createdAt: string;
   replyCount: number;
@@ -68,6 +69,8 @@ export type MemberForumThread = {
   forumSlug: string;
   forumName: string;
   lastPostAt: string;
+  /** True when this member (userId, not viewerId) authored the thread itself, not just a reply in it — used by /my-posts to label "Started" vs "Replied". */
+  startedByMember: boolean;
 };
 
 export type ForumThreadDetail = {

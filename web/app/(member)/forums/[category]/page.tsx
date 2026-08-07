@@ -49,7 +49,7 @@ export default async function ForumCategoryPage({
   searchParams,
 }: {
   params: { category: string };
-  searchParams: { q?: string; sort?: string };
+  searchParams: { q?: string; sort?: string; mine?: string };
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
@@ -61,20 +61,33 @@ export default async function ForumCategoryPage({
 
   const requestedSort = isThreadSort(searchParams.sort) ? searchParams.sort : cookies().get(THREAD_SORT_COOKIE)?.value;
   const sort: ThreadSort = isThreadSort(requestedSort) ? requestedSort : "recent";
-  const threads = [...result.threads].sort((a, b) => {
-    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-    if (sort === "newest") return b.createdAt.localeCompare(a.createdAt);
-    if (sort === "active") return b.replyCount - a.replyCount;
-    return b.lastActivityAt.localeCompare(a.lastActivityAt);
-  });
+  const mine = searchParams.mine === "1";
+  const threads = [...result.threads]
+    .filter((thread) => !mine || thread.authorId === user.id)
+    .sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      if (sort === "newest") return b.createdAt.localeCompare(a.createdAt);
+      if (sort === "active") return b.replyCount - a.replyCount;
+      return b.lastActivityAt.localeCompare(a.lastActivityAt);
+    });
 
   const sortHref = (value: ThreadSort) => {
     const qs = new URLSearchParams();
     if (searchParams.q) qs.set("q", searchParams.q);
     if (value !== "recent") qs.set("sort", value);
+    if (mine) qs.set("mine", "1");
     const query = qs.toString();
     return `/forums/${forum.slug}${query ? `?${query}` : ""}`;
   };
+
+  const mineHref = (() => {
+    const qs = new URLSearchParams();
+    if (searchParams.q) qs.set("q", searchParams.q);
+    if (searchParams.sort) qs.set("sort", searchParams.sort);
+    if (!mine) qs.set("mine", "1");
+    const query = qs.toString();
+    return `/forums/${forum.slug}${query ? `?${query}` : ""}`;
+  })();
 
   return (
     <main className="mx-auto flex max-w-[1120px] flex-col gap-6 p-8">
@@ -89,6 +102,11 @@ export default async function ForumCategoryPage({
         </div>
         <div className="flex gap-2">
           <FollowForumButton forumId={forum.id} initialFollowing={isFollowing} />
+          <Button asChild variant={mine ? "secondary" : "outline"}>
+            <Link href={mineHref} scroll={false}>
+              Mine
+            </Link>
+          </Button>
           <Button asChild>
             <Link href={`/forums/${forum.slug}/new`}>New Thread</Link>
           </Button>
@@ -97,6 +115,7 @@ export default async function ForumCategoryPage({
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <form action={`/forums/${forum.slug}`} method="get" className="flex max-w-sm gap-2">
+          {mine && <input type="hidden" name="mine" value="1" />}
           <Input type="search" name="q" defaultValue={searchParams.q} placeholder="Search this forum…" />
           <Button type="submit" variant="outline">
             Search
@@ -126,7 +145,11 @@ export default async function ForumCategoryPage({
 
       {threads.length === 0 ? (
         <p className="rounded-[10px] border p-8 text-center text-muted-foreground">
-          {searchParams.q ? "No threads match your search." : "No threads yet — start the conversation."}
+          {searchParams.q
+            ? "No threads match your search."
+            : mine
+              ? "You haven't started any threads in this forum yet."
+              : "No threads yet — start the conversation."}
         </p>
       ) : (
         <div className="flex flex-col divide-y rounded-[10px] border">

@@ -340,25 +340,26 @@ const FORUMS: { name: string; description: string; displayOrder: number }[] = [
 // Sample blog posts (mixed draft/published, PRD §4.8) so 5.2+ has real data
 // to render immediately. Hosts/authors assigned round-robin from real
 // (Clerk-synced) members — same rationale as SAMPLE_EVENTS.
-const SAMPLE_POSTS: { title: string; body: string; category: string; published: boolean; tags: string[] }[] = [
+const SAMPLE_POSTS: { title: string; body: string; categories: string[]; published: boolean; tags: string[] }[] = [
   {
     title: "Heart Failure Guidelines: What Changed in the Latest Update",
     body: "A summary of the key changes clinicians should know about in the latest heart failure management guidelines.",
-    category: "Healthcare",
+    // Demonstrates a post spanning more than one category (§4.8).
+    categories: ["Healthcare", "Clinical Research"],
     published: true,
     tags: ["guidelines"],
   },
   {
     title: "Navigating Your First Year as an Early-Career Researcher",
     body: "Practical advice for early-career members starting out in clinical research, from finding a mentor to publishing your first paper.",
-    category: "Clinical Research",
+    categories: ["Clinical Research"],
     published: true,
     tags: ["career-advice", "research-methods"],
   },
   {
     title: "A De-Identified Case Discussion Worth Revisiting",
     body: "Draft notes on a complex oncology case discussed at a recent roundtable — still being written up.",
-    category: "Healthcare",
+    categories: ["Healthcare"],
     published: false,
     tags: ["case-study"],
   },
@@ -402,14 +403,14 @@ async function seedBlog() {
     const existing = await db.post.findFirst({ where: { title: sample.title } });
     if (existing) continue;
 
-    const category = categoriesByName.get(sample.category)!;
+    const categoryIds = sample.categories.map((name) => categoriesByName.get(name)!.id);
     const post = await db.post.create({
       data: {
         title: sample.title,
         slug: slugify(sample.title),
         body: sample.body,
         authorId: authors[i % authors.length].id,
-        categoryId: category.id,
+        categories: { create: categoryIds.map((categoryId) => ({ categoryId })) },
         licenseConsented: true,
         publishedAt: sample.published ? new Date() : null,
         tags: { create: sample.tags.map((name) => ({ tagId: tagsByName.get(name)!.id })) },
@@ -446,7 +447,7 @@ const SAMPLE_KNOWLEDGE_ITEMS: {
   contentType: "recorded_lecture" | "article" | "case_study" | "guideline";
   status: "pending_review" | "published" | "flagged" | "rejected";
   level: "student_friendly" | "early_career" | "advanced" | "all_levels";
-  category: string;
+  categories: string[];
   youtubeUrl?: string;
   attachment?: boolean;
   deidentificationConfirmed?: boolean;
@@ -457,7 +458,8 @@ const SAMPLE_KNOWLEDGE_ITEMS: {
     contentType: "article",
     status: "published",
     level: "all_levels",
-    category: "Healthcare",
+    // Demonstrates an item spanning more than one category (§4.9).
+    categories: ["Healthcare", "Clinical Research"],
     attachment: true,
   },
   {
@@ -466,7 +468,7 @@ const SAMPLE_KNOWLEDGE_ITEMS: {
     contentType: "case_study",
     status: "pending_review",
     level: "advanced",
-    category: "Healthcare",
+    categories: ["Healthcare"],
     deidentificationConfirmed: true,
   },
   {
@@ -475,7 +477,7 @@ const SAMPLE_KNOWLEDGE_ITEMS: {
     contentType: "recorded_lecture",
     status: "published",
     level: "early_career",
-    category: "Clinical Research",
+    categories: ["Clinical Research"],
     youtubeUrl: "https://www.youtube.com/watch?v=nasiha-sample-lecture",
   },
 ];
@@ -518,7 +520,7 @@ async function seedKnowledgeLibrary() {
     const existing = await db.knowledgeItem.findFirst({ where: { title: sample.title } });
     if (existing) continue;
 
-    const category = categoriesByName.get(sample.category)!;
+    const categoryIds = sample.categories.map((name) => categoriesByName.get(name)!.id);
     await db.knowledgeItem.create({
       data: {
         title: sample.title,
@@ -527,7 +529,7 @@ async function seedKnowledgeLibrary() {
         status: sample.status,
         level: sample.level,
         contributorId: contributors[i % contributors.length].id,
-        categoryId: category.id,
+        categories: { create: categoryIds.map((categoryId) => ({ categoryId })) },
         youtubeUrl: sample.youtubeUrl,
         deidentificationConfirmed: sample.deidentificationConfirmed ?? false,
         licenseConsented: true,

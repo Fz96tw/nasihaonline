@@ -4,10 +4,8 @@ import { ArrowLeft } from "lucide-react";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getMySubmissions } from "@/lib/library-server";
-import { CONTENT_TYPE_LABELS, STATUS_BADGE_VARIANT, STATUS_LABELS } from "@/lib/library";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { MySubmissionsTable } from "@/components/library/my-submissions-table";
 
 export const metadata: Metadata = {
   title: "My Submissions — NASIHA",
@@ -46,47 +44,7 @@ export default async function MyLibrarySubmissionsPage() {
         </Button>
       </div>
 
-      <div className="rounded-[10px] border shadow-sm">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Title</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Submitted</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {submissions.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
-                  You haven&apos;t submitted any resources yet.
-                </TableCell>
-              </TableRow>
-            )}
-            {submissions.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell className="font-medium">{item.title}</TableCell>
-                <TableCell className="text-muted-foreground">{CONTENT_TYPE_LABELS[item.contentType]}</TableCell>
-                <TableCell className="text-muted-foreground">{item.category.name}</TableCell>
-                <TableCell>
-                  <Badge variant={STATUS_BADGE_VARIANT[item.status]}>{STATUS_LABELS[item.status]}</Badge>
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {new Date(item.createdAt).toLocaleDateString()}
-                </TableCell>
-                <TableCell className="text-right">
-                  <Link href={`/library/${item.id}/edit`} className="text-sm text-primary hover:underline">
-                    Edit
-                  </Link>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      <MySubmissionsTable submissions={submissions} />
     </main>
   );
 }

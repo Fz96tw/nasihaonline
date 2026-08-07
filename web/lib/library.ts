@@ -37,6 +37,8 @@ export type KnowledgeCategoryOption = {
   slug: string;
 };
 
+export type KnowledgeCategoryWithCount = KnowledgeCategoryOption & { count: number };
+
 export type KnowledgeTagOption = {
   id: string;
   name: string;
@@ -49,7 +51,7 @@ export type MySubmission = {
   title: string;
   contentType: KnowledgeContentType;
   status: KnowledgeStatus;
-  category: { name: string };
+  categories: { name: string }[];
   createdAt: string;
 };
 
@@ -62,7 +64,7 @@ export type LibraryCard = {
   level: KnowledgeLevel;
   status: KnowledgeStatus;
   visibility: KnowledgeVisibility;
-  category: { name: string; slug: string };
+  categories: { name: string; slug: string }[];
   contributor: { id: string; name: string | null };
   createdAt: string;
   youtubeUrl: string | null;
@@ -121,7 +123,7 @@ export type KnowledgeItemForEdit = {
   contentType: KnowledgeContentType;
   level: KnowledgeLevel;
   status: KnowledgeStatus;
-  categoryId: string;
+  categoryIds: string[];
   tagIds: string[];
   youtubeUrl: string | null;
   heroImageUrl: string | null;
@@ -146,7 +148,7 @@ export type ReviewQueueItem = {
   description: string;
   contentType: KnowledgeContentType;
   level: KnowledgeLevel;
-  category: { name: string };
+  categories: { name: string }[];
   contributor: { name: string | null; email: string };
   deidentificationConfirmed: boolean;
   youtubeUrl: string | null;

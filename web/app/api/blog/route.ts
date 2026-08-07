@@ -24,7 +24,7 @@ export async function POST(request: Request) {
   const parsed = createPostSchema.safeParse({
     title: formData.get("title"),
     body: formData.get("body"),
-    categoryId: formData.get("categoryId"),
+    categoryIds: formData.getAll("categoryIds"),
     tagIds: formData.getAll("tagIds"),
     licenseConsented: formData.get("licenseConsented") === "true",
   });

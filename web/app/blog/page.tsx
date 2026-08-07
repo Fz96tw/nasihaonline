@@ -4,7 +4,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { Clock, Eye, MessageSquare } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
-import { getPostCategories, getPublishedPosts } from "@/lib/blog-server";
+import { getPostCategoriesWithCounts, getPublishedPosts } from "@/lib/blog-server";
 import type { PostSort } from "@/lib/blog";
 import { PostCard } from "@/components/blog/post-card";
 import { Button } from "@/components/ui/button";
@@ -18,16 +18,38 @@ export const metadata: Metadata = {
   title: "Blog — NASIHA",
 };
 
-function CategoryChip({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
+function CategoryChip({
+  href,
+  active,
+  count,
+  children,
+}: {
+  href: string;
+  active: boolean;
+  count?: number;
+  children: React.ReactNode;
+}) {
   return (
     <Link
       href={href}
+      scroll={false}
       className={cn(
         "rounded-full px-3 py-1 text-sm font-medium transition-colors",
         active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70",
+        count === 0 && !active && "opacity-50",
       )}
     >
       {children}
+      {!!count && (
+        <span
+          className={cn(
+            "ml-1 text-[0.65rem] tabular-nums",
+            active ? "text-primary-foreground/70" : "text-muted-foreground/70",
+          )}
+        >
+          {count}
+        </span>
+      )}
     </Link>
   );
 }
@@ -59,16 +81,32 @@ function buildSortHref(base: string, params: Record<string, string | undefined>,
 export default async function BlogPage({
   searchParams,
 }: {
-  searchParams: { category?: string; q?: string; sort?: string };
+  searchParams: { category?: string; q?: string; sort?: string; mine?: string };
 }) {
   const user = await getSessionUser();
   const requestedSort = isPostSort(searchParams.sort) ? searchParams.sort : cookies().get(BLOG_SORT_COOKIE)?.value;
   const sort: PostSort = isPostSort(requestedSort) ? requestedSort : "recent";
+  const mine = searchParams.mine === "1" && Boolean(user);
 
   const [posts, categories] = await Promise.all([
-    getPublishedPosts({ categorySlug: searchParams.category, q: searchParams.q, sort }),
-    getPostCategories(),
+    getPublishedPosts({
+      categorySlug: searchParams.category,
+      q: searchParams.q,
+      sort,
+      authorId: mine ? user!.id : undefined,
+    }),
+    getPostCategoriesWithCounts(),
   ]);
+
+  const mineHref = (() => {
+    const usp = new URLSearchParams();
+    if (searchParams.category) usp.set("category", searchParams.category);
+    if (searchParams.q) usp.set("q", searchParams.q);
+    if (searchParams.sort) usp.set("sort", searchParams.sort);
+    if (!mine) usp.set("mine", "1");
+    const query = usp.toString();
+    return `/blog${query ? `?${query}` : ""}`;
+  })();
 
   return (
     <main className="min-h-screen">
@@ -95,15 +133,23 @@ export default async function BlogPage({
                   key={category.id}
                   href={`/blog?category=${category.slug}`}
                   active={searchParams.category === category.slug}
+                  count={category.count}
                 >
                   {category.name}
                 </CategoryChip>
               ))}
             </div>
             {user && (
-              <Button asChild>
-                <Link href="/blog/new">Write a Post</Link>
-              </Button>
+              <div className="flex gap-2">
+                <Button asChild variant={mine ? "secondary" : "outline"}>
+                  <Link href={mineHref} scroll={false}>
+                    Mine
+                  </Link>
+                </Button>
+                <Button asChild>
+                  <Link href="/blog/new">Write a Post</Link>
+                </Button>
+              </div>
             )}
           </div>
 
@@ -111,6 +157,7 @@ export default async function BlogPage({
             {searchParams.category && (
               <input type="hidden" name="category" value={searchParams.category} />
             )}
+            {mine && <input type="hidden" name="mine" value="1" />}
             <Input type="search" name="q" defaultValue={searchParams.q} placeholder="Search posts…" />
             <Button type="submit" variant="outline">
               Search
@@ -144,7 +191,11 @@ export default async function BlogPage({
 
         {posts.length === 0 ? (
           <p className="text-center text-muted-foreground">
-            {searchParams.q ? "No posts match your search." : "No posts published yet — check back soon."}
+            {searchParams.q
+              ? "No posts match your search."
+              : mine
+                ? "You haven't published any posts yet."
+                : "No posts published yet — check back soon."}
           </p>
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">

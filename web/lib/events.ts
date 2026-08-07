@@ -166,4 +166,6 @@ export type MemberHostedEvent = {
   startsAt: string;
   open: boolean;
   heroImageUrl: string | null;
+  /** Set once the host has cancelled the event — null otherwise. Used by /my-posts to badge Upcoming/Past/Cancelled. */
+  cancelledAt: string | null;
 };

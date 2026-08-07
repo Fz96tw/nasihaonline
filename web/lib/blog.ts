@@ -7,6 +7,8 @@ export type PostCategoryOption = {
   slug: string;
 };
 
+export type PostCategoryWithCount = PostCategoryOption & { count: number };
+
 export type PostTagOption = {
   id: string;
   name: string;
@@ -21,17 +23,38 @@ export type PostCard = {
   heroImageUrl: string | null;
   publishedAt: string;
   author: { name: string | null; avatarUrl: string | null };
-  category: { name: string; slug: string };
+  categories: { name: string; slug: string }[];
   viewCount: number;
   commentCount: number;
 };
 
 export type PostSort = "recent" | "viewed" | "commented";
 
+/** /my-posts's Blog tab — a member's own post, at any status (draft or published). */
+export type MyPost = {
+  id: string;
+  slug: string;
+  title: string;
+  publishedAt: string | null;
+  flagged: boolean;
+  categories: { name: string }[];
+  createdAt: string;
+};
+
+export const POST_STATUS_LABELS: Record<"draft" | "published", string> = {
+  draft: "Draft",
+  published: "Published",
+};
+
+export const POST_STATUS_BADGE_VARIANT: Record<"draft" | "published", "neutral" | "success" | "warning" | "danger" | "info"> = {
+  draft: "neutral",
+  published: "success",
+};
+
 export type PostDetail = PostCard & {
   body: string;
   authorId: string;
-  categoryId: string;
+  categoryIds: string[];
   tagIds: string[];
   tags: { name: string; slug: string }[];
   flagged: boolean;

@@ -11,7 +11,7 @@ import { z } from "zod";
 export const createPostSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(200),
   body: z.string().trim().min(1, "Write something before publishing"),
-  categoryId: z.string().trim().min(1, "Select a category"),
+  categoryIds: z.array(z.string()).min(1, "Select at least one category"),
   tagIds: z.array(z.string()),
   licenseConsented: z
     .boolean()

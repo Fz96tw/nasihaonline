@@ -52,9 +52,13 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
         <img src={post.heroImageUrl} alt={post.title} className="mb-8 h-72 w-full rounded-lg object-cover" />
       )}
 
-      <Badge variant="info" className="mb-3 w-fit">
-        {post.category.name}
-      </Badge>
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {post.categories.map((category) => (
+          <Badge key={category.slug} variant="info" className="w-fit">
+            {category.name}
+          </Badge>
+        ))}
+      </div>
       <h1 className="mb-3 text-4xl font-extrabold tracking-tight">{post.title}</h1>
 
       <div className="mb-8 flex items-center justify-between gap-3">

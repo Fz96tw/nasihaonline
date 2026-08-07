@@ -41,7 +41,7 @@ export default async function EditBlogPostPage({ params }: { params: { slug: str
           slug: post.slug,
           title: post.title,
           body: post.body,
-          categoryId: post.categoryId,
+          categoryIds: post.categoryIds,
           tagIds: post.tagIds,
           heroImageUrl: post.heroImageUrl,
         }}

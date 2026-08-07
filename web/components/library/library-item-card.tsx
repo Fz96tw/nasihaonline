@@ -39,10 +39,12 @@ export function LibraryItemCard({ item, canEdit }: { item: LibraryCardData; canE
         <img src={thumbnailUrl} alt="" className="aspect-video w-full object-cover" />
       )}
       <CardHeader>
-        <div className="flex items-center gap-2">
-          <Badge variant="info" className="w-fit">
-            {item.category.name}
-          </Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          {item.categories.map((category) => (
+            <Badge key={category.slug} variant="info" className="w-fit">
+              {category.name}
+            </Badge>
+          ))}
           {item.status === KnowledgeStatus.flagged && <Badge variant="danger">Flagged</Badge>}
         </div>
         <CardTitle className="text-lg">

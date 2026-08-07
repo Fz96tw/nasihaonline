@@ -31,7 +31,7 @@ export async function RecentBlogWidget() {
                   {post.title}
                 </Link>
                 <p className="text-xs text-muted-foreground">
-                  {post.category.name} · {formatDate(post.publishedAt)}
+                  {post.categories.map((category) => category.name).join(", ")} · {formatDate(post.publishedAt)}
                 </p>
               </li>
             ))}

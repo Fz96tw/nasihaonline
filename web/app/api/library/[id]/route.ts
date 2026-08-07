@@ -25,7 +25,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     description: formData.get("description"),
     contentType: formData.get("contentType"),
     level: formData.get("level"),
-    categoryId: formData.get("categoryId"),
+    categoryIds: formData.getAll("categoryIds"),
     tagIds: formData.getAll("tagIds"),
     youtubeUrl: formData.get("youtubeUrl") || null,
     externalUrl: formData.get("externalUrl") || null,

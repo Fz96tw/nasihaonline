@@ -30,9 +30,13 @@ export function PostCard({ post, showExcerpt = true }: { post: PostCardData; sho
         <HeroImage src={post.heroImageUrl} title={post.title} />
       </Link>
       <CardHeader>
-        <Badge variant="info" className="mb-1 w-fit">
-          {post.category.name}
-        </Badge>
+        <div className="mb-1 flex flex-wrap gap-1.5">
+          {post.categories.map((category) => (
+            <Badge key={category.slug} variant="info" className="w-fit">
+              {category.name}
+            </Badge>
+          ))}
+        </div>
         <CardTitle className="line-clamp-2 break-words text-xl">
           <Link href={`/blog/${post.slug}`} className="hover:underline">
             {post.title}

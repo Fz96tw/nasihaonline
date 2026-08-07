@@ -15,15 +15,25 @@ export const metadata: Metadata = {
   title: "Calendar — NASIHA",
 };
 
-export default async function CalendarPage({ searchParams }: { searchParams: { ref?: string } }) {
+export default async function CalendarPage({ searchParams }: { searchParams: { ref?: string; mine?: string } }) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const [events, meetings] = await Promise.all([
+  const [allEvents, meetings] = await Promise.all([
     getMemberEvents(user.id),
     getUpcomingMeetingsForUser(user.id),
   ]);
   const canSubmitEvent = Boolean(user.tier && EVENT_SUBMISSION_TIERS.includes(user.tier));
+  const mine = searchParams.mine === "1";
+  const events = mine ? allEvents.filter((event) => event.hostId === user.id) : allEvents;
+
+  const mineHref = (() => {
+    const qs = new URLSearchParams();
+    if (searchParams.ref) qs.set("ref", searchParams.ref);
+    if (!mine) qs.set("mine", "1");
+    const query = qs.toString();
+    return `/calendar${query ? `?${query}` : ""}`;
+  })();
 
   return (
     <main className="min-h-screen">
@@ -41,13 +51,18 @@ export default async function CalendarPage({ searchParams }: { searchParams: { r
       <section className="mx-auto flex max-w-[1120px] flex-col gap-8 px-8 py-16">
         <BackToFeedLink searchParams={searchParams} />
 
-        {canSubmitEvent && (
-          <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <Button asChild variant={mine ? "secondary" : "outline"}>
+            <Link href={mineHref} scroll={false}>
+              Mine
+            </Link>
+          </Button>
+          {canSubmitEvent && (
             <Button asChild>
               <Link href="/calendar/new">Submit Event</Link>
             </Button>
-          </div>
-        )}
+          )}
+        </div>
 
         <CalendarView
           events={events}

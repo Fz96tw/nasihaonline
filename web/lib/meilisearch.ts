@@ -32,8 +32,8 @@ export type PostSearchDocument = {
   title: string;
   excerpt: string;
   authorName: string | null;
-  categoryName: string;
-  categorySlug: string;
+  categoryNames: string[];
+  categorySlugs: string[];
   tagNames: string[];
 };
 
@@ -47,8 +47,8 @@ export type LibrarySearchDocument = {
   title: string;
   description: string;
   contributorName: string | null;
-  categoryName: string;
-  categorySlug: string;
+  categoryNames: string[];
+  categorySlugs: string[];
   contentType: KnowledgeContentType;
   level: KnowledgeLevel;
   tagNames: string[];
@@ -138,8 +138,8 @@ export async function ensurePostsIndexConfigured(): Promise<void> {
   const client = getClient();
   await client.createIndex(POSTS_INDEX_NAME, { primaryKey: "id" }).catch(() => undefined);
   const index = getPostsIndex();
-  await index.updateSearchableAttributes(["title", "excerpt", "authorName", "categoryName", "tagNames"]);
-  await index.updateFilterableAttributes(["categorySlug"]);
+  await index.updateSearchableAttributes(["title", "excerpt", "authorName", "categoryNames", "tagNames"]);
+  await index.updateFilterableAttributes(["categorySlugs"]);
 }
 
 export async function upsertPostDocument(document: PostSearchDocument): Promise<void> {
@@ -156,7 +156,7 @@ export async function searchPostDocuments(
 ): Promise<PostSearchDocument[]> {
   const result = await getPostsIndex().search(query, {
     limit: options.limit ?? 50,
-    filter: options.categorySlug ? `categorySlug = "${options.categorySlug}"` : undefined,
+    filter: options.categorySlug ? `categorySlugs = "${options.categorySlug}"` : undefined,
   });
   return result.hits;
 }
@@ -166,8 +166,8 @@ export async function ensureLibraryIndexConfigured(): Promise<void> {
   const client = getClient();
   await client.createIndex(LIBRARY_INDEX_NAME, { primaryKey: "id" }).catch(() => undefined);
   const index = getLibraryIndex();
-  await index.updateSearchableAttributes(["title", "description", "contributorName", "categoryName", "tagNames"]);
-  await index.updateFilterableAttributes(["contentType", "level", "categorySlug"]);
+  await index.updateSearchableAttributes(["title", "description", "contributorName", "categoryNames", "tagNames"]);
+  await index.updateFilterableAttributes(["contentType", "level", "categorySlugs"]);
 }
 
 export async function upsertLibraryDocument(document: LibrarySearchDocument): Promise<void> {
@@ -185,7 +185,7 @@ export async function searchLibraryDocuments(
   const filters = [
     options.contentType ? `contentType = "${options.contentType}"` : null,
     options.level ? `level = "${options.level}"` : null,
-    options.categorySlug ? `categorySlug = "${options.categorySlug}"` : null,
+    options.categorySlug ? `categorySlugs = "${options.categorySlug}"` : null,
   ].filter((clause): clause is string => clause != null);
 
   const result = await getLibraryIndex().search(query, {

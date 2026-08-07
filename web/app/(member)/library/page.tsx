@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Clock, Eye, MessageSquare } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
-import { getKnowledgeCategories, getPublishedKnowledgeItems } from "@/lib/library-server";
+import { getKnowledgeCategoriesWithCounts, getPublishedKnowledgeItems } from "@/lib/library-server";
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS } from "@/lib/library";
 import type { LibrarySort } from "@/lib/library";
 import { KnowledgeContentType, KnowledgeLevel, Role } from "@/lib/generated/prisma/enums";
@@ -21,16 +21,38 @@ export const metadata: Metadata = {
   title: "Knowledge Library — NASIHA",
 };
 
-function CategoryChip({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
+function CategoryChip({
+  href,
+  active,
+  count,
+  children,
+}: {
+  href: string;
+  active: boolean;
+  count?: number;
+  children: React.ReactNode;
+}) {
   return (
     <Link
       href={href}
+      scroll={false}
       className={cn(
         "rounded-full px-3 py-1 text-sm font-medium transition-colors",
         active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70",
+        count === 0 && !active && "opacity-50",
       )}
     >
       {children}
+      {!!count && (
+        <span
+          className={cn(
+            "ml-1 text-[0.65rem] tabular-nums",
+            active ? "text-primary-foreground/70" : "text-muted-foreground/70",
+          )}
+        >
+          {count}
+        </span>
+      )}
     </Link>
   );
 }
@@ -97,7 +119,7 @@ export default async function LibraryPage({
       userId: user.id,
       isPrivileged,
     }),
-    getKnowledgeCategories(),
+    getKnowledgeCategoriesWithCounts({ userId: user.id, isPrivileged }),
   ]);
 
   const canEditAny = isPrivileged;
@@ -138,6 +160,7 @@ export default async function LibraryPage({
               key={category.id}
               href={`/library?category=${category.slug}`}
               active={searchParams.category === category.slug}
+              count={category.count}
             >
               {category.name}
             </CategoryChip>

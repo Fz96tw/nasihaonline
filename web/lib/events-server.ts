@@ -423,13 +423,14 @@ export async function getEventsHostedByMember(hostId: string, viewerId: string):
         { invitees: { some: { userId: viewerId } } },
       ],
     },
-    select: { id: true, title: true, type: true, startsAt: true, open: true, heroImageUrl: true },
+    select: { id: true, title: true, type: true, startsAt: true, open: true, heroImageUrl: true, cancelledAt: true },
     orderBy: { startsAt: "desc" },
   });
   return events.map((event) => ({
     ...event,
     startsAt: event.startsAt.toISOString(),
     heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
+    cancelledAt: event.cancelledAt?.toISOString() ?? null,
   }));
 }
 

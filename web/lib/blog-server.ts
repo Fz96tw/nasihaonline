@@ -20,7 +20,16 @@ import { createNotification } from "@/lib/notifications-server";
 import { recordAdminAction } from "@/lib/audit-server";
 import { getMentionableMembers } from "@/lib/members-server";
 import { findMentionedMembers } from "@/lib/mentions";
-import type { PostCard, PostDetail, PostCategoryOption, PostTagOption, PostCommentNode, PostSort } from "@/lib/blog";
+import type {
+  PostCard,
+  PostDetail,
+  PostCategoryOption,
+  PostCategoryWithCount,
+  PostTagOption,
+  PostCommentNode,
+  PostSort,
+  MyPost,
+} from "@/lib/blog";
 import { excerptFromHtml } from "@/lib/blog";
 
 const CARD_SELECT = {
@@ -31,7 +40,7 @@ const CARD_SELECT = {
   heroImageUrl: true,
   publishedAt: true,
   author: { select: { name: true, profile: { select: { avatarUrl: true } } } },
-  category: { select: { name: true, slug: true } },
+  categories: { select: { category: { select: { name: true, slug: true } } } },
   _count: { select: { comments: true, views: true } },
 } as const;
 
@@ -61,7 +70,7 @@ function toCard(post: {
   heroImageUrl: string | null;
   publishedAt: Date | null;
   author: { name: string | null; profile: { avatarUrl: string | null } | null };
-  category: { name: string; slug: string };
+  categories: { category: { name: string; slug: string } }[];
   _count: { comments: number; views: number };
 }): PostCard {
   return {
@@ -74,7 +83,7 @@ function toCard(post: {
     // where clauses) so publishedAt is never actually null here.
     publishedAt: (post.publishedAt ?? new Date()).toISOString(),
     author: { name: post.author.name, avatarUrl: getProfileAvatarUrl(post.author.profile?.avatarUrl ?? null) },
-    category: post.category,
+    categories: post.categories.map(({ category }) => category),
     viewCount: post._count.views,
     commentCount: post._count.comments,
   };
@@ -101,8 +110,13 @@ export async function getPublishedPosts(params: {
   categorySlug?: string;
   q?: string;
   sort?: PostSort;
+  /** /blog's "Mine" filter — narrows the published browse view down to one author's own posts. */
+  authorId?: string;
 }): Promise<PostCard[]> {
-  const categoryFilter = params.categorySlug ? { category: { slug: params.categorySlug } } : {};
+  const categoryFilter = params.categorySlug
+    ? { categories: { some: { category: { slug: params.categorySlug } } } }
+    : {};
+  const authorFilter = params.authorId ? { authorId: params.authorId } : {};
   const sort = params.sort ?? "recent";
 
   if (params.q?.trim()) {
@@ -110,7 +124,7 @@ export async function getPublishedPosts(params: {
     if (hits.length === 0) return [];
 
     const posts = await db.post.findMany({
-      where: { id: { in: hits.map((hit) => hit.id) }, publishedAt: { not: null } },
+      where: { id: { in: hits.map((hit) => hit.id) }, publishedAt: { not: null }, ...authorFilter },
       select: CARD_SELECT,
     });
     const byId = new Map(posts.map((post) => [post.id, post]));
@@ -119,7 +133,7 @@ export async function getPublishedPosts(params: {
   }
 
   const posts = await db.post.findMany({
-    where: { publishedAt: { not: null }, ...categoryFilter },
+    where: { publishedAt: { not: null }, ...categoryFilter, ...authorFilter },
     select: CARD_SELECT,
     orderBy: { publishedAt: "desc" },
   });
@@ -158,14 +172,37 @@ export async function getPublishedPostsByAuthor(authorId: string): Promise<PostC
   return posts.map(toCard);
 }
 
+/** /my-posts's Blog tab — a member's own posts at any status (draft included), newest first. */
+export async function getMyPosts(authorId: string): Promise<MyPost[]> {
+  const posts = await db.post.findMany({
+    where: { authorId },
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+      publishedAt: true,
+      flagged: true,
+      categories: { select: { category: { select: { name: true } } } },
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  return posts.map((post) => ({
+    ...post,
+    publishedAt: post.publishedAt?.toISOString() ?? null,
+    categories: post.categories.map(({ category }) => category),
+    createdAt: post.createdAt.toISOString(),
+  }));
+}
+
 export async function getPublishedPostBySlug(slug: string): Promise<PostDetail | null> {
   const post = await db.post.findFirst({
     where: { slug, publishedAt: { not: null } },
     select: {
       ...CARD_SELECT,
       authorId: true,
-      categoryId: true,
       flagged: true,
+      categories: { select: { categoryId: true, category: { select: { name: true, slug: true } } } },
       tags: { select: { tagId: true, tag: { select: { name: true, slug: true } } } },
     },
   });
@@ -175,7 +212,7 @@ export async function getPublishedPostBySlug(slug: string): Promise<PostDetail |
     ...toCard(post),
     body: post.body,
     authorId: post.authorId,
-    categoryId: post.categoryId,
+    categoryIds: post.categories.map(({ categoryId }) => categoryId),
     tagIds: post.tags.map(({ tagId }) => tagId),
     tags: post.tags.map(({ tag }) => tag),
     flagged: post.flagged,
@@ -184,6 +221,24 @@ export async function getPublishedPostBySlug(slug: string): Promise<PostDetail |
 
 export async function getPostCategories(): Promise<PostCategoryOption[]> {
   return db.postCategory.findMany({ orderBy: { name: "asc" } });
+}
+
+/**
+ * Same category list as getPostCategories, with a per-category count of
+ * published posts — powers the /blog filter chips' item-count hint.
+ */
+export async function getPostCategoriesWithCounts(): Promise<PostCategoryWithCount[]> {
+  const [categories, counts] = await Promise.all([
+    db.postCategory.findMany({ orderBy: { name: "asc" } }),
+    db.postCategoryOnPost.groupBy({
+      by: ["categoryId"],
+      where: { post: { publishedAt: { not: null } } },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const countByCategory = new Map(counts.map((row) => [row.categoryId, row._count._all]));
+  return categories.map((category) => ({ ...category, count: countByCategory.get(category.id) ?? 0 }));
 }
 
 export async function getPostTags(): Promise<PostTagOption[]> {
@@ -214,7 +269,7 @@ export async function createPost(
   input: {
     title: string;
     body: string;
-    categoryId: string;
+    categoryIds: string[];
     tagIds: string[];
     licenseConsented: boolean;
     heroImage: File | null;
@@ -224,9 +279,12 @@ export async function createPost(
     throw new PostError(400, "You must acknowledge the content licensing terms to publish.");
   }
 
-  const category = await db.postCategory.findUnique({ where: { id: input.categoryId }, select: { id: true } });
-  if (!category) {
-    throw new PostError(400, "Select a valid category.");
+  const categories = await db.postCategory.findMany({
+    where: { id: { in: input.categoryIds } },
+    select: { id: true },
+  });
+  if (categories.length !== input.categoryIds.length) {
+    throw new PostError(400, "Select at least one valid category.");
   }
 
   let heroImageUrl: string | null = null;
@@ -251,10 +309,10 @@ export async function createPost(
         slug,
         body: input.body,
         authorId,
-        categoryId: input.categoryId,
         heroImageUrl,
         licenseConsented: true,
         publishedAt: new Date(),
+        categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
         tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
       },
       select: { id: true, slug: true, title: true },
@@ -306,7 +364,7 @@ export async function updatePost(
   input: {
     title: string;
     body: string;
-    categoryId: string;
+    categoryIds: string[];
     tagIds: string[];
     heroImage: File | null;
   },
@@ -323,9 +381,12 @@ export async function updatePost(
     throw new PostError(403, "Only the post's author or an admin can edit it.");
   }
 
-  const category = await db.postCategory.findUnique({ where: { id: input.categoryId }, select: { id: true } });
-  if (!category) {
-    throw new PostError(400, "Select a valid category.");
+  const categories = await db.postCategory.findMany({
+    where: { id: { in: input.categoryIds } },
+    select: { id: true },
+  });
+  if (categories.length !== input.categoryIds.length) {
+    throw new PostError(400, "Select at least one valid category.");
   }
 
   let heroImageUrl = post.heroImageUrl;
@@ -342,13 +403,14 @@ export async function updatePost(
 
   const updated = await db.$transaction(async (tx) => {
     await tx.postTagOnPost.deleteMany({ where: { postId: post.id } });
+    await tx.postCategoryOnPost.deleteMany({ where: { postId: post.id } });
     return tx.post.update({
       where: { id: post.id },
       data: {
         title: input.title,
         body: input.body,
-        categoryId: input.categoryId,
         heroImageUrl,
+        categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
         tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
       },
       select: { id: true, slug: true },

@@ -143,6 +143,7 @@ const THREAD_LIST_SELECT = {
   title: true,
   pinned: true,
   createdAt: true,
+  authorId: true,
   author: { select: { name: true } },
   posts: { select: { createdAt: true }, orderBy: { createdAt: "desc" } as const, take: 1 },
   _count: { select: { posts: true, views: true } },
@@ -155,6 +156,7 @@ function toThreadListItem(thread: {
   title: string;
   pinned: boolean;
   createdAt: Date;
+  authorId: string;
   author: { name: string | null };
   posts: { createdAt: Date }[];
   _count: { posts: number; views: number };
@@ -163,6 +165,7 @@ function toThreadListItem(thread: {
     id: thread.id,
     title: thread.title,
     pinned: thread.pinned,
+    authorId: thread.authorId,
     authorName: thread.author.name,
     createdAt: thread.createdAt.toISOString(),
     replyCount: thread._count.posts - 1,
@@ -362,6 +365,7 @@ export async function getMemberForumThreads(
       thread: {
         select: {
           title: true,
+          authorId: true,
           forum: { select: { slug: true, name: true } },
           event: EVENT_THREAD_ACCESS_SELECT,
           knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
@@ -383,6 +387,7 @@ export async function getMemberForumThreads(
       forumSlug: post.thread.forum.slug,
       forumName: post.thread.forum.name,
       lastPostAt: post.createdAt.toISOString(),
+      startedByMember: post.thread.authorId === userId,
     });
   }
   return threads;

@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { Award, LayoutDashboard, User } from "lucide-react";
+import { Award, LayoutDashboard, ListChecks, User } from "lucide-react";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { StatsRow } from "@/components/dashboard/stats-row";
@@ -50,6 +50,13 @@ export default async function DashboardPage() {
           >
             <Award className="h-4 w-4" />
             My Knowledge Hours
+          </Link>
+          <Link
+            href="/my-posts"
+            className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+          >
+            <ListChecks className="h-4 w-4" />
+            All My Posts
           </Link>
         </div>
       </div>

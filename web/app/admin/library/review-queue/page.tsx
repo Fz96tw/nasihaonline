@@ -61,7 +61,8 @@ export default async function LibraryReviewQueuePage() {
               <div>
                 <CardTitle className="text-lg">{item.title}</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  {item.contributor.name ?? item.contributor.email} · {item.category.name} ·{" "}
+                  {item.contributor.name ?? item.contributor.email} ·{" "}
+                  {item.categories.map((category) => category.name).join(", ")} ·{" "}
                   {CONTENT_TYPE_LABELS[item.contentType]} · {LEVEL_LABELS[item.level]}
                 </p>
               </div>

@@ -7,7 +7,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { TiptapEditor } from "@/components/blog/tiptap-editor";
 import { createPostSchema, type CreatePostValues } from "@/lib/validation/post";
@@ -17,7 +16,7 @@ import type { PostCategoryOption, PostTagOption } from "@/lib/blog";
 const DEFAULT_VALUES: CreatePostValues = {
   title: "",
   body: "",
-  categoryId: "",
+  categoryIds: [],
   tagIds: [],
   licenseConsented: false,
 };
@@ -26,7 +25,7 @@ type ExistingPost = {
   slug: string;
   title: string;
   body: string;
-  categoryId: string;
+  categoryIds: string[];
   tagIds: string[];
   heroImageUrl: string | null;
 };
@@ -60,7 +59,7 @@ export function WritePostForm({
       ? {
           title: existingPost.title,
           body: existingPost.body,
-          categoryId: existingPost.categoryId,
+          categoryIds: existingPost.categoryIds,
           tagIds: existingPost.tagIds,
           licenseConsented: true,
         }
@@ -76,7 +75,7 @@ export function WritePostForm({
       const formData = new FormData();
       formData.append("title", values.title);
       formData.append("body", values.body);
-      formData.append("categoryId", values.categoryId);
+      values.categoryIds.forEach((categoryId) => formData.append("categoryIds", categoryId));
       values.tagIds.forEach((tagId) => formData.append("tagIds", tagId));
       if (!existingPost) formData.append("licenseConsented", String(values.licenseConsented));
       if (heroImage) formData.append("heroImage", heroImage);
@@ -125,24 +124,30 @@ export function WritePostForm({
 
         <FormField
           control={form.control}
-          name="categoryId"
+          name="categoryIds"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Category</FormLabel>
-              <Select value={field.value} onValueChange={field.onChange}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a category" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
+              <FormLabel>Categories</FormLabel>
+              <div className="flex flex-wrap gap-4">
+                {categories.map((category) => {
+                  const checked = field.value.includes(category.id);
+                  return (
+                    <label key={category.id} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(c) =>
+                          field.onChange(
+                            c === true
+                              ? [...field.value, category.id]
+                              : field.value.filter((id) => id !== category.id),
+                          )
+                        }
+                      />
                       {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    </label>
+                  );
+                })}
+              </div>
               <FormMessage />
             </FormItem>
           )}

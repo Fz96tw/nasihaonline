@@ -31,6 +31,7 @@ import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import { sendLibraryInviteEmail, sendLibraryLifecycleEmail } from "@/lib/email";
 import type {
   KnowledgeCategoryOption,
+  KnowledgeCategoryWithCount,
   KnowledgeItemDetail,
   KnowledgeItemForEdit,
   KnowledgeItemRosterMember,
@@ -58,7 +59,7 @@ const LIBRARY_CARD_SELECT = {
   youtubeUrl: true,
   heroImageUrl: true,
   externalUrl: true,
-  category: { select: { name: true, slug: true } },
+  categories: { select: { category: { select: { name: true, slug: true } } } },
   contributor: { select: { id: true, name: true } },
   attachments: { select: { fileName: true, mimeType: true, objectKey: true }, take: 1 },
   _count: { select: { views: true } },
@@ -77,7 +78,7 @@ function toLibraryCard(item: {
   youtubeUrl: string | null;
   heroImageUrl: string | null;
   externalUrl: string | null;
-  category: { name: string; slug: string };
+  categories: { category: { name: string; slug: string } }[];
   contributor: { id: string; name: string | null };
   attachments: { fileName: string; mimeType: string; objectKey: string }[];
   _count: { views: number };
@@ -91,7 +92,7 @@ function toLibraryCard(item: {
     level: item.level,
     status: item.status,
     visibility: item.visibility,
-    category: item.category,
+    categories: item.categories.map(({ category }) => category),
     contributor: item.contributor,
     createdAt: item.createdAt.toISOString(),
     youtubeUrl: item.youtubeUrl,
@@ -127,6 +128,41 @@ function sortLibraryCards(cards: LibraryCard[], sort: LibrarySort): LibraryCard[
 
 export async function getKnowledgeCategories(): Promise<KnowledgeCategoryOption[]> {
   return db.knowledgeCategory.findMany({ orderBy: { name: "asc" } });
+}
+
+/**
+ * Same category list as getKnowledgeCategories, with a per-category count of
+ * published/flagged items visible to this user — powers the /library filter
+ * chips' item-count hint. Kept separate since the submit/edit forms that
+ * call getKnowledgeCategories have no userId/visibility context to scope
+ * counts by, and don't need one.
+ */
+export async function getKnowledgeCategoriesWithCounts(params: {
+  userId: string;
+  isPrivileged: boolean;
+}): Promise<KnowledgeCategoryWithCount[]> {
+  const visibleStatuses = [KnowledgeStatus.published, KnowledgeStatus.flagged];
+  const visibilityFilter = params.isPrivileged
+    ? {}
+    : {
+        OR: [
+          { visibility: KnowledgeVisibility.public },
+          { contributorId: params.userId },
+          { invitees: { some: { userId: params.userId } } },
+        ],
+      };
+
+  const [categories, counts] = await Promise.all([
+    db.knowledgeCategory.findMany({ orderBy: { name: "asc" } }),
+    db.knowledgeItemCategory.groupBy({
+      by: ["categoryId"],
+      where: { knowledgeItem: { status: { in: visibleStatuses }, ...visibilityFilter } },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const countByCategory = new Map(counts.map((row) => [row.categoryId, row._count._all]));
+  return categories.map((category) => ({ ...category, count: countByCategory.get(category.id) ?? 0 }));
 }
 
 export async function getKnowledgeTags(): Promise<KnowledgeTagOption[]> {
@@ -170,7 +206,7 @@ export async function createKnowledgeItem(
     description: string;
     contentType: KnowledgeContentType;
     level: KnowledgeLevel;
-    categoryId: string;
+    categoryIds: string[];
     tagIds: string[];
     youtubeUrl: string | null;
     externalUrl: string | null;
@@ -204,9 +240,12 @@ export async function createKnowledgeItem(
     throw new KnowledgeItemError(400, "Select at least one member to invite.");
   }
 
-  const category = await db.knowledgeCategory.findUnique({ where: { id: input.categoryId }, select: { id: true } });
-  if (!category) {
-    throw new KnowledgeItemError(400, "Select a valid category.");
+  const categories = await db.knowledgeCategory.findMany({
+    where: { id: { in: input.categoryIds } },
+    select: { id: true },
+  });
+  if (categories.length !== input.categoryIds.length) {
+    throw new KnowledgeItemError(400, "Select at least one valid category.");
   }
 
   const isRecordedLecture = input.contentType === KnowledgeContentType.recorded_lecture;
@@ -254,7 +293,6 @@ export async function createKnowledgeItem(
       contentType: input.contentType,
       level: input.level,
       contributorId,
-      categoryId: input.categoryId,
       youtubeUrl: isRecordedLecture ? input.youtubeUrl : null,
       heroImageUrl,
       externalUrl: isRecordedLecture ? null : input.externalUrl,
@@ -262,6 +300,7 @@ export async function createKnowledgeItem(
       licenseConsented: true,
       status: KnowledgeStatus.pending_review,
       visibility: input.visibility,
+      categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
       tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
       attachments: attachment ? { create: [attachment] } : undefined,
       invitees: invitedUsers.length > 0 ? { create: invitedUsers.map((user) => ({ userId: user.id })) } : undefined,
@@ -289,7 +328,7 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
       contentType: true,
       level: true,
       status: true,
-      categoryId: true,
+      categories: { select: { categoryId: true } },
       youtubeUrl: true,
       heroImageUrl: true,
       externalUrl: true,
@@ -308,7 +347,7 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
     contentType: item.contentType,
     level: item.level,
     status: item.status,
-    categoryId: item.categoryId,
+    categoryIds: item.categories.map(({ categoryId }) => categoryId),
     tagIds: item.tags.map(({ tagId }) => tagId),
     youtubeUrl: item.youtubeUrl,
     heroImageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl),
@@ -340,7 +379,7 @@ export async function updateKnowledgeItem(
     description: string;
     contentType: KnowledgeContentType;
     level: KnowledgeLevel;
-    categoryId: string;
+    categoryIds: string[];
     tagIds: string[];
     youtubeUrl: string | null;
     externalUrl: string | null;
@@ -370,9 +409,12 @@ export async function updateKnowledgeItem(
     throw new KnowledgeItemError(400, "You must confirm all patient information has been de-identified.");
   }
 
-  const category = await db.knowledgeCategory.findUnique({ where: { id: input.categoryId }, select: { id: true } });
-  if (!category) {
-    throw new KnowledgeItemError(400, "Select a valid category.");
+  const categories = await db.knowledgeCategory.findMany({
+    where: { id: { in: input.categoryIds } },
+    select: { id: true },
+  });
+  if (categories.length !== input.categoryIds.length) {
+    throw new KnowledgeItemError(400, "Select at least one valid category.");
   }
 
   const isRecordedLecture = input.contentType === KnowledgeContentType.recorded_lecture;
@@ -425,6 +467,7 @@ export async function updateKnowledgeItem(
 
   const updated = await db.$transaction(async (tx) => {
     await tx.knowledgeItemTag.deleteMany({ where: { knowledgeItemId: item.id } });
+    await tx.knowledgeItemCategory.deleteMany({ where: { knowledgeItemId: item.id } });
     if (dropsExistingAttachment) {
       await tx.knowledgeAttachment.delete({ where: { id: existingAttachment!.id } });
     }
@@ -435,12 +478,12 @@ export async function updateKnowledgeItem(
         description: input.description,
         contentType: input.contentType,
         level: input.level,
-        categoryId: input.categoryId,
         youtubeUrl: isRecordedLecture ? input.youtubeUrl : null,
         heroImageUrl,
         externalUrl: isRecordedLecture ? null : input.externalUrl,
         deidentificationConfirmed: input.deidentificationConfirmed,
         status: nextStatus,
+        categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
         tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
         attachments: newAttachment ? { create: [newAttachment] } : undefined,
       },
@@ -488,7 +531,7 @@ export async function getPublishedKnowledgeItems(params: {
   const filters = {
     ...(params.contentType ? { contentType: params.contentType } : {}),
     ...(params.level ? { level: params.level } : {}),
-    ...(params.categorySlug ? { category: { slug: params.categorySlug } } : {}),
+    ...(params.categorySlug ? { categories: { some: { category: { slug: params.categorySlug } } } } : {}),
   };
   const visibilityFilter = params.isPrivileged
     ? {}
@@ -937,13 +980,17 @@ export async function getMySubmissions(contributorId: string): Promise<MySubmiss
       title: true,
       contentType: true,
       status: true,
-      category: { select: { name: true } },
+      categories: { select: { category: { select: { name: true } } } },
       createdAt: true,
     },
     orderBy: { createdAt: "desc" },
   });
 
-  return items.map((item) => ({ ...item, createdAt: item.createdAt.toISOString() }));
+  return items.map((item) => ({
+    ...item,
+    categories: item.categories.map(({ category }) => category),
+    createdAt: item.createdAt.toISOString(),
+  }));
 }
 
 /** GET /api/admin/library/review-queue (§4.9) — Steward/admin pre-publish queue. */
@@ -956,7 +1003,7 @@ export async function getReviewQueue(): Promise<ReviewQueueItem[]> {
       description: true,
       contentType: true,
       level: true,
-      category: { select: { name: true } },
+      categories: { select: { category: { select: { name: true } } } },
       contributor: { select: { name: true, email: true } },
       deidentificationConfirmed: true,
       youtubeUrl: true,
@@ -971,6 +1018,7 @@ export async function getReviewQueue(): Promise<ReviewQueueItem[]> {
 
   return items.map((item) => ({
     ...item,
+    categories: item.categories.map(({ category }) => category),
     invitees: item.invitees.map((invitee) => invitee.user),
     createdAt: item.createdAt.toISOString(),
   }));

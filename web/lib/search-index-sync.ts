@@ -65,7 +65,7 @@ export async function syncPostToIndex(postId: string): Promise<void> {
       body: true,
       publishedAt: true,
       author: { select: { name: true } },
-      category: { select: { name: true, slug: true } },
+      categories: { select: { category: { select: { name: true, slug: true } } } },
       tags: { select: { tag: { select: { name: true } } } },
     },
   });
@@ -80,8 +80,8 @@ export async function syncPostToIndex(postId: string): Promise<void> {
     title: post.title,
     excerpt: excerptFromHtml(post.body),
     authorName: post.author.name,
-    categoryName: post.category.name,
-    categorySlug: post.category.slug,
+    categoryNames: post.categories.map(({ category }) => category.name),
+    categorySlugs: post.categories.map(({ category }) => category.slug),
     tagNames: post.tags.map(({ tag }) => tag.name),
   });
 }
@@ -108,7 +108,7 @@ export async function syncKnowledgeItemToIndex(knowledgeItemId: string): Promise
       contentType: true,
       level: true,
       contributor: { select: { name: true } },
-      category: { select: { name: true, slug: true } },
+      categories: { select: { category: { select: { name: true, slug: true } } } },
       tags: { select: { tag: { select: { name: true } } } },
     },
   });
@@ -127,8 +127,8 @@ export async function syncKnowledgeItemToIndex(knowledgeItemId: string): Promise
     title: item.title,
     description: item.description,
     contributorName: item.contributor.name,
-    categoryName: item.category.name,
-    categorySlug: item.category.slug,
+    categoryNames: item.categories.map(({ category }) => category.name),
+    categorySlugs: item.categories.map(({ category }) => category.slug),
     contentType: item.contentType,
     level: item.level,
     tagNames: item.tags.map(({ tag }) => tag.name),

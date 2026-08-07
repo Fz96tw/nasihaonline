@@ -75,9 +75,11 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
       )}
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Badge variant="info" className="w-fit">
-          {item.category.name}
-        </Badge>
+        {item.categories.map((category) => (
+          <Badge key={category.slug} variant="info" className="w-fit">
+            {category.name}
+          </Badge>
+        ))}
         <Badge variant="neutral">{CONTENT_TYPE_LABELS[item.contentType]}</Badge>
         <Badge variant="neutral">{LEVEL_LABELS[item.level]}</Badge>
         {item.status === KnowledgeStatus.flagged && <Badge variant="danger">Flagged</Badge>}
