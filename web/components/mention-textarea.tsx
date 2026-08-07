@@ -27,10 +27,13 @@ function activeMentionQuery(value: string, caretIndex: number): { start: number;
 export function MentionTextarea({
   value,
   onChange,
+  allowedMemberIds,
   ...textareaProps
 }: Omit<TextareaProps, "value" | "onChange"> & {
   value: string;
   onChange: (value: string) => void;
+  /** Member-Initiated Restricted Forum Threads (§4.13/§11.16) — when set, narrows suggestions to this id set so a restricted thread's composer can't autocomplete-suggest (and thus can't silently notify) a non-invitee. Omit for the unrestricted default. */
+  allowedMemberIds?: string[];
 }) {
   const [query, setQuery] = useState<{ start: number; query: string } | null>(null);
   const [suggestions, setSuggestions] = useState<DirectoryMember[]>([]);
@@ -50,7 +53,11 @@ export function MentionTextarea({
         if (!res.ok || cancelled) return;
         const payload = await res.json();
         const members: DirectoryMember[] = Array.isArray(payload?.members) ? payload.members : [];
-        setSuggestions(members.filter((member) => member.name).slice(0, SUGGESTION_LIMIT));
+        setSuggestions(
+          members
+            .filter((member) => member.name && (!allowedMemberIds || allowedMemberIds.includes(member.id)))
+            .slice(0, SUGGESTION_LIMIT),
+        );
         setActiveIndex(0);
       } catch {
         if (!cancelled) setSuggestions([]);
@@ -61,7 +68,7 @@ export function MentionTextarea({
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [query]);
+  }, [query, allowedMemberIds]);
 
   function handleChange(event: React.ChangeEvent<HTMLTextAreaElement>) {
     const nextValue = event.target.value;

@@ -1,23 +1,27 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { EventVisibility, KnowledgeVisibility, NotificationType } from "@/lib/generated/prisma/enums";
+import { EventVisibility, ForumThreadVisibility, KnowledgeVisibility, NotificationType } from "@/lib/generated/prisma/enums";
+import type { Prisma } from "@/lib/generated/prisma/client";
 import { createNotification } from "@/lib/notifications-server";
 import { recordAdminAction } from "@/lib/audit-server";
 import { searchForumDocuments } from "@/lib/meilisearch";
 import { getDirectoryMembersByIds, getMentionableMembers } from "@/lib/members-server";
+import { getProfileAvatarUrl } from "@/lib/storage";
 import { findMentionedMembers } from "@/lib/mentions";
+import { DIRECTORY_TIERS } from "@/lib/members";
 import { CLINICAL_DISCUSSIONS_SLUG } from "@/lib/forums";
 import type {
   ForumCategory,
   ForumThreadListItem,
   ForumThreadDetail,
+  ForumThreadRosterMember,
   ForumPostNode,
   MemberForumThread,
 } from "@/lib/forums";
 
 export class ForumError extends Error {
   constructor(
-    public readonly status: 400 | 404,
+    public readonly status: 400 | 403 | 404,
     message: string,
   ) {
     super(message);
@@ -127,14 +131,42 @@ function isKnowledgeItemThreadVisible(
   return item.contributorId === viewerId || item.invitees.some((invitee) => invitee.userId === viewerId);
 }
 
+// Member-Initiated Restricted Forum Threads (§4.13/§11.16) — a standalone
+// thread's own independently-set restriction, same shape as
+// KnowledgeItemThreadAccess above (author takes the contributor/host role,
+// isPrivileged still bypasses). Always vacuously visible for a thread with
+// an eventId/knowledgeItemId, since createForumThread/
+// updateForumThreadInvitees never let a thread carry both inherited and
+// member-initiated restriction at once — visibility stays `community` on
+// every such thread.
+type OwnThreadAccess = {
+  visibility: ForumThreadVisibility;
+  authorId: string;
+  invitees: { userId: string }[];
+};
+
+const OWN_THREAD_ACCESS_SELECT = {
+  visibility: true,
+  authorId: true,
+  invitees: { select: { userId: true } },
+} as const;
+
+function isOwnThreadVisible(thread: OwnThreadAccess, viewerId: string | undefined, isPrivileged: boolean): boolean {
+  if (thread.visibility !== ForumThreadVisibility.invited) return true;
+  if (isPrivileged) return true;
+  if (!viewerId) return false;
+  return thread.authorId === viewerId || thread.invitees.some((invitee) => invitee.userId === viewerId);
+}
+
 function isThreadVisible(
-  thread: { event: EventThreadAccess; knowledgeItem: KnowledgeItemThreadAccess },
+  thread: { event: EventThreadAccess; knowledgeItem: KnowledgeItemThreadAccess } & OwnThreadAccess,
   viewerId: string | undefined,
   isPrivileged: boolean,
 ): boolean {
   return (
     isEventThreadVisible(thread.event, viewerId) &&
-    isKnowledgeItemThreadVisible(thread.knowledgeItem, viewerId, isPrivileged)
+    isKnowledgeItemThreadVisible(thread.knowledgeItem, viewerId, isPrivileged) &&
+    isOwnThreadVisible(thread, viewerId, isPrivileged)
   );
 }
 
@@ -143,12 +175,12 @@ const THREAD_LIST_SELECT = {
   title: true,
   pinned: true,
   createdAt: true,
-  authorId: true,
   author: { select: { name: true } },
   posts: { select: { createdAt: true }, orderBy: { createdAt: "desc" } as const, take: 1 },
   _count: { select: { posts: true, views: true } },
   event: EVENT_THREAD_ACCESS_SELECT,
   knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
+  ...OWN_THREAD_ACCESS_SELECT,
 } as const;
 
 function toThreadListItem(thread: {
@@ -160,6 +192,7 @@ function toThreadListItem(thread: {
   author: { name: string | null };
   posts: { createdAt: Date }[];
   _count: { posts: number; views: number };
+  visibility: ForumThreadVisibility;
 }): ForumThreadListItem {
   return {
     id: thread.id,
@@ -171,6 +204,7 @@ function toThreadListItem(thread: {
     replyCount: thread._count.posts - 1,
     viewCount: thread._count.views,
     lastActivityAt: (thread.posts[0]?.createdAt ?? thread.createdAt).toISOString(),
+    visibility: thread.visibility,
   };
 }
 
@@ -277,6 +311,11 @@ export async function getForumThreadDetail(
       forum: { select: { id: true, name: true, slug: true } },
       event: EVENT_THREAD_ACCESS_SELECT,
       knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
+      visibility: true,
+      invitees: {
+        select: { userId: true, user: { select: { name: true, profile: { select: { avatarUrl: true } } } } },
+        orderBy: { createdAt: "asc" },
+      },
       posts: {
         select: {
           id: true,
@@ -326,6 +365,12 @@ export async function getForumThreadDetail(
     else roots.push(node);
   }
 
+  const invitees: ForumThreadRosterMember[] = thread.invitees.map((invitee) => ({
+    userId: invitee.userId,
+    name: invitee.user.name,
+    avatarUrl: getProfileAvatarUrl(invitee.user.profile?.avatarUrl ?? null),
+  }));
+
   return {
     id: thread.id,
     title: thread.title,
@@ -337,6 +382,8 @@ export async function getForumThreadDetail(
     viewCount: thread._count.views,
     forum: thread.forum,
     posts: roots,
+    visibility: thread.visibility,
+    invitees,
   };
 }
 
@@ -365,10 +412,10 @@ export async function getMemberForumThreads(
       thread: {
         select: {
           title: true,
-          authorId: true,
           forum: { select: { slug: true, name: true } },
           event: EVENT_THREAD_ACCESS_SELECT,
           knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
+          ...OWN_THREAD_ACCESS_SELECT,
         },
       },
     },
@@ -412,7 +459,12 @@ export async function getThreadViewCount(threadId: string): Promise<number> {
 export async function recordThreadView(threadId: string, userId: string, isPrivileged = false): Promise<number> {
   const thread = await db.forumThread.findUnique({
     where: { id: threadId },
-    select: { id: true, event: EVENT_THREAD_ACCESS_SELECT, knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT },
+    select: {
+      id: true,
+      event: EVENT_THREAD_ACCESS_SELECT,
+      knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
+      ...OWN_THREAD_ACCESS_SELECT,
+    },
   });
   if (!thread || !isThreadVisible(thread, userId, isPrivileged)) throw new ForumError(404, "Thread not found.");
 
@@ -421,17 +473,65 @@ export async function recordThreadView(threadId: string, userId: string, isPrivi
 }
 
 /**
+ * Bell-notifies invitees that a restricted standalone thread is now
+ * reachable to them (Member-Initiated Restricted Forum Threads, §4.13/
+ * §11.16) — reused by createForumThread (initial invite list) and
+ * updateForumThreadInvitees (a newly-added invitee), same "shared helper,
+ * two call sites" precedent as notifyInvitedLibraryUsers in
+ * lib/library-server.ts. Unlike the Library/Event equivalents, a forum
+ * thread has no draft/pending-review state to gate on — it's visible the
+ * instant it's created, so there's no "itemIsVisible" branch to check.
+ * Takes a transaction client so callers can post it alongside other writes
+ * in the same transaction. No paired email — forums have no existing
+ * lifecycle-email precedent to extend.
+ */
+async function notifyThreadInvitees(
+  tx: Prisma.TransactionClient,
+  params: { threadId: string; forumSlug: string; title: string; authorName: string; userIds: string[] },
+): Promise<void> {
+  if (params.userIds.length === 0) return;
+  const link = `/forums/${params.forumSlug}/${params.threadId}`;
+  const message = `${params.authorName} invited you to a private thread: "${params.title}"`;
+  await tx.notification.createMany({
+    data: params.userIds.map((userId) => ({
+      recipientId: userId,
+      type: NotificationType.forum_thread_invited,
+      message,
+      link,
+    })),
+  });
+}
+
+/**
  * "New Thread" (§4.13) — creates the ForumThread and its opening ForumPost
- * together. No notification here (no other participants exist yet, unlike
- * createForumPost). The de-identification gate is enforced here rather than
- * in the zod schema, since the schema alone doesn't know which forum a
- * thread is going into — same "type/category decides the gate" shape as
+ * together. The de-identification gate is enforced here rather than in the
+ * zod schema, since the schema alone doesn't know which forum a thread is
+ * going into — same "type/category decides the gate" shape as
  * createKnowledgeItem's case_study check.
+ *
+ * Member-Initiated Restricted Forum Threads (§4.13/§11.16): when
+ * `visibility` is `invited`, `invitedUserIds` is re-resolved against
+ * directory eligibility (ids that aren't eligible, or the author's own id,
+ * are silently dropped rather than erroring, same rationale as
+ * createEvent/createKnowledgeItem) and must leave at least one real
+ * invitee — the zod schema already requires a non-empty list, but a list
+ * that resolves to zero eligible members after re-checking still needs to
+ * fail here. Every invitee is notified (forum_thread_invited), mirroring
+ * event_invited/library_item_shared. `eventId`/`knowledgeItemId` are never
+ * set here — only events-server.ts/library-server.ts's own thread-creation
+ * paths set those, and neither ever passes a `visibility` — so inherited
+ * and member-initiated restriction can never coexist on the same thread.
  */
 export async function createForumThread(
   forumId: string,
   authorId: string,
-  input: { title: string; body: string; deidentificationConfirmed: boolean },
+  input: {
+    title: string;
+    body: string;
+    deidentificationConfirmed: boolean;
+    visibility: ForumThreadVisibility;
+    invitedUserIds: string[];
+  },
 ): Promise<{ id: string }> {
   const forum = await db.forum.findUnique({ where: { id: forumId }, select: { id: true, slug: true, active: true } });
   if (!forum || !forum.active) throw new ForumError(404, "Forum not found.");
@@ -441,23 +541,57 @@ export async function createForumThread(
     throw new ForumError(400, "You must confirm all patient information has been de-identified.");
   }
 
-  const thread = await db.forumThread.create({
-    data: {
-      forumId,
-      authorId,
-      title: input.title,
-      posts: {
-        create: {
-          authorId,
-          body: input.body,
-          deidentificationConfirmed: isClinicalDiscussions && input.deidentificationConfirmed,
+  const isRestricted = input.visibility === ForumThreadVisibility.invited;
+  const invitees =
+    isRestricted && input.invitedUserIds.length > 0
+      ? await db.user.findMany({
+          where: {
+            id: { in: input.invitedUserIds, notIn: [authorId] },
+            tier: { in: DIRECTORY_TIERS },
+            profile: { listInDirectory: true },
+          },
+          select: { id: true },
+        })
+      : [];
+  if (isRestricted && invitees.length === 0) {
+    throw new ForumError(400, "Select at least one member to invite.");
+  }
+
+  const author = isRestricted ? await db.user.findUnique({ where: { id: authorId }, select: { name: true } }) : null;
+
+  const thread = await db.$transaction(async (tx) => {
+    const created = await tx.forumThread.create({
+      data: {
+        forumId,
+        authorId,
+        title: input.title,
+        visibility: isRestricted ? ForumThreadVisibility.invited : ForumThreadVisibility.community,
+        posts: {
+          create: {
+            authorId,
+            body: input.body,
+            deidentificationConfirmed: isClinicalDiscussions && input.deidentificationConfirmed,
+          },
         },
+        ...(invitees.length > 0 ? { invitees: { create: invitees.map((user) => ({ userId: user.id })) } } : {}),
       },
-    },
-    select: { id: true },
+      select: { id: true, title: true },
+    });
+
+    if (invitees.length > 0) {
+      await notifyThreadInvitees(tx, {
+        threadId: created.id,
+        forumSlug: forum.slug,
+        title: created.title,
+        authorName: author?.name ?? "A member",
+        userIds: invitees.map((user) => user.id),
+      });
+    }
+
+    return created;
   });
 
-  return thread;
+  return { id: thread.id };
 }
 
 /**
@@ -490,10 +624,10 @@ export async function createForumPost(
       id: true,
       title: true,
       forumId: true,
-      authorId: true,
       forum: { select: { slug: true } },
       event: EVENT_THREAD_ACCESS_SELECT,
       knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
+      ...OWN_THREAD_ACCESS_SELECT,
     },
   });
   if (!thread) throw new ForumError(404, "Thread not found.");
@@ -538,9 +672,27 @@ export async function createForumPost(
       if (invitee.userId !== authorId) otherParticipantIds.add(invitee.userId);
     }
   }
+  // Same rationale for a member-initiated restricted thread's own invitees
+  // (§4.13/§11.16) — AC "every invitee gets the normal reply notification
+  // for new activity whether or not they've posted."
+  if (thread.visibility === ForumThreadVisibility.invited) {
+    for (const invitee of thread.invitees) {
+      if (invitee.userId !== authorId) otherParticipantIds.add(invitee.userId);
+    }
+  }
 
+  // A restricted thread's `@`-tag candidates are narrowed to its author and
+  // invitees — a mention notification linking to a 404 (or to a resolved
+  // "@Name" tag rendered for someone who can never actually open the
+  // thread) would otherwise leak the thread's existence to a non-invitee.
   const mentionableMembers = await getMentionableMembers();
-  const mentionedMembers = findMentionedMembers(input.body, mentionableMembers).filter(
+  const mentionCandidates =
+    thread.visibility === ForumThreadVisibility.invited
+      ? mentionableMembers.filter(
+          (member) => member.id === thread.authorId || thread.invitees.some((invitee) => invitee.userId === member.id),
+        )
+      : mentionableMembers;
+  const mentionedMembers = findMentionedMembers(input.body, mentionCandidates).filter(
     (member) => member.id !== authorId,
   );
   const postLink = `/forums/${thread.forum.slug}/${threadId}#post-${post.id}`;
@@ -581,6 +733,113 @@ export async function createForumPost(
   }
 
   return { id: post.id, createdAt: post.createdAt.toISOString() };
+}
+
+/**
+ * PATCH /api/forums/threads/:threadId/invitees — adds and/or removes
+ * members from a restricted standalone thread's invited list after
+ * creation (Member-Initiated Restricted Forum Threads, §4.13/§11.16),
+ * mirrors updateKnowledgeItemInvitees. Unlike the Library equivalent, a
+ * forum thread has no draft/pending-review state, so every notification
+ * fires unconditionally rather than being gated on an "itemIsVisible"
+ * check. Removing the thread's last invitee is rejected — a restricted
+ * thread always keeps at least one, and there's no path to flip `invited`
+ * back to `community` in v1.
+ */
+export async function updateForumThreadInvitees(
+  threadId: string,
+  userId: string,
+  isPrivileged: boolean,
+  input: { addUserIds: string[]; removeUserIds: string[] },
+): Promise<{ added: number; removed: number }> {
+  const thread = await db.forumThread.findUnique({
+    where: { id: threadId },
+    select: {
+      id: true,
+      title: true,
+      authorId: true,
+      visibility: true,
+      forum: { select: { slug: true } },
+      _count: { select: { invitees: true } },
+    },
+  });
+  if (!thread) throw new ForumError(404, "Thread not found.");
+  if (thread.visibility !== ForumThreadVisibility.invited) {
+    throw new ForumError(400, "Only a restricted thread has an invited list.");
+  }
+  if (!isPrivileged && userId !== thread.authorId) {
+    throw new ForumError(403, "Only the thread's author or a moderator/admin can manage invitees.");
+  }
+
+  const author = await db.user.findUnique({ where: { id: thread.authorId }, select: { name: true } });
+  const authorName = author?.name ?? "A member";
+
+  // Re-resolved against directory eligibility, same rationale as
+  // createForumThread — ids that aren't eligible (or already invited, or
+  // the author) are silently dropped rather than erroring.
+  const [addCandidates, alreadyInvited, removeCandidates] = await Promise.all([
+    input.addUserIds.length > 0
+      ? db.user.findMany({
+          where: {
+            id: { in: input.addUserIds, notIn: [thread.authorId] },
+            tier: { in: DIRECTORY_TIERS },
+            profile: { listInDirectory: true },
+          },
+          select: { id: true },
+        })
+      : Promise.resolve([]),
+    input.addUserIds.length > 0
+      ? db.forumThreadInvitee.findMany({
+          where: { threadId, userId: { in: input.addUserIds } },
+          select: { userId: true },
+        })
+      : Promise.resolve([]),
+    input.removeUserIds.length > 0
+      ? db.forumThreadInvitee.findMany({
+          where: { threadId, userId: { in: input.removeUserIds } },
+          select: { userId: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const alreadyInvitedIds = new Set(alreadyInvited.map((row) => row.userId));
+  const newInvitees = addCandidates.filter((user) => !alreadyInvitedIds.has(user.id));
+
+  const finalCount = thread._count.invitees + newInvitees.length - removeCandidates.length;
+  if (removeCandidates.length > 0 && finalCount < 1) {
+    throw new ForumError(400, "A restricted thread must keep at least one invited member.");
+  }
+
+  await db.$transaction(async (tx) => {
+    if (newInvitees.length > 0) {
+      await tx.forumThreadInvitee.createMany({
+        data: newInvitees.map((user) => ({ threadId, userId: user.id })),
+      });
+      await notifyThreadInvitees(tx, {
+        threadId,
+        forumSlug: thread.forum.slug,
+        title: thread.title,
+        authorName,
+        userIds: newInvitees.map((user) => user.id),
+      });
+    }
+
+    if (removeCandidates.length > 0) {
+      const removeIds = removeCandidates.map((row) => row.userId);
+      await tx.forumThreadInvitee.deleteMany({ where: { threadId, userId: { in: removeIds } } });
+      await tx.notification.createMany({
+        data: removeIds.map((recipientId) => ({
+          recipientId,
+          type: NotificationType.forum_thread_removed,
+          message: `You no longer have access to a private thread: "${thread.title}"`,
+          // No link — a removed invitee's next request for the thread
+          // 404s, same rationale as library_item_removed/event_removed.
+          link: null,
+        })),
+      });
+    }
+  });
+
+  return { added: newInvitees.length, removed: removeCandidates.length };
 }
 
 /**

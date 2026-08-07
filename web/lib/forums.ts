@@ -1,6 +1,7 @@
 // Shared Forums types (§4.13) — mirrors lib/blog.ts's split between plain
 // data shapes (this file) and DB-touching queries (lib/forums-server.ts).
 
+import { ForumThreadVisibility } from "@/lib/generated/prisma/enums";
 import type { DirectoryMember } from "@/lib/members";
 
 // Seeded forum slug (see prisma/seed.ts's slugify("Clinical Discussions"))
@@ -42,7 +43,26 @@ export type ForumThreadListItem = {
   replyCount: number;
   viewCount: number;
   lastActivityAt: string;
+  /** Member-Initiated Restricted Forum Threads (§4.13/§11.16) — only ever `invited` for a standalone thread its author, an invitee, or a moderator/admin can see; every other viewer never receives this row at all. */
+  visibility: ForumThreadVisibility;
 };
+
+/** Member-Initiated Restricted Forum Threads (§4.13/§11.16) — one row per invited member, shown on the thread detail page's invite-management panel. No RSVP-equivalent status, same rationale as KnowledgeItemRosterMember. */
+export type ForumThreadRosterMember = {
+  userId: string;
+  name: string | null;
+  avatarUrl: string | null;
+};
+
+// Shared "Everyone" / "Invited only" audience badge for a ForumThread —
+// mirrors getEventAudienceBadge (lib/events.ts), minus the "Open" case
+// (forums have no public/anonymous audience).
+export function getForumThreadAudienceBadge(thread: {
+  visibility: ForumThreadVisibility;
+}): { label: string; variant: "info" | "warning" } {
+  if (thread.visibility === ForumThreadVisibility.invited) return { label: "Invited Only", variant: "warning" };
+  return { label: "Everyone", variant: "info" };
+}
 
 /** A post/reply on a ForumThread (§4.13), nested by `parentPostId` into a reply tree. */
 export type ForumPostNode = {
@@ -84,4 +104,8 @@ export type ForumThreadDetail = {
   viewCount: number;
   forum: { id: string; name: string; slug: string };
   posts: ForumPostNode[];
+  /** Member-Initiated Restricted Forum Threads (§4.13/§11.16). */
+  visibility: ForumThreadVisibility;
+  /** Populated only when visibility is `invited` — empty for a `community` thread. */
+  invitees: ForumThreadRosterMember[];
 };

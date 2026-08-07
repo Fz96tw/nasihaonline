@@ -92,6 +92,7 @@ model User {
   knowledgeItemsContributed KnowledgeItem[]        @relation("KnowledgeContributor")
   knowledgeItemInvitations  KnowledgeItemInvitee[] @relation("KnowledgeItemInvitee")
   forumThreads              ForumThread[]          @relation("ForumThreadAuthor")
+  forumThreadInvitations    ForumThreadInvitee[]   @relation("ForumThreadInvitee")
   forumPosts                ForumPost[]            @relation("ForumPostAuthor")
   forumFollows              ForumFollow[]
   threadViews               ThreadView[]
@@ -770,6 +771,16 @@ enum NotificationType {
   // list (paired with email, like event_removed). No link — a removed
   // invitee loses access to the item's detail page.
   library_item_removed
+  // Member-Initiated Restricted Forum Threads (§4.13/§11.16) — sent to a
+  // newly-added invitee of a restricted standalone thread, both at
+  // creation and via updateForumThreadInvitees. No paired email (unlike
+  // event_invited/library_item_shared) — forums have no existing
+  // lifecycle-email precedent to extend.
+  forum_thread_invited
+  // Sent to a member removed from a restricted thread's invited list
+  // (mirrors library_item_removed). No link — a removed invitee's next
+  // request for the thread 404s.
+  forum_thread_removed
 }
 
 // Homegrown in-app notification feed (§4.10) — no third-party vendor.
@@ -1382,19 +1393,37 @@ model ForumFollow {
   @@map("forum_follows")
 }
 
-model ForumThread {
-  id        String   @id @default(cuid())
-  forumId   String
-  forum     Forum    @relation(fields: [forumId], references: [id])
-  authorId  String
-  author    User     @relation("ForumThreadAuthor", fields: [authorId], references: [id])
-  title     String
-  pinned    Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// Member-Initiated Restricted Forum Threads (§4.13, §11.16). `community`
+// (the only behavior that existed before this) is visible to the whole
+// membership, unconditionally; `invited` is visible only to the thread's
+// author and the members listed in ForumThreadInvitee — enforced in every
+// member-facing query in lib/forums-server.ts/lib/feed-server.ts, never in
+// the DB layer, same convention as EventVisibility. Only ever set on a
+// standalone thread (eventId and knowledgeItemId both null) — a thread
+// that inherits restriction from its linked Event/KnowledgeItem never sets
+// this to `invited`; inherited and member-initiated restriction are
+// mutually exclusive, enforced in createForumThread/
+// updateForumThreadInvitees.
+enum ForumThreadVisibility {
+  community
+  invited
+}
 
-  posts ForumPost[]
-  views ThreadView[]
+model ForumThread {
+  id         String                @id @default(cuid())
+  forumId    String
+  forum      Forum                 @relation(fields: [forumId], references: [id])
+  authorId   String
+  author     User                  @relation("ForumThreadAuthor", fields: [authorId], references: [id])
+  title      String
+  pinned     Boolean               @default(false)
+  visibility ForumThreadVisibility @default(community)
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  posts    ForumPost[]
+  views    ThreadView[]
+  invitees ForumThreadInvitee[]
 
   // Set only for the auto-created thread behind an Event's optional
   // "create a discussion thread" checkbox (§4.6) — null for every
@@ -1413,6 +1442,26 @@ model ForumThread {
   @@index([forumId])
   @@index([authorId])
   @@map("forum_threads")
+}
+
+// Invite list for a member-initiated restricted ForumThread
+// (visibility: invited) — mirrors EventInvitee/KnowledgeItemInvitee
+// exactly, no RSVP analog (same rationale as KnowledgeItemInvitee's doc
+// comment). One row per invited member; rows are added/removed
+// independently after creation via updateForumThreadInvitees, which keeps
+// this table non-empty for as long as the thread stays `invited` — no path
+// to flip back to `community` in v1.
+model ForumThreadInvitee {
+  id        String      @id @default(cuid())
+  threadId  String
+  thread    ForumThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation("ForumThreadInvitee", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@unique([threadId, userId])
+  @@index([userId])
+  @@map("forum_thread_invitees")
 }
 
 // One row per unique member visit to a ForumThread (§4.13), for the

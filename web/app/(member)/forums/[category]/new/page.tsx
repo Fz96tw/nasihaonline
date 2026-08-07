@@ -29,6 +29,7 @@ export default async function NewForumThreadPage({ params }: { params: { categor
         forumId={forum.id}
         forumSlug={forum.slug}
         requireDeidentification={forum.slug === CLINICAL_DISCUSSIONS_SLUG}
+        currentUserId={user.id}
       />
     </main>
   );

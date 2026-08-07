@@ -20,6 +20,7 @@ function ReplyForm({
   threadId,
   parentId,
   requireDeidentification,
+  allowedMemberIds,
   autoFocus,
   onPosted,
   onCancel,
@@ -27,6 +28,8 @@ function ReplyForm({
   threadId: string;
   parentId: string | null;
   requireDeidentification: boolean;
+  /** Member-Initiated Restricted Forum Threads (§4.13/§11.16) — narrows the `@`-mention autocomplete to the thread's author + invitees; omit for an unrestricted (community) thread. */
+  allowedMemberIds?: string[];
   autoFocus?: boolean;
   onPosted: () => void;
   onCancel?: () => void;
@@ -73,6 +76,7 @@ function ReplyForm({
         placeholder={parentId ? "Write a reply… (@ to tag a member)" : "Write a post… (@ to tag a member)"}
         value={body}
         onChange={setBody}
+        allowedMemberIds={allowedMemberIds}
         autoFocus={autoFocus}
       />
       {requireDeidentification && (
@@ -101,12 +105,14 @@ function PostNode({
   threadId,
   requireDeidentification,
   mentionableMembers,
+  allowedMemberIds,
   onPosted,
 }: {
   post: ForumPostNode;
   threadId: string;
   requireDeidentification: boolean;
   mentionableMembers: MentionCandidate[];
+  allowedMemberIds?: string[];
   onPosted: () => void;
 }) {
   const router = useRouter();
@@ -206,6 +212,7 @@ function PostNode({
             threadId={threadId}
             parentId={post.id}
             requireDeidentification={requireDeidentification}
+            allowedMemberIds={allowedMemberIds}
             autoFocus
             onCancel={() => setReplying(false)}
             onPosted={() => {
@@ -225,6 +232,7 @@ function PostNode({
               threadId={threadId}
               requireDeidentification={requireDeidentification}
               mentionableMembers={mentionableMembers}
+              allowedMemberIds={allowedMemberIds}
               onPosted={onPosted}
             />
           ))}
@@ -240,11 +248,14 @@ export function ForumThreadView({
   posts,
   requireDeidentification,
   mentionableMembers,
+  allowedMemberIds,
 }: {
   threadId: string;
   posts: ForumPostNode[];
   requireDeidentification: boolean;
   mentionableMembers: MentionCandidate[];
+  /** Member-Initiated Restricted Forum Threads (§4.13/§11.16) — narrows every reply composer's `@`-mention autocomplete to the thread's author + invitees; omit for an unrestricted (community) thread. */
+  allowedMemberIds?: string[];
 }) {
   const router = useRouter();
 
@@ -257,6 +268,7 @@ export function ForumThreadView({
           threadId={threadId}
           requireDeidentification={requireDeidentification}
           mentionableMembers={mentionableMembers}
+          allowedMemberIds={allowedMemberIds}
           onPosted={() => router.refresh()}
         />
       ))}
@@ -267,6 +279,7 @@ export function ForumThreadView({
           threadId={threadId}
           parentId={null}
           requireDeidentification={requireDeidentification}
+          allowedMemberIds={allowedMemberIds}
           onPosted={() => router.refresh()}
         />
       </div>

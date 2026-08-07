@@ -3,10 +3,10 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Activity, Clock, Flame, Pin } from "lucide-react";
+import { ArrowLeft, Activity, Clock, Flame, Lock, Pin } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getForumBySlug } from "@/lib/forums-server";
-import { Role } from "@/lib/generated/prisma/enums";
+import { ForumThreadVisibility, Role } from "@/lib/generated/prisma/enums";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -160,6 +160,9 @@ export default async function ForumCategoryPage({
               <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2">
                   {thread.pinned && <Pin className="h-3.5 w-3.5 text-primary" />}
+                  {thread.visibility === ForumThreadVisibility.invited && (
+                    <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                  )}
                   <span className="font-medium">{thread.title}</span>
                 </div>
                 <span className="text-xs text-muted-foreground">

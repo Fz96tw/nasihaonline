@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import {
   EventVisibility,
+  ForumThreadVisibility,
   KnowledgeStatus,
   KnowledgeVisibility,
   RSVPStatus,
@@ -188,13 +189,20 @@ export async function getFeedPage(params: {
       // forumReplyCount above), so listing them again here would be a
       // duplicate, bodiless-looking "Forum" row for the same activity.
       // knowledgeItemId: null excludes the Library's on-demand discussion
-      // threads for the same reason — but critically, unlike the eventId
-      // exclusion, this isn't just de-duplication: this branch has no
-      // per-viewer visibility filter at all (every thread it returns is
-      // shown to every viewer unconditionally), so a restricted item's
-      // thread title/excerpt would otherwise leak to non-invitees here even
-      // though the item's own "library" feed row above is correctly scoped.
-      where: { eventId: null, knowledgeItemId: null, ...(before ? { createdAt: { lt: before } } : {}) },
+      // threads for the same reason. Beyond de-duplication, the OR below is
+      // Member-Initiated Restricted Forum Threads' (§4.13/§11.16) own
+      // per-viewer visibility filter — same shape as the events/library
+      // branches above — since a standalone thread can now independently
+      // carry `visibility: invited`.
+      where: {
+        eventId: null,
+        knowledgeItemId: null,
+        ...(before ? { createdAt: { lt: before } } : {}),
+        OR: [
+          { visibility: ForumThreadVisibility.community },
+          ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
+        ],
+      },
       select: {
         id: true,
         title: true,

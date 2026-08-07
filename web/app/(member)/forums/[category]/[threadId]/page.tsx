@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Pin } from "lucide-react";
+import { Lock, Pin } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getForumThreadDetail } from "@/lib/forums-server";
 import { getMentionableMembers } from "@/lib/members-server";
 import { ForumThreadView } from "@/components/forums/forum-thread-view";
+import { ManageThreadInvitees } from "@/components/forums/manage-thread-invitees";
 import { ThreadViewCounter } from "@/components/forums/thread-view-counter";
 import { BackLink } from "@/components/back-link";
-import { CLINICAL_DISCUSSIONS_SLUG } from "@/lib/forums";
-import { Role } from "@/lib/generated/prisma/enums";
+import { Badge } from "@/components/ui/badge";
+import { Avatar } from "@/components/ui/avatar";
+import { CLINICAL_DISCUSSIONS_SLUG, getForumThreadAudienceBadge } from "@/lib/forums";
+import { ForumThreadVisibility, Role } from "@/lib/generated/prisma/enums";
 
 export async function generateMetadata({
   params,
@@ -35,7 +38,23 @@ export default async function ForumThreadPage({
   const thread = await getForumThreadDetail(params.category, params.threadId, user.id, isPrivileged);
   if (!thread) notFound();
 
-  const mentionableMembers = await getMentionableMembers();
+  const isRestricted = thread.visibility === ForumThreadVisibility.invited;
+  const canManageInvitees = isRestricted && (user.id === thread.authorId || isPrivileged);
+  const audienceBadge = getForumThreadAudienceBadge(thread);
+
+  // Member-Initiated Restricted Forum Threads (§4.13/§11.16) — a restricted
+  // thread's `@`-mention candidates (both the composer's autocomplete and
+  // rendered "@Name" tags) are narrowed to its author + invitees, same
+  // rationale as createForumPost's server-side mention narrowing: a
+  // resolved mention (or an autocomplete suggestion) for someone who could
+  // never actually open the thread would leak its existence.
+  const allMentionableMembers = await getMentionableMembers();
+  const restrictedMemberIds = isRestricted
+    ? [thread.authorId, ...thread.invitees.map((invitee) => invitee.userId)]
+    : null;
+  const mentionableMembers = restrictedMemberIds
+    ? allMentionableMembers.filter((member) => restrictedMemberIds.includes(member.id))
+    : allMentionableMembers;
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
@@ -43,7 +62,9 @@ export default async function ForumThreadPage({
       <div>
         <div className="flex items-center gap-2">
           {thread.pinned && <Pin className="h-4 w-4 text-primary" />}
+          {isRestricted && <Lock className="h-4 w-4 text-muted-foreground" />}
           <h1 className="text-2xl font-bold tracking-tight">{thread.title}</h1>
+          {isRestricted && <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>}
         </div>
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
@@ -61,7 +82,25 @@ export default async function ForumThreadPage({
         posts={thread.posts}
         requireDeidentification={thread.forum.slug === CLINICAL_DISCUSSIONS_SLUG}
         mentionableMembers={mentionableMembers}
+        allowedMemberIds={restrictedMemberIds ?? undefined}
       />
+
+      {isRestricted &&
+        (canManageInvitees ? (
+          <ManageThreadInvitees threadId={thread.id} initialRoster={thread.invitees} />
+        ) : (
+          <div className="flex flex-col gap-2 border-t pt-6">
+            <h2 className="text-sm font-semibold">Invited members ({thread.invitees.length})</h2>
+            <ul className="flex flex-col divide-y">
+              {thread.invitees.map((member) => (
+                <li key={member.userId} className="flex items-center gap-2 py-2">
+                  <Avatar name={member.name ?? "Member"} src={member.avatarUrl} size="xs" />
+                  <span className="text-sm">{member.name ?? "A member"}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
     </main>
   );
 }

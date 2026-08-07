@@ -8,14 +8,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { createForumThreadSchema, type CreateForumThreadValues } from "@/lib/validation/forum";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { InviteePicker } from "@/components/members/invitee-picker";
+import { ForumThreadVisibility } from "@/lib/generated/prisma/enums";
 
 const DEFAULT_VALUES: CreateForumThreadValues = {
   title: "",
   body: "",
   deidentificationConfirmed: false,
+  visibility: ForumThreadVisibility.community,
+  invitedUserIds: [],
 };
 
 /**
@@ -25,15 +30,21 @@ const DEFAULT_VALUES: CreateForumThreadValues = {
  * Discussions, same conditional-gate shape as SubmitResourceForm's
  * case_study checkbox. Both gates are enforced again server-side by
  * createForumThread.
+ *
+ * Member-Initiated Restricted Forum Threads (§4.13/§11.16) — the Audience
+ * select + InviteePicker follow the exact same conditional-gate shape as
+ * SubmitEventForm's restricted-audience toggle.
  */
 export function NewThreadForm({
   forumId,
   forumSlug,
   requireDeidentification,
+  currentUserId,
 }: {
   forumId: string;
   forumSlug: string;
   requireDeidentification: boolean;
+  currentUserId: string;
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -44,6 +55,9 @@ export function NewThreadForm({
     defaultValues: DEFAULT_VALUES,
     mode: "onTouched",
   });
+
+  const visibility = form.watch("visibility");
+  const isRestricted = visibility === ForumThreadVisibility.invited;
 
   async function onSubmit(values: CreateForumThreadValues) {
     if (requireDeidentification && !values.deidentificationConfirmed) {
@@ -85,6 +99,49 @@ export function NewThreadForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
+        <FormField
+          control={form.control}
+          name="visibility"
+          render={({ field }) => (
+            <FormItem className="rounded-md border p-4">
+              <FormLabel>Audience</FormLabel>
+              <Select value={field.value} onValueChange={field.onChange}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value={ForumThreadVisibility.community}>Everyone</SelectItem>
+                  <SelectItem value={ForumThreadVisibility.invited}>Invite only</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                {isRestricted
+                  ? "Only you and the members you invite can see or reply to this thread."
+                  : "Every member can see and reply to this thread."}
+              </FormDescription>
+            </FormItem>
+          )}
+        />
+
+        {isRestricted && (
+          <FormField
+            control={form.control}
+            name="invitedUserIds"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Invited members</FormLabel>
+                <FormControl>
+                  <InviteePicker value={field.value} onChange={field.onChange} excludeUserId={currentUserId} />
+                </FormControl>
+                <FormDescription>Each invited member gets a notification pointing them to the thread.</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
         <FormField
           control={form.control}
           name="title"
