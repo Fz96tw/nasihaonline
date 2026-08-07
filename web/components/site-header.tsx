@@ -115,7 +115,7 @@ export async function SiteHeader() {
           <Link href="/donate">Support Us</Link>
         </Button>
       </div>
-      <div className="ml-auto flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] sm:gap-3 [&::-webkit-scrollbar]:hidden">
+      <div className="ml-auto flex min-w-0 items-center gap-1 overflow-x-auto py-1 [scrollbar-width:none] sm:gap-3 [&::-webkit-scrollbar]:hidden">
         {user ? (
           <>
             <div className="hidden items-center gap-2 lg:flex">
