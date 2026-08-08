@@ -45,7 +45,7 @@ export async function sendWelcomeAnnouncement(newUser: UserModel): Promise<void>
 
   const directoryLink =
     isDirectoryVisible && APP_URL
-      ? `\n\n[Say hello to ${displayName} in the Member Directory](${APP_URL}/members/${newUser.id})`
+      ? `\n\n[Say hello to ${displayName}](${APP_URL}/members/${newUser.id})`
       : "";
 
   const title = rawName ? `Welcome, ${rawName}!` : "Welcome our newest member!";
