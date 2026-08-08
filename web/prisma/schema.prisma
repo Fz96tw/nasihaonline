@@ -274,6 +274,7 @@ enum InterestArea {
   tech_development
   travel_culture
   music
+  history
 }
 
 enum ApplicationStatus {

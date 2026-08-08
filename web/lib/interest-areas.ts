@@ -16,6 +16,7 @@ export const INTEREST_AREA_LABELS: Record<InterestArea, string> = {
   [InterestArea.health_wellness]: "Health & Wellness",
   [InterestArea.health_tech]: "Health-tech",
   [InterestArea.healthcare]: "Healthcare",
+  [InterestArea.history]: "History",
   [InterestArea.leadership_management]: "Leadership & Management",
   [InterestArea.literature_writing]: "Literature & Writing",
   [InterestArea.marketing_sales]: "Marketing & Sales",
