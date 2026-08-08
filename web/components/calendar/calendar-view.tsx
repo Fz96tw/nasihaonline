@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
@@ -16,6 +16,14 @@ import type { UpcomingMeeting } from "@/lib/meeting-requests";
 import "@/components/calendar/calendar-theme.css";
 
 type UpcomingItem = ({ kind: "event" } & MemberEvent) | ({ kind: "meeting" } & UpcomingMeeting);
+
+function upcomingItemStart(item: UpcomingItem): string {
+  return item.kind === "event" ? item.startsAt : item.scheduledAt;
+}
+
+function monthLabel(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
 
 type RsvpState = { rsvped: boolean; meetingUrl: string | null; attendeeCount?: number };
 
@@ -119,11 +127,9 @@ export function CalendarView({
       .map((event) => ({ kind: "event" as const, ...event }));
     const upcomingMeetings: UpcomingItem[] = meetings.map((meeting) => ({ kind: "meeting" as const, ...meeting }));
 
-    return [...upcomingEvents, ...upcomingMeetings].sort((a, b) => {
-      const aStart = a.kind === "event" ? a.startsAt : a.scheduledAt;
-      const bStart = b.kind === "event" ? b.startsAt : b.scheduledAt;
-      return aStart.localeCompare(bStart);
-    });
+    return [...upcomingEvents, ...upcomingMeetings].sort((a, b) =>
+      upcomingItemStart(a).localeCompare(upcomingItemStart(b)),
+    );
   }, [resolvedEvents, meetings]);
 
   function handleRsvpToggled(eventId: string, result: RsvpState) {
@@ -201,18 +207,31 @@ export function CalendarView({
               </p>
             ) : (
               <ul>
-                {upcoming.map((item) =>
-                  item.kind === "event" ? (
-                    <EventListItem
-                      key={item.id}
-                      event={item}
-                      isHost={item.hostId === currentUserId}
-                      onRsvpToggled={(result) => handleRsvpToggled(item.id, result)}
-                    />
-                  ) : (
-                    <UpcomingMeetingItem key={item.id} meeting={item} />
-                  ),
-                )}
+                {upcoming.map((item, index) => {
+                  const label = monthLabel(upcomingItemStart(item));
+                  const showDivider = index === 0 || label !== monthLabel(upcomingItemStart(upcoming[index - 1]));
+
+                  return (
+                    <Fragment key={item.id}>
+                      {showDivider && (
+                        <li className="list-none">
+                          <h3 className="mb-2 border-b pb-1 text-sm font-semibold text-muted-foreground first:mt-0 mt-6">
+                            {label}
+                          </h3>
+                        </li>
+                      )}
+                      {item.kind === "event" ? (
+                        <EventListItem
+                          event={item}
+                          isHost={item.hostId === currentUserId}
+                          onRsvpToggled={(result) => handleRsvpToggled(item.id, result)}
+                        />
+                      ) : (
+                        <UpcomingMeetingItem meeting={item} />
+                      )}
+                    </Fragment>
+                  );
+                })}
               </ul>
             )}
           </CardContent>
