@@ -214,8 +214,8 @@ export function CalendarView({
                   return (
                     <Fragment key={item.id}>
                       {showDivider && (
-                        <li className="list-none">
-                          <h3 className="mb-2 border-b pb-1 text-sm font-semibold text-muted-foreground first:mt-0 mt-6">
+                        <li className="list-none mt-16 first:mt-0">
+                          <h3 className="mb-4 border-b-2 pb-2 text-2xl font-bold text-foreground">
                             {label}
                           </h3>
                         </li>
