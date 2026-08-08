@@ -151,7 +151,7 @@ export default async function MyPostsPage() {
     type: "Event",
     title: event.title,
     status: eventStatus(event, now),
-    date: event.startsAt,
+    date: event.createdAt,
     href: `/calendar/${event.id}/edit`,
     actionLabel: "Edit",
   }));
