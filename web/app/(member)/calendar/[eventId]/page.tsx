@@ -113,6 +113,8 @@ export default async function EventDetailPage({ params }: { params: { eventId: s
             posts={thread.posts.slice(1)}
             requireDeidentification={false}
             mentionableMembers={mentionableMembers}
+            currentUserId={user.id}
+            isPrivileged={user.role === Role.admin || user.role === Role.moderator}
           />
         </div>
       )}

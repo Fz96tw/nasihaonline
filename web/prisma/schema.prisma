@@ -1515,6 +1515,12 @@ model ForumPost {
   // for a removed post's body instead.
   removed                   Boolean @default(false)
 
+  // Set when the author (or an admin/moderator) edits this post's body
+  // after posting — distinct from `updatedAt` (also touched by
+  // flagForumPost/resolveForumPostFlag) so the "(edited)" UI indicator
+  // can't misfire off a moderation action. Null until the first edit.
+  editedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

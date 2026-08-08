@@ -63,3 +63,33 @@ export const createForumPostSchema = z.object({
 });
 
 export type CreateForumPostValues = z.infer<typeof createForumPostSchema>;
+
+/**
+ * PATCH /api/forums/posts/:postId body shape — body-only edit, shared by
+ * the opening ForumPost and any reply (both are the same ForumPost row
+ * shape; only body is ever mutable after posting).
+ */
+export const updateForumPostSchema = z.object({
+  body: z.string().trim().min(1, "Post can't be empty").max(10000),
+});
+
+export type UpdateForumPostValues = z.infer<typeof updateForumPostSchema>;
+
+/**
+ * PATCH /api/forums/threads/:threadId body shape — title + audience edit
+ * for a standalone thread. Reuses requireRestrictedThreadInvariants exactly
+ * as createForumThreadSchema does. When the thread is already `invited` and
+ * staying `invited`, the client pre-fills invitedUserIds with the thread's
+ * current roster purely to satisfy this invariant — updateForumThread
+ * ignores the field entirely in that case (roster changes keep going
+ * through the existing PATCH .../invitees endpoint).
+ */
+export const updateForumThreadSchema = z
+  .object({
+    title: z.string().trim().min(1, "Title is required").max(200),
+    visibility: z.nativeEnum(ForumThreadVisibility),
+    invitedUserIds: z.array(z.string()),
+  })
+  .superRefine(requireRestrictedThreadInvariants);
+
+export type UpdateForumThreadValues = z.infer<typeof updateForumThreadSchema>;

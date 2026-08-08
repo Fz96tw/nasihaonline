@@ -73,6 +73,8 @@ export type ForumPostNode = {
   /** Author's Directory profile, if they're directory-listed and tier-eligible (§4.3/§9) — null otherwise, in which case the author's avatar isn't clickable. */
   authorProfile: DirectoryMember | null;
   createdAt: string;
+  /** Set once the author (or a moderator/admin) edits this post's body after posting — null until the first edit. */
+  editedAt: string | null;
   flagged: boolean;
   removed: boolean;
   replies: ForumPostNode[];
@@ -108,4 +110,6 @@ export type ForumThreadDetail = {
   visibility: ForumThreadVisibility;
   /** Populated only when visibility is `invited` — empty for a `community` thread. */
   invitees: ForumThreadRosterMember[];
+  /** False for a thread linked to an Event or Knowledge Library item (inherited visibility) — its title/audience are managed automatically and can't be edited via /forums/[category]/[threadId]/edit. */
+  isEditable: boolean;
 };

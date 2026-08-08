@@ -106,6 +106,8 @@ function PostNode({
   requireDeidentification,
   mentionableMembers,
   allowedMemberIds,
+  currentUserId,
+  isPrivileged,
   onPosted,
 }: {
   post: ForumPostNode;
@@ -113,6 +115,8 @@ function PostNode({
   requireDeidentification: boolean;
   mentionableMembers: MentionCandidate[];
   allowedMemberIds?: string[];
+  currentUserId: string;
+  isPrivileged: boolean;
   onPosted: () => void;
 }) {
   const router = useRouter();
@@ -121,7 +125,36 @@ function PostNode({
   const [flagging, setFlagging] = useState(false);
   const [flagged, setFlagged] = useState(post.flagged);
   const [flagError, setFlagError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editBody, setEditBody] = useState(post.body);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const authorName = post.authorName ?? "NASIHA Member";
+  const canEdit = !post.removed && (post.authorId === currentUserId || isPrivileged);
+
+  async function handleSaveEdit() {
+    if (!editBody.trim()) return;
+    setEditSubmitting(true);
+    setEditError(null);
+    try {
+      const csrfToken = await getCsrfToken();
+      const res = await fetch(`/api/forums/posts/${post.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+        body: JSON.stringify({ body: editBody.trim() }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        throw new Error(typeof payload?.error === "string" ? payload.error : "Something went wrong.");
+      }
+      setEditing(false);
+      onPosted();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setEditSubmitting(false);
+    }
+  }
 
   async function handleFlag(reason: string) {
     setFlagging(true);
@@ -170,11 +203,35 @@ function PostNode({
             {post.removed && <Badge variant="neutral">Removed</Badge>}
             {!post.removed && flagged && <Badge variant="danger">Flagged</Badge>}
           </span>
-          <span>{formatTimestamp(post.createdAt)}</span>
+          <span>
+            {formatTimestamp(post.createdAt)}
+            {post.editedAt && !post.removed && <span className="ml-1">· edited</span>}
+          </span>
         </div>
-        <p className={cn("whitespace-pre-wrap break-words text-sm", post.removed && "italic text-muted-foreground")}>
-          {renderTextWithMentions(post.body, mentionableMembers)}
-        </p>
+        {editing ? (
+          <div className="flex flex-col gap-2">
+            <MentionTextarea
+              rows={3}
+              value={editBody}
+              onChange={setEditBody}
+              allowedMemberIds={allowedMemberIds}
+              autoFocus
+            />
+            {editError && <p className="text-xs text-destructive">{editError}</p>}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+              <Button type="button" size="sm" disabled={editSubmitting || !editBody.trim()} onClick={handleSaveEdit}>
+                {editSubmitting ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className={cn("whitespace-pre-wrap break-words text-sm", post.removed && "italic text-muted-foreground")}>
+            {renderTextWithMentions(post.body, mentionableMembers)}
+          </p>
+        )}
         <div className="mt-2 flex items-center gap-3">
           <button
             type="button"
@@ -183,6 +240,19 @@ function PostNode({
           >
             {replying ? "Cancel" : "Reply"}
           </button>
+          {canEdit && (
+            <button
+              type="button"
+              className="text-xs font-medium text-primary hover:underline"
+              onClick={() => {
+                setEditBody(post.body);
+                setEditError(null);
+                setEditing((value) => !value);
+              }}
+            >
+              {editing ? "Cancel" : "Edit"}
+            </button>
+          )}
           {!post.removed && !flagged && (
             <button
               type="button"
@@ -233,6 +303,8 @@ function PostNode({
               requireDeidentification={requireDeidentification}
               mentionableMembers={mentionableMembers}
               allowedMemberIds={allowedMemberIds}
+              currentUserId={currentUserId}
+              isPrivileged={isPrivileged}
               onPosted={onPosted}
             />
           ))}
@@ -249,6 +321,8 @@ export function ForumThreadView({
   requireDeidentification,
   mentionableMembers,
   allowedMemberIds,
+  currentUserId,
+  isPrivileged,
 }: {
   threadId: string;
   posts: ForumPostNode[];
@@ -256,6 +330,8 @@ export function ForumThreadView({
   mentionableMembers: MentionCandidate[];
   /** Member-Initiated Restricted Forum Threads (§4.13/§11.16) — narrows every reply composer's `@`-mention autocomplete to the thread's author + invitees; omit for an unrestricted (community) thread. */
   allowedMemberIds?: string[];
+  currentUserId: string;
+  isPrivileged: boolean;
 }) {
   const router = useRouter();
 
@@ -269,6 +345,8 @@ export function ForumThreadView({
           requireDeidentification={requireDeidentification}
           mentionableMembers={mentionableMembers}
           allowedMemberIds={allowedMemberIds}
+          currentUserId={currentUserId}
+          isPrivileged={isPrivileged}
           onPosted={() => router.refresh()}
         />
       ))}

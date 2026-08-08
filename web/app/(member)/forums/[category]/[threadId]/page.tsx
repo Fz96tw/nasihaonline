@@ -10,6 +10,7 @@ import { ManageThreadInvitees } from "@/components/forums/manage-thread-invitees
 import { ThreadViewCounter } from "@/components/forums/thread-view-counter";
 import { BackLink } from "@/components/back-link";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { CLINICAL_DISCUSSIONS_SLUG, getForumThreadAudienceBadge } from "@/lib/forums";
 import { ForumThreadVisibility, Role } from "@/lib/generated/prisma/enums";
@@ -60,11 +61,18 @@ export default async function ForumThreadPage({
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
       <BackLink fallbackHref={`/forums/${thread.forum.slug}`} />
       <div>
-        <div className="flex items-center gap-2">
-          {thread.pinned && <Pin className="h-4 w-4 text-primary" />}
-          {isRestricted && <Lock className="h-4 w-4 text-muted-foreground" />}
-          <h1 className="text-2xl font-bold tracking-tight">{thread.title}</h1>
-          {isRestricted && <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            {thread.pinned && <Pin className="h-4 w-4 text-primary" />}
+            {isRestricted && <Lock className="h-4 w-4 text-muted-foreground" />}
+            <h1 className="text-2xl font-bold tracking-tight">{thread.title}</h1>
+            {isRestricted && <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>}
+          </div>
+          {thread.isEditable && (user.id === thread.authorId || isPrivileged) && (
+            <Button asChild variant="ghost" size="sm">
+              <Link href={`/forums/${thread.forum.slug}/${thread.id}/edit`}>Edit</Link>
+            </Button>
+          )}
         </div>
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
@@ -83,6 +91,8 @@ export default async function ForumThreadPage({
         requireDeidentification={thread.forum.slug === CLINICAL_DISCUSSIONS_SLUG}
         mentionableMembers={mentionableMembers}
         allowedMemberIds={restrictedMemberIds ?? undefined}
+        currentUserId={user.id}
+        isPrivileged={isPrivileged}
       />
 
       {isRestricted &&

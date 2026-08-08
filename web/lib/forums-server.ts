@@ -311,6 +311,8 @@ export async function getForumThreadDetail(
       forum: { select: { id: true, name: true, slug: true } },
       event: EVENT_THREAD_ACCESS_SELECT,
       knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
+      eventId: true,
+      knowledgeItemId: true,
       visibility: true,
       invitees: {
         select: { userId: true, user: { select: { name: true, profile: { select: { avatarUrl: true } } } } },
@@ -324,6 +326,7 @@ export async function getForumThreadDetail(
           author: { select: { name: true } },
           parentPostId: true,
           createdAt: true,
+          editedAt: true,
           flagged: true,
           removed: true,
         },
@@ -350,6 +353,7 @@ export async function getForumThreadDetail(
         authorName: post.author.name,
         authorProfile: authorProfiles.get(post.authorId) ?? null,
         createdAt: post.createdAt.toISOString(),
+        editedAt: post.editedAt?.toISOString() ?? null,
         flagged: post.flagged,
         removed: post.removed,
         replies: [],
@@ -384,6 +388,7 @@ export async function getForumThreadDetail(
     posts: roots,
     visibility: thread.visibility,
     invitees,
+    isEditable: !thread.eventId && !thread.knowledgeItemId,
   };
 }
 
@@ -595,6 +600,113 @@ export async function createForumThread(
 }
 
 /**
+ * PATCH /api/forums/threads/:threadId — the author or a moderator/admin
+ * editing a standalone thread's title and/or audience. Only ever valid for
+ * a standalone, member-initiated thread — a thread carrying an
+ * eventId/knowledgeItemId has its title fully owned by
+ * events-server.ts/library-server.ts (renamed via their own updateMany
+ * calls, visibility always `community`, see the ForumThreadVisibility doc
+ * comment) and is rejected here with a 400, same rationale as
+ * createForumThread never accepting a visibility for those threads.
+ *
+ * Visibility transitions:
+ *   community -> community : no-op on invitees.
+ *   invited   -> invited   : `invitedUserIds` is IGNORED — an already-
+ *                             restricted thread's roster is only ever
+ *                             changed via the existing
+ *                             updateForumThreadInvitees/PATCH .../invitees,
+ *                             never overwritten here.
+ *   community -> invited   : re-resolves invitedUserIds against directory
+ *                             eligibility (same rules as createForumThread's
+ *                             own resolution block), requires >=1 real
+ *                             invitee, creates the ForumThreadInvitee rows
+ *                             and notifies them, all inside the same
+ *                             transaction as the visibility flip — so there
+ *                             is never a persisted state where the thread is
+ *                             `invited` with zero invitees.
+ *   invited   -> community : rejected (400) — no path back to `community`
+ *                             in v1, same rule as the ForumThreadInvitee
+ *                             model doc comment and
+ *                             updateForumThreadInvitees's own doc comment
+ *                             already state.
+ */
+export async function updateForumThread(
+  threadId: string,
+  actingUserId: string,
+  isPrivileged: boolean,
+  input: { title: string; visibility: ForumThreadVisibility; invitedUserIds: string[] },
+): Promise<{ id: string }> {
+  const thread = await db.forumThread.findUnique({
+    where: { id: threadId },
+    select: {
+      id: true,
+      title: true,
+      authorId: true,
+      visibility: true,
+      eventId: true,
+      knowledgeItemId: true,
+      forum: { select: { slug: true } },
+    },
+  });
+  if (!thread) throw new ForumError(404, "Thread not found.");
+  if (thread.eventId || thread.knowledgeItemId) {
+    throw new ForumError(400, "This thread's title and audience are managed automatically and can't be edited here.");
+  }
+  if (!isPrivileged && actingUserId !== thread.authorId) {
+    throw new ForumError(403, "Only the thread's author or a moderator/admin can edit it.");
+  }
+  if (thread.visibility === ForumThreadVisibility.invited && input.visibility === ForumThreadVisibility.community) {
+    throw new ForumError(400, "A restricted thread can't be switched back to Everyone.");
+  }
+
+  const isNewlyRestricted =
+    thread.visibility === ForumThreadVisibility.community && input.visibility === ForumThreadVisibility.invited;
+
+  let invitees: { id: string }[] = [];
+  let authorName = "A member";
+  if (isNewlyRestricted) {
+    invitees =
+      input.invitedUserIds.length > 0
+        ? await db.user.findMany({
+            where: {
+              id: { in: input.invitedUserIds, notIn: [thread.authorId] },
+              tier: { in: DIRECTORY_TIERS },
+              profile: { listInDirectory: true },
+            },
+            select: { id: true },
+          })
+        : [];
+    if (invitees.length === 0) throw new ForumError(400, "Select at least one member to invite.");
+    const author = await db.user.findUnique({ where: { id: thread.authorId }, select: { name: true } });
+    authorName = author?.name ?? "A member";
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.forumThread.update({
+      where: { id: threadId },
+      data: {
+        title: input.title,
+        ...(isNewlyRestricted
+          ? { visibility: ForumThreadVisibility.invited, invitees: { create: invitees.map((u) => ({ userId: u.id })) } }
+          : {}),
+      },
+    });
+
+    if (isNewlyRestricted) {
+      await notifyThreadInvitees(tx, {
+        threadId,
+        forumSlug: thread.forum.slug,
+        title: input.title,
+        authorName,
+        userIds: invitees.map((u) => u.id),
+      });
+    }
+  });
+
+  return { id: threadId };
+}
+
+/**
  * Posts a reply on a thread and notifies its other participants
  * (`forum_reply_mention`) — every distinct author on the thread plus the
  * thread's own author, plus (for a restricted event's thread) every invitee
@@ -733,6 +845,43 @@ export async function createForumPost(
   }
 
   return { id: post.id, createdAt: post.createdAt.toISOString() };
+}
+
+/**
+ * PATCH /api/forums/posts/:postId — the author or a moderator/admin editing
+ * an existing post's body, whether it's a thread's opening post or a nested
+ * reply (both are ForumPost rows, identical shape). Same
+ * isPrivileged-or-isAuthor authorization shape as updateForumThreadInvitees's
+ * authorId check below. A removed post (takedown by a moderator) can't be
+ * edited — its real body is already hidden from everyone, and editing it
+ * could resurrect content a moderator deliberately took down. No separate
+ * visibility check is needed here (unlike createForumPost): only the post's
+ * own author or a privileged moderator/admin can reach this branch at all,
+ * and both already have implicit visibility into the post.
+ */
+export async function updateForumPost(
+  postId: string,
+  actingUserId: string,
+  isPrivileged: boolean,
+  input: { body: string },
+): Promise<{ id: string; threadId: string; editedAt: string }> {
+  const post = await db.forumPost.findUnique({
+    where: { id: postId },
+    select: { id: true, authorId: true, threadId: true, removed: true },
+  });
+  if (!post) throw new ForumError(404, "Post not found.");
+  if (post.removed) throw new ForumError(400, "A removed post can't be edited.");
+  if (!isPrivileged && actingUserId !== post.authorId) {
+    throw new ForumError(403, "Only the post's author or a moderator/admin can edit it.");
+  }
+
+  const updated = await db.forumPost.update({
+    where: { id: postId },
+    data: { body: input.body, editedAt: new Date() },
+    select: { id: true, threadId: true, editedAt: true },
+  });
+
+  return { id: updated.id, threadId: updated.threadId, editedAt: updated.editedAt!.toISOString() };
 }
 
 /**

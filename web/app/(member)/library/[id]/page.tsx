@@ -183,6 +183,8 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
             posts={thread.posts.slice(1)}
             requireDeidentification={false}
             mentionableMembers={mentionableMembers}
+            currentUserId={user.id}
+            isPrivileged={isPrivileged}
           />
         </div>
       )}
