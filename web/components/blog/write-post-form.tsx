@@ -96,7 +96,11 @@ export function WritePostForm({
         );
       }
       const { slug } = await res.json();
-      router.push(`/blog/${slug}`);
+      // Replace rather than push: the write/edit form is a dead end once
+      // submitted, so it shouldn't linger in history for Back to land on
+      // (see BackLink, which relies on router.back() to whatever the
+      // requester actually arrived from rather than a hardcoded route).
+      router.replace(`/blog/${slug}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
