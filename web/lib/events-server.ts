@@ -992,36 +992,16 @@ export async function updateEvent(
     await updateMeetingCalendarEventTime(event.googleEventId, startsAt, endsAt);
   }
 
-  // Reschedule notification (Objective 03) — restricted events only,
-  // community events keep today's silent-edit behavior unchanged.
-  const rescheduled = event.visibility === EventVisibility.invited && timeChanged;
-  if (rescheduled) {
-    const invitees = await db.eventInvitee.findMany({
-      where: { eventId },
-      select: { userId: true, user: { select: { email: true, name: true } } },
+  // Reschedule notification (Objective 03) — every visibility now notifies
+  // its committed audience via notifyEventAudience (shared with
+  // cancelEvent), not just restricted events.
+  if (timeChanged) {
+    const when = startsAt.toLocaleString("en-US", { dateStyle: "full", timeStyle: "short" });
+    await notifyEventAudience(eventId, event.visibility, {
+      type: NotificationType.event_rescheduled,
+      subject: `Rescheduled: ${input.title}`,
+      message: `"${input.title}" has been rescheduled to ${when}.`,
     });
-    if (invitees.length > 0) {
-      const link = `/calendar/${eventId}`;
-      const when = startsAt.toLocaleString("en-US", { dateStyle: "full", timeStyle: "short" });
-      const message = `"${input.title}" has been rescheduled to ${when}.`;
-      await db.notification.createMany({
-        data: invitees.map((invitee) => ({
-          recipientId: invitee.userId,
-          type: NotificationType.event_rescheduled,
-          message,
-          link,
-        })),
-      });
-      await Promise.allSettled(
-        invitees.map((invitee) =>
-          sendEventLifecycleEmail(invitee.user.email, invitee.user.name ?? "there", {
-            subject: `Rescheduled: ${input.title}`,
-            message,
-            link: `${APP_URL}${link}`,
-          }),
-        ),
-      );
-    }
   }
 
   return updated;
@@ -1160,16 +1140,81 @@ export async function updateEventInvitees(
 }
 
 /**
+ * Notifies everyone who committed to an event of a lifecycle change
+ * (cancellation, reschedule) — for any visibility: restricted-event
+ * invitees and anyone with a `going` RSVP get a bell notification + email
+ * (deduped by userId, since a restricted-event member can be both invited
+ * and RSVP'd); external `EventRegistration` signups — no `User` account,
+ * so no bell notification is possible — get an email pointing at the
+ * public /events listing instead of the member-only /calendar/[eventId]
+ * link, since they can't sign in to reach it. Shared by cancelEvent and
+ * updateEvent's reschedule path so both lifecycle events notify the same
+ * audience the same way.
+ */
+async function notifyEventAudience(
+  eventId: string,
+  visibility: EventVisibility,
+  notification: { type: NotificationType; subject: string; message: string },
+): Promise<void> {
+  const isRestricted = visibility === EventVisibility.invited;
+  const [invitees, goingRsvps, registrations] = await Promise.all([
+    isRestricted
+      ? db.eventInvitee.findMany({
+          where: { eventId },
+          select: { userId: true, user: { select: { email: true, name: true } } },
+        })
+      : Promise.resolve([]),
+    db.rSVP.findMany({
+      where: { eventId, status: RSVPStatus.going },
+      select: { userId: true, user: { select: { email: true, name: true } } },
+    }),
+    db.eventRegistration.findMany({ where: { eventId }, select: { email: true, name: true } }),
+  ]);
+
+  // Invitees ∪ RSVP'd members, deduped by userId — a restricted-event
+  // member who is both invited and RSVP'd gets exactly one notification.
+  const members = new Map<string, { email: string; name: string | null }>();
+  for (const invitee of invitees) members.set(invitee.userId, invitee.user);
+  for (const rsvp of goingRsvps) members.set(rsvp.userId, rsvp.user);
+
+  if (members.size > 0) {
+    const link = `/calendar/${eventId}`;
+    await db.notification.createMany({
+      data: Array.from(members.keys()).map((recipientId) => ({
+        recipientId,
+        type: notification.type,
+        message: notification.message,
+        link,
+      })),
+    });
+    await Promise.allSettled(
+      Array.from(members.values()).map((member) =>
+        sendEventLifecycleEmail(member.email, member.name ?? "there", {
+          subject: notification.subject,
+          message: notification.message,
+          link: `${APP_URL}${link}`,
+        }),
+      ),
+    );
+  }
+
+  if (registrations.length > 0) {
+    await Promise.allSettled(
+      registrations.map((registration) =>
+        sendEventLifecycleEmail(registration.email, registration.name ?? "there", {
+          subject: notification.subject,
+          message: notification.message,
+          link: `${APP_URL}/events`,
+        }),
+      ),
+    );
+  }
+}
+
+/**
  * Cancels an event (host or admin only) — a one-way, soft-delete-style flag
- * (Event.cancelledAt), not a status a host can clear. Notifies everyone who
- * committed to the event, for any visibility: restricted-event invitees and
- * anyone with a `going` RSVP get a bell notification + email (deduped by
- * userId, since a restricted-event member can be both invited and RSVP'd);
- * external `EventRegistration` signups — no `User` account, so no bell
- * notification is possible — get an email pointing at the public /events
- * listing instead of the member-only /calendar/[eventId] link, since they
- * can't sign in to reach it. Also deletes the underlying Google Calendar
- * event if the Meet link was auto-generated.
+ * (Event.cancelledAt), not a status a host can clear. Also deletes the
+ * underlying Google Calendar event if the Meet link was auto-generated.
  */
 export async function cancelEvent(eventId: string, actingUser: UserModel): Promise<void> {
   const event = await db.event.findUnique({
@@ -1185,63 +1230,13 @@ export async function cancelEvent(eventId: string, actingUser: UserModel): Promi
     throw new EventError(403, "Only the event's host or an admin can cancel it.");
   }
 
-  const isRestricted = event.visibility === EventVisibility.invited;
-  const [invitees, goingRsvps, registrations] = await Promise.all([
-    isRestricted
-      ? db.eventInvitee.findMany({
-          where: { eventId },
-          select: { userId: true, user: { select: { email: true, name: true } } },
-        })
-      : Promise.resolve([]),
-    db.rSVP.findMany({
-      where: { eventId, status: RSVPStatus.going },
-      select: { userId: true, user: { select: { email: true, name: true } } },
-    }),
-    db.eventRegistration.findMany({ where: { eventId }, select: { email: true, name: true } }),
-  ]);
-
   await db.event.update({ where: { id: eventId }, data: { cancelledAt: new Date() } });
 
-  const message = `${actingUser.name ?? "The host"} cancelled "${event.title}".`;
-
-  // Invitees ∪ RSVP'd members, deduped by userId — a restricted-event
-  // member who is both invited and RSVP'd gets exactly one notification.
-  const members = new Map<string, { email: string; name: string | null }>();
-  for (const invitee of invitees) members.set(invitee.userId, invitee.user);
-  for (const rsvp of goingRsvps) members.set(rsvp.userId, rsvp.user);
-
-  if (members.size > 0) {
-    const link = `/calendar/${eventId}`;
-    await db.notification.createMany({
-      data: Array.from(members.keys()).map((recipientId) => ({
-        recipientId,
-        type: NotificationType.event_cancelled,
-        message,
-        link,
-      })),
-    });
-    await Promise.allSettled(
-      Array.from(members.values()).map((member) =>
-        sendEventLifecycleEmail(member.email, member.name ?? "there", {
-          subject: `Cancelled: ${event.title}`,
-          message,
-          link: `${APP_URL}${link}`,
-        }),
-      ),
-    );
-  }
-
-  if (registrations.length > 0) {
-    await Promise.allSettled(
-      registrations.map((registration) =>
-        sendEventLifecycleEmail(registration.email, registration.name ?? "there", {
-          subject: `Cancelled: ${event.title}`,
-          message,
-          link: `${APP_URL}/events`,
-        }),
-      ),
-    );
-  }
+  await notifyEventAudience(eventId, event.visibility, {
+    type: NotificationType.event_cancelled,
+    subject: `Cancelled: ${event.title}`,
+    message: `${actingUser.name ?? "The host"} cancelled "${event.title}".`,
+  });
 
   if (event.googleEventId) {
     await cancelMeetingCalendarEvent(event.googleEventId);
