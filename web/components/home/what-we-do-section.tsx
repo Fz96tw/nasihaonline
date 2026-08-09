@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Reveal } from "@/components/home/reveal";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const ACTIVITIES = [
@@ -59,6 +59,11 @@ export function WhatWeDoSection() {
             </Reveal>
           ))}
         </div>
+        <Reveal className="mt-10 text-center">
+          <Button variant="outline" size="lg" asChild>
+            <Link href="/contact">Contact Us</Link>
+          </Button>
+        </Reveal>
       </div>
     </section>
   );
