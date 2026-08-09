@@ -29,17 +29,20 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { MEMBER_NAV_SECTIONS, memberFooterItems } from "@/lib/member-nav";
+import { MEMBER_NAV_SECTIONS, memberFooterItems, type NavItem as MemberNavItem } from "@/lib/member-nav";
 import { cn } from "@/lib/utils";
 
 type NavLink = { href: string; label: string; icon: LucideIcon; restricted?: boolean };
 
-// Mirrors the desktop header's two NavDropdowns (site-header.tsx) — grouped
-// under collapsed-by-default accordions instead of one long flat list, so
-// the sheet stays short by default regardless of how many links either
-// group grows to hold. The sheet's own overflow-y-auto (see SheetContent
-// below) is still there as a backstop for short screens/several groups
-// open at once, but shouldn't be relied on as the primary fix for a long menu.
+// Mirrors the desktop header's two NavDropdowns (site-header.tsx). Signed-in
+// members get a lot more nav below this (Main/Community sections from
+// MEMBER_NAV_SECTIONS, plus footer items), so Our Mission collapses into an
+// accordion there to keep the sheet short — the sheet's own overflow-y-auto
+// (see SheetContent below) is still a backstop, but shouldn't be relied on
+// as the primary fix. Guests have far fewer items overall (no member
+// sections), so both groups render as one flat list instead — collapsing
+// would just add an extra tap before reaching Join/Sign in for no real
+// space benefit.
 const OUR_MISSION_LINKS: NavLink[] = [
   { href: "/about", label: "About", icon: Info },
   { href: "/getinvolved", label: "Get Involved", icon: Handshake },
@@ -61,10 +64,35 @@ const SUPPORT_LINK: NavLink = { href: "/donate", label: "Support Us", icon: Hear
 const linkClasses = "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold hover:bg-accent";
 const triggerClasses = "rounded-md px-3 py-2 text-sm font-semibold hover:bg-accent hover:no-underline";
 
-function GroupLink({ link, dimmed }: { link: NavLink; dimmed: boolean }) {
+// Renders one MEMBER_NAV_SECTIONS item — a real link, or a disabled "Soon"
+// placeholder.
+function SectionLink({ item }: { item: MemberNavItem }) {
+  const Icon = item.icon;
+  if (item.soon) {
+    return (
+      <div aria-disabled="true" className={`${linkClasses} cursor-not-allowed text-muted-foreground/50`}>
+        <Icon className="h-[18px] w-[18px] flex-shrink-0" />
+        <span className="truncate">{item.label} · Soon</span>
+      </div>
+    );
+  }
   return (
     <SheetClose asChild>
-      <Link href={link.href} className={cn(linkClasses, "pl-9", dimmed && "justify-between text-muted-foreground")}>
+      <Link href={item.href} className={linkClasses}>
+        <Icon className="h-[18px] w-[18px] flex-shrink-0" />
+        <span className="truncate">{item.label}</span>
+      </Link>
+    </SheetClose>
+  );
+}
+
+function GroupLink({ link, dimmed, indent = true }: { link: NavLink; dimmed: boolean; indent?: boolean }) {
+  return (
+    <SheetClose asChild>
+      <Link
+        href={link.href}
+        className={cn(linkClasses, indent && "pl-9", dimmed && "justify-between text-muted-foreground")}
+      >
         <span className="flex items-center gap-3">
           <link.icon className="h-[18px] w-[18px] flex-shrink-0" />
           <span className="truncate">{link.label}</span>
@@ -88,7 +116,7 @@ export function MobileNav({
   // Signed-in members already get the Community links from
   // MEMBER_NAV_SECTIONS' own "Community" section below (Events Calendar,
   // Blogs, Knowledge Library, Forums, Member Directory, Message Inbox), so
-  // that accordion group is guest-only here rather than just filtered down.
+  // COMMUNITY_LINKS only renders at all in the guest (flat-list) branch below.
   const topLevelHrefs = new Set([
     ...OUR_MISSION_LINKS.map((link) => link.href),
     ...(signedIn ? [] : COMMUNITY_LINKS.map((link) => link.href)),
@@ -111,36 +139,29 @@ export function MobileNav({
           <SheetTitle className="sr-only">Menu</SheetTitle>
         </SheetHeader>
         <nav className="flex flex-col gap-1">
-          <Accordion type="multiple" className="flex flex-col gap-1">
-            <AccordionItem value="mission" className="border-none">
-              <AccordionTrigger className={triggerClasses}>
-                <span className="flex items-center gap-3">
-                  <Info className="h-[18px] w-[18px] flex-shrink-0" />
-                  Our Mission
-                </span>
-              </AccordionTrigger>
-              <AccordionContent className="flex flex-col gap-1 pb-1 pt-0">
-                {OUR_MISSION_LINKS.map((link) => (
-                  <GroupLink key={link.href} link={link} dimmed={false} />
-                ))}
-              </AccordionContent>
-            </AccordionItem>
-            {!signedIn && (
-              <AccordionItem value="community" className="border-none">
+          {signedIn ? (
+            <Accordion type="single" collapsible className="flex flex-col gap-1">
+              <AccordionItem value="mission" className="border-none">
                 <AccordionTrigger className={triggerClasses}>
                   <span className="flex items-center gap-3">
-                    <Users className="h-[18px] w-[18px] flex-shrink-0" />
-                    Community
+                    <Info className="h-[18px] w-[18px] flex-shrink-0" />
+                    Our Mission
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="flex flex-col gap-1 pb-1 pt-0">
-                  {COMMUNITY_LINKS.map((link) => (
-                    <GroupLink key={link.href} link={link} dimmed={Boolean(link.restricted)} />
+                  {OUR_MISSION_LINKS.map((link) => (
+                    <GroupLink key={link.href} link={link} dimmed={false} />
                   ))}
                 </AccordionContent>
               </AccordionItem>
-            )}
-          </Accordion>
+            </Accordion>
+          ) : (
+            <div className="flex flex-col gap-1">
+              {[...OUR_MISSION_LINKS, ...COMMUNITY_LINKS].map((link) => (
+                <GroupLink key={link.href} link={link} dimmed={Boolean(link.restricted)} indent={false} />
+              ))}
+            </div>
+          )}
 
           <SheetClose asChild>
             <Link href={SUPPORT_LINK.href} className={linkClasses}>
@@ -151,36 +172,26 @@ export function MobileNav({
 
           {signedIn ? (
             <>
-              {MEMBER_NAV_SECTIONS.map((section) => (
-                <div key={section.title} className="flex flex-col gap-1">
-                  <div className="my-2 border-t" />
-                  <div className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {section.title}
+              {MEMBER_NAV_SECTIONS.map((section) => {
+                const visibleItems = section.items.filter(
+                  (item) => item.soon || !topLevelHrefs.has(item.href),
+                );
+                // Both Main and Community stay flat (never collapsible) —
+                // unlike Our Mission above, this is a member's working nav,
+                // not overview/marketing content, so it should always be one
+                // tap away.
+                return (
+                  <div key={section.title} className="flex flex-col gap-1">
+                    <div className="my-2 border-t" />
+                    <div className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {section.title}
+                    </div>
+                    {visibleItems.map((item) => (
+                      <SectionLink key={item.label} item={item} />
+                    ))}
                   </div>
-                  {section.items
-                    .filter((item) => item.soon || !topLevelHrefs.has(item.href))
-                    .map((item) => {
-                      const Icon = item.icon;
-                      return item.soon ? (
-                        <div
-                          key={item.label}
-                          aria-disabled="true"
-                          className={`${linkClasses} cursor-not-allowed text-muted-foreground/50`}
-                        >
-                          <Icon className="h-[18px] w-[18px] flex-shrink-0" />
-                          <span className="truncate">{item.label} · Soon</span>
-                        </div>
-                      ) : (
-                        <SheetClose asChild key={item.label}>
-                          <Link href={item.href} className={linkClasses}>
-                            <Icon className="h-[18px] w-[18px] flex-shrink-0" />
-                            <span className="truncate">{item.label}</span>
-                          </Link>
-                        </SheetClose>
-                      );
-                    })}
-                </div>
-              ))}
+                );
+              })}
               <div className="my-2 border-t" />
               {canModerate && !isAdmin && (
                 <div className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
