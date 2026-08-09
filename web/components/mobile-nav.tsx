@@ -32,14 +32,14 @@ import { cn } from "@/lib/utils";
 const publicLinks = [
   { href: "/about", label: "Our Mission", icon: Info },
   { href: "/our-team", label: "Our Team", icon: Users },
-  { href: "/events", label: "Events", icon: CalendarDays },
-  { href: "/blog", label: "Blog", icon: PenLine },
+  { href: "/events", label: "Events Calendar", icon: CalendarDays },
+  { href: "/blog", label: "Blogs", icon: PenLine },
   { href: "/library", label: "Knowledge Library", icon: BookOpen, restricted: true },
   { href: "/forums", label: "Forums", icon: MessageSquare, restricted: true },
   { href: "/members", label: "Member Directory", icon: Users, restricted: true },
   { href: "/inbox", label: "Message Inbox", icon: Inbox, restricted: true },
   { href: "/donate", label: "Support Us", icon: Heart },
-  { href: "/contact", label: "Contact", icon: Mail },
+  { href: "/contact", label: "Contact Us", icon: Mail },
 ];
 // For signed-in members, Events, Blog, Library, Forums, Member Directory,
 // and Message Inbox are dropped from the top-level links to cut clutter —

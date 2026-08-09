@@ -45,7 +45,7 @@ export const MEMBER_NAV_SECTIONS: NavSection[] = [
       { label: "Events Calendar", href: "/calendar", icon: CalendarDays },
       { label: "Forums", href: "/forums", icon: MessageSquare },
       { label: "Blogs", href: "/blog", icon: PenLine },
-      { label: "Library", href: "/library", icon: BookOpen },
+      { label: "Knowledge Library", href: "/library", icon: BookOpen },
     ],
   },
 ];

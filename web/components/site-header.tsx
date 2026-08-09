@@ -73,7 +73,7 @@ export async function SiteHeader() {
         </NavDropdown>
         <NavDropdown label="Community">
           <DropdownMenuItem className="text-base" asChild>
-            <Link href={user ? "/calendar" : "/events"}>Events</Link>
+            <Link href={user ? "/calendar" : "/events"}>Events Calendar</Link>
           </DropdownMenuItem>
           <DropdownMenuItem className="text-base" asChild>
             <Link href="/blog">Blogs</Link>
