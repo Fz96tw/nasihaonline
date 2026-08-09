@@ -3,9 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search } from "lucide-react";
+import { Filter, Search, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { InboxList } from "@/components/inbox/inbox-list";
 import { InboxDetail } from "@/components/inbox/inbox-detail";
 import { MeetingRequestDetail } from "@/components/inbox/meeting-request-detail";
@@ -28,6 +37,79 @@ function matchesSearch(item: InboxListItem, query: string): boolean {
       ? [item.otherPartyName, item.subject, item.snippet]
       : [item.otherPartyName, item.topic];
   return haystack.some((value) => value?.toLowerCase().includes(query));
+}
+
+type Person = { id: string; name: string };
+
+/**
+ * Dropdown of members who have at least one item in the current inbox —
+ * picking one filters the list down to just that person's threads/requests.
+ */
+function PersonFilterButton({
+  people,
+  selectedId,
+  onSelect,
+}: {
+  people: Person[];
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = people.find((person) => person.id === selectedId) ?? null;
+
+  return (
+    <div className="flex items-center gap-1">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label="Filter the inbox by member"
+            className={cn(
+              "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+              selected
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/70",
+            )}
+          >
+            <Filter className="h-3.5 w-3.5" />
+            Filter
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-56 p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Filter by member…" />
+            <CommandList>
+              <CommandEmpty>No member found.</CommandEmpty>
+              <CommandGroup>
+                {people.map((person) => (
+                  <CommandItem
+                    key={person.id}
+                    value={person.name}
+                    onSelect={() => {
+                      onSelect(person.id);
+                      setOpen(false);
+                    }}
+                  >
+                    {person.name}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      {selected && (
+        <button
+          type="button"
+          onClick={() => onSelect(null)}
+          className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted/70"
+        >
+          {selected.name}
+          <X className="h-3 w-3" />
+        </button>
+      )}
+    </div>
+  );
 }
 
 async function fetchInboxList(): Promise<InboxListItem[]> {
@@ -61,6 +143,7 @@ export function InboxPanel({
   const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("item"));
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<InboxFilter>("all");
+  const [personFilter, setPersonFilter] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const { data: items = [] } = useQuery({
@@ -69,16 +152,27 @@ export function InboxPanel({
     initialData: initialItems,
   });
 
+  const people = useMemo(() => {
+    const byId = new Map<string, Person>();
+    for (const item of items) {
+      if (!byId.has(item.otherPartyId)) {
+        byId.set(item.otherPartyId, { id: item.otherPartyId, name: item.otherPartyName });
+      }
+    }
+    return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [items]);
+
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
     return items.filter((item) => {
       if (filter === "unread" && !(item.kind === "message" && item.unread)) return false;
       if (filter === "message" && item.kind !== "message") return false;
       if (filter === "meeting_request" && item.kind !== "meeting_request") return false;
+      if (personFilter && item.otherPartyId !== personFilter) return false;
       if (query && !matchesSearch(item, query)) return false;
       return true;
     });
-  }, [items, search, filter]);
+  }, [items, search, filter, personFilter]);
 
   const selectedItem = items.find((item) => item.id === selectedId) ?? null;
 
@@ -107,11 +201,7 @@ export function InboxPanel({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Inbox</h2>
-        <NewConversationActions
-          currentUserId={currentUserId}
-          items={items}
-          onSelectExisting={setSelectedId}
-        />
+        <NewConversationActions currentUserId={currentUserId} />
       </div>
       <Card className="flex h-[600px] overflow-hidden p-0">
         <div
@@ -131,7 +221,7 @@ export function InboxPanel({
                 aria-label="Search the inbox"
               />
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {FILTER_OPTIONS.map((option) => (
                 <button
                   key={option.value}
@@ -147,6 +237,7 @@ export function InboxPanel({
                   {option.label}
                 </button>
               ))}
+              <PersonFilterButton people={people} selectedId={personFilter} onSelect={setPersonFilter} />
             </div>
           </div>
           <div className="min-h-0 flex-1">
