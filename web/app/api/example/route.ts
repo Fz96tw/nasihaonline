@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rateLimit } from "@/lib/rate-limit";
 
+// GET here has no dynamic-forcing API (request.headers/.ip don't count,
+// unlike next/headers' cookies()/headers()), so without this Next.js treats
+// it as static-optimizable and invokes it during `next build`'s page-data
+// collection — before Redis is reachable, since REDIS_URL isn't passed as a
+// build arg (see web/README.md's Docker redeploy notes). Same fix as
+// app/api/health/route.ts.
+export const dynamic = "force-dynamic";
+
 const LIMIT = 5;
 const WINDOW_SECONDS = 60;
 
