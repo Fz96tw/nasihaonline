@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   BookOpen,
   CalendarDays,
+  Handshake,
   Heart,
   Inbox,
   Info,
@@ -16,8 +17,10 @@ import {
   PenLine,
   UserPlus,
   Users,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
   Sheet,
   SheetClose,
@@ -29,26 +32,48 @@ import {
 import { MEMBER_NAV_SECTIONS, memberFooterItems } from "@/lib/member-nav";
 import { cn } from "@/lib/utils";
 
-const publicLinks = [
-  { href: "/about", label: "Our Mission", icon: Info },
+type NavLink = { href: string; label: string; icon: LucideIcon; restricted?: boolean };
+
+// Mirrors the desktop header's two NavDropdowns (site-header.tsx) — grouped
+// under collapsed-by-default accordions instead of one long flat list, so
+// the sheet stays short by default regardless of how many links either
+// group grows to hold. The sheet's own overflow-y-auto (see SheetContent
+// below) is still there as a backstop for short screens/several groups
+// open at once, but shouldn't be relied on as the primary fix for a long menu.
+const OUR_MISSION_LINKS: NavLink[] = [
+  { href: "/about", label: "About", icon: Info },
+  { href: "/getinvolved", label: "Get Involved", icon: Handshake },
   { href: "/our-team", label: "Our Team", icon: Users },
+  { href: "/contact", label: "Contact Us", icon: Mail },
+];
+
+const COMMUNITY_LINKS: NavLink[] = [
   { href: "/events", label: "Events Calendar", icon: CalendarDays },
   { href: "/blog", label: "Blogs", icon: PenLine },
   { href: "/library", label: "Knowledge Library", icon: BookOpen, restricted: true },
   { href: "/forums", label: "Forums", icon: MessageSquare, restricted: true },
   { href: "/members", label: "Member Directory", icon: Users, restricted: true },
   { href: "/inbox", label: "Message Inbox", icon: Inbox, restricted: true },
-  { href: "/donate", label: "Support Us", icon: Heart },
-  { href: "/contact", label: "Contact Us", icon: Mail },
 ];
-// For signed-in members, Events, Blog, Library, Forums, Member Directory,
-// and Message Inbox are dropped from the top-level links to cut clutter —
-// Calendar (which supersedes Events), Blogs, the Library, Forums, the
-// Member Directory, and the Inbox already live in the member Main/Community
-// sections below.
-const memberHiddenHrefs = new Set(["/events", "/blog", "/library", "/forums", "/members", "/inbox"]);
+
+const SUPPORT_LINK: NavLink = { href: "/donate", label: "Support Us", icon: Heart };
 
 const linkClasses = "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold hover:bg-accent";
+const triggerClasses = "rounded-md px-3 py-2 text-sm font-semibold hover:bg-accent hover:no-underline";
+
+function GroupLink({ link, dimmed }: { link: NavLink; dimmed: boolean }) {
+  return (
+    <SheetClose asChild>
+      <Link href={link.href} className={cn(linkClasses, "pl-9", dimmed && "justify-between text-muted-foreground")}>
+        <span className="flex items-center gap-3">
+          <link.icon className="h-[18px] w-[18px] flex-shrink-0" />
+          <span className="truncate">{link.label}</span>
+        </span>
+        {dimmed && <KeyRound className="h-3.5 w-3.5 flex-shrink-0" aria-label="Sign-in required" />}
+      </Link>
+    </SheetClose>
+  );
+}
 
 export function MobileNav({
   signedIn,
@@ -60,10 +85,15 @@ export function MobileNav({
   canModerate?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const topLevelLinks = signedIn
-    ? publicLinks.filter((link) => !memberHiddenHrefs.has(link.href))
-    : publicLinks;
-  const topLevelHrefs = new Set(topLevelLinks.map((link) => link.href));
+  // Signed-in members already get the Community links from
+  // MEMBER_NAV_SECTIONS' own "Community" section below (Events Calendar,
+  // Blogs, Knowledge Library, Forums, Member Directory, Message Inbox), so
+  // that accordion group is guest-only here rather than just filtered down.
+  const topLevelHrefs = new Set([
+    ...OUR_MISSION_LINKS.map((link) => link.href),
+    ...(signedIn ? [] : COMMUNITY_LINKS.map((link) => link.href)),
+    SUPPORT_LINK.href,
+  ]);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -74,28 +104,50 @@ export function MobileNav({
       </SheetTrigger>
       <SheetContent side="left" className="flex w-3/4 flex-col gap-1 overflow-y-auto sm:max-w-xs">
         <SheetHeader>
-          <SheetTitle>Menu</SheetTitle>
+          {/* Visually hidden, not removed — Radix's Dialog still needs an
+              accessible name for screen readers even though sighted users
+              don't need a "Menu" label taking up space above a menu they
+              just opened via a button already labeled "Open menu". */}
+          <SheetTitle className="sr-only">Menu</SheetTitle>
         </SheetHeader>
-        <nav className="mt-2 flex flex-col gap-1">
-          {topLevelLinks.map((link) => {
-            const dimmed = link.restricted && !signedIn;
-            return (
-              <SheetClose asChild key={link.href}>
-                <Link
-                  href={link.href}
-                  className={cn(linkClasses, dimmed && "justify-between text-muted-foreground")}
-                >
+        <nav className="flex flex-col gap-1">
+          <Accordion type="multiple" className="flex flex-col gap-1">
+            <AccordionItem value="mission" className="border-none">
+              <AccordionTrigger className={triggerClasses}>
+                <span className="flex items-center gap-3">
+                  <Info className="h-[18px] w-[18px] flex-shrink-0" />
+                  Our Mission
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="flex flex-col gap-1 pb-1 pt-0">
+                {OUR_MISSION_LINKS.map((link) => (
+                  <GroupLink key={link.href} link={link} dimmed={false} />
+                ))}
+              </AccordionContent>
+            </AccordionItem>
+            {!signedIn && (
+              <AccordionItem value="community" className="border-none">
+                <AccordionTrigger className={triggerClasses}>
                   <span className="flex items-center gap-3">
-                    <link.icon className="h-[18px] w-[18px] flex-shrink-0" />
-                    <span className="truncate">{link.label}</span>
+                    <Users className="h-[18px] w-[18px] flex-shrink-0" />
+                    Community
                   </span>
-                  {dimmed && (
-                    <KeyRound className="h-3.5 w-3.5 flex-shrink-0" aria-label="Sign-in required" />
-                  )}
-                </Link>
-              </SheetClose>
-            );
-          })}
+                </AccordionTrigger>
+                <AccordionContent className="flex flex-col gap-1 pb-1 pt-0">
+                  {COMMUNITY_LINKS.map((link) => (
+                    <GroupLink key={link.href} link={link} dimmed={Boolean(link.restricted)} />
+                  ))}
+                </AccordionContent>
+              </AccordionItem>
+            )}
+          </Accordion>
+
+          <SheetClose asChild>
+            <Link href={SUPPORT_LINK.href} className={linkClasses}>
+              <SUPPORT_LINK.icon className="h-[18px] w-[18px] flex-shrink-0" />
+              <span className="truncate">{SUPPORT_LINK.label}</span>
+            </Link>
+          </SheetClose>
 
           {signedIn ? (
             <>
