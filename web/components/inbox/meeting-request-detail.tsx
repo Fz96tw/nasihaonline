@@ -203,7 +203,7 @@ function RescheduleForm({
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={submitting}>
             Cancel
           </Button>
@@ -218,27 +218,42 @@ function RescheduleForm({
 
 const editFormSchema = z.object({
   topic: z.string().trim().min(1, "Describe what you'd like to discuss").max(200),
+  proposedTimes: z
+    .array(z.object({ value: z.string().min(1, "Pick a date and time") }))
+    .min(1)
+    .max(MAX_PROPOSED_TIMES),
   message: z.string().trim().max(1000).nullable(),
 });
 
 type EditFormValues = z.infer<typeof editFormSchema>;
 
+// datetime-local inputs need a value in local (no-offset) "YYYY-MM-DDTHH:mm"
+// form — Date's non-UTC getters already return local time components, so
+// this just formats them, unlike toISOString() which would shift to UTC.
+function toDateTimeLocalValue(iso: string): string {
+  const date = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 /**
- * Lets the sender correct/expand their own request's topic or message
- * while it's still open (pending, or rescheduled) — see editMeetingRequest
- * in meeting-requests-server.ts. Purely a text correction: no separate
- * notification is sent, the recipient sees the update whenever they next
- * open the still-open item.
+ * Lets the sender correct/expand their own request's topic, proposed times,
+ * or message while it's still open (pending, or rescheduled) — see
+ * editMeetingRequest in meeting-requests-server.ts. Purely a correction: no
+ * separate notification is sent, the recipient sees the update whenever
+ * they next open the still-open item.
  */
 function EditRequestForm({
   meetingRequestId,
   initialTopic,
+  initialProposedTimes,
   initialMessage,
   onDone,
   onCancel,
 }: {
   meetingRequestId: string;
   initialTopic: string;
+  initialProposedTimes: string[];
   initialMessage: string | null;
   onDone: () => Promise<unknown>;
   onCancel: () => void;
@@ -248,9 +263,15 @@ function EditRequestForm({
 
   const form = useForm<EditFormValues>({
     resolver: zodResolver(editFormSchema),
-    defaultValues: { topic: initialTopic, message: initialMessage },
+    defaultValues: {
+      topic: initialTopic,
+      proposedTimes: initialProposedTimes.map((time) => ({ value: toDateTimeLocalValue(time) })),
+      message: initialMessage,
+    },
     mode: "onTouched",
   });
+  const { fields, append, remove } = useFieldArray({ control: form.control, name: "proposedTimes" });
+  const hasMounted = useHasMounted();
 
   async function onSubmit(values: EditFormValues) {
     setSubmitting(true);
@@ -259,6 +280,7 @@ function EditRequestForm({
       await patchMeetingRequest(meetingRequestId, {
         action: "edit",
         topic: values.topic,
+        proposedTimes: values.proposedTimes.map((time) => new Date(time.value).toISOString()),
         message: values.message?.trim() ? values.message.trim() : null,
       });
       await onDone();
@@ -285,6 +307,51 @@ function EditRequestForm({
             </FormItem>
           )}
         />
+
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <FormLabel>Proposed times</FormLabel>
+            {hasMounted && (
+              <span className="text-xs text-muted-foreground">(your time zone: {getLocalTimeZoneAbbreviation()})</span>
+            )}
+          </div>
+          {fields.map((item, index) => (
+            <FormField
+              key={item.id}
+              control={form.control}
+              name={`proposedTimes.${index}.value`}
+              render={({ field }) => (
+                <FormItem>
+                  <div className="flex items-center gap-2">
+                    <FormControl>
+                      <Input type="datetime-local" {...field} />
+                    </FormControl>
+                    {fields.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 flex-shrink-0"
+                        aria-label="Remove this time"
+                        onClick={() => remove(index)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          ))}
+          {fields.length < MAX_PROPOSED_TIMES && (
+            <Button type="button" variant="outline" size="sm" className="w-fit" onClick={() => append({ value: "" })}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add another time
+            </Button>
+          )}
+        </div>
+
         <FormField
           control={form.control}
           name="message"
@@ -305,7 +372,7 @@ function EditRequestForm({
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={submitting}>
             Cancel
           </Button>
@@ -324,7 +391,9 @@ function EditRequestForm({
  * GET /api/inbox/meeting-requests/:id per PRD's route list, so no fetch is
  * needed.
  *
- * `pending`/`rescheduled` double as a turn indicator (see
+ * `pending`/`rescheduled` (pre-acceptance) and `reschedule_by_sender`/
+ * `reschedule_by_recipient` (§4.7 follow-up, rescheduling an already-
+ * accepted meeting) each double as a turn indicator (see
  * MeetingRequestStatus's doc comment in schema.prisma): whichever party did
  * *not* propose the current outstanding time is the one who can
  * accept/decline/propose again, and either party can keep countering across
@@ -348,15 +417,29 @@ export function MeetingRequestDetail({
   const [selectedTime, setSelectedTime] = useState(item.proposedTimes[0] ?? "");
   const hasMounted = useHasMounted();
 
+  const isRenegotiatingAccepted =
+    item.status === "reschedule_by_sender" || item.status === "reschedule_by_recipient";
+  // A meeting mid-reschedule-negotiation is still fundamentally accepted —
+  // it still has a scheduledAt/meetingUrl, just with a new time on the
+  // table — so anything gated on "has this meeting been accepted" (the
+  // scheduled-time/Meet-link display, cancel eligibility) needs both.
+  const hasBeenAccepted = item.status === "accepted" || isRenegotiatingAccepted;
+  // Either party may kick off a reschedule of a *settled* accepted meeting
+  // at any time — not turn-gated, since there's no outstanding proposal yet
+  // to hold a turn on (contrast canRespond below, for when one already is).
+  const canProposeReschedule = item.status === "accepted";
   const canRespond =
     (item.status === "pending" && item.direction === "received") ||
-    (item.status === "rescheduled" && item.direction === "sent");
+    (item.status === "rescheduled" && item.direction === "sent") ||
+    (item.status === "reschedule_by_sender" && item.direction === "received") ||
+    (item.status === "reschedule_by_recipient" && item.direction === "sent");
   // Only while status === "pending" — i.e. the sender's own proposal (the
   // original ask, or a later counter) is still the one on the table. Once
   // the recipient counters (status "rescheduled"), there's nothing of the
   // sender's own left to edit; they respond via accept/decline/reschedule.
   const canEdit = item.direction === "sent" && item.status === "pending";
   const isOpenNegotiation = item.status === "pending" || item.status === "rescheduled";
+  const isNegotiating = isOpenNegotiation || isRenegotiatingAccepted;
   const latestMessage = item.messages[item.messages.length - 1];
 
   async function handleAccept() {
@@ -389,10 +472,9 @@ export function MeetingRequestDetail({
   }
 
   async function handleCancel() {
-    const confirmMessage =
-      item.status === "accepted"
-        ? "Cancel this meeting? This deletes the Google Calendar event for both of you."
-        : "Withdraw this meeting request?";
+    const confirmMessage = hasBeenAccepted
+      ? "Cancel this meeting? This deletes the Google Calendar event for both of you."
+      : "Withdraw this meeting request?";
     if (!window.confirm(confirmMessage)) return;
     setPendingAction("cancel");
     setError(null);
@@ -425,7 +507,7 @@ export function MeetingRequestDetail({
           <Badge variant={MEETING_REQUEST_STATUS_BADGE_VARIANT[item.status]} className="w-fit">
             {MEETING_REQUEST_STATUS_LABELS[item.status]}
           </Badge>
-          {isOpenNegotiation && (
+          {isNegotiating && (
             <span className="text-xs text-muted-foreground">
               {canRespond ? "Waiting on you" : `Waiting on ${item.otherPartyName}`}
             </span>
@@ -470,11 +552,13 @@ export function MeetingRequestDetail({
           </p>
         )}
 
-        {item.status === "accepted" && (
+        {hasBeenAccepted && (
           <div className="flex flex-col gap-2">
             {item.scheduledAt && (
               <div>
-                <div className="mb-1 text-xs font-medium text-muted-foreground">Scheduled for</div>
+                <div className="mb-1 text-xs font-medium text-muted-foreground">
+                  {isRenegotiatingAccepted ? "Currently scheduled for" : "Scheduled for"}
+                </div>
                 <p className="text-sm">{hasMounted ? formatTimestamp(item.scheduledAt) : null}</p>
               </div>
             )}
@@ -495,22 +579,34 @@ export function MeetingRequestDetail({
                   item.otherPartyName +
                   " confirms it."}
             </p>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="w-fit text-destructive hover:text-destructive"
-              onClick={handleCancel}
-              disabled={pendingAction !== null}
-            >
-              {pendingAction === "cancel" ? "Cancelling…" : "Cancel meeting"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {canProposeReschedule && !reschedulingOpen && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setReschedulingOpen(true)}
+                  disabled={pendingAction !== null}
+                >
+                  Propose new time
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+                onClick={handleCancel}
+                disabled={pendingAction !== null}
+              >
+                {pendingAction === "cancel" ? "Cancelling…" : "Cancel meeting"}
+              </Button>
+            </div>
           </div>
         )}
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         {canRespond && !reschedulingOpen && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={handleAccept} disabled={pendingAction !== null}>
               {pendingAction === "accept" ? "Accepting…" : "Accept"}
             </Button>
@@ -529,7 +625,7 @@ export function MeetingRequestDetail({
         )}
 
         {canEdit && !editingOpen && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" onClick={() => setEditingOpen(true)} disabled={pendingAction !== null}>
               Edit
             </Button>
@@ -540,6 +636,7 @@ export function MeetingRequestDetail({
           <EditRequestForm
             meetingRequestId={item.id}
             initialTopic={item.topic}
+            initialProposedTimes={item.proposedTimes}
             initialMessage={latestMessage?.body ?? null}
             onCancel={() => setEditingOpen(false)}
             onDone={onUpdated}
@@ -562,7 +659,7 @@ export function MeetingRequestDetail({
           </Button>
         )}
 
-        {canRespond && reschedulingOpen && (
+        {(canRespond || canProposeReschedule) && reschedulingOpen && (
           <RescheduleForm
             meetingRequestId={item.id}
             onCancel={() => setReschedulingOpen(false)}

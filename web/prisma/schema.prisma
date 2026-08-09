@@ -590,9 +590,10 @@ model ContributionLedger {
   @@map("contribution_ledger")
 }
 
-// `pending` and `rescheduled` double as a turn indicator, not just a
-// one-shot status — either party can keep proposing new times across
-// unlimited rounds until one side accepts/declines:
+// `pending`/`rescheduled` and `reschedule_by_sender`/`reschedule_by_recipient`
+// each double as a turn indicator, not just a one-shot status — either party
+// can keep proposing new times across unlimited rounds until one side
+// accepts/declines:
 //   pending     — the sender proposed last (the original request, or a
 //                 later counter-proposal); it's the recipient's turn.
 //   rescheduled — the recipient proposed last; it's the sender's turn.
@@ -610,6 +611,22 @@ enum MeetingRequestStatus {
   // Deletes the Google Calendar event; does not reverse the ContributionLedger
   // rows acceptance already posted.
   cancelled
+  // An already-`accepted` meeting with an outstanding proposed new time
+  // (§4.7 follow-up) — either party may kick this off at any time (unlike
+  // pending/rescheduled, entry into this pair isn't turn-gated, since
+  // there's no outstanding proposal yet to take a turn on). Once in one of
+  // these two states, the same turn-holder rule as pending/rescheduled
+  // applies for accept/decline/counter-propose. `proposedTimes` holds the
+  // candidate new time(s); the original `scheduledAt`/`meetingUrl`/
+  // `googleEventId` are left untouched (the meeting still happens as
+  // scheduled) until accept confirms the new time — see
+  // confirmMeetingReschedule in meeting-requests-server.ts. Declining just
+  // reverts status to `accepted` with the original time intact. Never
+  // touches the ContributionLedger rows the original acceptance already
+  // posted — a reschedule is the same engagement at a different time, not a
+  // new one.
+  reschedule_by_sender
+  reschedule_by_recipient
 }
 
 // One entry per step of a meeting-request negotiation (§4.7) — the

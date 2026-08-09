@@ -48,13 +48,15 @@ function toFullCalendarEvents(events: MemberEvent[]): EventInput[] {
 // a third dot color in renderEventContent — data's already scoped to just
 // the two participants (getUpcomingMeetingsForUser), so there's no audience
 // concern in showing them here too, unlike materializing them as real Event
-// rows would have been (see plan doc).
+// rows would have been (see plan doc). Includes pending/not-yet-accepted
+// requests (plotted at their earliest proposed time) alongside confirmed
+// ones — renderEventContent dims the dot for those via `isPending`.
 function meetingsToFullCalendarEvents(meetings: UpcomingMeeting[]): EventInput[] {
   return meetings.map((meeting) => ({
     id: meeting.id,
     title: meeting.topic,
     start: meeting.scheduledAt,
-    extendedProps: { kind: "meeting" as const },
+    extendedProps: { kind: "meeting" as const, isPending: meeting.isPending },
   }));
 }
 
@@ -64,7 +66,9 @@ function meetingsToFullCalendarEvents(meetings: UpcomingMeeting[]): EventInput[]
 function renderEventContent(arg: EventContentArg) {
   const kind = arg.event.extendedProps.kind as "event" | "meeting";
   const open = arg.event.extendedProps.open as boolean | undefined;
-  const dotColor = kind === "meeting" ? "bg-purple-500" : open ? "bg-emerald-500" : "bg-blue-500";
+  const isPending = arg.event.extendedProps.isPending as boolean | undefined;
+  const dotColor =
+    kind === "meeting" ? (isPending ? "bg-purple-300" : "bg-purple-500") : open ? "bg-emerald-500" : "bg-blue-500";
   return (
     <div className="flex items-center gap-1 overflow-hidden px-1">
       <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dotColor}`} />
@@ -80,7 +84,7 @@ export function CalendarView({
   forcedTab,
 }: {
   events: MemberEvent[];
-  /** Accepted 1:1 meeting requests, private to the viewer — surfaced only in the Upcoming List, not the Month grid (see plan doc). */
+  /** 1:1 meeting requests (confirmed or still pending), private to the viewer — surfaced in both the Month grid and the Upcoming List. */
   meetings?: UpcomingMeeting[];
   /** Current viewer's id — lets the Upcoming List hide the RSVP button on events this viewer hosts (they never RSVP to their own event). */
   currentUserId: string;

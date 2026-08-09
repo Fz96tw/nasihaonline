@@ -7,8 +7,10 @@ import { getMyPosts } from "@/lib/blog-server";
 import { getMySubmissions } from "@/lib/library-server";
 import { getEventsHostedByMember } from "@/lib/events-server";
 import { getMemberForumThreads } from "@/lib/forums-server";
+import { getMyMeetingRequests } from "@/lib/meeting-requests-server";
 import { POST_STATUS_LABELS, POST_STATUS_BADGE_VARIANT } from "@/lib/blog";
 import { STATUS_LABELS, STATUS_BADGE_VARIANT } from "@/lib/library";
+import { MEETING_REQUEST_STATUS_LABELS, MEETING_REQUEST_STATUS_BADGE_VARIANT } from "@/lib/meeting-requests";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MySubmissionsTable } from "@/components/library/my-submissions-table";
@@ -20,7 +22,7 @@ export const metadata: Metadata = {
 
 type BadgeVariant = "neutral" | "success" | "warning" | "danger" | "info";
 
-type ActivityType = "Blog" | "Library" | "Event" | "Forum";
+type ActivityType = "Blog" | "Library" | "Event" | "Forum" | "Meeting";
 
 type ActivityRow = {
   id: string;
@@ -114,11 +116,12 @@ export default async function MyPostsPage() {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const [posts, submissions, events, threads] = await Promise.all([
+  const [posts, submissions, events, threads, meetings] = await Promise.all([
     getMyPosts(user.id),
     getMySubmissions(user.id),
     getEventsHostedByMember(user.id, user.id),
     getMemberForumThreads(user.id, user.id, true),
+    getMyMeetingRequests(user.id),
   ]);
 
   const now = Date.now();
@@ -167,7 +170,18 @@ export default async function MyPostsPage() {
     actionLabel: "View",
   }));
 
-  const allRows = [...blogRows, ...libraryRows, ...eventRows, ...forumRows].sort(
+  const meetingRows: ActivityRow[] = meetings.map((meeting) => ({
+    id: meeting.id,
+    type: "Meeting",
+    title: meeting.topic,
+    meta: meeting.otherPartyName,
+    status: { label: MEETING_REQUEST_STATUS_LABELS[meeting.status], variant: MEETING_REQUEST_STATUS_BADGE_VARIANT[meeting.status] },
+    date: meeting.createdAt,
+    href: `/inbox?item=${meeting.id}`,
+    actionLabel: "View",
+  }));
+
+  const allRows = [...blogRows, ...libraryRows, ...eventRows, ...forumRows, ...meetingRows].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
   );
 
@@ -183,7 +197,8 @@ export default async function MyPostsPage() {
         </Link>
         <h1 className="text-3xl font-bold tracking-tight">All My Posts</h1>
         <p className="text-muted-foreground">
-          Everything you&apos;ve created — blog posts, Library submissions, hosted events, and forum threads.
+          Everything you&apos;ve created — blog posts, Library submissions, hosted events, forum threads, and 1-1
+          meetings.
         </p>
       </div>
 
@@ -193,6 +208,7 @@ export default async function MyPostsPage() {
         libraryCount={libraryRows.length}
         eventsCount={eventRows.length}
         forumCount={forumRows.length}
+        meetingsCount={meetingRows.length}
         allContent={<ActivityTable rows={allRows} showType emptyMessage="You haven't created anything yet." />}
         blogContent={<ActivityTable rows={blogRows} emptyMessage="You haven't written any blog posts yet." />}
         libraryContent={<MySubmissionsTable submissions={submissions} />}
@@ -202,6 +218,13 @@ export default async function MyPostsPage() {
             rows={forumRows}
             metaHeader="Forum"
             emptyMessage="You haven't started or replied to any forum threads yet."
+          />
+        }
+        meetingsContent={
+          <ActivityTable
+            rows={meetingRows}
+            metaHeader="With"
+            emptyMessage="You haven't sent or received any meeting requests yet."
           />
         }
       />

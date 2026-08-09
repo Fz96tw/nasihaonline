@@ -21,7 +21,10 @@ function formatMeetingDateTime(iso: string) {
  * distinct from EventListItem's community events (a plain "Meeting" badge,
  * no host/RSVP/attendee-count chrome). No detail page of its own: the topic
  * links to the underlying thread at /inbox?item=<id>, the same route the
- * Month grid's handleEventClick navigates to for meetings.
+ * Month grid's handleEventClick navigates to for meetings. Pending/
+ * rescheduled requests (not yet accepted) get a "Proposed" badge and label
+ * instead, since `meeting.scheduledAt` is only a proposed time for those,
+ * not a confirmed one.
  */
 export function UpcomingMeetingItem({ meeting }: { meeting: UpcomingMeeting }) {
   const hasMounted = useHasMounted();
@@ -38,14 +41,18 @@ export function UpcomingMeetingItem({ meeting }: { meeting: UpcomingMeeting }) {
         </Link>
         <div className="min-w-0">
           <div className="mb-1 flex flex-wrap items-center gap-2">
-            <Badge variant="info">Meeting</Badge>
+            <Badge variant={meeting.isPending ? "warning" : "info"}>
+              {meeting.isPending ? "Meeting request" : "Meeting"}
+            </Badge>
           </div>
           <Link href={`/inbox?item=${meeting.id}`} className="block truncate font-medium hover:underline">
             {meeting.topic}
           </Link>
           <p className="text-sm text-muted-foreground">with {meeting.otherPartyName}</p>
           <p className="text-sm text-muted-foreground">
-            {hasMounted ? formatMeetingDateTime(meeting.scheduledAt) : null}
+            {hasMounted
+              ? `${meeting.isPending ? "Proposed: " : ""}${formatMeetingDateTime(meeting.scheduledAt)}`
+              : null}
           </p>
         </div>
       </div>

@@ -28,8 +28,8 @@ export type CreateMeetingRequestValues = z.infer<typeof createMeetingRequestSche
  * further input. `cancel` is different in kind: either party (not just the
  * recipient) may cancel an already-`accepted` request, which deletes the
  * Google Calendar event. `edit` is the sender correcting/expanding their
- * own request's topic/message while it's still open (pending or
- * rescheduled) — not available once accepted/declined/cancelled.
+ * own request's topic/message/proposed times while it's still open (pending
+ * or rescheduled) — not available once accepted/declined/cancelled.
  */
 export const meetingRequestActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("accept"), selectedTime: z.string().trim().min(1).optional() }),
@@ -46,6 +46,10 @@ export const meetingRequestActionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("edit"),
     topic: z.string().trim().min(1, "Describe what you'd like to discuss").max(200),
+    proposedTimes: z
+      .array(z.string().trim().min(1))
+      .min(1, "Propose at least one time")
+      .max(5, "Propose at most 5 times"),
     message: z.string().trim().max(1000).nullable(),
   }),
 ]);

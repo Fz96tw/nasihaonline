@@ -9,6 +9,8 @@ export const MEETING_REQUEST_STATUS_LABELS: Record<MeetingRequestStatus, string>
   [MeetingRequestStatus.declined]: "Declined",
   [MeetingRequestStatus.rescheduled]: "New time proposed",
   [MeetingRequestStatus.cancelled]: "Cancelled",
+  [MeetingRequestStatus.reschedule_by_sender]: "New time proposed",
+  [MeetingRequestStatus.reschedule_by_recipient]: "New time proposed",
 };
 
 export const MEETING_REQUEST_STATUS_BADGE_VARIANT: Record<MeetingRequestStatus, "success" | "warning" | "danger" | "info"> = {
@@ -17,19 +19,26 @@ export const MEETING_REQUEST_STATUS_BADGE_VARIANT: Record<MeetingRequestStatus, 
   [MeetingRequestStatus.declined]: "danger",
   [MeetingRequestStatus.rescheduled]: "info",
   [MeetingRequestStatus.cancelled]: "danger",
+  [MeetingRequestStatus.reschedule_by_sender]: "info",
+  [MeetingRequestStatus.reschedule_by_recipient]: "info",
 };
 
 /**
- * An accepted meeting request due in the future, for the calendar page's
- * "Upcoming List" (getUpcomingMeetingsForUser in meeting-requests-server.ts).
- * Kept separate from MemberEvent — these are private to the two
- * participants, not the shared community calendar.
+ * A meeting request due in the future, for the calendar page's "Upcoming
+ * List" (getUpcomingMeetingsForUser in meeting-requests-server.ts). Kept
+ * separate from MemberEvent — these are private to the two participants,
+ * not the shared community calendar.
  */
 export type UpcomingMeeting = {
   id: string;
   topic: string;
-  /** ISO timestamp. */
+  /**
+   * ISO timestamp — the confirmed time once accepted, or the earliest
+   * still-future proposed time while `isPending`.
+   */
   scheduledAt: string;
   meetingUrl: string | null;
+  /** True for pending/rescheduled requests — not yet accepted, so `scheduledAt` is a proposed time, not a confirmed one. */
+  isPending: boolean;
   otherPartyName: string;
 };
