@@ -1,15 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Search } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { InboxList } from "@/components/inbox/inbox-list";
 import { InboxDetail } from "@/components/inbox/inbox-detail";
 import { MeetingRequestDetail } from "@/components/inbox/meeting-request-detail";
 import { NewConversationActions } from "@/components/inbox/new-conversation-actions";
 import { type InboxListItem, type InboxThread } from "@/lib/inbox";
 import { cn } from "@/lib/utils";
+
+type InboxFilter = "all" | "unread" | "message" | "meeting_request";
+
+const FILTER_OPTIONS: { value: InboxFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "unread", label: "Unread" },
+  { value: "message", label: "Messages" },
+  { value: "meeting_request", label: "Meeting Requests" },
+];
+
+function matchesSearch(item: InboxListItem, query: string): boolean {
+  const haystack =
+    item.kind === "message"
+      ? [item.otherPartyName, item.subject, item.snippet]
+      : [item.otherPartyName, item.topic];
+  return haystack.some((value) => value?.toLowerCase().includes(query));
+}
 
 async function fetchInboxList(): Promise<InboxListItem[]> {
   const response = await fetch("/api/inbox");
@@ -40,6 +59,8 @@ export function InboxPanel({
   const searchParams = useSearchParams();
   // Seeds the selected thread/request from a notification link (`/inbox?item=<id>`, §4.10).
   const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("item"));
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<InboxFilter>("all");
   const queryClient = useQueryClient();
 
   const { data: items = [] } = useQuery({
@@ -47,6 +68,17 @@ export function InboxPanel({
     queryFn: fetchInboxList,
     initialData: initialItems,
   });
+
+  const filteredItems = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return items.filter((item) => {
+      if (filter === "unread" && !(item.kind === "message" && item.unread)) return false;
+      if (filter === "message" && item.kind !== "message") return false;
+      if (filter === "meeting_request" && item.kind !== "meeting_request") return false;
+      if (query && !matchesSearch(item, query)) return false;
+      return true;
+    });
+  }, [items, search, filter]);
 
   const selectedItem = items.find((item) => item.id === selectedId) ?? null;
 
@@ -75,7 +107,11 @@ export function InboxPanel({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Inbox</h2>
-        <NewConversationActions currentUserId={currentUserId} />
+        <NewConversationActions
+          currentUserId={currentUserId}
+          items={items}
+          onSelectExisting={setSelectedId}
+        />
       </div>
       <Card className="flex h-[600px] overflow-hidden p-0">
         <div
@@ -84,7 +120,43 @@ export function InboxPanel({
             selectedId ? "hidden" : "flex",
           )}
         >
-          <InboxList items={items} selectedId={selectedId} onSelect={setSelectedId} />
+          <div className="flex flex-col gap-2 border-b p-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search messages…"
+                className="pl-9"
+                aria-label="Search the inbox"
+              />
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {FILTER_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setFilter(option.value)}
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+                    filter === option.value
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/70",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="min-h-0 flex-1">
+            <InboxList
+              items={filteredItems}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              hasUnfilteredItems={items.length > 0}
+            />
+          </div>
         </div>
         <div className={cn("min-w-0 flex-1 flex-col sm:flex", selectedId ? "flex" : "hidden")}>
           {selectedItem?.kind === "meeting_request" ? (

@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { SendMessageDialog } from "@/components/inbox/send-message-dialog";
 import { RequestMeetingDialog } from "@/components/members/request-meeting-dialog";
 import { type DirectoryMember } from "@/lib/members";
+import { type InboxListItem } from "@/lib/inbox";
 
 async function fetchMembers(): Promise<DirectoryMember[]> {
   const response = await fetch("/api/members");
@@ -84,7 +85,17 @@ function MemberPickerButton({
  * Friend tier and directory-opted-out members) rather than a full Directory
  * page visit.
  */
-export function NewConversationActions({ currentUserId }: { currentUserId: string }) {
+export function NewConversationActions({
+  currentUserId,
+  items = [],
+  onSelectExisting,
+}: {
+  currentUserId: string;
+  /** The current inbox list, used to reuse an existing message thread instead of always composing new. */
+  items?: InboxListItem[];
+  /** Called with an existing thread's id when the picked recipient already has one, in place of opening the compose dialog. */
+  onSelectExisting?: (id: string) => void;
+}) {
   const { data: members = [] } = useQuery({
     queryKey: ["members-for-new-conversation"],
     queryFn: fetchMembers,
@@ -94,6 +105,17 @@ export function NewConversationActions({ currentUserId }: { currentUserId: strin
   const [messageRecipient, setMessageRecipient] = useState<Recipient | null>(null);
   const [meetingRecipient, setMeetingRecipient] = useState<Recipient | null>(null);
 
+  function handleSelectMessageRecipient(recipient: Recipient) {
+    const existingThread = items.find(
+      (item) => item.kind === "message" && item.otherPartyId === recipient.id,
+    );
+    if (existingThread && onSelectExisting) {
+      onSelectExisting(existingThread.id);
+      return;
+    }
+    setMessageRecipient(recipient);
+  }
+
   return (
     <div className="flex gap-2">
       <MemberPickerButton
@@ -101,7 +123,7 @@ export function NewConversationActions({ currentUserId }: { currentUserId: strin
         icon={MessageSquare}
         variant="default"
         members={options}
-        onSelect={setMessageRecipient}
+        onSelect={handleSelectMessageRecipient}
         hideLabelOnMobile
       />
       <MemberPickerButton
