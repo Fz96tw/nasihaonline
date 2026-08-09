@@ -6,6 +6,7 @@ import { getSessionUser } from "@/lib/auth";
 import { StatsRow } from "@/components/dashboard/stats-row";
 import { AccountNoticesWidget } from "@/components/dashboard/account-notices-widget";
 import { UpcomingEventsWidget } from "@/components/dashboard/upcoming-events-widget";
+import { UpcomingMeetingsWidget } from "@/components/dashboard/upcoming-meetings-widget";
 import { RecentLibraryWidget } from "@/components/dashboard/recent-library-widget";
 import { RecentBlogWidget } from "@/components/dashboard/recent-blog-widget";
 import { RecentAnnouncementsWidget } from "@/components/dashboard/recent-announcements-widget";
@@ -76,6 +77,9 @@ export default async function DashboardPage() {
         </Suspense>
         <Suspense fallback={<WidgetSkeleton />}>
           <UpcomingEventsWidget userId={user.id} />
+        </Suspense>
+        <Suspense fallback={<WidgetSkeleton />}>
+          <UpcomingMeetingsWidget userId={user.id} />
         </Suspense>
         <Suspense fallback={<WidgetSkeleton />}>
           <RecentLibraryWidget />

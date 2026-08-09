@@ -40,5 +40,7 @@ export type UpcomingMeeting = {
   meetingUrl: string | null;
   /** True for pending/rescheduled requests — not yet accepted, so `scheduledAt` is a proposed time, not a confirmed one. */
   isPending: boolean;
+  /** True if the viewer sent this request (the organizer); false if they received it. */
+  isOrganizer: boolean;
   otherPartyName: string;
 };

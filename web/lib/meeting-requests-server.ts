@@ -776,6 +776,7 @@ export async function getUpcomingMeetingsForUser(userId: string) {
     scheduledAt: (meeting.scheduledAt as Date).toISOString(),
     meetingUrl: meeting.meetingUrl,
     isPending: false,
+    isOrganizer: meeting.senderId === userId,
     otherPartyName:
       (meeting.senderId === userId ? meeting.recipient.name : meeting.sender.name) ?? "NASIHA Member",
   }));
@@ -792,6 +793,7 @@ export async function getUpcomingMeetingsForUser(userId: string) {
         scheduledAt: nextProposedTime.toISOString(),
         meetingUrl: null,
         isPending: true,
+        isOrganizer: meeting.senderId === userId,
         otherPartyName:
           (meeting.senderId === userId ? meeting.recipient.name : meeting.sender.name) ?? "NASIHA Member",
       },
