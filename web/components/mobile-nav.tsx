@@ -9,7 +9,7 @@ import {
   Heart,
   Inbox,
   Info,
-  KeyRound,
+  Lock,
   LogIn,
   Mail,
   Menu,
@@ -102,7 +102,7 @@ function GroupLink({ link, dimmed, indent = true }: { link: NavLink; dimmed: boo
           <link.icon className="h-[18px] w-[18px] flex-shrink-0" />
           <span className="truncate">{link.label}</span>
         </span>
-        {dimmed && <KeyRound className="h-3.5 w-3.5 flex-shrink-0" aria-label="Sign-in required" />}
+        {dimmed && <Lock className="h-3.5 w-3.5 flex-shrink-0" aria-label="Sign-in required" />}
       </Link>
     </SheetClose>
   );

@@ -89,13 +89,19 @@ export async function sendWelcomeEmail(to: string, firstName: string, tier: Tier
  * Sent right after an anonymous visitor registers for an `open` event via
  * the public /events page. Best-effort, same as above: the EventRegistration
  * row is already persisted by the time this runs, so a failed/unconfigured
- * send must not surface as an error to the visitor. No meeting/join link —
- * that's never exposed on the public page today, for members or otherwise.
+ * send must not surface as an error to the visitor. Unlike the public
+ * listing itself (which never shows meetingUrl, per Event's schema
+ * comment), this email does include it — registering is the visitor's one
+ * deliberate signal of intent to attend, so withholding the join link past
+ * that point serves no purpose. meetingUrl can still be null (a manually
+ * entered event without one), hence the fallback line below. Also pitches
+ * membership per PRD §4.6's stated purpose for EventRegistration: building
+ * a list of engaged non-members for membership-campaign outreach.
  */
 export async function sendEventRegistrationConfirmationEmail(
   to: string,
   name: string,
-  event: { title: string; startsAt: Date },
+  event: { title: string; startsAt: Date; meetingUrl: string | null },
 ) {
   if (!resend) {
     console.warn(`[email] RESEND_API_KEY not set — skipping event registration email to ${to}`);
@@ -107,12 +113,20 @@ export async function sendEventRegistrationConfirmationEmail(
     timeStyle: "short",
   });
 
+  const joinLine = event.meetingUrl
+    ? `Join with Google Meet: ${event.meetingUrl}`
+    : "We'll share the joining details closer to the event.";
+
+  const membershipPitch =
+    "NASIHA is a free community of professionals, students, and teachers dedicated to reciprocal knowledge exchange — no fees, just knowledge. Members get full access to the Knowledge Library, Forums, and every live event like this one right on their calendar, plus the ability to connect directly with other members. If that sounds like you, membership is free to apply for: " +
+    `${APP_URL}/join`;
+
   try {
     await resend.emails.send({
       from: FROM_EMAIL,
       to,
       subject: `You're registered: ${event.title}`,
-      text: `Hi ${name},\n\nYou're registered for "${event.title}" on ${when}. We'll be in touch with more details closer to the event.\n\n— The NASIHA Team`,
+      text: `Hi ${name},\n\nYou're registered for "${event.title}" on ${when}.\n\n${joinLine}\n\n${membershipPitch}\n\n— The NASIHA Team`,
     });
   } catch (error) {
     console.error("[email] Failed to send event registration confirmation email", error);

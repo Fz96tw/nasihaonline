@@ -1325,14 +1325,18 @@ export async function rsvpToEvent(
  * rsvpToEvent above, but writing to EventRegistration (no userId) instead
  * of RSVP. Upserts on the `(eventId, email)` unique key so a repeat
  * submission from the same visitor is idempotent rather than an error.
+ * Returns meetingUrl (the caller emails it in the confirmation) — the
+ * public /events listing itself still never shows it (per Event's schema
+ * comment); registering is the visitor's deliberate signal of intent to
+ * attend, so it's the one place a guest does get the join link.
  */
 export async function registerForEvent(
   eventId: string,
   input: { email: string; name: string },
-): Promise<{ id: string; title: string; startsAt: Date }> {
+): Promise<{ id: string; title: string; startsAt: Date; meetingUrl: string | null }> {
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { id: true, title: true, startsAt: true, open: true, visibility: true },
+    select: { id: true, title: true, startsAt: true, open: true, visibility: true, meetingUrl: true },
   });
   if (!event) throw new EventError(404, "Event not found.");
   // The real enforcement point: even if `open` were ever true on a
@@ -1349,7 +1353,7 @@ export async function registerForEvent(
     update: { name: input.name },
   });
 
-  return { id: event.id, title: event.title, startsAt: event.startsAt };
+  return { id: event.id, title: event.title, startsAt: event.startsAt, meetingUrl: event.meetingUrl };
 }
 
 function formatIcsDate(date: Date): string {

@@ -863,7 +863,11 @@ enum AttendanceRole {
 // Event listing/calendar entry (§4.6). `open` gates public (§4.5 unauthenticated
 // /events) vs. members-only visibility; `meetingUrl` is stored regardless but
 // only ever served to RSVP'd members (enforced in API routes, not here) — the
-// public listing never gets it. `deidentificationConfirmed` must be true
+// public listing itself never gets it. A signed-out visitor registering for
+// an `open` event via EventRegistration (registerForEvent, events-server.ts)
+// is the one exception — that's a deliberate signal of intent to attend, so
+// the confirmation email does include meetingUrl even though nothing ever
+// displays it on the page. `deidentificationConfirmed` must be true
 // before a case_discussion event can be published — also app-enforced (same
 // pattern as MembershipApplication's phase-conditional required fields),
 // since the rule depends on `type` and isn't expressible as a DB constraint.
