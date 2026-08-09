@@ -73,8 +73,8 @@ export function RegisterButton({ eventId, eventTitle }: { eventId: string; event
         <DialogHeader>
           <DialogTitle>Register for {eventTitle}</DialogTitle>
           <DialogDescription>
-            This event is open to the public — no NASIHA account needed. We&apos;ll email you with
-            details closer to the date.
+            This event is open to the public — no NASIHA account needed. We&apos;ll email you a
+            confirmation right away, including how to join.
           </DialogDescription>
         </DialogHeader>
 
