@@ -62,7 +62,12 @@ const COMMUNITY_LINKS: NavLink[] = [
 const SUPPORT_LINK: NavLink = { href: "/donate", label: "Support Us", icon: Heart };
 
 const linkClasses = "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold hover:bg-accent";
-const triggerClasses = "rounded-md px-3 py-2 text-sm font-semibold hover:bg-accent hover:no-underline";
+// font-sans is load-bearing, not decorative: Radix's AccordionHeader
+// (components/ui/accordion.tsx) renders as an <h3>, and globals.css styles
+// every heading with the site's heading font (Mulish) instead of body text's
+// font (Montserrat) — without this override the trigger's label silently
+// renders in a different typeface than every plain link row around it.
+const triggerClasses = "rounded-md px-3 py-2 text-sm font-sans font-semibold hover:bg-accent hover:no-underline";
 
 // Renders one MEMBER_NAV_SECTIONS item — a real link, or a disabled "Soon"
 // placeholder.
