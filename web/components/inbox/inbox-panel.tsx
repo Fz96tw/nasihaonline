@@ -125,6 +125,12 @@ async function fetchThread(id: string): Promise<InboxThread> {
   return response.json();
 }
 
+/** Side-effect-only call — marks a meeting request's unread messages as read (§4.7 AC2, mirroring fetchThread for InboxMessage). */
+async function markMeetingRequestRead(id: string): Promise<void> {
+  const response = await fetch(`/api/inbox/meeting-requests/${id}`);
+  if (!response.ok) throw new Error("Failed to mark meeting request read");
+}
+
 /**
  * Single inbox list view with a detail pane (§4.7) — not a 3-column live
  * chat layout. On mobile, selecting a thread swaps the list for the detail
@@ -165,7 +171,7 @@ export function InboxPanel({
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
     return items.filter((item) => {
-      if (filter === "unread" && !(item.kind === "message" && item.unread)) return false;
+      if (filter === "unread" && !item.unread) return false;
       if (filter === "message" && item.kind !== "message") return false;
       if (filter === "meeting_request" && item.kind !== "meeting_request") return false;
       if (personFilter && item.otherPartyId !== personFilter) return false;
@@ -189,6 +195,20 @@ export function InboxPanel({
     if (thread) queryClient.invalidateQueries({ queryKey: ["inbox-list"] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread?.id, thread?.messages.length]);
+
+  // Meeting requests carry their full timeline inline in the list (no
+  // separate detail fetch), so opening one calls the read-marking side
+  // effect directly rather than piggybacking on a query like fetchThread.
+  const selectedMeetingRequestId = selectedItem?.kind === "meeting_request" ? selectedItem.id : null;
+  const selectedMeetingRequestUnread = selectedItem?.kind === "meeting_request" ? selectedItem.unread : false;
+  useEffect(() => {
+    if (selectedMeetingRequestId && selectedMeetingRequestUnread) {
+      markMeetingRequestRead(selectedMeetingRequestId).then(() => {
+        queryClient.invalidateQueries({ queryKey: ["inbox-list"] });
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMeetingRequestId, selectedMeetingRequestUnread]);
 
   async function refresh() {
     await Promise.all([

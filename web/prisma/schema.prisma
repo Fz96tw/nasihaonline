@@ -641,6 +641,10 @@ enum MeetingRequestMessageAction {
   accepted
   declined
   cancelled
+  // Freeform follow-up on the thread — doesn't touch MeetingRequest.status,
+  // available at any status/turn (unlike the negotiation actions above,
+  // which are turn-gated). See resolveMeetingRequest's "message" branch.
+  commented
 }
 
 model MeetingRequestMessage {
@@ -653,9 +657,16 @@ model MeetingRequestMessage {
   body             String?
   // Only set for created/proposed — the times on offer as of this step.
   proposedTimes    DateTime[]
-  createdAt        DateTime                    @default(now())
+  // Read state for the *other* party (a meeting request is always strictly
+  // two-party, so unlike InboxMessage there's no separate recipientId column
+  // needed — "the other party" is fully determined by senderId plus the
+  // MeetingRequest's own sender/recipient). Null until the other party opens
+  // the meeting request detail view.
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
 
   @@index([meetingRequestId, createdAt])
+  @@index([senderId, readAt])
   @@map("meeting_request_messages")
 }
 
@@ -755,6 +766,10 @@ enum NotificationType {
   meeting_request_declined
   meeting_request_rescheduled
   meeting_request_cancelled
+  // Freeform follow-up comment posted on a meeting-request thread — distinct
+  // from the lifecycle notifications above, which only fire on a
+  // status-changing action.
+  meeting_request_message
   contribution_awarded
   blog_comment
   forum_reply_mention

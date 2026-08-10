@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import type { Prisma } from "@/lib/generated/prisma/client";
 import { NotificationType } from "@/lib/generated/prisma/enums";
 import type { InboxListItem, InboxThread } from "@/lib/inbox";
 import { sendInboxMessageEmail } from "@/lib/email";
@@ -88,6 +89,10 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
   for (const meetingRequest of meetingRequests) {
     const direction = meetingRequest.senderId === userId ? "sent" : "received";
     const otherParty = direction === "sent" ? meetingRequest.recipient : meetingRequest.sender;
+    const latestMessage = meetingRequest.messages[meetingRequest.messages.length - 1];
+    const unread = meetingRequest.messages.some(
+      (message) => message.senderId !== userId && message.readAt === null,
+    );
 
     items.push({
       kind: "meeting_request",
@@ -108,7 +113,8 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
       })),
       proposedTimes: meetingRequest.proposedTimes.map((time) => time.toISOString()),
       status: meetingRequest.status,
-      lastActivityAt: meetingRequest.updatedAt.toISOString(),
+      unread,
+      lastActivityAt: (latestMessage?.createdAt ?? meetingRequest.updatedAt).toISOString(),
       scheduledAt: meetingRequest.scheduledAt?.toISOString() ?? null,
       meetingUrl: meetingRequest.meetingUrl,
     });
@@ -128,11 +134,21 @@ const DASHBOARD_INBOX_LIMIT = 5;
 /**
  * Dashboard Inbox widget: unread-message count plus the most recent unread
  * messages, mirroring the notification-bell's `readAt: null` count pattern
- * over the same indexed field (`@@index([recipientId, readAt])`).
+ * over the same indexed field (`@@index([recipientId, readAt])`). Unlike
+ * InboxMessage, MeetingRequestMessage has no recipientId column — a meeting
+ * request is always strictly two-party, so "addressed to userId" is
+ * `senderId != userId` scoped to requests userId is a party of.
  */
 export async function getUnreadInboxSummaryForUser(userId: string) {
-  const [unreadCount, unread] = await Promise.all([
+  const meetingRequestUnreadWhere: Prisma.MeetingRequestMessageWhereInput = {
+    readAt: null,
+    senderId: { not: userId },
+    meetingRequest: { OR: [{ senderId: userId }, { recipientId: userId }] },
+  };
+
+  const [inboxUnreadCount, meetingUnreadCount, unreadMessages, unreadComments] = await Promise.all([
     db.inboxMessage.count({ where: { recipientId: userId, readAt: null } }),
+    db.meetingRequestMessage.count({ where: meetingRequestUnreadWhere }),
     db.inboxMessage.findMany({
       where: { recipientId: userId, readAt: null },
       select: {
@@ -145,17 +161,41 @@ export async function getUnreadInboxSummaryForUser(userId: string) {
       orderBy: { createdAt: "desc" },
       take: DASHBOARD_INBOX_LIMIT,
     }),
+    db.meetingRequestMessage.findMany({
+      where: meetingRequestUnreadWhere,
+      select: {
+        body: true,
+        createdAt: true,
+        sender: { select: { name: true } },
+        meetingRequest: { select: { id: true, topic: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: DASHBOARD_INBOX_LIMIT,
+    }),
   ]);
 
-  return {
-    unreadCount,
-    items: unread.map((message) => ({
+  const items = [
+    ...unreadMessages.map((message) => ({
       id: message.id,
       senderName: message.sender.name ?? "NASIHA Member",
       subject: message.subject,
       snippet: truncate(message.body),
       createdAt: message.createdAt.toISOString(),
     })),
+    ...unreadComments.map((comment) => ({
+      id: comment.meetingRequest.id,
+      senderName: comment.sender.name ?? "NASIHA Member",
+      subject: `Meeting: ${comment.meetingRequest.topic}`,
+      snippet: truncate(comment.body ?? ""),
+      createdAt: comment.createdAt.toISOString(),
+    })),
+  ]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, DASHBOARD_INBOX_LIMIT);
+
+  return {
+    unreadCount: inboxUnreadCount + meetingUnreadCount,
+    items,
   };
 }
 
@@ -203,6 +243,26 @@ export async function getThreadForUser(rootId: string, userId: string): Promise<
       isOwn: message.senderId === userId,
     })),
   };
+}
+
+/**
+ * Marks a meeting request's unread messages addressed to `userId` as read
+ * (mirrors getThreadForUser's read-marking for InboxMessage threads). There's
+ * no separate meeting-request detail GET route — the list (getInboxList) is
+ * the only read path for its content — so this is called as its own side
+ * effect when the client opens a meeting request's detail pane.
+ */
+export async function markMeetingRequestRead(meetingRequestId: string, userId: string): Promise<void> {
+  const meetingRequest = await db.meetingRequest.findUnique({ where: { id: meetingRequestId } });
+  if (!meetingRequest) throw new InboxAccessError(404, "Meeting request not found.");
+  if (meetingRequest.senderId !== userId && meetingRequest.recipientId !== userId) {
+    throw new InboxAccessError(403, "You don't have access to this meeting request.");
+  }
+
+  await db.meetingRequestMessage.updateMany({
+    where: { meetingRequestId, senderId: { not: userId }, readAt: null },
+    data: { readAt: new Date() },
+  });
 }
 
 export class SendMessageError extends Error {

@@ -113,7 +113,8 @@ type ResolveAction =
   | { action: "decline" }
   | { action: "reschedule"; proposedTimes: string[]; message: string | null }
   | { action: "cancel" }
-  | { action: "edit"; topic: string; proposedTimes: string[]; message: string | null };
+  | { action: "edit"; topic: string; proposedTimes: string[]; message: string | null }
+  | { action: "message"; body: string };
 
 /**
  * Cancels a meeting request (§4.7 follow-up), in either of two states with
@@ -194,6 +195,50 @@ async function cancelMeetingRequest(
     );
     return updated;
   });
+}
+
+/**
+ * Freeform follow-up comment on a meeting-request thread (§4.7 follow-up
+ * conversation) — either party may post one at any status/turn, unlike the
+ * turn-gated negotiation actions. Never touches MeetingRequest.status.
+ */
+async function postMeetingRequestComment(
+  meetingRequest: MeetingRequestModel,
+  actingUserId: string,
+  body: string,
+): Promise<MeetingRequestModel> {
+  if (meetingRequest.senderId !== actingUserId && meetingRequest.recipientId !== actingUserId) {
+    throw new MeetingRequestError(403, "You don't have access to this meeting request.");
+  }
+  const otherPartyId =
+    actingUserId === meetingRequest.senderId ? meetingRequest.recipientId : meetingRequest.senderId;
+
+  const [actor, otherParty] = await Promise.all([
+    db.user.findUnique({ where: { id: actingUserId }, select: { name: true } }),
+    db.user.findUnique({ where: { id: otherPartyId }, select: { email: true, name: true } }),
+  ]);
+  const actorName = actor?.name ?? "A member";
+  const message = `${actorName} sent a message about: "${meetingRequest.topic}"`;
+  const link = `/inbox?item=${meetingRequest.id}`;
+
+  await db.$transaction(async (tx) => {
+    await tx.meetingRequestMessage.create({
+      data: { meetingRequestId: meetingRequest.id, senderId: actingUserId, action: MeetingRequestMessageAction.commented, body },
+    });
+    await createNotification(
+      { recipientId: otherPartyId, type: NotificationType.meeting_request_message, message, link },
+      tx,
+    );
+  });
+  if (otherParty) {
+    await sendMeetingRequestEmail(otherParty.email, otherParty.name ?? "there", {
+      subject: `New message: ${meetingRequest.topic}`,
+      message: `${message}\n\n"${body}"`,
+      link: `${APP_URL}${link}`,
+    });
+  }
+
+  return meetingRequest;
 }
 
 /**
@@ -450,6 +495,9 @@ export async function resolveMeetingRequest(
   const meetingRequest = await db.meetingRequest.findUnique({ where: { id: meetingRequestId } });
   if (!meetingRequest) throw new MeetingRequestError(404, "Meeting request not found.");
 
+  if (action.action === "message") {
+    return postMeetingRequestComment(meetingRequest, actingUserId, action.body);
+  }
   if (action.action === "cancel") {
     return cancelMeetingRequest(meetingRequest, actingUserId);
   }

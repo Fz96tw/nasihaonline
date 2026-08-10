@@ -13,18 +13,22 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { type MeetingRequestListItem, type MeetingRequestMessageItem } from "@/lib/inbox";
 import { MEETING_REQUEST_STATUS_BADGE_VARIANT, MEETING_REQUEST_STATUS_LABELS } from "@/lib/meeting-requests";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { linkifyText } from "@/lib/linkify";
 import { getLocalTimeZoneAbbreviation } from "@/lib/timezone";
 import { useHasMounted } from "@/lib/use-has-mounted";
 import { cn } from "@/lib/utils";
 
 const MAX_PROPOSED_TIMES = 5;
 
+// Empty string for "commented" renders as a plain chat bubble (just the
+// sender's name, no action phrase) — see the header line in MessageTimeline.
 const MESSAGE_ACTION_LABELS: Record<MeetingRequestMessageItem["action"], string> = {
   created: "requested a meeting",
   proposed: "proposed a new time",
   accepted: "accepted",
   declined: "declined",
   cancelled: "cancelled the request",
+  commented: "",
 };
 
 // timeZoneName makes explicit which zone a bare time means (see lib/timezone.ts)
@@ -62,7 +66,8 @@ function MessageTimeline({ messages, currentUserId }: { messages: MeetingRequest
         >
           <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
             <span className="font-medium">
-              {message.senderName} {MESSAGE_ACTION_LABELS[message.action]}
+              {message.senderName}
+              {MESSAGE_ACTION_LABELS[message.action] ? ` ${MESSAGE_ACTION_LABELS[message.action]}` : ""}
             </span>
             <span>{hasMounted ? formatTimestamp(message.createdAt) : null}</span>
           </div>
@@ -73,7 +78,9 @@ function MessageTimeline({ messages, currentUserId }: { messages: MeetingRequest
               ))}
             </ul>
           )}
-          {message.body && <p className="whitespace-pre-wrap break-words text-sm">{message.body}</p>}
+          {message.body && (
+            <p className="whitespace-pre-wrap break-words text-sm">{linkifyText(message.body)}</p>
+          )}
         </div>
       ))}
     </div>
@@ -386,6 +393,47 @@ function EditRequestForm({
 }
 
 /**
+ * Freeform follow-up reply box (§4.7 follow-up conversation) — available to
+ * either party at any status, unlike the structured negotiation actions
+ * above. Posts a `commented` MeetingRequestMessage; never touches status.
+ */
+function CommentComposer({ meetingRequestId, onSent }: { meetingRequestId: string; onSent: () => Promise<unknown> }) {
+  const [body, setBody] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSend() {
+    if (!body.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await patchMeetingRequest(meetingRequestId, { action: "message", body: body.trim() });
+      setBody("");
+      await onSent();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 border-t p-4">
+      <Textarea
+        rows={3}
+        placeholder="Write a message…"
+        value={body}
+        onChange={(event) => setBody(event.target.value)}
+      />
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <Button className="self-end" disabled={submitting || !body.trim()} onClick={handleSend}>
+        {submitting ? "Sending…" : "Send"}
+      </Button>
+    </div>
+  );
+}
+
+/**
  * Detail pane for a meeting-request inbox item (§4.7). Rendered directly
  * from the merged inbox list's inline data — there's no
  * GET /api/inbox/meeting-requests/:id per PRD's route list, so no fetch is
@@ -667,6 +715,8 @@ export function MeetingRequestDetail({
           />
         )}
       </div>
+
+      <CommentComposer meetingRequestId={item.id} onSent={onUpdated} />
     </div>
   );
 }

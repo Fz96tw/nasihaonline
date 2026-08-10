@@ -57,7 +57,9 @@ export type MeetingRequestListItem = {
   /** ISO timestamps — the current outstanding proposal. */
   proposedTimes: string[];
   status: MeetingRequestStatus;
-  /** Timestamp of the request's most recent status change, for "most recent activity" sort. */
+  /** True if the current user has an unread comment/negotiation step anywhere in this thread. */
+  unread: boolean;
+  /** Timestamp of the thread's most recent message (status change or freeform comment), for "most recent activity" sort. */
   lastActivityAt: string;
   /** Set once accepted — the single confirmed time (ISO), chosen from proposedTimes. */
   scheduledAt: string | null;

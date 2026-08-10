@@ -31,7 +31,7 @@ export function InboxList({
   return (
     <ul className="flex h-full flex-col divide-y overflow-y-auto">
       {items.map((item) => {
-        const unread = item.kind === "message" && item.unread;
+        const unread = item.unread;
         return (
           <li key={item.id}>
             <button
