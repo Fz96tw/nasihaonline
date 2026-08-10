@@ -12,17 +12,24 @@ export function InboxList({
   items,
   selectedId,
   onSelect,
+  hasUnfilteredItems = true,
 }: {
   items: InboxListItem[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** True if the inbox has items before search/filter is applied — distinguishes an empty inbox from a no-results search. */
+  hasUnfilteredItems?: boolean;
 }) {
   if (items.length === 0) {
-    return <p className="p-6 text-center text-sm text-muted-foreground">Nothing here yet.</p>;
+    return (
+      <p className="p-6 text-center text-sm text-muted-foreground">
+        {hasUnfilteredItems ? "No messages match your search." : "Nothing here yet."}
+      </p>
+    );
   }
 
   return (
-    <ul className="flex flex-col divide-y overflow-y-auto">
+    <ul className="flex h-full flex-col divide-y overflow-y-auto">
       {items.map((item) => {
         const unread = item.kind === "message" && item.unread;
         return (

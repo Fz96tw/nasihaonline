@@ -214,27 +214,23 @@ export async function listAnnouncementHistory(): Promise<AnnouncementHistoryItem
   }));
 }
 
-export type DashboardAnnouncement = { id: string; title: string; sentAt: string };
+const TRENDING_WINDOW_DAYS = 30;
 
-/**
- * Most recently sent, still-live announcements for the dashboard's Board
- * Announcements widget — same "sent, not retracted, feed-eligible" filter as
- * the What's New feed's announcement query (getFeedPage in feed-server.ts),
- * just without the merge/pagination since the dashboard only ever shows a
- * few at a time.
- */
-export async function getRecentAnnouncementsForDashboard(limit = 3): Promise<DashboardAnnouncement[]> {
+/** Dashboard "What's Trending" — feed-visible announcements last updated in the last 30 days (no view-tracking exists for this model). */
+export async function getTrendingAnnouncements(
+  limit = 3,
+): Promise<{ id: string; title: string; updatedAt: string }[]> {
+  const since = new Date(Date.now() - TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   const announcements = await db.announcement.findMany({
-    where: { sentAt: { not: null }, retractedAt: null, showInFeed: true },
-    select: { id: true, title: true, sentAt: true },
-    orderBy: { sentAt: "desc" },
+    where: { sentAt: { not: null }, retractedAt: null, showInFeed: true, updatedAt: { gte: since } },
+    select: { id: true, title: true, updatedAt: true },
+    orderBy: { updatedAt: "desc" },
     take: limit,
   });
 
   return announcements.map((announcement) => ({
     id: announcement.id,
     title: announcement.title,
-    // sentAt is never null here — the where clause above excludes drafts.
-    sentAt: (announcement.sentAt as Date).toISOString(),
+    updatedAt: announcement.updatedAt.toISOString(),
   }));
 }

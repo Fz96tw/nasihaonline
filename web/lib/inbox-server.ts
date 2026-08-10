@@ -123,6 +123,42 @@ export class InboxAccessError extends Error {
   }
 }
 
+const DASHBOARD_INBOX_LIMIT = 5;
+
+/**
+ * Dashboard Inbox widget: unread-message count plus the most recent unread
+ * messages, mirroring the notification-bell's `readAt: null` count pattern
+ * over the same indexed field (`@@index([recipientId, readAt])`).
+ */
+export async function getUnreadInboxSummaryForUser(userId: string) {
+  const [unreadCount, unread] = await Promise.all([
+    db.inboxMessage.count({ where: { recipientId: userId, readAt: null } }),
+    db.inboxMessage.findMany({
+      where: { recipientId: userId, readAt: null },
+      select: {
+        id: true,
+        subject: true,
+        body: true,
+        createdAt: true,
+        sender: { select: { name: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: DASHBOARD_INBOX_LIMIT,
+    }),
+  ]);
+
+  return {
+    unreadCount,
+    items: unread.map((message) => ({
+      id: message.id,
+      senderName: message.sender.name ?? "NASIHA Member",
+      subject: message.subject,
+      snippet: truncate(message.body),
+      createdAt: message.createdAt.toISOString(),
+    })),
+  };
+}
+
 /**
  * Full thread for the detail pane, permission-checked to the two
  * participants. As a side effect, marks every message in the thread

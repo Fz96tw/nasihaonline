@@ -29,12 +29,12 @@ export function StatCard({
   return (
     <Card className={cn(className)}>
       <CardHeader className="space-y-1 p-6 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
+        <CardTitle className="text-lg text-muted-foreground">
           {label}
         </CardTitle>
       </CardHeader>
       <CardContent className="p-6 pt-0">
-        <p className="text-3xl font-bold tracking-tight">
+        <p className="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">
           {numericValue !== undefined ? <CountUp value={numericValue} decimals={decimals} /> : value}
         </p>
         {sublabel ? (

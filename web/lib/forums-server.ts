@@ -1068,3 +1068,49 @@ export async function resolveForumPostFlag(
     return updated;
   });
 }
+
+const TRENDING_WINDOW_DAYS = 30;
+
+/**
+ * Dashboard "What's Trending" — forum threads with the most replies posted
+ * in the last 30 days. Unlike getThreadViewCount/isThreadVisible elsewhere
+ * in this file, there's no per-viewer context here (same shape as
+ * getTrendingLibraryItems/getTrendingEvents), so this only surfaces threads
+ * anyone could see: `community` visibility, and not inheriting restriction
+ * from a linked Event/Knowledge item.
+ */
+export async function getTrendingForumThreads(
+  limit = 3,
+): Promise<{ id: string; title: string; forumSlug: string; replyCount: number }[]> {
+  const since = new Date(Date.now() - TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const grouped = await db.forumPost.groupBy({
+    by: ["threadId"],
+    where: { createdAt: { gte: since } },
+    _count: { threadId: true },
+    orderBy: { _count: { threadId: "desc" } },
+    take: limit * 3,
+  });
+  if (grouped.length === 0) return [];
+
+  const threads = await db.forumThread.findMany({
+    where: {
+      id: { in: grouped.map((group) => group.threadId) },
+      visibility: ForumThreadVisibility.community,
+      AND: [
+        { OR: [{ eventId: null }, { event: { visibility: { not: EventVisibility.invited } } }] },
+        { OR: [{ knowledgeItemId: null }, { knowledgeItem: { visibility: { not: KnowledgeVisibility.restricted } } }] },
+      ],
+    },
+    select: { id: true, title: true, forum: { select: { slug: true } } },
+  });
+  const byId = new Map(threads.map((thread) => [thread.id, thread]));
+
+  return grouped
+    .flatMap((group) => {
+      const thread = byId.get(group.threadId);
+      return thread
+        ? [{ id: thread.id, title: thread.title, forumSlug: thread.forum.slug, replyCount: group._count.threadId }]
+        : [];
+    })
+    .slice(0, limit);
+}

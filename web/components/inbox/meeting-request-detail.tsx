@@ -73,7 +73,7 @@ function MessageTimeline({ messages, currentUserId }: { messages: MeetingRequest
               ))}
             </ul>
           )}
-          {message.body && <p className="whitespace-pre-wrap text-sm">{message.body}</p>}
+          {message.body && <p className="whitespace-pre-wrap break-words text-sm">{message.body}</p>}
         </div>
       ))}
     </div>

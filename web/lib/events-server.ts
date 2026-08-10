@@ -400,6 +400,34 @@ export async function getEventViewCount(eventId: string): Promise<number> {
   return db.eventView.count({ where: { eventId } });
 }
 
+const TRENDING_WINDOW_DAYS = 30;
+
+/** Dashboard "What's Trending" — events with the most views in the last 30 days. */
+export async function getTrendingEvents(
+  limit = 3,
+): Promise<{ id: string; title: string; viewCount: number }[]> {
+  const since = new Date(Date.now() - TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const grouped = await db.eventView.groupBy({
+    by: ["eventId"],
+    where: { createdAt: { gte: since } },
+    _count: { eventId: true },
+    orderBy: { _count: { eventId: "desc" } },
+    take: limit,
+  });
+  if (grouped.length === 0) return [];
+
+  const events = await db.event.findMany({
+    where: { id: { in: grouped.map((group) => group.eventId) }, cancelledAt: null },
+    select: { id: true, title: true },
+  });
+  const byId = new Map(events.map((event) => [event.id, event]));
+
+  return grouped.flatMap((group) => {
+    const event = byId.get(group.eventId);
+    return event ? [{ id: event.id, title: event.title, viewCount: group._count.eventId }] : [];
+  });
+}
+
 /**
  * /members/[memberId]'s Events section (§4.5) — events this member has
  * hosted, newest first. The profile page's viewer is always a signed-in

@@ -133,14 +133,6 @@ export type KnowledgeItemForEdit = {
   attachment: { fileName: string; url: string } | null;
 };
 
-/** Dashboard "recently added to the library" widget row (§4.10). */
-export type RecentLibraryItem = {
-  id: string;
-  title: string;
-  contentType: KnowledgeContentType;
-  createdAt: string;
-};
-
 /** /admin/library/review-queue row (§4.9) — Steward/admin only. */
 export type ReviewQueueItem = {
   id: string;
