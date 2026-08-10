@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getInboxList } from "@/lib/inbox-server";
 import { InboxPanel } from "@/components/inbox/inbox-panel";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
+import { BackLink } from "@/components/back-link";
 
 export const metadata: Metadata = {
   title: "Message Inbox — NASIHA",
@@ -30,6 +31,7 @@ export default async function InboxPage() {
       </section>
 
       <section className="mx-auto flex max-w-[1120px] flex-col gap-8 px-8 py-16">
+        <BackLink fallbackHref="/dashboard" />
         <Suspense fallback={null}>
           <InboxPanel initialItems={items} currentUserId={user.id} />
         </Suspense>

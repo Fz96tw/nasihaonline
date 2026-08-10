@@ -52,9 +52,9 @@ export function ScheduleAgenda({ items }: { items: ScheduleItem[] }) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col divide-y divide-border">
       {groups.map((group) => (
-        <div key={group.heading}>
+        <div key={group.heading} className="pb-4 pt-4 first:pt-0 last:pb-0">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {group.heading}
           </p>

@@ -103,7 +103,7 @@ export function InboxDetail({
               <span className="font-medium">{message.senderName}</span>
               <span>{formatTimestamp(message.createdAt)}</span>
             </div>
-            <p className="whitespace-pre-wrap text-sm">{linkifyText(message.body)}</p>
+            <p className="whitespace-pre-wrap break-words text-sm">{linkifyText(message.body)}</p>
           </div>
         ))}
       </div>

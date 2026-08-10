@@ -29,7 +29,7 @@ export function StatCard({
   return (
     <Card className={cn(className)}>
       <CardHeader className="space-y-1 p-6 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
+        <CardTitle className="text-lg text-muted-foreground">
           {label}
         </CardTitle>
       </CardHeader>

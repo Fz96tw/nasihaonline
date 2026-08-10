@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// Dashboard renders a single Trending carousel, so one fixed key is enough.
+// Persisted (rather than kept in React state) because clicking a card
+// navigates away to a different route, which remounts this component —
+// sessionStorage survives that so returning via back link lands where you
+// left off instead of snapping back to the start.
+const SCROLL_POSITION_KEY = "trending-carousel-scroll-left";
 
 /**
  * Horizontal snap-scroll shell for the Trending category cards — same
@@ -18,6 +25,17 @@ export function TrendingCarousel({ children }: { children: React.ReactNode }) {
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
+  // Runs before paint so the restored position doesn't flash from 0. Uses
+  // "instant" rather than assigning scrollLeft directly because the
+  // scroller's CSS scroll-behavior is smooth, which would otherwise animate
+  // the restore into a visible slide.
+  useLayoutEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const saved = Number(sessionStorage.getItem(SCROLL_POSITION_KEY));
+    if (saved > 0) el.scrollTo({ left: saved, behavior: "instant" });
+  }, []);
+
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -26,6 +44,7 @@ export function TrendingCarousel({ children }: { children: React.ReactNode }) {
       if (!el) return;
       setCanScrollLeft(el.scrollLeft > 1);
       setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+      sessionStorage.setItem(SCROLL_POSITION_KEY, String(el.scrollLeft));
     }
 
     updateScrollState();

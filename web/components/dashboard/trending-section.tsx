@@ -112,8 +112,8 @@ export async function TrendingSection() {
 
   return (
     <section>
-      <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
-        <Flame className="h-6 w-6 text-warning sm:h-7 sm:w-7" />
+      <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
+        <Flame className="h-5 w-5 text-warning" />
         What&apos;s Trending
       </h2>
       <TrendingCarousel>
