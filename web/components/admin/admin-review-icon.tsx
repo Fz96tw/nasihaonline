@@ -6,7 +6,7 @@ import { Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const POLL_INTERVAL_MS = 20_000;
+const POLL_INTERVAL_MS = 120_000;
 
 async function fetchPendingCount(signal: AbortSignal): Promise<number> {
   const response = await fetch("/api/admin/pending-review-count", { signal });

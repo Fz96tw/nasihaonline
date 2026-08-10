@@ -16,7 +16,7 @@ import { getCsrfToken } from "@/lib/csrf-client";
 import type { NotificationListItem } from "@/lib/notifications";
 import { cn } from "@/lib/utils";
 
-const POLL_INTERVAL_MS = 20_000;
+const POLL_INTERVAL_MS = 120_000;
 
 async function fetchNotifications(
   signal: AbortSignal,
