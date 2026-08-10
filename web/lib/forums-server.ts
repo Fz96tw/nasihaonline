@@ -9,7 +9,7 @@ import { getDirectoryMembersByIds, getMentionableMembers } from "@/lib/members-s
 import { getProfileAvatarUrl } from "@/lib/storage";
 import { findMentionedMembers } from "@/lib/mentions";
 import { DIRECTORY_TIERS } from "@/lib/members";
-import { CLINICAL_DISCUSSIONS_SLUG } from "@/lib/forums";
+import { CLINICAL_DISCUSSIONS_SLUG, EVENTS_FORUM_SLUG, LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import type {
   ForumCategory,
   ForumThreadListItem,
@@ -29,15 +29,25 @@ export class ForumError extends Error {
 }
 
 /**
- * /forums (§4.13) — the six seeded forum categories, admin-manageable but
- * not editable here yet. postCount/lastActivityAt are derived from each
- * thread's latest post (every thread has at least one, from creation) so
- * the "most active" / "most recent" sort buttons on the page have something
- * to sort by without a denormalized column on Forum itself.
+ * /forums (§4.13) — the six member-browsable seeded forum categories,
+ * admin-manageable but not editable here yet. Excludes Events Discussion and
+ * Library Discussions: those two forums only ever get threads on-demand,
+ * created from an Event's/Knowledge Library item's own detail page rather
+ * than picked by a member browsing here, so listing them as a browsable
+ * category would be a dead end (no "new thread" flow reachable from here)
+ * and could leak the existence of a thread whose visibility is inherited
+ * from a restricted event/item to members who can't see it. Their threads
+ * stay reachable via the source item's page and direct
+ * /forums/{events,library-discussions}/[threadId] URLs (still subject to
+ * getForumThreadDetail's visibility check) — only this index listing hides
+ * them. postCount/lastActivityAt are derived from each thread's latest post
+ * (every thread has at least one, from creation) so the "most active" /
+ * "most recent" sort buttons on the page have something to sort by without
+ * a denormalized column on Forum itself.
  */
 export async function getForumCategories(): Promise<ForumCategory[]> {
   const forums = await db.forum.findMany({
-    where: { active: true },
+    where: { active: true, slug: { notIn: [EVENTS_FORUM_SLUG, LIBRARY_FORUM_SLUG] } },
     select: {
       id: true,
       name: true,
