@@ -955,8 +955,16 @@ export async function getPublishedKnowledgeItemsByContributor(
 
 const TRENDING_WINDOW_DAYS = 30;
 
-/** Dashboard "What's Trending" — library items with the most views in the last 30 days. */
+/**
+ * Dashboard "What's Trending" — library items with the most views in the
+ * last 30 days. Gated the same way as getPublishedKnowledgeItemById: a
+ * `public` item is visible to everyone, a `restricted` item only to its
+ * contributor/invitees, and isPrivileged (admin/moderator) bypasses the gate
+ * entirely.
+ */
 export async function getTrendingLibraryItems(
+  userId: string,
+  isPrivileged: boolean,
   limit = 3,
 ): Promise<{ id: string; title: string; contentType: KnowledgeContentType; viewCount: number }[]> {
   const since = new Date(Date.now() - TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
@@ -973,7 +981,15 @@ export async function getTrendingLibraryItems(
     where: {
       id: { in: grouped.map((group) => group.knowledgeItemId) },
       status: { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] },
-      visibility: KnowledgeVisibility.public,
+      ...(isPrivileged
+        ? {}
+        : {
+            OR: [
+              { visibility: KnowledgeVisibility.public },
+              { contributorId: userId },
+              { invitees: { some: { userId } } },
+            ],
+          }),
     },
     select: { id: true, title: true, contentType: true },
   });

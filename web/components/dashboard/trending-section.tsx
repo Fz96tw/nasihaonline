@@ -35,14 +35,20 @@ type TrendingCategory = {
  * entirely if every category is empty, and each category card is hidden
  * individually if it has nothing in the window.
  */
-export async function TrendingSection() {
+export async function TrendingSection({
+  userId,
+  isPrivileged,
+}: {
+  userId: string;
+  isPrivileged: boolean;
+}) {
   const [announcements, surveys, events, libraryItems, posts, forumThreads] = await Promise.all([
     getTrendingAnnouncements(),
     getTrendingSurveys(),
-    getTrendingEvents(),
-    getTrendingLibraryItems(),
+    getTrendingEvents(userId, isPrivileged),
+    getTrendingLibraryItems(userId, isPrivileged),
     getTrendingPosts(),
-    getTrendingForumThreads(),
+    getTrendingForumThreads(userId, isPrivileged),
   ]);
 
   const categories: TrendingCategory[] = [

@@ -714,7 +714,7 @@ export async function getMyMeetingRequests(userId: string) {
 }
 
 /**
- * Meeting requests due in the future, for the calendar page's "Upcoming
+ * Meeting requests due today or later, for the calendar page's "Upcoming
  * List" (kept separate from the shared, unfiltered Event model — see plan
  * doc — since these are private to the two participants). Covers two shapes:
  *  - `accepted`/`reschedule_by_sender`/`reschedule_by_recipient`: a
@@ -723,12 +723,16 @@ export async function getMyMeetingRequests(userId: string) {
  *    so it shouldn't vanish from the calendar mid-negotiation.
  *  - `pending`/`rescheduled`: not yet accepted, so there's no `scheduledAt`
  *    yet — only `proposedTimes` on the table. These still show up (marked
- *    `isPending`) using the earliest proposed time that's still in the
- *    future, so a meeting doesn't disappear from the calendar just because
- *    the other party hasn't responded yet.
+ *    `isPending`) using the earliest proposed time from today onward, so a
+ *    meeting doesn't disappear from the calendar just because the other
+ *    party hasn't responded yet.
  */
 export async function getUpcomingMeetingsForUser(userId: string) {
-  const now = new Date();
+  // Start-of-day cutoff, not `now` — a today meeting shouldn't drop off the
+  // dashboard/calendar the moment its scheduled time passes.
+  const startOfToday = new Date();
+  startOfToday.setUTCHours(0, 0, 0, 0);
+
   const [confirmed, negotiating] = await Promise.all([
     db.meetingRequest.findMany({
       where: {
@@ -739,7 +743,7 @@ export async function getUpcomingMeetingsForUser(userId: string) {
             MeetingRequestStatus.reschedule_by_recipient,
           ],
         },
-        scheduledAt: { gte: now },
+        scheduledAt: { gte: startOfToday },
         OR: [{ senderId: userId }, { recipientId: userId }],
       },
       select: {
@@ -783,7 +787,7 @@ export async function getUpcomingMeetingsForUser(userId: string) {
 
   const pendingMeetings = negotiating.flatMap((meeting) => {
     const nextProposedTime = meeting.proposedTimes
-      .filter((time) => time >= now)
+      .filter((time) => time >= startOfToday)
       .sort((a, b) => a.getTime() - b.getTime())[0];
     if (!nextProposedTime) return [];
     return [

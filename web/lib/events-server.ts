@@ -402,8 +402,17 @@ export async function getEventViewCount(eventId: string): Promise<number> {
 
 const TRENDING_WINDOW_DAYS = 30;
 
-/** Dashboard "What's Trending" — events with the most views in the last 30 days. */
+/**
+ * Dashboard "What's Trending" — events with the most views in the last 30
+ * days. Gated the same way as getDashboardUpcomingEvents: a `community`
+ * event is visible to everyone, an `invited` event only to its host/
+ * invitees, and isPrivileged (admin/moderator) bypasses the gate entirely.
+ * Over-fetches the view-count grouping since this filter can now drop
+ * results that a viewer isn't allowed to see.
+ */
 export async function getTrendingEvents(
+  userId: string,
+  isPrivileged: boolean,
   limit = 3,
 ): Promise<{ id: string; title: string; viewCount: number }[]> {
   const since = new Date(Date.now() - TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
@@ -412,20 +421,34 @@ export async function getTrendingEvents(
     where: { createdAt: { gte: since } },
     _count: { eventId: true },
     orderBy: { _count: { eventId: "desc" } },
-    take: limit,
+    take: limit * 3,
   });
   if (grouped.length === 0) return [];
 
   const events = await db.event.findMany({
-    where: { id: { in: grouped.map((group) => group.eventId) }, cancelledAt: null },
+    where: {
+      id: { in: grouped.map((group) => group.eventId) },
+      cancelledAt: null,
+      ...(isPrivileged
+        ? {}
+        : {
+            OR: [
+              { hostId: userId },
+              { invitees: { some: { userId } } },
+              { visibility: EventVisibility.community },
+            ],
+          }),
+    },
     select: { id: true, title: true },
   });
   const byId = new Map(events.map((event) => [event.id, event]));
 
-  return grouped.flatMap((group) => {
-    const event = byId.get(group.eventId);
-    return event ? [{ id: event.id, title: event.title, viewCount: group._count.eventId }] : [];
-  });
+  return grouped
+    .flatMap((group) => {
+      const event = byId.get(group.eventId);
+      return event ? [{ id: event.id, title: event.title, viewCount: group._count.eventId }] : [];
+    })
+    .slice(0, limit);
 }
 
 /**
@@ -527,9 +550,14 @@ export async function getDashboardUpcomingEvents(
   userId: string,
   limit = 3,
 ): Promise<DashboardUpcomingEvent[]> {
+  // Start-of-day cutoff, not `now` — a today event shouldn't drop off the
+  // dashboard the moment its start time passes.
+  const startOfToday = new Date();
+  startOfToday.setUTCHours(0, 0, 0, 0);
+
   const events = await db.event.findMany({
     where: {
-      startsAt: { gte: new Date() },
+      startsAt: { gte: startOfToday },
       cancelledAt: null,
       // A restricted event's organizer/invitees see it unconditionally —
       // they shouldn't have to RSVP to their own private event just to

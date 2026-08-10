@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Award, LayoutDashboard, ListChecks, User } from "lucide-react";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
+import { Role } from "@/lib/generated/prisma/enums";
 import { StatsRow } from "@/components/dashboard/stats-row";
 import { AccountNoticesWidget } from "@/components/dashboard/account-notices-widget";
 import { ScheduleWidget } from "@/components/dashboard/schedule-widget";
@@ -25,6 +26,7 @@ function StaggeredIn({ index, children }: { index: number; children: React.React
 export default async function DashboardPage() {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
+  const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
 
   return (
     <main className="mx-auto flex max-w-[1280px] flex-col gap-8 p-8">
@@ -89,7 +91,7 @@ export default async function DashboardPage() {
 
       <StaggeredIn index={2}>
         <Suspense fallback={null}>
-          <TrendingSection />
+          <TrendingSection userId={user.id} isPrivileged={isPrivileged} />
         </Suspense>
       </StaggeredIn>
     </main>

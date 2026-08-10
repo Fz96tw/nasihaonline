@@ -1073,13 +1073,17 @@ const TRENDING_WINDOW_DAYS = 30;
 
 /**
  * Dashboard "What's Trending" — forum threads with the most replies posted
- * in the last 30 days. Unlike getThreadViewCount/isThreadVisible elsewhere
- * in this file, there's no per-viewer context here (same shape as
- * getTrendingLibraryItems/getTrendingEvents), so this only surfaces threads
- * anyone could see: `community` visibility, and not inheriting restriction
- * from a linked Event/Knowledge item.
+ * in the last 30 days. Mirrors isThreadVisible's three gates (own-thread
+ * `invited` visibility, event-inherited restriction, knowledge-item-
+ * inherited restriction) as a per-viewer Prisma filter: each gate passes if
+ * it isn't restricted, or the viewer is the author/host/contributor/an
+ * invitee. isPrivileged (admin/moderator) bypasses every gate, including the
+ * event-inherited one, which isThreadVisible itself doesn't bypass — for
+ * this dashboard-wide surface an admin should always see what's trending.
  */
 export async function getTrendingForumThreads(
+  userId: string,
+  isPrivileged: boolean,
   limit = 3,
 ): Promise<{ id: string; title: string; forumSlug: string; replyCount: number }[]> {
   const since = new Date(Date.now() - TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
@@ -1095,11 +1099,35 @@ export async function getTrendingForumThreads(
   const threads = await db.forumThread.findMany({
     where: {
       id: { in: grouped.map((group) => group.threadId) },
-      visibility: ForumThreadVisibility.community,
-      AND: [
-        { OR: [{ eventId: null }, { event: { visibility: { not: EventVisibility.invited } } }] },
-        { OR: [{ knowledgeItemId: null }, { knowledgeItem: { visibility: { not: KnowledgeVisibility.restricted } } }] },
-      ],
+      ...(isPrivileged
+        ? {}
+        : {
+            AND: [
+              {
+                OR: [
+                  { visibility: ForumThreadVisibility.community },
+                  { authorId: userId },
+                  { invitees: { some: { userId } } },
+                ],
+              },
+              {
+                OR: [
+                  { eventId: null },
+                  { event: { visibility: { not: EventVisibility.invited } } },
+                  { event: { hostId: userId } },
+                  { event: { invitees: { some: { userId } } } },
+                ],
+              },
+              {
+                OR: [
+                  { knowledgeItemId: null },
+                  { knowledgeItem: { visibility: { not: KnowledgeVisibility.restricted } } },
+                  { knowledgeItem: { contributorId: userId } },
+                  { knowledgeItem: { invitees: { some: { userId } } } },
+                ],
+              },
+            ],
+          }),
     },
     select: { id: true, title: true, forum: { select: { slug: true } } },
   });
