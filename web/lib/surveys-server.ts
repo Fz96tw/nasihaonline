@@ -460,34 +460,24 @@ export async function getInvitationByToken(token: string): Promise<InvitationFor
   };
 }
 
-export type DashboardSurvey = { id: string; title: string; openedAt: string; closesAt: string | null };
+const TRENDING_WINDOW_DAYS = 30;
 
-/**
- * Currently open surveys sent to the member audience, for the dashboard's
- * Active Survey widget — same "only show what's actionable" filter as the
- * What's New feed's survey query (getFeedPage in feed-server.ts), just
- * without the merge/pagination since the dashboard only ever shows a
- * couple at a time. `closesAt` is derived from openedAt + durationDays —
- * the same math used to schedule the auto-close job when the survey opened
- * (lib/surveys-lifecycle.ts) — since the model only stores the duration,
- * not a materialized close date, until it's actually closed.
- */
-export async function getOpenSurveysForDashboard(limit = 2): Promise<DashboardSurvey[]> {
+/** Dashboard "What's Trending" — open surveys last updated in the last 30 days (no view-tracking exists for this model). */
+export async function getTrendingSurveys(
+  limit = 3,
+): Promise<{ id: string; title: string; updatedAt: string }[]> {
+  const since = new Date(Date.now() - TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   const surveys = await db.survey.findMany({
-    where: { status: SurveyStatus.open, audienceMembers: true },
-    select: { id: true, title: true, openedAt: true, durationDays: true },
-    orderBy: { openedAt: "desc" },
+    where: { status: SurveyStatus.open, audienceMembers: true, updatedAt: { gte: since } },
+    select: { id: true, title: true, updatedAt: true },
+    orderBy: { updatedAt: "desc" },
     take: limit,
   });
 
   return surveys.map((survey) => ({
     id: survey.id,
     title: survey.title,
-    // openedAt is never null here — the where clause above filters to status: open.
-    openedAt: (survey.openedAt as Date).toISOString(),
-    closesAt: survey.durationDays
-      ? new Date((survey.openedAt as Date).getTime() + survey.durationDays * 24 * 60 * 60 * 1000).toISOString()
-      : null,
+    updatedAt: survey.updatedAt.toISOString(),
   }));
 }
 

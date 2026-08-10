@@ -5,16 +5,22 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { StatsRow } from "@/components/dashboard/stats-row";
 import { AccountNoticesWidget } from "@/components/dashboard/account-notices-widget";
-import { UpcomingEventsWidget } from "@/components/dashboard/upcoming-events-widget";
-import { UpcomingMeetingsWidget } from "@/components/dashboard/upcoming-meetings-widget";
-import { RecentLibraryWidget } from "@/components/dashboard/recent-library-widget";
-import { RecentBlogWidget } from "@/components/dashboard/recent-blog-widget";
-import { RecentAnnouncementsWidget } from "@/components/dashboard/recent-announcements-widget";
-import { ActiveSurveyWidget } from "@/components/dashboard/active-survey-widget";
+import { ScheduleWidget } from "@/components/dashboard/schedule-widget";
+import { InboxWidget } from "@/components/dashboard/inbox-widget";
+import { TrendingSection } from "@/components/dashboard/trending-section";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
+
+/** Staggered fade+slide-in for the main/sidebar widgets on load. */
+function StaggeredIn({ index, children }: { index: number; children: React.ReactNode }) {
+  return (
+    <div className="animate-in fade-in slide-in-from-bottom-2 duration-500" style={{ animationDelay: `${index * 75}ms` }}>
+      {children}
+    </div>
+  );
+}
 
 export default async function DashboardPage() {
   const user = await getSessionUser();
@@ -57,7 +63,7 @@ export default async function DashboardPage() {
             className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
           >
             <ListChecks className="h-4 w-4" />
-            All My Posts
+            All My Activity
           </Link>
         </div>
       </div>
@@ -68,26 +74,24 @@ export default async function DashboardPage() {
 
       <StatsRow userId={user.id} />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Suspense fallback={<WidgetSkeleton />}>
-          <RecentAnnouncementsWidget />
-        </Suspense>
-        <Suspense fallback={<WidgetSkeleton />}>
-          <ActiveSurveyWidget />
-        </Suspense>
-        <Suspense fallback={<WidgetSkeleton />}>
-          <UpcomingEventsWidget userId={user.id} />
-        </Suspense>
-        <Suspense fallback={<WidgetSkeleton />}>
-          <UpcomingMeetingsWidget userId={user.id} />
-        </Suspense>
-        <Suspense fallback={<WidgetSkeleton />}>
-          <RecentLibraryWidget />
-        </Suspense>
-        <Suspense fallback={<WidgetSkeleton />}>
-          <RecentBlogWidget />
-        </Suspense>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <StaggeredIn index={0}>
+          <Suspense fallback={<WidgetSkeleton />}>
+            <ScheduleWidget userId={user.id} />
+          </Suspense>
+        </StaggeredIn>
+        <StaggeredIn index={1}>
+          <Suspense fallback={<WidgetSkeleton />}>
+            <InboxWidget userId={user.id} />
+          </Suspense>
+        </StaggeredIn>
       </div>
+
+      <StaggeredIn index={2}>
+        <Suspense fallback={null}>
+          <TrendingSection />
+        </Suspense>
+      </StaggeredIn>
     </main>
   );
 }

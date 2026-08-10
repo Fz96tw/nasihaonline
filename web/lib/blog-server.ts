@@ -140,18 +140,35 @@ export async function getPublishedPosts(params: {
   return sortCards(posts.map(toCard), sort);
 }
 
-/** Dashboard's recently-added-blog widget (§5/§10 Phase 5) — newest published posts, plain Postgres query. */
-export async function getRecentlyPublishedPosts(limit = 5): Promise<PostCard[]> {
-  const posts = await db.post.findMany({
-    where: { publishedAt: { not: null } },
-    select: CARD_SELECT,
-    orderBy: { publishedAt: "desc" },
+const TRENDING_WINDOW_DAYS = 30;
+
+/** Dashboard "What's Trending" — posts with the most views in the last 30 days. */
+export async function getTrendingPosts(
+  limit = 3,
+): Promise<{ id: string; title: string; slug: string; viewCount: number }[]> {
+  const since = new Date(Date.now() - TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const grouped = await db.postView.groupBy({
+    by: ["postId"],
+    where: { createdAt: { gte: since } },
+    _count: { postId: true },
+    orderBy: { _count: { postId: "desc" } },
     take: limit,
   });
-  return posts.map(toCard);
+  if (grouped.length === 0) return [];
+
+  const posts = await db.post.findMany({
+    where: { id: { in: grouped.map((group) => group.postId) }, publishedAt: { not: null } },
+    select: { id: true, title: true, slug: true },
+  });
+  const byId = new Map(posts.map((post) => [post.id, post]));
+
+  return grouped.flatMap((group) => {
+    const post = byId.get(group.postId);
+    return post ? [{ id: post.id, title: post.title, slug: post.slug, viewCount: group._count.postId }] : [];
+  });
 }
 
-/** "More from this author" on the post detail page — plain Postgres query, same shape as getRecentlyPublishedPosts. */
+/** "More from this author" on the post detail page — plain Postgres query, newest published posts. */
 export async function getPostsByAuthor(authorId: string, excludePostId: string, limit = 3): Promise<PostCard[]> {
   const posts = await db.post.findMany({
     where: { publishedAt: { not: null }, authorId, id: { not: excludePostId } },

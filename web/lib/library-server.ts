@@ -39,7 +39,6 @@ import type {
   LibraryCard,
   LibrarySort,
   MySubmission,
-  RecentLibraryItem,
   ReviewQueueItem,
 } from "@/lib/library";
 
@@ -953,22 +952,39 @@ export async function getPublishedKnowledgeItemsByContributor(
   return items.map(toLibraryCard);
 }
 
-/**
- * Dashboard "recently added to the library" widget (§4.10) — restricted
- * items are excluded outright rather than per-viewer filtered, since this
- * widget has no per-viewer context to filter with.
- */
-export async function getRecentlyPublishedKnowledgeItems(limit = 5): Promise<RecentLibraryItem[]> {
+
+const TRENDING_WINDOW_DAYS = 30;
+
+/** Dashboard "What's Trending" — library items with the most views in the last 30 days. */
+export async function getTrendingLibraryItems(
+  limit = 3,
+): Promise<{ id: string; title: string; contentType: KnowledgeContentType; viewCount: number }[]> {
+  const since = new Date(Date.now() - TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const grouped = await db.knowledgeItemView.groupBy({
+    by: ["knowledgeItemId"],
+    where: { createdAt: { gte: since } },
+    _count: { knowledgeItemId: true },
+    orderBy: { _count: { knowledgeItemId: "desc" } },
+    take: limit,
+  });
+  if (grouped.length === 0) return [];
+
   const items = await db.knowledgeItem.findMany({
     where: {
+      id: { in: grouped.map((group) => group.knowledgeItemId) },
       status: { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] },
       visibility: KnowledgeVisibility.public,
     },
-    select: { id: true, title: true, contentType: true, createdAt: true },
-    orderBy: { createdAt: "desc" },
-    take: limit,
+    select: { id: true, title: true, contentType: true },
   });
-  return items.map((item) => ({ ...item, createdAt: item.createdAt.toISOString() }));
+  const byId = new Map(items.map((item) => [item.id, item]));
+
+  return grouped.flatMap((group) => {
+    const item = byId.get(group.knowledgeItemId);
+    return item
+      ? [{ id: item.id, title: item.title, contentType: item.contentType, viewCount: group._count.knowledgeItemId }]
+      : [];
+  });
 }
 
 /** /library/mine (§4.9) — a member's own submissions at any status, newest first. */

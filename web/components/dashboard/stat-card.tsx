@@ -34,7 +34,7 @@ export function StatCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="p-6 pt-0">
-        <p className="text-3xl font-bold tracking-tight">
+        <p className="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl">
           {numericValue !== undefined ? <CountUp value={numericValue} decimals={decimals} /> : value}
         </p>
         {sublabel ? (
