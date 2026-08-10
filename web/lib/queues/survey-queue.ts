@@ -20,10 +20,15 @@ const globalForSurveyQueue = globalThis as unknown as {
   surveyQueue: Queue<SurveyJob> | undefined;
 };
 
-const surveyQueue =
-  globalForSurveyQueue.surveyQueue ?? new Queue<SurveyJob>(SURVEY_QUEUE_NAME, { connection: queueConnection });
-
-if (process.env.NODE_ENV !== "production") globalForSurveyQueue.surveyQueue = surveyQueue;
+// Constructed lazily — see the matching comment in search-index-queue.ts for
+// why a top-level `new Queue(...)` spams `next build`'s log with
+// connection-refused retries.
+function getSurveyQueue(): Queue<SurveyJob> {
+  if (!globalForSurveyQueue.surveyQueue) {
+    globalForSurveyQueue.surveyQueue = new Queue<SurveyJob>(SURVEY_QUEUE_NAME, { connection: queueConnection });
+  }
+  return globalForSurveyQueue.surveyQueue;
+}
 
 /**
  * Queued when an admin schedules a survey for a future `scheduledStartAt`
@@ -34,7 +39,7 @@ if (process.env.NODE_ENV !== "production") globalForSurveyQueue.surveyQueue = su
  */
 export async function enqueueOpenSurvey(surveyId: string, generation: number, openAt: Date): Promise<void> {
   const delay = Math.max(0, openAt.getTime() - Date.now());
-  await surveyQueue.add(
+  await getSurveyQueue().add(
     "open-survey",
     { type: "open-survey", surveyId, generation },
     { delay, removeOnComplete: true, removeOnFail: 50 },
@@ -49,7 +54,7 @@ export async function enqueueOpenSurvey(surveyId: string, generation: number, op
  */
 export async function enqueueAutoClose(surveyId: string, generation: number, closeAt: Date): Promise<void> {
   const delay = Math.max(0, closeAt.getTime() - Date.now());
-  await surveyQueue.add(
+  await getSurveyQueue().add(
     "auto-close",
     { type: "auto-close", surveyId, generation },
     { delay, removeOnComplete: true, removeOnFail: 50 },

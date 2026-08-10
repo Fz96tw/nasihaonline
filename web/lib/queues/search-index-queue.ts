@@ -15,11 +15,21 @@ const globalForSearchIndexQueue = globalThis as unknown as {
   searchIndexQueue: Queue<SearchIndexSyncJob> | undefined;
 };
 
-const searchIndexQueue =
-  globalForSearchIndexQueue.searchIndexQueue ??
-  new Queue<SearchIndexSyncJob>(SEARCH_INDEX_QUEUE_NAME, { connection: queueConnection });
-
-if (process.env.NODE_ENV !== "production") globalForSearchIndexQueue.searchIndexQueue = searchIndexQueue;
+// Constructed lazily, on first enqueue, rather than at module scope.
+// BullMQ's Queue constructor probes the Redis server version as part of
+// construction (RedisConnection.init()'s getRedisVersionAndType() call)
+// regardless of the connection's lazyConnect setting, so a top-level `new
+// Queue(...)` was enough to spam `next build`'s log with connection-refused
+// retries just from this module being pulled into the build's module graph
+// — before Redis is reachable, since REDIS_URL isn't passed as a build arg.
+function getSearchIndexQueue(): Queue<SearchIndexSyncJob> {
+  if (!globalForSearchIndexQueue.searchIndexQueue) {
+    globalForSearchIndexQueue.searchIndexQueue = new Queue<SearchIndexSyncJob>(SEARCH_INDEX_QUEUE_NAME, {
+      connection: queueConnection,
+    });
+  }
+  return globalForSearchIndexQueue.searchIndexQueue;
+}
 
 /**
  * Called from every Profile write path (PATCH/avatar upload/avatar delete,
@@ -28,7 +38,7 @@ if (process.env.NODE_ENV !== "production") globalForSearchIndexQueue.searchIndex
  * rather than trusting the job payload, so this only needs the userId.
  */
 export async function enqueueProfileIndexSync(userId: string): Promise<void> {
-  await searchIndexQueue.add(
+  await getSearchIndexQueue().add(
     "profile-sync",
     { type: "profile", userId },
     { removeOnComplete: true, removeOnFail: 50 },
@@ -41,7 +51,7 @@ export async function enqueueProfileIndexSync(userId: string): Promise<void> {
  * enqueueProfileIndexSync.
  */
 export async function enqueuePostIndexSync(postId: string): Promise<void> {
-  await searchIndexQueue.add(
+  await getSearchIndexQueue().add(
     "post-sync",
     { type: "post", postId },
     { removeOnComplete: true, removeOnFail: 50 },
@@ -54,7 +64,7 @@ export async function enqueuePostIndexSync(postId: string): Promise<void> {
  * DB-write → BullMQ → index-sync pattern as enqueuePostIndexSync.
  */
 export async function enqueueKnowledgeItemIndexSync(knowledgeItemId: string): Promise<void> {
-  await searchIndexQueue.add(
+  await getSearchIndexQueue().add(
     "knowledge-sync",
     { type: "knowledge", knowledgeItemId },
     { removeOnComplete: true, removeOnFail: 50 },
@@ -69,7 +79,7 @@ export async function enqueueKnowledgeItemIndexSync(knowledgeItemId: string): Pr
  * separate one, since ForumSearchDocument is one-per-thread.
  */
 export async function enqueueForumThreadIndexSync(threadId: string): Promise<void> {
-  await searchIndexQueue.add(
+  await getSearchIndexQueue().add(
     "forum-sync",
     { type: "forum", threadId },
     { removeOnComplete: true, removeOnFail: 50 },
