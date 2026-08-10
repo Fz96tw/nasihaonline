@@ -55,6 +55,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
           assignedTier: tier,
           reviewedAt: new Date(),
           reviewedByEmail: admin.email,
+          lastInvitedAt: new Date(),
         },
       });
       await recordAdminAction(
@@ -64,15 +65,17 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       return application_;
     });
 
+    let emailStatus: { ok: boolean; error?: string };
     if (invitation.url) {
-      await sendWelcomeEmail(application.email, application.firstName, tier, invitation.url);
+      const result = await sendWelcomeEmail(application.email, application.firstName, tier, invitation.url);
+      emailStatus = result.ok ? { ok: true } : { ok: false, error: result.error };
     } else {
-      console.error(
-        `[email] Clerk invitation ${invitation.id} for ${application.email} has no url — skipping welcome email`,
-      );
+      const error = `Clerk invitation ${invitation.id} has no url`;
+      console.error(`[email] ${error} for ${application.email} — skipping welcome email`);
+      emailStatus = { ok: false, error };
     }
 
-    return NextResponse.json({ application: updated });
+    return NextResponse.json({ application: updated, emailStatus });
   }
 
   const { adminNote, visibleToApplicant } = parsed.data;

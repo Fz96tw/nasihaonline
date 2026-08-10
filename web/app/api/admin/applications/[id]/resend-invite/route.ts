@@ -54,7 +54,16 @@ export async function POST(request: Request, { params }: { params: { id: string 
     );
   }
 
-  await sendWelcomeEmail(application.email, application.firstName, application.assignedTier, invitation.url);
+  // The prior invitation was already revoked inside resendMemberInvitation()
+  // by this point, so any earlier email's link is dead regardless of
+  // whether the new email below succeeds — record the timestamp now.
+  const lastInvitedAt = new Date();
+  await db.membershipApplication.update({ where: { id: application.id }, data: { lastInvitedAt } });
 
-  return NextResponse.json({ ok: true });
+  const result = await sendWelcomeEmail(application.email, application.firstName, application.assignedTier, invitation.url);
+  if (!result.ok) {
+    return NextResponse.json({ error: `Invite created, but the email failed to send: ${result.error}` }, { status: 502 });
+  }
+
+  return NextResponse.json({ ok: true, lastInvitedAt });
 }

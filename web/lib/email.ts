@@ -56,10 +56,16 @@ export async function sendApplicationConfirmationEmail(application: MembershipAp
   }
 }
 
+export type SendResult = { ok: true } | { ok: false; error: string };
+
 /**
  * Sent by the admin approve action once provisionMemberAccount() has
  * created the Clerk invitation. Best-effort, same as above: a failed send
  * must not undo the approval, which has already happened by this point.
+ * Callers surface the returned status to the admin rather than treating a
+ * resolved promise as success — the Resend SDK resolves normally with an
+ * `error` field on API-level failures (bad recipient, etc.) instead of
+ * throwing, so that has to be checked explicitly.
  *
  * inviteUrl is the accept-invite link from Clerk's invitation response.
  * provisionMemberAccount() creates that invitation with notify: false, so
@@ -67,21 +73,34 @@ export async function sendApplicationConfirmationEmail(application: MembershipAp
  * dev-instance monthly email cap) — this welcome email is the only place
  * the applicant receives the link to set up their account.
  */
-export async function sendWelcomeEmail(to: string, firstName: string, tier: Tier, inviteUrl: string) {
+export async function sendWelcomeEmail(
+  to: string,
+  firstName: string,
+  tier: Tier,
+  inviteUrl: string,
+): Promise<SendResult> {
   if (!resend) {
-    console.warn(`[email] RESEND_API_KEY not set — skipping welcome email to ${to}`);
-    return;
+    const error = "RESEND_API_KEY not set";
+    console.warn(`[email] ${error} — skipping welcome email to ${to}`);
+    return { ok: false, error };
   }
 
   try {
-    await resend.emails.send({
+    const { error } = await resend.emails.send({
       from: FROM_EMAIL,
       to,
+      bcc: "nasihaforyou@gmail.com",
       subject: "Welcome to NASIHA!",
-      text: `Hi ${firstName},\n\nYour NASIHA membership application has been approved, and you've been welcomed as a(n) ${TIER_LABELS[tier]}. Set up your account and log in here:\n\n${inviteUrl}\n\n— The NASIHA Team`,
+      text: `Hi ${firstName},\n\nYour NASIHA membership application has been approved, and you've been welcomed as a(n) ${TIER_LABELS[tier]}. Set up your account and log in here:\n\n${inviteUrl}\n\nIf you've received this email more than once, only the link in the most recent one still works — earlier links are no longer valid.\n\n— The NASIHA Team`,
     });
+    if (error) {
+      console.error("[email] Failed to send welcome email", error);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
   } catch (error) {
     console.error("[email] Failed to send welcome email", error);
+    return { ok: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
 }
 

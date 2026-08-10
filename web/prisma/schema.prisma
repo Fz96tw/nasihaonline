@@ -439,6 +439,14 @@ model MembershipApplication {
   reviewedAt                  DateTime?
   reviewedByEmail             String?
 
+  // Set whenever a Clerk sign-up invitation is (re)created for this
+  // applicant — on initial approve and on every "Resend invite email"
+  // click. resendMemberInvitation() revokes any prior pending invitation
+  // before creating the new one, so this timestamp marks the point after
+  // which only the newest invite email's link still works; shown to the
+  // admin so repeat resends don't get triggered without reason.
+  lastInvitedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

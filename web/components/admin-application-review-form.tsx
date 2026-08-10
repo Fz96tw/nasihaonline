@@ -25,6 +25,10 @@ export function AdminApplicationReviewForm({
   const [visibleToApplicant, setVisibleToApplicant] = useState(false);
   const [pending, setPending] = useState<"approve" | "reject" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Approval flips the application out of "pending" status, which unmounts
+  // this form on refresh — so the email-send outcome is held here and shown
+  // before the admin dismisses it, rather than being refreshed away unseen.
+  const [approvedEmailStatus, setApprovedEmailStatus] = useState<{ ok: boolean; error?: string } | null>(null);
 
   async function submit(body: Record<string, unknown>, kind: "approve" | "reject") {
     setPending(kind);
@@ -36,16 +40,39 @@ export function AdminApplicationReviewForm({
         headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
         body: JSON.stringify(body),
       });
+      const payload = await res.json().catch(() => null);
       if (!res.ok) {
-        const payload = await res.json().catch(() => null);
         throw new Error(payload?.error ? JSON.stringify(payload.error) : "Request failed");
       }
-      router.refresh();
+      if (kind === "approve") {
+        setApprovedEmailStatus(payload?.emailStatus ?? { ok: false, error: "No status returned" });
+      } else {
+        router.refresh();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
       setPending(null);
     }
+  }
+
+  if (approvedEmailStatus) {
+    return (
+      <div className="rounded-[10px] border p-4">
+        <p className="text-sm font-medium">Application approved and account created.</p>
+        {approvedEmailStatus.ok ? (
+          <p className="mt-1 text-sm text-muted-foreground">Welcome email sent to the applicant.</p>
+        ) : (
+          <p className="mt-1 text-sm text-destructive">
+            Welcome email failed to send: {approvedEmailStatus.error}. Use &quot;Resend invite email&quot; on this
+            page after continuing, or check server logs.
+          </p>
+        )}
+        <Button className="mt-3" size="sm" onClick={() => router.refresh()}>
+          Continue
+        </Button>
+      </div>
+    );
   }
 
   return (

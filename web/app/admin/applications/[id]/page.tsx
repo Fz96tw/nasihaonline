@@ -147,7 +147,7 @@ export default async function AdminApplicationDetailPage({
               />
             </div>
             {application.status === "approved" && (
-              <AdminResendInviteButton applicationId={application.id} />
+              <AdminResendInviteButton applicationId={application.id} lastInvitedAt={application.lastInvitedAt} />
             )}
           </CardContent>
         </Card>
