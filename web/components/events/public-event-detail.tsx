@@ -50,7 +50,7 @@ export function PublicEventDetail({ event }: { event: PublicEvent }) {
       {event.heroImageUrl && (
         <div className="flex h-72 w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
           {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
-          <img src={event.heroImageUrl} alt={event.title} className="h-full w-full object-contain" />
+          <img src={event.heroImageUrl} alt={event.title} className="h-full w-full object-cover" />
         </div>
       )}
 

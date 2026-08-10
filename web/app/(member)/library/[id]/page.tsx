@@ -70,7 +70,7 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
       {heroImageUrl && (
         <div className="mb-6 flex h-72 w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
           {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied or external YouTube URL, not a next/image-eligible local asset */}
-          <img src={heroImageUrl} alt={item.title} className="h-full w-full object-contain" />
+          <img src={heroImageUrl} alt={item.title} className="h-full w-full object-cover" />
         </div>
       )}
 
