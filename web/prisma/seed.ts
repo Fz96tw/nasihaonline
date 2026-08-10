@@ -301,7 +301,10 @@ const POST_TAGS = ["guidelines", "case-study", "career-advice", "research-method
 const KNOWLEDGE_CATEGORIES = Object.values(INTEREST_AREA_LABELS);
 const KNOWLEDGE_TAGS = ["guidelines", "review-article", "recorded-lecture", "case-study"];
 
-// Six seeded forum categories, per Member_Communications.md's table (§4.13).
+// Seven member-browsable forum categories (six from Member_Communications.md's
+// table plus Peer Review & Feedback, §4.13), plus two on-demand forums
+// (Events Discussion, Library Discussions) that don't appear in the /forums
+// index — see getForumCategories in lib/forums-server.ts.
 const FORUMS: { name: string; description: string; displayOrder: number }[] = [
   { name: "General", description: "Community announcements, introductions, open discussion.", displayOrder: 0 },
   {
@@ -326,14 +329,19 @@ const FORUMS: { name: string; description: string; displayOrder: number }[] = [
     displayOrder: 5,
   },
   {
+    name: "Peer Review & Feedback",
+    description: "Constructive, evidence-based critique of work, research, and educational content across disciplines.",
+    displayOrder: 6,
+  },
+  {
     name: "Events Discussion",
     description: "Auto-created discussion threads for events that opt in at submission time.",
-    displayOrder: 6,
+    displayOrder: 7,
   },
   {
     name: "Library Discussions",
     description: "On-demand discussion threads for Knowledge Library resources, started from a resource's detail page.",
-    displayOrder: 7,
+    displayOrder: 8,
   },
 ];
 
@@ -554,7 +562,7 @@ async function seedKnowledgeLibrary() {
   );
 }
 
-// Sample threads/posts in two of the six forums (§4.13), demonstrating the
+// Sample threads/posts in two of the seeded forums (§4.13), demonstrating the
 // pinned flag and the ForumPost parentPostId self-relation for replies.
 async function seedForums() {
   const forumsByName = new Map<string, { id: string }>();
