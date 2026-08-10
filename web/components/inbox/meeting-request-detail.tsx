@@ -562,8 +562,6 @@ export function MeetingRequestDetail({
           )}
         </div>
 
-        <MessageTimeline messages={item.messages} currentUserId={currentUserId} />
-
         {item.status !== "accepted" && (
           <div>
             <div className="mb-1 text-xs font-medium text-muted-foreground">Proposed times</div>
@@ -714,6 +712,11 @@ export function MeetingRequestDetail({
             onDone={onUpdated}
           />
         )}
+
+        {/* Conversation history flows last, right above the compose box, so
+            new comments land at the bottom near where they're typed rather
+            than being buried above the status/scheduling info. */}
+        <MessageTimeline messages={item.messages} currentUserId={currentUserId} />
       </div>
 
       <CommentComposer meetingRequestId={item.id} onSent={onUpdated} />
