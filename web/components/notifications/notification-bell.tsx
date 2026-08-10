@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,8 +18,10 @@ import { cn } from "@/lib/utils";
 
 const POLL_INTERVAL_MS = 20_000;
 
-async function fetchNotifications(): Promise<{ items: NotificationListItem[]; unreadCount: number }> {
-  const response = await fetch("/api/notifications");
+async function fetchNotifications(
+  signal: AbortSignal,
+): Promise<{ items: NotificationListItem[]; unreadCount: number }> {
+  const response = await fetch("/api/notifications", { signal });
   if (!response.ok) throw new Error("Failed to load notifications");
   return response.json();
 }
@@ -60,21 +62,33 @@ export function NotificationBell() {
   const router = useRouter();
   const [items, setItems] = useState<NotificationListItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  // setInterval fires on schedule regardless of whether the previous
+  // refresh() resolved. Without cancelling the stale request first, a slow
+  // response lets ticks pile up as separate in-flight fetches, which can
+  // exhaust the browser's per-origin connection cap and stall unrelated
+  // navigation (Link clicks) queued behind them.
+  const abortRef = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const data = await fetchNotifications();
+      const data = await fetchNotifications(controller.signal);
       setItems(data.items);
       setUnreadCount(data.unreadCount);
     } catch {
-      // Transient poll failure — next interval tick retries.
+      // Transient poll failure (including our own abort) — next interval tick retries.
     }
   }, []);
 
   useEffect(() => {
     refresh();
     const interval = setInterval(refresh, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      abortRef.current?.abort();
+    };
   }, [refresh]);
 
   async function handleSelect(notification: NotificationListItem) {

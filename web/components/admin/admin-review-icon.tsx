@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,8 @@ import { cn } from "@/lib/utils";
 
 const POLL_INTERVAL_MS = 20_000;
 
-async function fetchPendingCount(): Promise<number> {
-  const response = await fetch("/api/admin/pending-review-count");
+async function fetchPendingCount(signal: AbortSignal): Promise<number> {
+  const response = await fetch("/api/admin/pending-review-count", { signal });
   if (!response.ok) throw new Error("Failed to load pending admin review count");
   const data = await response.json();
   return data.count;
@@ -24,19 +24,31 @@ async function fetchPendingCount(): Promise<number> {
  */
 export function AdminReviewIcon() {
   const [count, setCount] = useState(0);
+  // setInterval fires on schedule regardless of whether the previous
+  // refresh() resolved. Without cancelling the stale request first, a slow
+  // response (DB contention, etc) lets ticks pile up as separate in-flight
+  // fetches, which can exhaust the browser's per-origin connection cap and
+  // stall unrelated navigation (Link clicks) queued behind them.
+  const abortRef = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      setCount(await fetchPendingCount());
+      setCount(await fetchPendingCount(controller.signal));
     } catch {
-      // Transient poll failure — next interval tick retries.
+      // Transient poll failure (including our own abort) — next interval tick retries.
     }
   }, []);
 
   useEffect(() => {
     refresh();
     const interval = setInterval(refresh, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      abortRef.current?.abort();
+    };
   }, [refresh]);
 
   return (
