@@ -4,9 +4,10 @@ import { ReviewItemError, publishReviewItemToLibrary } from "@/lib/review-server
 
 /**
  * POST /api/review-feedback/:id/publish — submitter-only, requires the
- * review to be closed. Creates a pending_review KnowledgeItem from the
- * ReviewItem's fields — peer review acts as an optional pre-publish
- * quality gate, not a bypass of the normal Steward approval.
+ * review to be closed. First call creates a pending_review KnowledgeItem
+ * from the ReviewItem's fields — peer review acts as an optional pre-publish
+ * quality gate, not a bypass of the normal Steward approval. A later call
+ * (once already published) updates that same KnowledgeItem in place instead.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   let user;

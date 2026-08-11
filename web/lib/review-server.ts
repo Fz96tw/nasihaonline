@@ -729,6 +729,7 @@ export async function getReviewItemDetail(itemId: string, actingUser: UserModel)
       externalUrl: true,
       deidentificationConfirmed: true,
       publishedKnowledgeItemId: true,
+      publishedKnowledgeItem: { select: { status: true } },
       categories: { select: { category: { select: { name: true, slug: true } } } },
       tags: { select: { tag: { select: { name: true, slug: true } } } },
       attachments: { select: { fileName: true, mimeType: true, objectKey: true }, take: 1 },
@@ -774,6 +775,7 @@ export async function getReviewItemDetail(itemId: string, actingUser: UserModel)
         : null,
     deidentificationConfirmed: item.deidentificationConfirmed,
     publishedKnowledgeItemId: hasFullAccess ? item.publishedKnowledgeItemId : null,
+    publishedKnowledgeItemStatus: hasFullAccess ? (item.publishedKnowledgeItem?.status ?? null) : null,
     isSubmitter: item.submitterId === actingUser.id,
     isInvitee: item.invitees.some((invitee) => invitee.userId === actingUser.id),
     hasFullAccess,
@@ -955,14 +957,18 @@ export async function flagReviewComment(commentId: string, actingUser: UserModel
 }
 
 /**
- * Submitter-only — publishes a closed ReviewItem to the Knowledge Library as
- * a new `pending_review` submission, copying its fields/categories/tags/
- * attachments. Peer review doesn't bypass Steward moderation — it's a
- * pre-publish quality gate, not a shortcut around one. Idempotent guard: a
- * ReviewItem can only be published once (publishedKnowledgeItemId is unique
- * and set in the same transaction that creates the KnowledgeItem).
+ * Submitter-only — publishes a closed ReviewItem to the Knowledge Library,
+ * copying its fields/categories/tags/attachments. The first publish creates
+ * a new `pending_review` KnowledgeItem — Peer review doesn't bypass Steward
+ * moderation on a first submission, same as any other Library item. Every
+ * publish after that updates that *same* KnowledgeItem in place (by its
+ * unique publishedKnowledgeItemId) instead of creating a duplicate, and —
+ * mirroring updateKnowledgeItem's own "edits to an already-published item go
+ * live immediately, no re-review; only a rejected item's edit re-enters the
+ * queue" rule (lib/library-server.ts) — leaves status untouched unless it
+ * was `rejected`, in which case it goes back to `pending_review`.
  */
-export async function publishReviewItemToLibrary(itemId: string, actingUser: UserModel): Promise<{ knowledgeItemId: string }> {
+export async function publishReviewItemToLibrary(itemId: string, actingUser: UserModel): Promise<{ knowledgeItemId: string; status: KnowledgeStatus }> {
   const item = await db.reviewItem.findUnique({
     where: { id: itemId },
     select: {
@@ -988,11 +994,38 @@ export async function publishReviewItemToLibrary(itemId: string, actingUser: Use
   if (item.status !== ReviewItemStatus.closed) {
     throw new ReviewItemError(409, "Close this review before publishing it to the Knowledge Library.");
   }
-  if (item.publishedKnowledgeItemId) {
-    throw new ReviewItemError(409, "This item has already been published to the Knowledge Library.");
-  }
 
-  const knowledgeItemId = await db.$transaction(async (tx) => {
+  return db.$transaction(async (tx) => {
+    if (item.publishedKnowledgeItemId) {
+      const existing = await tx.knowledgeItem.findUniqueOrThrow({
+        where: { id: item.publishedKnowledgeItemId },
+        select: { status: true },
+      });
+      const nextStatus = existing.status === KnowledgeStatus.rejected ? KnowledgeStatus.pending_review : existing.status;
+
+      await tx.knowledgeItemCategory.deleteMany({ where: { knowledgeItemId: item.publishedKnowledgeItemId } });
+      await tx.knowledgeItemTag.deleteMany({ where: { knowledgeItemId: item.publishedKnowledgeItemId } });
+      await tx.knowledgeAttachment.deleteMany({ where: { knowledgeItemId: item.publishedKnowledgeItemId } });
+      await tx.knowledgeItem.update({
+        where: { id: item.publishedKnowledgeItemId },
+        data: {
+          title: item.title,
+          description: item.description,
+          contentType: item.contentType,
+          level: item.level,
+          youtubeUrl: item.youtubeUrl,
+          heroImageUrl: item.heroImageUrl,
+          externalUrl: item.externalUrl,
+          deidentificationConfirmed: item.deidentificationConfirmed,
+          status: nextStatus,
+          categories: { create: item.categories.map((c) => ({ categoryId: c.categoryId })) },
+          tags: { create: item.tags.map((t) => ({ tagId: t.tagId })) },
+          attachments: item.attachments.length > 0 ? { create: item.attachments } : undefined,
+        },
+      });
+      return { knowledgeItemId: item.publishedKnowledgeItemId, status: nextStatus };
+    }
+
     const knowledgeItem = await tx.knowledgeItem.create({
       data: {
         title: item.title,
@@ -1015,10 +1048,8 @@ export async function publishReviewItemToLibrary(itemId: string, actingUser: Use
     });
 
     await tx.reviewItem.update({ where: { id: itemId }, data: { publishedKnowledgeItemId: knowledgeItem.id } });
-    return knowledgeItem.id;
+    return { knowledgeItemId: knowledgeItem.id, status: KnowledgeStatus.pending_review };
   });
-
-  return { knowledgeItemId };
 }
 
 // ===== Volunteer reviewers (open call) =====

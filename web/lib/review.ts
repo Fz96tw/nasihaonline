@@ -7,7 +7,7 @@
 // directly rather than a duplicated enum, since the taxonomy is identical.
 export { CONTENT_TYPE_LABELS, LEVEL_LABELS } from "@/lib/library";
 
-import { KnowledgeContentType, KnowledgeLevel, ReviewItemStatus, ReviewVolunteerStatus } from "@/lib/generated/prisma/enums";
+import { KnowledgeContentType, KnowledgeLevel, KnowledgeStatus, ReviewItemStatus, ReviewVolunteerStatus } from "@/lib/generated/prisma/enums";
 
 export const REVIEW_STATUS_LABELS: Record<ReviewItemStatus, string> = {
   [ReviewItemStatus.open]: "Open",
@@ -118,6 +118,8 @@ export type ReviewItemDetail = {
   attachment: { fileName: string; mimeType: string; url: string } | null;
   deidentificationConfirmed: boolean;
   publishedKnowledgeItemId: string | null;
+  /** The linked Library item's current moderation status — null until published. Drives ReviewLifecycleActions' post-publish messaging (still in the queue vs. live vs. rejected). */
+  publishedKnowledgeItemStatus: KnowledgeStatus | null;
   isSubmitter: boolean;
   isInvitee: boolean;
   /** False for a non-invitee viewing an open call purely from its preview tier — attachment/externalUrl/youtubeUrl/publishedKnowledgeItemId are nulled out and the comment thread/roster aren't loaded in that case. */

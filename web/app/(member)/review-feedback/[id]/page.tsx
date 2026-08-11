@@ -155,7 +155,14 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
         )}
       </div>
 
-      {item.isSubmitter && <ReviewLifecycleActions itemId={item.id} status={item.status} publishedKnowledgeItemId={item.publishedKnowledgeItemId} />}
+      {item.isSubmitter && (
+        <ReviewLifecycleActions
+          itemId={item.id}
+          status={item.status}
+          publishedKnowledgeItemId={item.publishedKnowledgeItemId}
+          publishedKnowledgeItemStatus={item.publishedKnowledgeItemStatus}
+        />
+      )}
 
       {item.isSubmitter ? (
         <div className="mt-8">
