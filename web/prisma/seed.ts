@@ -301,10 +301,14 @@ const POST_TAGS = ["guidelines", "case-study", "career-advice", "research-method
 const KNOWLEDGE_CATEGORIES = Object.values(INTEREST_AREA_LABELS);
 const KNOWLEDGE_TAGS = ["guidelines", "review-article", "recorded-lecture", "case-study"];
 
-// Seven member-browsable forum categories (six from Member_Communications.md's
-// table plus Peer Review & Feedback, §4.13), plus two on-demand forums
-// (Events Discussion, Library Discussions) that don't appear in the /forums
-// index — see getForumCategories in lib/forums-server.ts.
+// Six member-browsable forum categories from Member_Communications.md's
+// table, plus two on-demand forums (Events Discussion, Library Discussions)
+// that don't appear in the /forums index — see getForumCategories in
+// lib/forums-server.ts. A seventh category, "Peer Review & Feedback", used
+// to live here (§4.13) but has been replaced by the dedicated
+// /review-feedback feature (ReviewItem et al.) — the existing seeded Forum
+// row is deactivated (active=false) rather than deleted, so any historical
+// threads in it stay intact but the category no longer appears on /forums.
 const FORUMS: { name: string; description: string; displayOrder: number }[] = [
   { name: "General", description: "Community announcements, introductions, open discussion.", displayOrder: 0 },
   {
@@ -329,19 +333,14 @@ const FORUMS: { name: string; description: string; displayOrder: number }[] = [
     displayOrder: 5,
   },
   {
-    name: "Peer Review & Feedback",
-    description: "Constructive, evidence-based critique of work, research, and educational content across disciplines.",
-    displayOrder: 6,
-  },
-  {
     name: "Events Discussion",
     description: "Auto-created discussion threads for events that opt in at submission time.",
-    displayOrder: 7,
+    displayOrder: 6,
   },
   {
     name: "Library Discussions",
     description: "On-demand discussion threads for Knowledge Library resources, started from a resource's detail page.",
-    displayOrder: 8,
+    displayOrder: 7,
   },
 ];
 
