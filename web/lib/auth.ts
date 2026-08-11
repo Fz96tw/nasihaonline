@@ -21,12 +21,37 @@ export async function getSessionUser(): Promise<UserModel | null> {
   const user = await db.user.findUnique({ where: { clerkUserId: userId } });
   if (user) {
     await maybeSendWelcomeAnnouncement(user);
+    void touchLastActive(user);
     return user;
   }
 
   const synced = await syncUserFromClerk(userId);
-  if (synced) await maybeSendWelcomeAnnouncement(synced);
+  if (synced) {
+    await maybeSendWelcomeAnnouncement(synced);
+    void touchLastActive(synced);
+  }
   return synced;
+}
+
+/**
+ * Stamps lastActiveAt (shown as "Last active" on /admin/users) — throttled
+ * to once per LAST_ACTIVE_THROTTLE_MS since getSessionUser runs on every
+ * authenticated request and per-request precision isn't needed. Best-effort,
+ * same as maybeSendWelcomeAnnouncement: must never break sign-in. Fired
+ * without awaiting (unlike maybeSendWelcomeAnnouncement) — its own try/catch
+ * already prevents an unhandled rejection, and this app runs as a long-lived
+ * Node process (docker-compose's app/worker services, not serverless/edge),
+ * so the write still completes in the background after the response is sent.
+ */
+const LAST_ACTIVE_THROTTLE_MS = 5 * 60 * 1000;
+
+async function touchLastActive(user: UserModel): Promise<void> {
+  if (user.lastActiveAt && Date.now() - user.lastActiveAt.getTime() < LAST_ACTIVE_THROTTLE_MS) return;
+  try {
+    await db.user.update({ where: { id: user.id }, data: { lastActiveAt: new Date() } });
+  } catch (error) {
+    console.error("Failed to update lastActiveAt", error);
+  }
 }
 
 /**

@@ -10,6 +10,7 @@ const ADMIN_USER_LIST_SELECT = {
   suspended: true,
   suspendedAt: true,
   createdAt: true,
+  lastActiveAt: true,
   profile: { select: { titleSpecialty: true } },
 } as const;
 

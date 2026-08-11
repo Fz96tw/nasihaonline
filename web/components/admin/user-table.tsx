@@ -116,6 +116,7 @@ export function UserTable({ users }: { users: AdminUser[] }) {
               <TableHead>Tier</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Joined</TableHead>
+              <TableHead>Last active</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -145,11 +146,19 @@ export function UserTable({ users }: { users: AdminUser[] }) {
                 <TableCell className="text-sm text-muted-foreground">
                   {user.createdAt.toLocaleDateString()}
                 </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {user.lastActiveAt
+                    ? user.lastActiveAt.toLocaleString(undefined, {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })
+                    : "Never"}
+                </TableCell>
               </TableRow>
             ))}
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
                   No users match these filters.
                 </TableCell>
               </TableRow>

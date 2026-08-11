@@ -132,6 +132,9 @@ model User {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // Last authenticated request, stamped (throttled) in getSessionUser() —
+  // the only per-request activity signal in the schema; see lib/auth.ts.
+  lastActiveAt DateTime?
 
   @@map("users")
 }
