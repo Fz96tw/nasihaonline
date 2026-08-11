@@ -47,10 +47,10 @@ const DEFAULT_VALUES: CreateReviewItemValues = {
  * default) and with the public/restricted visibility split replaced by the
  * Select-Reviewers/Request-Volunteers audience-mode toggle (same
  * conditional-gate shape as the Forums new-thread form's Everyone/Invite-only
- * toggle). Unlike the Library form, editing never replaces the underlying
- * attachment/hero image (updateReviewItem only touches metadata) — the file
- * inputs are create-only, and edit mode shows the existing attachment as a
- * read-only reference instead.
+ * toggle). Editing can replace the file/link source the same way the
+ * Library form's edit mode does (updateReviewItem swaps the attachment and
+ * cleans up the old MinIO object) — only the hero image stays create-only,
+ * shown read-only when editing.
  */
 export function SubmitReviewItemForm({
   categories,
@@ -105,32 +105,6 @@ export function SubmitReviewItemForm({
     setError(null);
     try {
       const csrfToken = await getCsrfToken();
-
-      if (existingItem) {
-        const res = await fetch(`/api/review-feedback/${existingItem.id}`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
-          body: JSON.stringify({
-            title: values.title,
-            description: values.description,
-            contentType: values.contentType,
-            level: values.level,
-            categoryIds: values.categoryIds,
-            tagIds: values.tagIds,
-            youtubeUrl: isRecordedLecture ? values.youtubeUrl : null,
-            externalUrl: isRecordedLecture ? null : values.externalUrl,
-            deidentificationConfirmed: isCaseStudy && values.deidentificationConfirmed,
-          }),
-        });
-        if (!res.ok) {
-          const payload = await res.json().catch(() => null);
-          throw new Error(typeof payload?.error === "string" ? payload.error : "Something went wrong. Please try again.");
-        }
-        router.push(`/review-feedback/${existingItem.id}`);
-        router.refresh();
-        return;
-      }
-
       const formData = new FormData();
       formData.append("title", values.title);
       formData.append("description", values.description);
@@ -143,14 +117,16 @@ export function SubmitReviewItemForm({
         formData.append("externalUrl", values.externalUrl);
       }
       formData.append("deidentificationConfirmed", String(isCaseStudy && values.deidentificationConfirmed));
-      formData.append("audienceMode", values.audienceMode);
-      formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
-      if (values.volunteerNote) formData.append("volunteerNote", values.volunteerNote);
+      if (!existingItem) {
+        formData.append("audienceMode", values.audienceMode);
+        formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
+        if (values.volunteerNote) formData.append("volunteerNote", values.volunteerNote);
+      }
       if (!isRecordedLecture && sourceMode === "file" && file) formData.append("file", file);
       if (heroImage) formData.append("heroImage", heroImage);
 
-      const res = await fetch("/api/review-feedback", {
-        method: "POST",
+      const res = await fetch(existingItem ? `/api/review-feedback/${existingItem.id}` : "/api/review-feedback", {
+        method: existingItem ? "PATCH" : "POST",
         headers: { "x-csrf-token": csrfToken },
         body: formData,
       });
@@ -164,7 +140,7 @@ export function SubmitReviewItemForm({
               : "Something went wrong. Please try again.",
         );
       }
-      router.push("/review-feedback");
+      router.push(existingItem ? `/review-feedback/${existingItem.id}` : "/review-feedback");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
@@ -396,34 +372,6 @@ export function SubmitReviewItemForm({
               </FormItem>
             )}
           />
-        ) : existingItem ? (
-          <FormField
-            control={form.control}
-            name="externalUrl"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>External URL</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="https://docs.google.com/document/d/…"
-                    value={field.value ?? ""}
-                    onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
-                    disabled={!!existingItem.attachment}
-                  />
-                </FormControl>
-                {existingItem.attachment && (
-                  <FormDescription>
-                    This item has an uploaded file (
-                    <a href={existingItem.attachment.url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
-                      {existingItem.attachment.fileName}
-                    </a>
-                    ) — the attachment itself can&apos;t be replaced here.
-                  </FormDescription>
-                )}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
         ) : (
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-2">
@@ -457,12 +405,25 @@ export function SubmitReviewItemForm({
                 <label htmlFor="review-item-file" className="text-sm font-medium">
                   File
                 </label>
+                {existingItem?.attachment && !file && (
+                  <a
+                    href={existingItem.attachment.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm text-primary hover:underline"
+                  >
+                    {existingItem.attachment.fileName}
+                  </a>
+                )}
                 <input
                   id="review-item-file"
                   type="file"
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                   className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
                 />
+                {existingItem?.attachment && (
+                  <p className="text-xs text-muted-foreground">Choose a new file to replace the current one.</p>
+                )}
               </div>
             ) : (
               <FormField

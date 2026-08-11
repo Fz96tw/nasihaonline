@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import {
   uploadKnowledgeDocument,
+  deleteKnowledgeDocument,
   getKnowledgeDocumentUrl,
   uploadKnowledgeItemHeroImage,
   getKnowledgeItemHeroImageUrl,
@@ -279,7 +280,14 @@ export async function reopenReviewItem(itemId: string, actingUser: UserModel): P
   return updated;
 }
 
-/** Submitter-only — full edit of a submission's field set (not invitees, see updateReviewItemInvitees). */
+/**
+ * Submitter-only — full edit of a submission's field set (not invitees, see
+ * updateReviewItemInvitees). Mirrors updateKnowledgeItem's attachment
+ * handling exactly: a new file uploads and is attached before the old one is
+ * dropped, so a failed upload never destroys the working attachment, and the
+ * old MinIO object is only deleted once the DB transaction that stops
+ * referencing it has committed.
+ */
 export async function updateReviewItem(
   itemId: string,
   actingUser: UserModel,
@@ -293,9 +301,16 @@ export async function updateReviewItem(
     youtubeUrl: string | null;
     externalUrl: string | null;
     deidentificationConfirmed: boolean;
+    file: File | null;
   },
 ): Promise<{ id: string }> {
-  const item = await db.reviewItem.findUnique({ where: { id: itemId }, select: { submitterId: true } });
+  const item = await db.reviewItem.findUnique({
+    where: { id: itemId },
+    select: {
+      submitterId: true,
+      attachments: { select: { id: true, objectKey: true }, take: 1 },
+    },
+  });
   if (!item) throw new ReviewItemError(404, "Review item not found.");
   assertSubmitter(item, actingUser);
 
@@ -311,24 +326,61 @@ export async function updateReviewItem(
     throw new ReviewItemError(400, "Select at least one valid category.");
   }
 
-  await db.$transaction([
-    db.reviewItemCategory.deleteMany({ where: { reviewItemId: itemId } }),
-    db.reviewItemTag.deleteMany({ where: { reviewItemId: itemId } }),
-    db.reviewItem.update({
+  const isRecordedLecture = input.contentType === KnowledgeContentType.recorded_lecture;
+  if (isRecordedLecture && !input.youtubeUrl) {
+    throw new ReviewItemError(400, "A YouTube URL is required for a recorded lecture.");
+  }
+  if (!isRecordedLecture && input.file && input.externalUrl) {
+    throw new ReviewItemError(400, "Choose either a file upload or an external link, not both.");
+  }
+  const existingAttachment = item.attachments[0] ?? null;
+  if (!isRecordedLecture && !input.file && !existingAttachment && !input.externalUrl) {
+    throw new ReviewItemError(400, "A file upload or external link is required for this content type.");
+  }
+
+  let newAttachment: { objectKey: string; fileName: string; mimeType: string; sizeBytes: number } | null = null;
+  if (!isRecordedLecture && input.file) {
+    try {
+      newAttachment = await uploadKnowledgeDocument(input.file);
+    } catch (error) {
+      if (error instanceof UploadValidationError) throw new ReviewItemError(400, error.message);
+      throw error;
+    }
+  }
+
+  // Drop the old attachment when it's being replaced by a new file, when
+  // contentType moved to recorded_lecture (which stores youtubeUrl instead),
+  // or when the edit switches from a file to an external link.
+  const dropsExistingAttachment =
+    existingAttachment !== null &&
+    (isRecordedLecture || newAttachment !== null || (!isRecordedLecture && input.externalUrl !== null));
+
+  await db.$transaction(async (tx) => {
+    await tx.reviewItemCategory.deleteMany({ where: { reviewItemId: itemId } });
+    await tx.reviewItemTag.deleteMany({ where: { reviewItemId: itemId } });
+    if (dropsExistingAttachment) {
+      await tx.reviewItemAttachment.delete({ where: { id: existingAttachment!.id } });
+    }
+    await tx.reviewItem.update({
       where: { id: itemId },
       data: {
         title: input.title,
         description: input.description,
         contentType: input.contentType,
         level: input.level,
-        youtubeUrl: input.contentType === KnowledgeContentType.recorded_lecture ? input.youtubeUrl : null,
-        externalUrl: input.contentType === KnowledgeContentType.recorded_lecture ? null : input.externalUrl,
+        youtubeUrl: isRecordedLecture ? input.youtubeUrl : null,
+        externalUrl: isRecordedLecture ? null : input.externalUrl,
         deidentificationConfirmed: input.deidentificationConfirmed,
         categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
         tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
+        attachments: newAttachment ? { create: [newAttachment] } : undefined,
       },
-    }),
-  ]);
+    });
+  });
+
+  if (dropsExistingAttachment) {
+    await deleteKnowledgeDocument(existingAttachment!.objectKey);
+  }
 
   return { id: itemId };
 }

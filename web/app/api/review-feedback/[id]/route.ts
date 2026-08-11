@@ -4,12 +4,11 @@ import { ReviewItemError, deleteReviewItem, updateReviewItem } from "@/lib/revie
 import { updateReviewItemSchema } from "@/lib/validation/review";
 
 /**
- * PATCH /api/review-feedback/:id — editing a submission's metadata
- * (title/description/type/level/categories/tags/urls/de-id flag).
- * Submitter-only (enforced in updateReviewItem). JSON body, unlike
- * POST /api/review-feedback — editing never replaces the underlying
- * attachment/hero image, only the surrounding fields, so there's no file
- * to carry in a multipart body.
+ * PATCH /api/review-feedback/:id — editing a submission (title/description/
+ * type/level/categories/tags/urls/de-id flag, plus the file/link source).
+ * Submitter-only (enforced in updateReviewItem). Multipart rather than JSON,
+ * same reason as POST /api/review-feedback: an optional replacement file
+ * travels alongside the text fields in one request.
  */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   let user;
@@ -21,14 +20,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const { id } = await params;
-  const body = await request.json().catch(() => null);
-  const parsed = updateReviewItemSchema.safeParse(body);
+  const formData = await request.formData();
+  const parsed = updateReviewItemSchema.safeParse({
+    title: formData.get("title"),
+    description: formData.get("description"),
+    contentType: formData.get("contentType"),
+    level: formData.get("level"),
+    categoryIds: formData.getAll("categoryIds"),
+    tagIds: formData.getAll("tagIds"),
+    youtubeUrl: formData.get("youtubeUrl") || null,
+    externalUrl: formData.get("externalUrl") || null,
+    deidentificationConfirmed: formData.get("deidentificationConfirmed") === "true",
+  });
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  const fileField = formData.get("file");
+  const file = fileField instanceof File && fileField.size > 0 ? fileField : null;
+
   try {
-    const item = await updateReviewItem(id, user, parsed.data);
+    const item = await updateReviewItem(id, user, { ...parsed.data, file });
     return NextResponse.json(item);
   } catch (error) {
     if (error instanceof ReviewItemError) {
