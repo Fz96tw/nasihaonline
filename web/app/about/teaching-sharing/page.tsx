@@ -31,6 +31,7 @@ const SECTIONS = [
 const LINKS = [
   { label: "Upcoming Events", href: "/events" },
   { label: "Read the Blog", href: "/blog" },
+  { label: "Browse the Forums", href: "/forums" },
 ];
 
 export default function TeachingSharingPage() {

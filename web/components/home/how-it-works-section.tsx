@@ -22,8 +22,8 @@ const STEPS = [
     description: "Guide each other with honest, constructive feedback.",
     href: "/about/peer-review-feedback",
     links: [
-      { label: "Browse the Forums", href: "/forums" },
       { label: "Find an Expert", href: "/members" },
+      { label: "Browse Review & Feedback", href: "/review-feedback" },
     ],
   },
   {
@@ -34,6 +34,7 @@ const STEPS = [
     links: [
       { label: "Upcoming Events", href: "/events" },
       { label: "Read the Blog", href: "/blog" },
+      { label: "Browse the Forums", href: "/forums" },
     ],
   },
 ];

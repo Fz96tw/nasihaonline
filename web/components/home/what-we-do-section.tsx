@@ -21,8 +21,8 @@ const ACTIVITIES = [
     body: "Constructive, evidence-based feedback across disciplines.",
     href: "/about/peer-review-feedback",
     links: [
-      { label: "Browse the Forums", href: "/forums" },
       { label: "Find an Expert", href: "/members" },
+      { label: "Browse Review & Feedback", href: "/review-feedback" },
     ],
   },
   {
@@ -33,6 +33,7 @@ const ACTIVITIES = [
     links: [
       { label: "Upcoming Events", href: "/events" },
       { label: "Read the Blog", href: "/blog" },
+      { label: "Browse the Forums", href: "/forums" },
     ],
   },
 ];

@@ -29,8 +29,8 @@ const SECTIONS = [
 ];
 
 const LINKS = [
-  { label: "Browse the Forums", href: "/forums" },
   { label: "Find an Expert", href: "/members" },
+  { label: "Browse Review & Feedback", href: "/review-feedback" },
 ];
 
 export default function PeerReviewFeedbackPage() {
