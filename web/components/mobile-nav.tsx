@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   BookOpen,
   CalendarDays,
+  ClipboardCheck,
   Handshake,
   Heart,
   Inbox,
@@ -55,6 +56,7 @@ const COMMUNITY_LINKS: NavLink[] = [
   { href: "/blog", label: "Blogs", icon: PenLine },
   { href: "/library", label: "Knowledge Library", icon: BookOpen, restricted: true },
   { href: "/forums", label: "Forums", icon: MessageSquare, restricted: true },
+  { href: "/review-feedback", label: "Peer Review & Feedback", icon: ClipboardCheck, restricted: true },
   { href: "/members", label: "Member Directory", icon: Users, restricted: true },
   { href: "/inbox", label: "Message Inbox", icon: Inbox, restricted: true },
 ];

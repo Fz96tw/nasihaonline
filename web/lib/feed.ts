@@ -5,7 +5,7 @@
 
 import type { Tier } from "@/lib/generated/prisma/enums";
 
-export type FeedItemType = "event" | "post" | "library" | "forum_thread" | "announcement" | "survey";
+export type FeedItemType = "event" | "post" | "library" | "forum_thread" | "announcement" | "survey" | "peer_review";
 
 export const FEED_TYPE_LABELS: Record<FeedItemType, string> = {
   event: "Event",
@@ -14,6 +14,7 @@ export const FEED_TYPE_LABELS: Record<FeedItemType, string> = {
   forum_thread: "Forum",
   announcement: "Announcement",
   survey: "Survey",
+  peer_review: "Peer Review",
 };
 
 export const FEED_TYPES = Object.keys(FEED_TYPE_LABELS) as FeedItemType[];
@@ -47,6 +48,8 @@ export type FeedItem = {
   libraryViewCount?: number;
   /** Only the welcome-new-member Announcement carries this — the member's tier, rendered as a badge after their name in the title. Null/undefined for every other Announcement and every other type. */
   titleTier?: Tier | null;
+  /** Only "peer_review" items carry this — a short CTA shown as plain text inside the row's single Link (not a nested button, since offering only happens after click-through to the detail page). Null for the item's own submitter viewing their own feed entry; undefined for every other type. */
+  reviewOfferPrompt?: string | null;
 };
 
 // Marks a feed row's href so the page it lands on (blog post, forum thread,

@@ -5,6 +5,7 @@ import {
   ForumThreadVisibility,
   KnowledgeStatus,
   KnowledgeVisibility,
+  ReviewItemStatus,
   RSVPStatus,
   SurveyStatus,
   type Tier,
@@ -97,7 +98,7 @@ export async function getFeedPage(params: {
   const wants = (type: FeedItem["type"]) => !params.types || params.types.includes(type);
   const viewerId = params.viewerId;
 
-  const [events, posts, libraryItems, forumThreads, announcements, surveys] = await Promise.all([
+  const [events, posts, libraryItems, forumThreads, announcements, surveys, seekingReviewItems] = await Promise.all([
     !wants("event") ? Promise.resolve([]) : db.event.findMany({
       where: {
         ...(before ? { createdAt: { lt: before } } : {}),
@@ -243,6 +244,33 @@ export async function getFeedPage(params: {
       orderBy: { openedAt: "desc" },
       take: pageSize,
     }),
+    // Peer Review & Feedback's open-call items — deliberately no
+    // viewer-based visibility filter (unlike the events/library restricted-
+    // audience OR-clauses above): an open call is public to every member by
+    // design, including the submitter's own feed (they just don't get the
+    // "Offer to Review" prompt on it, computed per-viewer below). Listing-
+    // only: only title/description/submitter/hero-image are selected here,
+    // never the attachment/externalUrl/youtubeUrl — the actual material
+    // stays gated behind an accepted offer, same as the dashboard's
+    // "Members Seeking Reviewers" tab.
+    !wants("peer_review") ? Promise.resolve([]) : db.reviewItem.findMany({
+      where: {
+        seekingReviewers: true,
+        status: ReviewItemStatus.open,
+        ...(before ? { createdAt: { lt: before } } : {}),
+      },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        createdAt: true,
+        heroImageUrl: true,
+        submitterId: true,
+        submitter: { select: AUTHOR_SELECT },
+      },
+      orderBy: { createdAt: "desc" },
+      take: pageSize,
+    }),
   ]);
 
   const merged: FeedItem[] = [
@@ -338,6 +366,21 @@ export async function getFeedPage(params: {
       timestamp: (survey.openedAt as Date).toISOString(),
       author: BOARD_SENDER,
       imageUrl: getSurveyHeroImageUrl(survey.heroImageUrl),
+    })),
+    ...seekingReviewItems.map((item): FeedItem => ({
+      type: "peer_review",
+      id: item.id,
+      title: item.title,
+      excerpt: truncate(item.description),
+      href: withFeedRef(`/review-feedback/${item.id}`),
+      timestamp: item.createdAt.toISOString(),
+      author: authorOf(item.submitter),
+      imageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl),
+      // Submitter sees their own entry (this feed shows your own activity
+      // like every other type does) but never the offer prompt — offering
+      // to review your own submission isn't a thing (offerToReview rejects
+      // it server-side too, see review-server.ts).
+      reviewOfferPrompt: viewerId && item.submitterId === viewerId ? null : "🙋 Open for reviewer volunteers",
     })),
   ].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 

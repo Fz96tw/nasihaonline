@@ -56,6 +56,9 @@ export function FeedRow({ item }: { item: FeedItem }) {
             {item.eventStartsAt && (
               <div className="mt-0.5 text-xs text-muted-foreground">Event Date: {formatTimestamp(item.eventStartsAt)}</div>
             )}
+            {item.reviewOfferPrompt && (
+              <div className="mt-0.5 text-xs font-medium text-primary">{item.reviewOfferPrompt}</div>
+            )}
             {!isForumThread && item.imageUrl && (
               // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
               <img

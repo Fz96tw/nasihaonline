@@ -95,6 +95,14 @@ export async function SiteHeader() {
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem className="text-base" asChild>
+            <Link href="/review-feedback" className={cn("justify-between", !user && "text-muted-foreground")}>
+              Peer Review &amp; Feedback
+              {!user && (
+                <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />
+              )}
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-base" asChild>
             <Link href="/members" className={cn("justify-between", !user && "text-muted-foreground")}>
               Member Directory
               {!user && (
