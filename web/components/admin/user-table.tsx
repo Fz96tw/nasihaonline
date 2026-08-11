@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -32,15 +32,69 @@ type RoleFilter = Role | "all";
 type TierFilter = Tier | "all";
 type SuspendedFilter = "all" | "suspended" | "active";
 
+type SortKey = "name" | "role" | "tier" | "status" | "joined" | "lastActive";
+type Sort = { key: SortKey; dir: "asc" | "desc" };
+
+function sortValue(user: AdminUser, key: SortKey): string | number {
+  switch (key) {
+    case "name":
+      return (user.name ?? user.email).toLowerCase();
+    case "role":
+      return ROLE_LABELS[user.role];
+    case "tier":
+      return user.tier ? TIER_LABELS[user.tier] : "";
+    case "status":
+      return user.suspended ? 1 : 0;
+    case "joined":
+      return user.createdAt.getTime();
+    case "lastActive":
+      return user.lastActiveAt ? user.lastActiveAt.getTime() : 0;
+  }
+}
+
+function SortableHead({
+  label,
+  sortKey,
+  sort,
+  onSort,
+}: {
+  label: string;
+  sortKey: SortKey;
+  sort: Sort | null;
+  onSort: (key: SortKey) => void;
+}) {
+  const active = sort?.key === sortKey;
+  const Icon = active ? (sort!.dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <TableHead aria-sort={active ? (sort!.dir === "asc" ? "ascending" : "descending") : "none"}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className="flex items-center gap-1 hover:text-foreground"
+      >
+        {label}
+        <Icon className={`h-3.5 w-3.5 ${active ? "" : "text-muted-foreground/50"}`} />
+      </button>
+    </TableHead>
+  );
+}
+
 export function UserTable({ users }: { users: AdminUser[] }) {
   const [search, setSearch] = useState("");
   const [role, setRole] = useState<RoleFilter>("all");
   const [tier, setTier] = useState<TierFilter>("all");
   const [suspendedFilter, setSuspendedFilter] = useState<SuspendedFilter>("all");
+  const [sort, setSort] = useState<Sort | null>(null);
+
+  const toggleSort = (key: SortKey) => {
+    setSort((current) =>
+      current?.key === key ? { key, dir: current.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" },
+    );
+  };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return users.filter((user) => {
+    const result = users.filter((user) => {
       if (role !== "all" && user.role !== role) return false;
       if (tier !== "all" && user.tier !== tier) return false;
       if (suspendedFilter === "suspended" && !user.suspended) return false;
@@ -51,7 +105,16 @@ export function UserTable({ users }: { users: AdminUser[] }) {
       }
       return true;
     });
-  }, [users, role, tier, suspendedFilter, search]);
+    if (sort) {
+      result.sort((a, b) => {
+        const av = sortValue(a, sort.key);
+        const bv = sortValue(b, sort.key);
+        const cmp = typeof av === "string" ? av.localeCompare(bv as string) : av - (bv as number);
+        return sort.dir === "asc" ? cmp : -cmp;
+      });
+    }
+    return result;
+  }, [users, role, tier, suspendedFilter, search, sort]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -111,12 +174,12 @@ export function UserTable({ users }: { users: AdminUser[] }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Tier</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Joined</TableHead>
-              <TableHead>Last active</TableHead>
+              <SortableHead label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
+              <SortableHead label="Role" sortKey="role" sort={sort} onSort={toggleSort} />
+              <SortableHead label="Tier" sortKey="tier" sort={sort} onSort={toggleSort} />
+              <SortableHead label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
+              <SortableHead label="Joined" sortKey="joined" sort={sort} onSort={toggleSort} />
+              <SortableHead label="Last active" sortKey="lastActive" sort={sort} onSort={toggleSort} />
             </TableRow>
           </TableHeader>
           <TableBody>
