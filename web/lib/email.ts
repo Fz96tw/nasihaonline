@@ -444,6 +444,57 @@ export async function sendLibraryLifecycleEmail(
   }
 }
 
+/**
+ * Sent when a member is invited to review a Peer Review & Feedback item —
+ * mirrors sendLibraryInviteEmail exactly (same "you now have access" shape),
+ * fired alongside the paired in-app peer_review_invited notification.
+ */
+export async function sendReviewInviteEmail(
+  to: string,
+  name: string,
+  item: { submitterName: string; title: string; link: string },
+) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping review invite email to ${to}`);
+    return;
+  }
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: `You've been invited to review: ${item.title}`,
+      text: `Hi ${name},\n\n${item.submitterName} has invited you to review "${item.title}" in Peer Review & Feedback.\n\nView it here:\n${item.link}\n\n— The NASIHA Team`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send review invite email", error);
+  }
+}
+
+/**
+ * Sent when a member is removed from a ReviewItem's invited list, or when a
+ * volunteer offer is declined — mirrors sendLibraryLifecycleEmail's shared
+ * lifecycle shape.
+ */
+export async function sendReviewLifecycleEmail(to: string, name: string, item: { subject: string; message: string; link?: string }) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping review lifecycle email to ${to}`);
+    return;
+  }
+
+  try {
+    const viewLine = item.link ? `\n\nView it here:\n${item.link}` : "";
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: item.subject,
+      text: `Hi ${name},\n\n${item.message}${viewLine}\n\n— The NASIHA Team`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send review lifecycle email", error);
+  }
+}
+
 export async function sendContactMessageEmail(message: {
   name: string;
   email: string;
