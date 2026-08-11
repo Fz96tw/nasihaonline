@@ -14,11 +14,23 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
+import { cn } from "@/lib/utils";
 
 /** Staggered fade+slide-in for the main/sidebar widgets on load. */
-function StaggeredIn({ index, children }: { index: number; children: React.ReactNode }) {
+function StaggeredIn({
+  index,
+  className,
+  children,
+}: {
+  index: number;
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-2 duration-500" style={{ animationDelay: `${index * 75}ms` }}>
+    <div
+      className={cn("animate-in fade-in slide-in-from-bottom-2 duration-500", className)}
+      style={{ animationDelay: `${index * 75}ms` }}
+    >
       {children}
     </div>
   );
@@ -78,21 +90,22 @@ export default async function DashboardPage() {
       <StatsRow userId={user.id} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <StaggeredIn index={0}>
+        <StaggeredIn index={1} className="order-1 lg:order-none lg:col-start-2 lg:row-start-1">
+          <QuickActionsWidget />
+        </StaggeredIn>
+        <StaggeredIn
+          index={0}
+          className="order-2 lg:order-none lg:col-start-1 lg:row-start-1 lg:row-span-2"
+        >
           <Suspense fallback={<WidgetSkeleton />}>
             <ScheduleWidget userId={user.id} />
           </Suspense>
         </StaggeredIn>
-        <div className="flex flex-col gap-6">
-          <StaggeredIn index={1}>
-            <QuickActionsWidget />
-          </StaggeredIn>
-          <StaggeredIn index={2}>
-            <Suspense fallback={<WidgetSkeleton />}>
-              <InboxWidget userId={user.id} />
-            </Suspense>
-          </StaggeredIn>
-        </div>
+        <StaggeredIn index={2} className="order-3 lg:order-none lg:col-start-2 lg:row-start-2">
+          <Suspense fallback={<WidgetSkeleton />}>
+            <InboxWidget userId={user.id} />
+          </Suspense>
+        </StaggeredIn>
       </div>
 
       <StaggeredIn index={3}>
