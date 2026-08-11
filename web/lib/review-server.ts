@@ -15,11 +15,13 @@ import {
   KnowledgeStatus,
   KnowledgeVisibility,
   ReviewItemStatus,
+  ReviewVolunteerStatus,
   Role,
 } from "@/lib/generated/prisma/enums";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { DIRECTORY_TIERS } from "@/lib/members";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
+import { createNotification } from "@/lib/notifications-server";
 import { sendReviewInviteEmail, sendReviewLifecycleEmail } from "@/lib/email";
 import type {
   MyReviewSubmission,
@@ -28,6 +30,7 @@ import type {
   ReviewItemDetail,
   ReviewItemRosterMember,
   ReviewTagOption,
+  SeekingReviewersItem,
   SharedReviewItem,
 } from "@/lib/review";
 
@@ -813,4 +816,189 @@ export async function publishReviewItemToLibrary(itemId: string, actingUser: Use
   });
 
   return { knowledgeItemId };
+}
+
+// ===== Volunteer reviewers (open call) =====
+// A submitter who doesn't know who to invite can open a call for
+// volunteers (ReviewItem.seekingReviewers) instead of, or alongside,
+// hand-picking invitees. Any directory-eligible member other than the
+// submitter can offer to review (ReviewVolunteerOffer); the submitter
+// accepts or declines each offer, and accepting converts it into a real
+// ReviewItemInvitee via the same create+notify path createReviewItem and
+// updateReviewItemInvitees already use.
+
+/**
+ * A member offers to review a `seekingReviewers` item they weren't directly
+ * invited to. Upserts rather than always-creates so re-offering after a
+ * prior withdrawn/declined offer reuses the same row (unique on
+ * [reviewItemId, userId]) instead of erroring on the constraint.
+ */
+export async function offerToReview(itemId: string, userId: string, note: string | null): Promise<{ id: string }> {
+  const item = await db.reviewItem.findUnique({
+    where: { id: itemId },
+    select: { id: true, title: true, submitterId: true, seekingReviewers: true },
+  });
+  if (!item) throw new ReviewItemError(404, "Review item not found.");
+  if (!item.seekingReviewers) {
+    throw new ReviewItemError(400, "This item isn't open for volunteer reviewers.");
+  }
+  if (item.submitterId === userId) {
+    throw new ReviewItemError(400, "You can't volunteer to review your own submission.");
+  }
+
+  const volunteer = await db.user.findUnique({ where: { id: userId }, select: { name: true } });
+
+  const offer = await db.reviewVolunteerOffer.upsert({
+    where: { reviewItemId_userId: { reviewItemId: itemId, userId } },
+    create: { reviewItemId: itemId, userId, note, status: ReviewVolunteerStatus.pending },
+    update: { note, status: ReviewVolunteerStatus.pending, respondedAt: null },
+    select: { id: true },
+  });
+
+  await createNotification({
+    recipientId: item.submitterId,
+    type: NotificationType.peer_review_volunteer_offered,
+    message: `${volunteer?.name ?? "A member"} offered to review "${item.title}".`,
+    link: `/review-feedback/${itemId}`,
+  });
+
+  return offer;
+}
+
+/** The volunteer withdraws their own offer — no-ops silently if there's no pending offer to withdraw. */
+export async function withdrawVolunteerOffer(itemId: string, userId: string): Promise<void> {
+  await db.reviewVolunteerOffer.updateMany({
+    where: { reviewItemId: itemId, userId, status: ReviewVolunteerStatus.pending },
+    data: { status: ReviewVolunteerStatus.withdrawn, respondedAt: new Date() },
+  });
+}
+
+/**
+ * Submitter-only — accept or decline a pending volunteer offer. Accept
+ * reuses the exact create+notify shape updateReviewItemInvitees's add-path
+ * uses (ReviewItemInvitee row + peer_review_invited notification + email),
+ * so an accepted volunteer gets identical treatment to a directly-invited
+ * member. Decline notifies the volunteer, not the submitter — the
+ * submitter already knows, they're the one declining.
+ */
+export async function respondToVolunteerOffer(
+  offerId: string,
+  actingUser: UserModel,
+  action: "accept" | "decline",
+): Promise<{ id: string; status: ReviewVolunteerStatus }> {
+  const offer = await db.reviewVolunteerOffer.findUnique({
+    where: { id: offerId },
+    select: {
+      id: true,
+      userId: true,
+      status: true,
+      user: { select: { email: true, name: true } },
+      reviewItem: { select: { id: true, title: true, submitterId: true } },
+    },
+  });
+  if (!offer) throw new ReviewItemError(404, "Volunteer offer not found.");
+  assertSubmitter(offer.reviewItem, actingUser);
+  if (offer.status !== ReviewVolunteerStatus.pending) {
+    throw new ReviewItemError(409, "This offer has already been responded to.");
+  }
+
+  const submitter = await db.user.findUnique({ where: { id: offer.reviewItem.submitterId }, select: { name: true } });
+  const submitterName = submitter?.name ?? "A member";
+
+  if (action === "accept") {
+    await db.$transaction(async (tx) => {
+      await tx.reviewItemInvitee.upsert({
+        where: { reviewItemId_userId: { reviewItemId: offer.reviewItem.id, userId: offer.userId } },
+        create: { reviewItemId: offer.reviewItem.id, userId: offer.userId },
+        update: {},
+      });
+      await tx.reviewVolunteerOffer.update({
+        where: { id: offerId },
+        data: { status: ReviewVolunteerStatus.accepted, respondedAt: new Date() },
+      });
+      await notifyInvitedReviewUsers(tx, {
+        reviewItemId: offer.reviewItem.id,
+        title: offer.reviewItem.title,
+        submitterName,
+        userIds: [offer.userId],
+      });
+    });
+    await emailInvitedReviewUsers([offer.user], { reviewItemId: offer.reviewItem.id, title: offer.reviewItem.title, submitterName });
+    return { id: offerId, status: ReviewVolunteerStatus.accepted };
+  }
+
+  await db.reviewVolunteerOffer.update({
+    where: { id: offerId },
+    data: { status: ReviewVolunteerStatus.declined, respondedAt: new Date() },
+  });
+  await createNotification({
+    recipientId: offer.userId,
+    type: NotificationType.peer_review_volunteer_declined,
+    message: `Thanks for offering to review "${offer.reviewItem.title}" — this item found its reviewers.`,
+    link: null,
+  });
+  await sendReviewLifecycleEmail(offer.user.email, offer.user.name ?? "there", {
+    subject: `Update: ${offer.reviewItem.title}`,
+    message: `Thanks for offering to review "${offer.reviewItem.title}" — this item found its reviewers.`,
+  });
+  return { id: offerId, status: ReviewVolunteerStatus.declined };
+}
+
+/**
+ * Submitter-only — opens or closes the volunteer call independently of
+ * `status` (open/closed), so a submitter can stop new offers once they
+ * have enough reviewers without closing the whole review, or open a call
+ * later on an item that started as "Select Reviewers."
+ */
+export async function toggleSeekingReviewers(itemId: string, actingUser: UserModel, value: boolean): Promise<{ id: string; seekingReviewers: boolean }> {
+  const item = await db.reviewItem.findUnique({ where: { id: itemId }, select: { submitterId: true } });
+  if (!item) throw new ReviewItemError(404, "Review item not found.");
+  assertSubmitter(item, actingUser);
+
+  const updated = await db.reviewItem.update({
+    where: { id: itemId },
+    data: { seekingReviewers: value },
+    select: { id: true, seekingReviewers: true },
+  });
+  return updated;
+}
+
+/**
+ * /review-feedback "Members Seeking Reviewers" tab — community-wide, excludes
+ * the viewer's own items (nothing to volunteer for on your own submission).
+ */
+export async function getSeekingReviewersFeed(viewerId: string): Promise<SeekingReviewersItem[]> {
+  const items = await db.reviewItem.findMany({
+    where: { seekingReviewers: true, status: ReviewItemStatus.open, submitterId: { not: viewerId } },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      contentType: true,
+      level: true,
+      createdAt: true,
+      categories: { select: { category: { select: { name: true } } } },
+      submitter: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } },
+      _count: { select: { volunteerOffers: { where: { status: { not: ReviewVolunteerStatus.withdrawn } } } } },
+      volunteerOffers: { where: { userId: viewerId }, select: { status: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return items.map((item) => ({
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    contentType: item.contentType,
+    level: item.level,
+    categories: item.categories.map(({ category }) => category),
+    submitter: {
+      id: item.submitter.id,
+      name: item.submitter.name,
+      avatarUrl: getProfileAvatarUrl(item.submitter.profile?.avatarUrl ?? null),
+    },
+    createdAt: item.createdAt.toISOString(),
+    volunteerCount: item._count.volunteerOffers,
+    myOfferStatus: item.volunteerOffers[0]?.status ?? null,
+  }));
 }

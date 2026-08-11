@@ -73,6 +73,20 @@ export type SharedReviewItem = {
   needsMyFeedback: boolean;
 };
 
+/** /review-feedback "Members Seeking Reviewers" tab card (community-wide, excludes the viewer's own items). */
+export type SeekingReviewersItem = {
+  id: string;
+  title: string;
+  description: string;
+  contentType: KnowledgeContentType;
+  level: KnowledgeLevel;
+  categories: { name: string }[];
+  submitter: { id: string; name: string | null; avatarUrl: string | null };
+  createdAt: string;
+  volunteerCount: number;
+  myOfferStatus: ReviewVolunteerStatus | null;
+};
+
 /** /review-feedback/[id] detail page's data load. */
 export type ReviewItemDetail = {
   id: string;
