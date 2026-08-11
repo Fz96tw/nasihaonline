@@ -383,29 +383,30 @@ export function SubmitResourceForm({
           />
         ) : (
           <div className="flex flex-col gap-3">
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant={sourceMode === "file" ? "default" : "outline"}
-                onClick={() => {
-                  setSourceMode("file");
-                  form.setValue("externalUrl", null);
+            <div className="flex flex-col gap-2">
+              <label htmlFor="resource-source-mode" className="text-sm font-medium">
+                How do you want to provide your document?
+              </label>
+              <Select
+                value={sourceMode}
+                onValueChange={(value) => {
+                  const mode = value as "file" | "link";
+                  setSourceMode(mode);
+                  if (mode === "file") {
+                    form.setValue("externalUrl", null);
+                  } else {
+                    setFile(null);
+                  }
                 }}
               >
-                Upload a file
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={sourceMode === "link" ? "default" : "outline"}
-                onClick={() => {
-                  setSourceMode("link");
-                  setFile(null);
-                }}
-              >
-                Link to an external resource
-              </Button>
+                <SelectTrigger id="resource-source-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="file">Upload a file</SelectItem>
+                  <SelectItem value="link">Web link to external source</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {sourceMode === "file" ? (
