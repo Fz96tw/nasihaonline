@@ -27,7 +27,9 @@ import type {
   MyReviewSubmission,
   ReviewCategoryOption,
   ReviewCommentNode,
+  PendingVolunteerOffer,
   ReviewItemDetail,
+  ReviewItemForEdit,
   ReviewItemRosterMember,
   ReviewTagOption,
   SeekingReviewersItem,
@@ -326,6 +328,49 @@ export async function updateReviewItem(
   ]);
 
   return { id: itemId };
+}
+
+/** /review-feedback/[id]/edit's data load — the full editable field set. Permission checked by the caller, same split as getKnowledgeItemForEdit. */
+export async function getReviewItemForEdit(id: string): Promise<ReviewItemForEdit | null> {
+  const item = await db.reviewItem.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      contentType: true,
+      level: true,
+      status: true,
+      submitterId: true,
+      categories: { select: { categoryId: true } },
+      tags: { select: { tagId: true } },
+      youtubeUrl: true,
+      heroImageUrl: true,
+      externalUrl: true,
+      deidentificationConfirmed: true,
+      attachments: { select: { fileName: true, objectKey: true }, take: 1 },
+    },
+  });
+  if (!item) return null;
+
+  return {
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    contentType: item.contentType,
+    level: item.level,
+    status: item.status,
+    categoryIds: item.categories.map((c) => c.categoryId),
+    tagIds: item.tags.map((t) => t.tagId),
+    youtubeUrl: item.youtubeUrl,
+    heroImageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl),
+    externalUrl: item.externalUrl,
+    deidentificationConfirmed: item.deidentificationConfirmed,
+    submitterId: item.submitterId,
+    attachment: item.attachments[0]
+      ? { fileName: item.attachments[0].fileName, url: getKnowledgeDocumentUrl(item.attachments[0].objectKey) }
+      : null,
+  };
 }
 
 /** Submitter-only — deletes a submission and everything attached to it (cascades). */
@@ -718,6 +763,23 @@ export async function postReviewComment(
   return { id: comment.id, createdAt: comment.createdAt.toISOString() };
 }
 
+/** Author or moderator/admin — edits an existing comment's body. Mirrors updateForumPost's authorization shape; a removed comment can't be edited. */
+export async function updateReviewComment(commentId: string, actingUser: UserModel, body: string): Promise<{ id: string }> {
+  const comment = await db.reviewComment.findUnique({
+    where: { id: commentId },
+    select: { id: true, authorId: true, removed: true },
+  });
+  if (!comment) throw new ReviewItemError(404, "Comment not found.");
+  const isPrivileged = actingUser.role === Role.admin || actingUser.role === Role.moderator;
+  if (comment.authorId !== actingUser.id && !isPrivileged) {
+    throw new ReviewItemError(403, "Only the author or a moderator/admin can edit this comment.");
+  }
+  if (comment.removed) throw new ReviewItemError(400, "This comment has been removed.");
+
+  await db.reviewComment.update({ where: { id: commentId }, data: { body, editedAt: new Date() } });
+  return { id: commentId };
+}
+
 /** Detail page's comment thread — tree-assembled, same two-pass algorithm as getForumThreadDetail. */
 export async function getReviewComments(itemId: string): Promise<ReviewCommentNode[]> {
   const comments = await db.reviewComment.findMany({
@@ -942,6 +1004,30 @@ export async function respondToVolunteerOffer(
     message: `Thanks for offering to review "${offer.reviewItem.title}" — this item found its reviewers.`,
   });
   return { id: offerId, status: ReviewVolunteerStatus.declined };
+}
+
+/** Submitter-only "Volunteer Offers" panel data — every currently-pending offer on this item. */
+export async function getPendingVolunteerOffers(itemId: string): Promise<PendingVolunteerOffer[]> {
+  const offers = await db.reviewVolunteerOffer.findMany({
+    where: { reviewItemId: itemId, status: ReviewVolunteerStatus.pending },
+    select: {
+      id: true,
+      userId: true,
+      note: true,
+      createdAt: true,
+      user: { select: { name: true, profile: { select: { avatarUrl: true } } } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return offers.map((offer) => ({
+    id: offer.id,
+    userId: offer.userId,
+    name: offer.user.name,
+    avatarUrl: getProfileAvatarUrl(offer.user.profile?.avatarUrl ?? null),
+    note: offer.note,
+    createdAt: offer.createdAt.toISOString(),
+  }));
 }
 
 /**

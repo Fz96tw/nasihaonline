@@ -73,6 +73,16 @@ export type SharedReviewItem = {
   needsMyFeedback: boolean;
 };
 
+/** Submitter-only "Volunteer Offers" panel entry, on the detail page of a `seekingReviewers` item. */
+export type PendingVolunteerOffer = {
+  id: string;
+  userId: string;
+  name: string | null;
+  avatarUrl: string | null;
+  note: string | null;
+  createdAt: string;
+};
+
 /** /review-feedback "Members Seeking Reviewers" tab card (community-wide, excludes the viewer's own items). */
 export type SeekingReviewersItem = {
   id: string;
@@ -108,6 +118,24 @@ export type ReviewItemDetail = {
   publishedKnowledgeItemId: string | null;
   isSubmitter: boolean;
   isInvitee: boolean;
+};
+
+/** /review-feedback/[id]/edit's data load — a submission's full editable field set. */
+export type ReviewItemForEdit = {
+  id: string;
+  title: string;
+  description: string;
+  contentType: KnowledgeContentType;
+  level: KnowledgeLevel;
+  status: ReviewItemStatus;
+  categoryIds: string[];
+  tagIds: string[];
+  youtubeUrl: string | null;
+  heroImageUrl: string | null;
+  externalUrl: string | null;
+  deidentificationConfirmed: boolean;
+  submitterId: string;
+  attachment: { fileName: string; url: string } | null;
 };
 
 export type ReviewCommentNode = {
