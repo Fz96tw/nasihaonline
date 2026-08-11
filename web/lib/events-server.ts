@@ -578,19 +578,27 @@ export async function getDashboardUpcomingEvents(
       title: true,
       type: true,
       startsAt: true,
+      hostId: true,
+      meetingUrl: true,
       rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
     },
     orderBy: { startsAt: "asc" },
     take: limit,
   });
 
-  return events.map((event) => ({
-    id: event.id,
-    title: event.title,
-    type: event.type,
-    startsAt: event.startsAt.toISOString(),
-    rsvped: event.rsvps.length > 0,
-  }));
+  return events.map((event) => {
+    const rsvped = event.rsvps.length > 0;
+    return {
+      id: event.id,
+      title: event.title,
+      type: event.type,
+      startsAt: event.startsAt.toISOString(),
+      rsvped,
+      // Same gate as getMemberEvents: the host can always join their own
+      // meeting even though they never auto-RSVP to their own event.
+      meetingUrl: rsvped || event.hostId === userId ? event.meetingUrl : null,
+    };
+  });
 }
 
 // /admin/event-registrations — a merged view of who's engaged with each

@@ -24,6 +24,8 @@ export async function ScheduleWidget({ userId }: { userId: string }) {
       dateTime: event.startsAt,
       href: `/calendar/${event.id}`,
       badge: event.rsvped ? ({ label: "Going", variant: "success" } as const) : null,
+      joinUrl: event.meetingUrl,
+      joinLabel: "Join the session",
     })),
     ...meetings.map((meeting) => ({
       id: `meeting-${meeting.id}`,
@@ -36,6 +38,8 @@ export async function ScheduleWidget({ userId }: { userId: string }) {
       badge: meeting.isPending
         ? ({ label: "Meeting request", variant: "warning" } as const)
         : ({ label: "Meeting", variant: "info" } as const),
+      joinUrl: meeting.meetingUrl,
+      joinLabel: "Join the meeting",
     })),
   ]
     .sort((a, b) => a.dateTime.localeCompare(b.dateTime))

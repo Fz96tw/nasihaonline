@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export type ScheduleItem = {
@@ -10,6 +11,9 @@ export type ScheduleItem = {
   href: string;
   detail?: string;
   badge: { label: string; variant: "success" | "warning" | "info" } | null;
+  /** Direct join link (Google Meet, etc). Null when not yet available — event needs an RSVP, meeting isn't accepted, or no link was set. */
+  joinUrl: string | null;
+  joinLabel: string;
 };
 
 function formatTime(iso: string) {
@@ -72,6 +76,17 @@ export function ScheduleAgenda({ items }: { items: ScheduleItem[] }) {
                     {formatTime(item.dateTime)}
                     {item.detail ? ` · ${item.detail}` : ""}
                   </p>
+                  {item.joinUrl ? (
+                    <a
+                      href={item.joinUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                    >
+                      {item.joinLabel}
+                      <ArrowRight className="h-3 w-3" />
+                    </a>
+                  ) : null}
                 </div>
                 {item.badge ? (
                   <Badge variant={item.badge.variant} className="flex-shrink-0">

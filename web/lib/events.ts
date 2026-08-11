@@ -140,6 +140,7 @@ export type DashboardUpcomingEvent = {
   type: EventType;
   startsAt: string;
   rsvped: boolean;
+  meetingUrl: string | null;
 };
 
 // /admin/events (§4.4/§4.6) — a past event awaiting (or already past) its
