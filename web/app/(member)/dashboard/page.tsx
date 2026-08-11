@@ -8,6 +8,7 @@ import { StatsRow } from "@/components/dashboard/stats-row";
 import { AccountNoticesWidget } from "@/components/dashboard/account-notices-widget";
 import { ScheduleWidget } from "@/components/dashboard/schedule-widget";
 import { InboxWidget } from "@/components/dashboard/inbox-widget";
+import { QuickActionsWidget } from "@/components/dashboard/quick-actions-widget";
 import { TrendingSection } from "@/components/dashboard/trending-section";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -82,14 +83,19 @@ export default async function DashboardPage() {
             <ScheduleWidget userId={user.id} />
           </Suspense>
         </StaggeredIn>
-        <StaggeredIn index={1}>
-          <Suspense fallback={<WidgetSkeleton />}>
-            <InboxWidget userId={user.id} />
-          </Suspense>
-        </StaggeredIn>
+        <div className="flex flex-col gap-6">
+          <StaggeredIn index={1}>
+            <QuickActionsWidget />
+          </StaggeredIn>
+          <StaggeredIn index={2}>
+            <Suspense fallback={<WidgetSkeleton />}>
+              <InboxWidget userId={user.id} />
+            </Suspense>
+          </StaggeredIn>
+        </div>
       </div>
 
-      <StaggeredIn index={2}>
+      <StaggeredIn index={3}>
         <Suspense fallback={null}>
           <TrendingSection userId={user.id} isPrivileged={isPrivileged} />
         </Suspense>
