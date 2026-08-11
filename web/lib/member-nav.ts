@@ -46,6 +46,7 @@ export const MEMBER_NAV_SECTIONS: NavSection[] = [
       { label: "Forums", href: "/forums", icon: MessageSquare },
       { label: "Blogs", href: "/blog", icon: PenLine },
       { label: "Knowledge Library", href: "/library", icon: BookOpen },
+      { label: "Peer Review & Feedback", href: "/review-feedback", icon: ClipboardCheck },
     ],
   },
 ];
