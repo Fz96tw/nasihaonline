@@ -30,7 +30,7 @@ export function ReviewDashboardTabs({
   const [tab, setTab] = useState("mine");
 
   const openSubmissionsCount = mySubmissions.filter((item) => item.status === ReviewItemStatus.open).length;
-  const needsFeedbackCount = sharedWithMe.filter((item) => item.needsMyFeedback).length;
+  const sharedWithMeCount = sharedWithMe.length;
 
   return (
     <Tabs value={tab} onValueChange={setTab}>
@@ -47,7 +47,7 @@ export function ReviewDashboardTabs({
           value="shared"
           className="shrink-0 rounded-t-lg rounded-b-none border border-b-0 border-transparent px-3 py-3 text-base font-semibold text-muted-foreground shadow-none data-[state=active]:-mb-px data-[state=active]:border-border data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none sm:px-5 sm:text-lg"
         >
-          Shared With Me{needsFeedbackCount > 0 && <span className="ml-1.5 text-sm text-muted-foreground">{needsFeedbackCount}</span>}
+          Shared With Me{sharedWithMeCount > 0 && <span className="ml-1.5 text-sm text-muted-foreground">{sharedWithMeCount}</span>}
         </TabsTrigger>
         <TabsTrigger
           value="seeking"

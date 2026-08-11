@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { Eye, MessageSquare, Users } from "lucide-react";
+import { Eye, Hand, MessageSquare, Users } from "lucide-react";
 import { type FeedItem, FEED_TYPE_LABELS } from "@/lib/feed";
 import { formatRelativeTime, formatTimestamp } from "@/lib/format-date";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { ReviewOfferButton } from "@/components/review/review-offer-button";
+import { cn } from "@/lib/utils";
 
 export function FeedRow({ item }: { item: FeedItem }) {
   const subtitle = [item.author.titleSpecialty, item.author.countryRegion].filter(Boolean).join(", ");
@@ -17,7 +19,10 @@ export function FeedRow({ item }: { item: FeedItem }) {
     <li>
       <Link
         href={item.href}
-        className="flex w-full items-start gap-3 p-4 text-left transition-colors hover:bg-accent/50"
+        className={cn(
+          "flex w-full items-start gap-3 p-4 text-left transition-colors hover:bg-accent/50",
+          item.reviewOfferPrompt && "pb-2",
+        )}
       >
         {isForumThread && item.imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
@@ -55,9 +60,6 @@ export function FeedRow({ item }: { item: FeedItem }) {
             <div className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{item.excerpt}</div>
             {item.eventStartsAt && (
               <div className="mt-0.5 text-xs text-muted-foreground">Event Date: {formatTimestamp(item.eventStartsAt)}</div>
-            )}
-            {item.reviewOfferPrompt && (
-              <div className="mt-0.5 text-xs font-medium text-primary">{item.reviewOfferPrompt}</div>
             )}
             {!isForumThread && item.imageUrl && (
               // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
@@ -116,6 +118,15 @@ export function FeedRow({ item }: { item: FeedItem }) {
           </div>
         </div>
       </Link>
+      {item.reviewOfferPrompt && (
+        <div className="flex items-center justify-between gap-3 py-0 pl-[60px] pr-4 pb-4">
+          <span className="flex items-center gap-1 text-xs font-medium text-primary">
+            <Hand className="h-3.5 w-3.5" />
+            {item.reviewOfferPrompt}
+          </span>
+          <ReviewOfferButton itemId={item.id} initialStatus={item.myOfferStatus ?? null} />
+        </div>
+      )}
     </li>
   );
 }

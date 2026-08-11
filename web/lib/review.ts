@@ -56,6 +56,8 @@ export type MyReviewSubmission = {
   categories: { name: string }[];
   invitees: { name: string | null; avatarUrl: string | null }[];
   commentCount: number;
+  /** Pending (not yet accepted/declined/withdrawn) volunteer offers awaiting this submitter's response. */
+  pendingOfferCount: number;
   createdAt: string;
   hasNewActivity: boolean;
 };
@@ -118,6 +120,10 @@ export type ReviewItemDetail = {
   publishedKnowledgeItemId: string | null;
   isSubmitter: boolean;
   isInvitee: boolean;
+  /** False for a non-invitee viewing an open call purely from its preview tier — attachment/externalUrl/youtubeUrl/publishedKnowledgeItemId are nulled out and the comment thread/roster aren't loaded in that case. */
+  hasFullAccess: boolean;
+  /** This viewer's own volunteer offer on the item, if any — drives ReviewOfferButton's initial state on the preview tier. */
+  myOfferStatus: ReviewVolunteerStatus | null;
 };
 
 /** /review-feedback/[id]/edit's data load — a submission's full editable field set. */

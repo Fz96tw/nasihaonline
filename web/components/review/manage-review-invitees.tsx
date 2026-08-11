@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { getCsrfToken } from "@/lib/csrf-client";
@@ -93,8 +93,9 @@ export function ManageReviewInvitees({ itemId, initialRoster }: { itemId: string
                 <Avatar name={member.name ?? "Member"} src={member.avatarUrl} size="xs" />
                 <span className="text-sm">{member.name ?? "A member"}</span>
                 {member.hasCommented && (
-                  <span className="text-xs text-success" title="Has left feedback">
-                    ✓ reviewed
+                  <span className="flex items-center gap-0.5 text-xs text-success" title="Has left feedback">
+                    <Check className="h-3 w-3" />
+                    reviewed
                   </span>
                 )}
               </div>

@@ -267,6 +267,10 @@ export async function getFeedPage(params: {
         heroImageUrl: true,
         submitterId: true,
         submitter: { select: AUTHOR_SELECT },
+        // Empty-string sentinel when there's no viewer — never a real user
+        // id, so the where clause just matches nothing instead of needing a
+        // conditional select shape.
+        volunteerOffers: { where: { userId: viewerId ?? "" }, select: { status: true } },
       },
       orderBy: { createdAt: "desc" },
       take: pageSize,
@@ -380,7 +384,8 @@ export async function getFeedPage(params: {
       // like every other type does) but never the offer prompt — offering
       // to review your own submission isn't a thing (offerToReview rejects
       // it server-side too, see review-server.ts).
-      reviewOfferPrompt: viewerId && item.submitterId === viewerId ? null : "🙋 Open for reviewer volunteers",
+      reviewOfferPrompt: viewerId && item.submitterId === viewerId ? null : "Open for reviewer volunteers",
+      myOfferStatus: item.volunteerOffers[0]?.status ?? null,
     })),
   ].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, ClipboardList, FileText, MessageSquare, PlayCircle, Stethoscope, type LucideIcon } from "lucide-react";
+import { BookOpen, ClipboardList, FileText, Hand, MessageSquare, PlayCircle, Stethoscope, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
@@ -72,6 +72,12 @@ function CardShell({
 export function MySubmissionCard({ item }: { item: MyReviewSubmission }) {
   return (
     <CardShell id={item.id} contentType={item.contentType} title={item.title} categories={item.categories} hasNewActivity={item.hasNewActivity}>
+      {item.pendingOfferCount > 0 && (
+        <Badge variant="warning" className="w-fit gap-1">
+          <Hand className="h-3 w-3" />
+          {item.pendingOfferCount} pending {item.pendingOfferCount === 1 ? "offer" : "offers"} to review
+        </Badge>
+      )}
       <div className="flex items-center gap-2">
         {item.invitees.slice(0, 4).map((invitee, index) => (
           <Avatar key={index} name={invitee.name ?? "Member"} src={invitee.avatarUrl} size="xs" />
@@ -127,8 +133,9 @@ export function SeekingReviewersCard({ item, currentUserId }: { item: SeekingRev
         <span>From {item.submitter.name ?? "a member"}</span>
       </div>
       <div className="mt-auto flex items-center justify-between pt-1">
-        <span className="text-xs text-muted-foreground">
-          🙋 {item.volunteerCount} {item.volunteerCount === 1 ? "member has" : "members have"} offered
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <Hand className="h-3.5 w-3.5" />
+          {item.volunteerCount} {item.volunteerCount === 1 ? "member has" : "members have"} offered
         </span>
         {!isOwn && (
           <ReviewOfferButton itemId={item.id} initialStatus={item.myOfferStatus} />

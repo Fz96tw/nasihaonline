@@ -3,7 +3,7 @@
 // lib/blog.ts's split between plain data shapes (this file) and DB-touching
 // queries (lib/feed-server.ts).
 
-import type { Tier } from "@/lib/generated/prisma/enums";
+import type { ReviewVolunteerStatus, Tier } from "@/lib/generated/prisma/enums";
 
 export type FeedItemType = "event" | "post" | "library" | "forum_thread" | "announcement" | "survey" | "peer_review";
 
@@ -48,8 +48,10 @@ export type FeedItem = {
   libraryViewCount?: number;
   /** Only the welcome-new-member Announcement carries this — the member's tier, rendered as a badge after their name in the title. Null/undefined for every other Announcement and every other type. */
   titleTier?: Tier | null;
-  /** Only "peer_review" items carry this — a short CTA shown as plain text inside the row's single Link (not a nested button, since offering only happens after click-through to the detail page). Null for the item's own submitter viewing their own feed entry; undefined for every other type. */
+  /** Only "peer_review" items carry this — a short CTA label rendered next to an inline ReviewOfferButton, so a member can volunteer straight from the feed row without clicking through. Null for the item's own submitter viewing their own feed entry; undefined for every other type. */
   reviewOfferPrompt?: string | null;
+  /** Only "peer_review" items carry this — the viewer's own volunteer offer status, driving the inline ReviewOfferButton's initial state. Same null/undefined split as reviewOfferPrompt. */
+  myOfferStatus?: ReviewVolunteerStatus | null;
 };
 
 // Marks a feed row's href so the page it lands on (blog post, forum thread,

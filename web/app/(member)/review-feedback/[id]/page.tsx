@@ -19,6 +19,7 @@ import { ManageReviewInvitees } from "@/components/review/manage-review-invitees
 import { ReviewCommentThread } from "@/components/review/review-comment-thread";
 import { VolunteerOffersPanel } from "@/components/review/volunteer-offers-panel";
 import { ReviewLifecycleActions } from "@/components/review/review-lifecycle-actions";
+import { ReviewOfferButton } from "@/components/review/review-offer-button";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
@@ -32,12 +33,14 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 }
 
 /**
- * /review-feedback/[id] — invite-only detail page. This is the enforcement
- * point for the feature's core privacy guarantee: getReviewItemDetail
- * returns null for anyone who isn't the submitter, an invitee, or a
- * moderator/admin, and that null is treated identically to "doesn't exist"
- * (notFound(), not a 403) so a guessed id can't even confirm the item's
- * existence — same convention as the Library/Forums restricted-content gates.
+ * /review-feedback/[id] — detail page. getReviewItemDetail returns null (and
+ * this 404s, not 403s, so a guessed id can't even confirm the item's
+ * existence — same convention as the Library/Forums restricted-content
+ * gates) for anyone who can't see even the preview tier: not the submitter,
+ * an invitee, a moderator/admin, or — for an open call — any other member.
+ * That last case (item.hasFullAccess: false) renders a reduced preview with
+ * an Offer-to-Review CTA instead of the full submission/comment thread,
+ * since the material and discussion stay gated behind an accepted offer.
  */
 export default async function ReviewItemDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser();
@@ -46,6 +49,54 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
   const { id } = await params;
   const item = await getReviewItemDetail(id, user);
   if (!item) notFound();
+
+  if (!item.hasFullAccess) {
+    return (
+      <main className="mx-auto max-w-3xl px-8 py-16">
+        <BackLink fallbackHref="/review-feedback" className="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline" />
+
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          {item.categories.map((category) => (
+            <Badge key={category.slug} variant="info" className="w-fit">
+              {category.name}
+            </Badge>
+          ))}
+          <Badge variant="neutral">{CONTENT_TYPE_LABELS[item.contentType]}</Badge>
+          <Badge variant="neutral">{LEVEL_LABELS[item.level]}</Badge>
+        </div>
+
+        <h1 className="mb-3 text-4xl font-extrabold tracking-tight">{item.title}</h1>
+
+        <div className="mb-8 flex items-center gap-3">
+          <Avatar name={item.submitter.name ?? "Member"} size="sm" />
+          <div className="text-sm text-muted-foreground">
+            <div className="font-medium text-foreground">{item.submitter.name ?? "A member"}</div>
+            <div>{formatDate(item.createdAt)}</div>
+          </div>
+        </div>
+
+        <p className="mb-8 text-base leading-relaxed text-muted-foreground">{item.description}</p>
+
+        <div className="rounded-lg border bg-accent/30 p-6">
+          <p className="mb-4 text-sm text-muted-foreground">
+            {item.submitter.name ?? "This member"} is looking for volunteer reviewers for this submission. Offer to
+            review to get full access to the material and discussion once they accept.
+          </p>
+          <ReviewOfferButton itemId={item.id} initialStatus={item.myOfferStatus} />
+        </div>
+
+        {item.tags.length > 0 && (
+          <div className="mt-8 flex flex-wrap gap-2">
+            {item.tags.map((tag) => (
+              <Badge key={tag.slug} variant="neutral">
+                {tag.name}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </main>
+    );
+  }
 
   const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
   const roster = await getReviewItemRoster(id);

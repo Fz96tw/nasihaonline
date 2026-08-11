@@ -61,12 +61,14 @@ export async function getReviewTags(): Promise<ReviewTagOption[]> {
 }
 
 /**
- * Submitter, an invitee, or a moderator/admin — a ReviewItem has no "public"
- * visibility tier the way KnowledgeItem does (canViewKnowledgeItem,
- * lib/library-server.ts), since Peer Review & Feedback is invite-only by
- * design, not optionally restricted. Every member-facing query below applies
- * this gate itself rather than trusting the caller already checked it, same
- * "every action route re-checks independently" convention as the Library.
+ * Submitter, an invitee, or a moderator/admin — full access to the material
+ * and the comment thread. A ReviewItem has no "public" visibility tier the
+ * way KnowledgeItem does (canViewKnowledgeItem, lib/library-server.ts),
+ * since Peer Review & Feedback is invite-only by design, not optionally
+ * restricted. Every member-facing action (comment, flag, edit) below
+ * applies this gate itself rather than trusting the caller already checked
+ * it, same "every action route re-checks independently" convention as the
+ * Library.
  */
 export function canViewReviewItem(
   item: { submitterId: string; invitees: { userId: string }[] },
@@ -77,6 +79,25 @@ export function canViewReviewItem(
     item.submitterId === actingUser.id ||
     item.invitees.some((invitee) => invitee.userId === actingUser.id) ||
     isPrivileged
+  );
+}
+
+/**
+ * Everyone canViewReviewItem already covers, plus any member for an open
+ * call (seekingReviewers + status: open) — the tier the "What's New" feed
+ * and the "Members Seeking Reviewers" tab already link to publicly.
+ * getReviewItemDetail uses this as its existence gate, then hands back a
+ * reduced object (no attachment/externalUrl/youtubeUrl, no comment thread)
+ * for a caller who only clears this and not canViewReviewItem — so the
+ * detail page renders an "Offer to Review" preview instead of notFound().
+ */
+function canPreviewReviewItem(
+  item: { submitterId: string; invitees: { userId: string }[]; seekingReviewers: boolean; status: ReviewItemStatus },
+  actingUser: UserModel,
+): boolean {
+  return (
+    canViewReviewItem(item, actingUser) ||
+    (item.seekingReviewers && item.status === ReviewItemStatus.open)
   );
 }
 
@@ -542,7 +563,12 @@ const MY_SUBMISSION_SELECT = {
     select: { user: { select: { name: true, profile: { select: { avatarUrl: true } } } } },
     orderBy: { createdAt: "asc" as const },
   },
-  _count: { select: { comments: true } },
+  _count: {
+    select: {
+      comments: true,
+      volunteerOffers: { where: { status: ReviewVolunteerStatus.pending } },
+    },
+  },
   comments: { select: { createdAt: true }, orderBy: { createdAt: "desc" as const }, take: 1 },
   volunteerOffers: { select: { createdAt: true }, orderBy: { createdAt: "desc" as const }, take: 1 },
 };
@@ -582,6 +608,7 @@ export async function getMySubmissions(userId: string): Promise<MyReviewSubmissi
       avatarUrl: getProfileAvatarUrl(user.profile?.avatarUrl ?? null),
     })),
     commentCount: item._count.comments,
+    pendingOfferCount: item._count.volunteerOffers,
     createdAt: item.createdAt.toISOString(),
     hasNewActivity: hasNewActivitySince(viewedAtById.get(item.id) ?? null, item.comments[0], item.volunteerOffers[0]),
   }));
@@ -669,12 +696,19 @@ function buildCommentTree(
 }
 
 /**
- * /review-feedback/[id] detail page's data load — gated by canViewReviewItem,
- * 404s (not 403s) for a viewer who can't see it, same "don't confirm
- * existence to a non-invitee" rationale as the Library/Forums. Upserts the
- * caller's ReviewItemView.viewedAt to now — unlike KnowledgeItemView (insert-once
- * visitor counter), this is a "last seen" timestamp updated on every visit,
- * powering the dashboard's per-card "New" activity indicator.
+ * /review-feedback/[id] detail page's data load — gated by
+ * canPreviewReviewItem, 404s (not 403s) for a viewer who can't see even the
+ * preview, same "don't confirm existence to a non-invitee" rationale as the
+ * Library/Forums. A caller who clears canPreviewReviewItem but not the
+ * stricter canViewReviewItem (i.e. any member browsing an open call they
+ * weren't invited to) gets hasFullAccess: false back — attachment/
+ * externalUrl/youtubeUrl/publishedKnowledgeItemId are nulled out, same
+ * "material stays gated behind an accepted offer" listing-only shape as
+ * getSeekingReviewersFeed — and the page renders an Offer-to-Review preview
+ * instead of the full submission. Upserts the caller's ReviewItemView.viewedAt
+ * to now for a full-access viewer only — unlike KnowledgeItemView (insert-once
+ * visitor counter), this is a "last seen" timestamp powering the dashboard's
+ * per-card "New" activity indicator, which a preview-only browser has no use for.
  */
 export async function getReviewItemDetail(itemId: string, actingUser: UserModel): Promise<ReviewItemDetail | null> {
   const item = await db.reviewItem.findUnique({
@@ -699,16 +733,21 @@ export async function getReviewItemDetail(itemId: string, actingUser: UserModel)
       tags: { select: { tag: { select: { name: true, slug: true } } } },
       attachments: { select: { fileName: true, mimeType: true, objectKey: true }, take: 1 },
       invitees: { select: { userId: true } },
+      volunteerOffers: { where: { userId: actingUser.id }, select: { status: true } },
     },
   });
   if (!item) return null;
-  if (!canViewReviewItem(item, actingUser)) return null;
+  if (!canPreviewReviewItem(item, actingUser)) return null;
 
-  await db.reviewItemView.upsert({
-    where: { reviewItemId_userId: { reviewItemId: itemId, userId: actingUser.id } },
-    create: { reviewItemId: itemId, userId: actingUser.id },
-    update: { viewedAt: new Date() },
-  });
+  const hasFullAccess = canViewReviewItem(item, actingUser);
+
+  if (hasFullAccess) {
+    await db.reviewItemView.upsert({
+      where: { reviewItemId_userId: { reviewItemId: itemId, userId: actingUser.id } },
+      create: { reviewItemId: itemId, userId: actingUser.id },
+      update: { viewedAt: new Date() },
+    });
+  }
 
   return {
     id: item.id,
@@ -722,20 +761,23 @@ export async function getReviewItemDetail(itemId: string, actingUser: UserModel)
     tags: item.tags.map(({ tag }) => tag),
     submitter: item.submitter,
     createdAt: item.createdAt.toISOString(),
-    youtubeUrl: item.youtubeUrl,
+    youtubeUrl: hasFullAccess ? item.youtubeUrl : null,
     heroImageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl),
-    externalUrl: item.externalUrl,
-    attachment: item.attachments[0]
-      ? {
-          fileName: item.attachments[0].fileName,
-          mimeType: item.attachments[0].mimeType,
-          url: getKnowledgeDocumentUrl(item.attachments[0].objectKey),
-        }
-      : null,
+    externalUrl: hasFullAccess ? item.externalUrl : null,
+    attachment:
+      hasFullAccess && item.attachments[0]
+        ? {
+            fileName: item.attachments[0].fileName,
+            mimeType: item.attachments[0].mimeType,
+            url: getKnowledgeDocumentUrl(item.attachments[0].objectKey),
+          }
+        : null,
     deidentificationConfirmed: item.deidentificationConfirmed,
-    publishedKnowledgeItemId: item.publishedKnowledgeItemId,
+    publishedKnowledgeItemId: hasFullAccess ? item.publishedKnowledgeItemId : null,
     isSubmitter: item.submitterId === actingUser.id,
     isInvitee: item.invitees.some((invitee) => invitee.userId === actingUser.id),
+    hasFullAccess,
+    myOfferStatus: item.volunteerOffers[0]?.status ?? null,
   };
 }
 
