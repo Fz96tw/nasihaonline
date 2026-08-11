@@ -2,6 +2,7 @@ import {
   Mic,
   MessageSquare,
   BookOpen,
+  ClipboardCheck,
   PenLine,
   HeartHandshake,
   Stethoscope,
@@ -53,6 +54,13 @@ const EARN_ITEMS: WorkflowItem[] = [
     value: "0.5 hrs",
     detail:
       "Self-reported after the fact. If you name a peer who can vouch for it, they confirm it; otherwise it goes to an admin for review.",
+  },
+  {
+    icon: ClipboardCheck,
+    label: "Peer review feedback",
+    value: "0.5 hrs",
+    detail:
+      "Credited the first time you comment on someone's Peer Review & Feedback submission — replying again on the same item doesn't earn more. Needs the submitter's confirmation before it counts, same as a knowledge discussion.",
   },
   {
     icon: PenLine,

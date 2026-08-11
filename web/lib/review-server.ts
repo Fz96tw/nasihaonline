@@ -10,10 +10,13 @@ import {
 } from "@/lib/storage";
 import {
   NotificationType,
+  ContributionSource,
   KnowledgeContentType,
   KnowledgeLevel,
   KnowledgeStatus,
   KnowledgeVisibility,
+  LedgerStatus,
+  LedgerTransactionType,
   ReviewItemStatus,
   ReviewVolunteerStatus,
   Role,
@@ -737,8 +740,52 @@ export async function postReviewComment(
 
   const author = await db.user.findUnique({ where: { id: authorId }, select: { name: true } });
 
-  const comment = await db.reviewComment.create({
-    data: { reviewItemId: itemId, authorId, body: input.body, parentId: input.parentId },
+  // Knowledge Hours accounting: the *first* comment a real invitee (never
+  // the submitter, never a moderator/admin just passing through) posts on
+  // this item earns them 0.5 Hours, pending the submitter's confirmation
+  // via the existing generic /contributions confirm flow — mirrors the
+  // expert-consultation earn side (resolveMeetingRequest), not the
+  // Library's admin-confirmed pattern, since here there's a natural
+  // counterpart (the submitter). Checked/created inside the same
+  // transaction as the comment itself so the two can never diverge.
+  const isReviewer = item.invitees.some((invitee) => invitee.userId === authorId) && authorId !== item.submitterId;
+
+  const comment = await db.$transaction(async (tx) => {
+    const created = await tx.reviewComment.create({
+      data: { reviewItemId: itemId, authorId, body: input.body, parentId: input.parentId },
+    });
+
+    if (isReviewer) {
+      const priorCommentCount = await tx.reviewComment.count({
+        where: { reviewItemId: itemId, authorId, id: { not: created.id } },
+      });
+      if (priorCommentCount === 0) {
+        const rule = await tx.contributionRule.findUnique({ where: { activityKey: "review_feedback" } });
+        if (rule && rule.active) {
+          const event = await tx.contributionEvent.create({
+            data: {
+              ruleId: rule.id,
+              actorId: authorId,
+              counterpartId: item.submitterId,
+              source: ContributionSource.review_feedback,
+              note: `Peer review feedback: ${item.title}`,
+              reviewCommentId: created.id,
+            },
+          });
+          await tx.contributionLedger.create({
+            data: {
+              userId: authorId,
+              eventId: event.id,
+              type: LedgerTransactionType.earned,
+              status: LedgerStatus.pending,
+              hours: rule.hours,
+            },
+          });
+        }
+      }
+    }
+
+    return created;
   });
 
   const recipientIds = new Set<string>();

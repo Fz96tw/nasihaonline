@@ -495,6 +495,7 @@ enum ContributionSource {
   self_reported
   blog_post
   library_submission
+  review_feedback
 }
 
 // Configurable earn/spend rate card (§4.4) — not hardcoded, so rates can
@@ -555,6 +556,14 @@ model ContributionEvent {
   // produce a single earn transaction, posted at publish time.
   knowledgeItemId String?        @unique
   knowledgeItem   KnowledgeItem? @relation(fields: [knowledgeItemId], references: [id])
+
+  // Set only for source = review_feedback: the reviewer's ReviewComment
+  // that triggered this auto-earn (Peer Review & Feedback Knowledge Hours
+  // accounting) — the specific *first* comment they posted on a given
+  // ReviewItem, not every comment. Same one-to-one audit-trail pattern as
+  // postId/knowledgeItemId above.
+  reviewCommentId String?        @unique
+  reviewComment   ReviewComment? @relation(fields: [reviewCommentId], references: [id])
 
   ledgerEntries ContributionLedger[]
 
@@ -1530,6 +1539,11 @@ model ReviewComment {
   removed    Boolean   @default(false)
   editedAt   DateTime?
   createdAt  DateTime  @default(now())
+
+  // The other direction of ContributionEvent.reviewCommentId — set only
+  // when this was the author's *first* comment on the item (Knowledge
+  // Hours accounting).
+  contributionEvent ContributionEvent?
 
   @@index([reviewItemId])
   @@index([authorId])
