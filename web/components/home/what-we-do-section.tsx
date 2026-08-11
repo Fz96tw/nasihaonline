@@ -10,18 +10,30 @@ const ACTIVITIES = [
     title: "Research & Curation",
     body: "Curating and sharing trusted resources across every field.",
     href: "/about/research-curation",
+    links: [
+      { label: "Browse the Library", href: "/library" },
+      { label: "See Research Discussions", href: "/forums" },
+    ],
   },
   {
     image: "/images/feedback.jpg",
     title: "Peer Review & Feedback",
     body: "Constructive, evidence-based feedback across disciplines.",
     href: "/about/peer-review-feedback",
+    links: [
+      { label: "Browse the Forums", href: "/forums" },
+      { label: "Find an Expert", href: "/members" },
+    ],
   },
   {
     image: "/images/teach.jpg",
     title: "Teaching & Sharing",
     body: "Sharing expertise through lectures, webinars, and discussions.",
     href: "/about/teaching-sharing",
+    links: [
+      { label: "Upcoming Events", href: "/events" },
+      { label: "Read the Blog", href: "/blog" },
+    ],
   },
 ];
 
@@ -36,26 +48,36 @@ export function WhatWeDoSection() {
           <h2 className="text-3xl font-extrabold tracking-[-.02em] md:text-4xl">What We Do</h2>
         </Reveal>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-          {ACTIVITIES.map(({ image, title, body, href }, index) => (
+          {ACTIVITIES.map(({ image, title, body, href, links }, index) => (
             <Reveal key={title} index={index} hover className="h-full">
-              <Link
-                href={href}
-                className="flex h-full flex-col overflow-hidden rounded-xl border bg-card text-center shadow-sm"
-              >
-                <div className="relative h-40 w-full shrink-0">
+              <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-card text-center shadow-sm">
+                <Link href={href} className="relative block h-40 w-full shrink-0">
                   <Image src={image} alt="" fill className="object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
                   <p className="absolute inset-x-0 bottom-3 px-4 text-2xl font-bold text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)]">
                     {title}
                   </p>
-                </div>
+                </Link>
                 <div className="flex flex-1 flex-col p-6 pt-4">
-                  <p className="mb-4 flex-1 text-lg leading-[1.7] text-muted-foreground">{body}</p>
-                  <span className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mx-auto")}>
-                    Learn More
-                  </span>
+                  <Link href={href} className="mb-4 flex-1">
+                    <p className="text-lg leading-[1.7] text-muted-foreground">{body}</p>
+                    <span className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
+                      Learn more <span aria-hidden="true">&rarr;</span>
+                    </span>
+                  </Link>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {links.map((link) => (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                      >
+                        {link.label}
+                      </Link>
+                    ))}
+                  </div>
                 </div>
-              </Link>
+              </div>
             </Reveal>
           ))}
         </div>
