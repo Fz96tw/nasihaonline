@@ -5,11 +5,11 @@ import { getReviewCategories, getReviewTags } from "@/lib/review-server";
 import { SubmitReviewItemForm } from "@/components/review/submit-review-item-form";
 
 export const metadata: Metadata = {
-  title: "Submit an Item — Peer Review & Feedback — NASIHA",
+  title: "Submit Item for Peer Review — NASIHA",
 };
 
 /**
- * /review-feedback/new — "Submit an Item" for peer review. Member-auth
+ * /review-feedback/new — "Submit Item for Peer Review". Member-auth
  * only, no tier gate (same as Library's Submit Resource page).
  */
 export default async function NewReviewItemPage() {
@@ -21,7 +21,7 @@ export default async function NewReviewItemPage() {
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-8 p-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Submit an Item</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Submit Item for Peer Review</h1>
         <p className="text-muted-foreground">
           Share your work with a hand-picked group of reviewers, or open a call for community volunteers.
         </p>

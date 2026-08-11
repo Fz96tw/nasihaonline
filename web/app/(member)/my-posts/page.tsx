@@ -17,7 +17,7 @@ import { MySubmissionsTable } from "@/components/library/my-submissions-table";
 import { MyPostsTabs } from "@/components/my-posts/my-posts-tabs";
 
 export const metadata: Metadata = {
-  title: "All My Posts — NASIHA",
+  title: "All My Activity — NASIHA",
 };
 
 type BadgeVariant = "neutral" | "success" | "warning" | "danger" | "info";
@@ -195,7 +195,7 @@ export default async function MyPostsPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Dashboard
         </Link>
-        <h1 className="text-3xl font-bold tracking-tight">All My Posts</h1>
+        <h1 className="text-3xl font-bold tracking-tight">All My Activity</h1>
         <p className="text-muted-foreground">
           Everything you&apos;ve created — blog posts, Library submissions, hosted events, forum threads, and 1-1
           meetings.
