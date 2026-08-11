@@ -85,6 +85,9 @@ export async function sendWelcomeEmail(
     return { ok: false, error };
   }
 
+  const safeFirstName = escapeHtml(firstName);
+  const safeTierLabel = escapeHtml(TIER_LABELS[tier]);
+
   try {
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
@@ -92,6 +95,16 @@ export async function sendWelcomeEmail(
       bcc: "nasihaforyou@gmail.com",
       subject: "Welcome to NASIHA!",
       text: `Hi ${firstName},\n\nYour NASIHA membership application has been approved, and you've been welcomed as a(n) ${TIER_LABELS[tier]}. Set up your account and log in here:\n\n${inviteUrl}\n\nIf you've received this email more than once, only the link in the most recent one still works — earlier links are no longer valid.\n\n— The NASIHA Team`,
+      html: `<div>
+        <p>Hi ${safeFirstName},</p>
+        <p>Your NASIHA membership application has been approved, and you've been welcomed as a(n) ${safeTierLabel}.</p>
+        <p>
+          <a href="${inviteUrl}" style="display:inline-block;padding:12px 24px;background-color:#1d4ed8;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600">Set up your account</a>
+        </p>
+        <p>If the button doesn't work, copy and paste this link into your browser:<br><a href="${inviteUrl}">${inviteUrl}</a></p>
+        <p>If you've received this email more than once, only the link in the most recent one still works — earlier links are no longer valid.</p>
+        <p>— The NASIHA Team</p>
+      </div>`,
     });
     if (error) {
       console.error("[email] Failed to send welcome email", error);
