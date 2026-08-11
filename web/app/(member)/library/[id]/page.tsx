@@ -132,6 +132,7 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
           </Button>
         )}
         {item.status === KnowledgeStatus.published && <LibraryFlagButton itemId={item.id} initialFlagged={false} />}
+        {!item.forumThreadId && <LibraryDiscussionLink itemId={item.id} initialThreadId={item.forumThreadId} />}
       </div>
 
       {roster ? (
@@ -153,12 +154,6 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
           </div>
         )
       ) : null}
-
-      {!item.forumThreadId && (
-        <div className="mt-8">
-          <LibraryDiscussionLink itemId={item.id} initialThreadId={item.forumThreadId} />
-        </div>
-      )}
 
       {item.tags.length > 0 && (
         <div className="mt-8 flex flex-wrap gap-2">

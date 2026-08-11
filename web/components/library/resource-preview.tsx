@@ -6,6 +6,17 @@ import { Button } from "@/components/ui/button";
 import { KnowledgeContentType } from "@/lib/generated/prisma/enums";
 import { youtubeEmbedUrl } from "@/lib/youtube";
 
+/** Best-effort "name.ext"-style label for an external link's last path segment, falling back to its hostname (bare domain) or the raw URL (malformed). */
+function displayNameForUrl(url: string): string {
+  try {
+    const { pathname, hostname } = new URL(url);
+    const lastSegment = pathname.split("/").filter(Boolean).at(-1);
+    return lastSegment ? decodeURIComponent(lastSegment) : hostname;
+  } catch {
+    return url;
+  }
+}
+
 /**
  * Renders a PDF attachment page-by-page onto a canvas via pdfjs-dist (per
  * system-design.md — not the browser's built-in PDF viewer). Non-PDF
@@ -104,10 +115,14 @@ function PdfPreview({ url, fileName }: { url: string; fileName: string }) {
     return (
       <div className="flex flex-col items-center gap-3 py-10 text-center">
         <p className="text-sm text-muted-foreground">This file type can&apos;t be previewed here.</p>
+        <div className="w-full max-w-xs">
+          <p className="break-words text-sm font-medium">{fileName}</p>
+          <p className="break-all text-xs text-muted-foreground">{url}</p>
+        </div>
         <Button asChild variant="outline" size="sm">
           <a href={url} target="_blank" rel="noreferrer" download={fileName}>
             <Download className="mr-2 h-4 w-4" />
-            Download {fileName}
+            Download
           </a>
         </Button>
       </div>
@@ -213,8 +228,11 @@ export function ResourcePreview({
   if (externalUrl) {
     return (
       <div className="flex flex-col items-center gap-3 py-10 text-center">
-        <ExternalLink className="h-6 w-6 text-muted-foreground" />
         <p className="text-sm text-muted-foreground">This resource is hosted externally.</p>
+        <div className="w-full max-w-xs">
+          <p className="break-words text-sm font-medium">{displayNameForUrl(externalUrl)}</p>
+          <p className="break-all text-xs text-muted-foreground">{externalUrl}</p>
+        </div>
         <Button asChild variant="outline" size="sm">
           <a href={externalUrl} target="_blank" rel="noreferrer">
             <ExternalLink className="mr-2 h-4 w-4" />
