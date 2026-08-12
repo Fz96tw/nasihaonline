@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/form";
 import { KnowledgeContentType, KnowledgeLevel } from "@/lib/generated/prisma/enums";
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS, type ReviewCategoryOption, type ReviewItemForEdit, type ReviewTagOption } from "@/lib/review";
-import { createReviewItemSchema, type CreateReviewItemValues } from "@/lib/validation/review";
+import { createReviewItemSchema, editReviewItemFormSchema, type CreateReviewItemValues } from "@/lib/validation/review";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { InviteePicker } from "@/components/members/invitee-picker";
 
@@ -67,12 +67,13 @@ export function SubmitReviewItemForm({
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [sourceMode, setSourceMode] = useState<"file" | "link">(existingItem?.externalUrl ? "link" : "file");
   const [heroImage, setHeroImage] = useState<File | null>(null);
 
   const form = useForm<CreateReviewItemValues>({
-    resolver: zodResolver(createReviewItemSchema),
+    resolver: zodResolver(existingItem ? editReviewItemFormSchema : createReviewItemSchema),
     defaultValues: existingItem
       ? {
           title: existingItem.title,
@@ -103,6 +104,7 @@ export function SubmitReviewItemForm({
   async function onSubmit(values: CreateReviewItemValues) {
     setSubmitting(true);
     setError(null);
+    setSaved(false);
     try {
       const csrfToken = await getCsrfToken();
       const formData = new FormData();
@@ -140,8 +142,13 @@ export function SubmitReviewItemForm({
               : "Something went wrong. Please try again.",
         );
       }
-      router.push(existingItem ? `/review-feedback/${existingItem.id}` : "/review-feedback");
-      router.refresh();
+      if (existingItem) {
+        setSaved(true);
+        router.refresh();
+      } else {
+        router.push("/review-feedback");
+        router.refresh();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
@@ -489,6 +496,11 @@ export function SubmitReviewItemForm({
         )}
 
         {error && <p className="text-sm text-destructive">{error}</p>}
+        {saved && !error && (
+          <p className="text-sm text-success" role="status">
+            Changes saved.
+          </p>
+        )}
 
         <div>
           <Button type="submit" disabled={submitting}>

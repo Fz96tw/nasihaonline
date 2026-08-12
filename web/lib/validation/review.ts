@@ -69,15 +69,24 @@ function requireAudienceInvariants(
   }
 }
 
+const reviewItemFormSchema = reviewItemBaseSchema.extend({
+  audienceMode: z.enum(["invite", "volunteers"]),
+  invitedUserIds: z.array(z.string()),
+  volunteerNote: z.string().trim().max(500).nullable(),
+});
+
 /** POST /api/review-feedback body shape — shared with the client form (zodResolver). */
-export const createReviewItemSchema = withContentTypeRefinements(
-  reviewItemBaseSchema.extend({
-    audienceMode: z.enum(["invite", "volunteers"]),
-    invitedUserIds: z.array(z.string()),
-    volunteerNote: z.string().trim().max(500).nullable(),
-  }),
-).superRefine(requireAudienceInvariants);
+export const createReviewItemSchema = withContentTypeRefinements(reviewItemFormSchema).superRefine(requireAudienceInvariants);
 export type CreateReviewItemValues = z.infer<typeof createReviewItemSchema>;
+
+/**
+ * Client form resolver for edit mode — same field shape as CreateReviewItemValues
+ * (SubmitReviewItemForm shares one form-state type between create and edit), but
+ * skips requireAudienceInvariants: the audience fields aren't editable from this
+ * form (see the "invite"/[] hardcoding in submit-review-item-form.tsx), so
+ * enforcing that invariant here would make every edit submission fail validation.
+ */
+export const editReviewItemFormSchema = withContentTypeRefinements(reviewItemFormSchema);
 
 /** PATCH /api/review-feedback/:id body shape (editing a submission). */
 export const updateReviewItemSchema = withContentTypeRefinements(reviewItemBaseSchema);
