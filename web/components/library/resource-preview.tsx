@@ -35,12 +35,123 @@ function displayNameForUrl(url: string): string {
   }
 }
 
+/** Shared "download the original file" CTA — used below a successful inline preview and inside the can't-preview fallback alike. */
+function DownloadButton({ url, fileName }: { url: string; fileName: string }) {
+  return (
+    <Button asChild variant="outline" size="sm">
+      <a href={url} target="_blank" rel="noreferrer" download={fileName}>
+        <Download className="mr-2 h-4 w-4" />
+        Download
+      </a>
+    </Button>
+  );
+}
+
+/** Shared "this file type can't be previewed here" fallback for PdfPreview/TextPreview's error state. */
+function UnsupportedFilePreview({ url, fileName }: { url: string; fileName: string }) {
+  return (
+    <div className="flex flex-col items-center gap-3 py-10 text-center">
+      <p className="text-sm text-muted-foreground">This file type can&apos;t be previewed here.</p>
+      <div className="w-full max-w-xs">
+        <p className="break-words text-sm font-medium">{fileName}</p>
+        <p className="break-all text-xs text-muted-foreground">{url}</p>
+      </div>
+      <DownloadButton url={url} fileName={fileName} />
+    </div>
+  );
+}
+
+/** True for a .txt upload — plain text is rendered inline via TextPreview rather than attempted through PDF.js. */
+function isPlainTextFile(mimeType: string, fileName: string): boolean {
+  return mimeType.startsWith("text/") || fileName.toLowerCase().endsWith(".txt");
+}
+
+/** True for an image upload (e.g. a scanned page) — rendered inline via ImagePreview rather than attempted through PDF.js. */
+function isImageFile(mimeType: string, fileName: string): boolean {
+  return mimeType.startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp|svg)$/i.test(fileName);
+}
+
+/** Renders an image attachment inline via the browser's native decoder, with a Download button below — same shape as TextPreview. */
+function ImagePreview({ url, fileName }: { url: string; fileName: string }) {
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+
+  if (status === "error") {
+    return <UnsupportedFilePreview url={url} fileName={fileName} />;
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <div className="flex max-h-[70vh] w-full items-center justify-center overflow-auto rounded-md border bg-muted/30">
+        {status === "loading" && (
+          <div className="flex h-80 items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        )}
+        {/* eslint-disable-next-line @next/next/no-img-element -- proxied same-origin binary, not a Next/Image-optimizable remote asset */}
+        <img
+          src={url}
+          alt={fileName}
+          className={`max-h-[70vh] max-w-full object-contain ${status === "loading" ? "hidden" : ""}`}
+          onLoad={() => setStatus("ready")}
+          onError={() => setStatus("error")}
+        />
+      </div>
+      {status === "ready" && <DownloadButton url={url} fileName={fileName} />}
+    </div>
+  );
+}
+
+/** Fetches a plain-text attachment and renders its contents inline, with a Download button below — same shape as PdfPreview's ready state. */
+function TextPreview({ url, fileName }: { url: string; fileName: string }) {
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [content, setContent] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("fetch failed");
+        const text = await response.text();
+        if (cancelled) return;
+        setContent(text);
+        setStatus("ready");
+      } catch {
+        if (!cancelled) setStatus("error");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  if (status === "error") {
+    return <UnsupportedFilePreview url={url} fileName={fileName} />;
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <div className="max-h-[70vh] w-full overflow-auto rounded-md border bg-muted/30 p-4">
+        {status === "loading" ? (
+          <div className="flex h-80 items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <pre className="whitespace-pre-wrap break-words text-sm">{content}</pre>
+        )}
+      </div>
+      {status === "ready" && <DownloadButton url={url} fileName={fileName} />}
+    </div>
+  );
+}
+
 /**
  * Renders a PDF attachment page-by-page onto a canvas via pdfjs-dist (per
  * system-design.md — not the browser's built-in PDF viewer). Non-PDF
- * document types (doc/docx/ppt/txt/scanned images — uploadKnowledgeDocument
- * accepts anything that isn't video) fall back to a download link, since
- * PDF.js only renders PDFs.
+ * document types (doc/docx/ppt — uploadKnowledgeDocument accepts anything
+ * that isn't video) fall back to a download link, since PDF.js only renders
+ * PDFs. Plain text (.txt) and images are routed to TextPreview/ImagePreview
+ * instead of landing here, per ResourcePreview's attachment dispatch below.
  */
 function PdfPreview({ url, fileName }: { url: string; fileName: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -130,21 +241,7 @@ function PdfPreview({ url, fileName }: { url: string; fileName: string }) {
   }, [status, pageNum, containerWidth]);
 
   if (status === "error") {
-    return (
-      <div className="flex flex-col items-center gap-3 py-10 text-center">
-        <p className="text-sm text-muted-foreground">This file type can&apos;t be previewed here.</p>
-        <div className="w-full max-w-xs">
-          <p className="break-words text-sm font-medium">{fileName}</p>
-          <p className="break-all text-xs text-muted-foreground">{url}</p>
-        </div>
-        <Button asChild variant="outline" size="sm">
-          <a href={url} target="_blank" rel="noreferrer" download={fileName}>
-            <Download className="mr-2 h-4 w-4" />
-            Download
-          </a>
-        </Button>
-      </div>
-    );
+    return <UnsupportedFilePreview url={url} fileName={fileName} />;
   }
 
   return (
@@ -185,14 +282,7 @@ function PdfPreview({ url, fileName }: { url: string; fileName: string }) {
           </Button>
         </div>
       )}
-      {status === "ready" && (
-        <Button asChild variant="outline" size="sm">
-          <a href={url} target="_blank" rel="noreferrer" download={fileName}>
-            <Download className="mr-2 h-4 w-4" />
-            Download
-          </a>
-        </Button>
-      )}
+      {status === "ready" && <DownloadButton url={url} fileName={fileName} />}
     </div>
   );
 }
@@ -260,6 +350,12 @@ export function ResourcePreview({
   }
 
   if (attachment) {
+    if (isImageFile(attachment.mimeType, attachment.fileName)) {
+      return <ImagePreview url={attachment.url} fileName={attachment.fileName} />;
+    }
+    if (isPlainTextFile(attachment.mimeType, attachment.fileName)) {
+      return <TextPreview url={attachment.url} fileName={attachment.fileName} />;
+    }
     return <PdfPreview url={attachment.url} fileName={attachment.fileName} />;
   }
 
