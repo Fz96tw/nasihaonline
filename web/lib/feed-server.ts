@@ -198,7 +198,11 @@ export async function getFeedPage(params: {
       where: {
         eventId: null,
         knowledgeItemId: null,
-        ...(before ? { createdAt: { lt: before } } : {}),
+        // lastActivityAt (bumped by every new reply, see createForumPost) is
+        // the sort/cursor field here rather than createdAt, so a thread with
+        // fresh activity resurfaces near the top instead of only ever
+        // appearing once at its original creation time.
+        ...(before ? { lastActivityAt: { lt: before } } : {}),
         OR: [
           { visibility: ForumThreadVisibility.community },
           ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
@@ -208,13 +212,14 @@ export async function getFeedPage(params: {
         id: true,
         title: true,
         createdAt: true,
+        lastActivityAt: true,
         author: { select: AUTHOR_SELECT },
         forum: { select: { name: true, slug: true } },
         // posts includes the thread's own opening post, so replyCount below
         // subtracts one — same convention as toThreadListItem in forums-server.ts.
         _count: { select: { posts: true, views: true } },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { lastActivityAt: "desc" },
       take: pageSize,
     }),
     !wants("announcement") ? Promise.resolve([]) : db.announcement.findMany({
@@ -338,9 +343,15 @@ export async function getFeedPage(params: {
       type: "forum_thread",
       id: thread.id,
       title: thread.title,
-      excerpt: `New thread in ${thread.forum.name}`,
+      // A thread bumped up by a fresh reply (lastActivityAt > createdAt)
+      // reads as "New activity" rather than "New thread" — it isn't new,
+      // it's resurfacing.
+      excerpt:
+        thread.lastActivityAt.getTime() > thread.createdAt.getTime()
+          ? `New activity in ${thread.forum.name}`
+          : `New thread in ${thread.forum.name}`,
       href: withFeedRef(`/forums/${thread.forum.slug}/${thread.id}`),
-      timestamp: thread.createdAt.toISOString(),
+      timestamp: thread.lastActivityAt.toISOString(),
       author: authorOf(thread.author),
       // Forum threads have no per-thread hero image (no upload UI, no
       // schema column) — every thread shows the same static default so the

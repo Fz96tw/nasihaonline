@@ -1700,6 +1700,11 @@ model ForumThread {
   visibility ForumThreadVisibility @default(community)
   createdAt  DateTime              @default(now())
   updatedAt  DateTime              @updatedAt
+  // Bumped to the latest reply's createdAt (or left at createdAt if the
+  // thread has no replies yet) by createForumPost — drives the What's New
+  // feed's forum_thread sort so a thread with fresh activity resurfaces
+  // instead of only ever appearing once at its original creation time.
+  lastActivityAt DateTime @default(now())
 
   posts    ForumPost[]
   views    ThreadView[]

@@ -778,6 +778,10 @@ export async function createForumPost(
       deidentificationConfirmed: isClinicalDiscussions && input.deidentificationConfirmed,
     },
   });
+  // Bump the thread's What's New feed position (lib/feed-server.ts's
+  // forum_thread branch sorts on this) so fresh replies resurface it
+  // instead of it only ever appearing once at its original creation time.
+  await db.forumThread.update({ where: { id: threadId }, data: { lastActivityAt: post.createdAt } });
 
   const participants = await db.forumPost.findMany({
     where: { threadId, authorId: { not: authorId } },
