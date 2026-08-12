@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
+  BookOpen,
   CalendarPlus,
   ChevronDown,
   ClipboardCheck,
@@ -17,10 +18,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { LucideIcon } from "lucide-react";
 
 const ACTIONS: { label: string; href: string; icon: LucideIcon }[] = [
-  { label: "Write a blog", href: "/blog/new", icon: PenLine },
+  { label: "Write a blog", href: "/blog", icon: PenLine },
   { label: "Start a discussion", href: "/forums", icon: MessageSquare },
-  { label: "Request a peer review", href: "/review-feedback/new", icon: ClipboardCheck },
-  { label: "Schedule an event", href: "/calendar/new", icon: CalendarPlus },
+  { label: "Request a peer review", href: "/review-feedback", icon: ClipboardCheck },
+  { label: "Contribute to Knowledge Library", href: "/library/new", icon: BookOpen },
+  { label: "Schedule an event", href: "/calendar", icon: CalendarPlus },
   { label: "Search member directory", href: "/members", icon: Search },
   { label: "Schedule 1-1 meeting", href: "/inbox", icon: Users },
   { label: "Send a direct message", href: "/inbox", icon: Send },
