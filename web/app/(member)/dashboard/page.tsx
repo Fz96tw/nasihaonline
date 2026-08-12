@@ -90,7 +90,7 @@ export default async function DashboardPage() {
       <StatsRow userId={user.id} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <StaggeredIn index={1} className="order-1 lg:order-none lg:col-start-2 lg:row-start-1">
+        <StaggeredIn index={1} className="order-1 lg:order-none lg:col-start-2 lg:row-start-1 lg:self-start">
           <QuickActionsWidget />
         </StaggeredIn>
         <StaggeredIn
@@ -101,7 +101,7 @@ export default async function DashboardPage() {
             <ScheduleWidget userId={user.id} />
           </Suspense>
         </StaggeredIn>
-        <StaggeredIn index={2} className="order-3 lg:order-none lg:col-start-2 lg:row-start-2">
+        <StaggeredIn index={2} className="order-3 lg:order-none lg:col-start-2 lg:row-start-2 lg:self-start">
           <Suspense fallback={<WidgetSkeleton />}>
             <InboxWidget userId={user.id} />
           </Suspense>
