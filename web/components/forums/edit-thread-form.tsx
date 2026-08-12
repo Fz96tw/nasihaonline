@@ -75,7 +75,15 @@ export function EditThreadForm({
               : "Something went wrong. Please try again.",
         );
       }
-      router.push(`/forums/${forumSlug}/${threadId}`);
+      // Pop this edit page off history (rather than pushing/replacing a new
+      // entry) so BackLink's router.back() on the thread page can't land
+      // back on it. Falls back to replace() if there's no history to pop
+      // (e.g. the edit URL was opened directly).
+      if (typeof window !== "undefined" && window.history.length > 1) {
+        router.back();
+      } else {
+        router.replace(`/forums/${forumSlug}/${threadId}`);
+      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
