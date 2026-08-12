@@ -458,21 +458,21 @@ export function SubmitReviewItemForm({
           <label htmlFor="review-hero-image" className="text-sm font-medium">
             Hero image (optional)
           </label>
-          {existingItem?.heroImageUrl ? (
+          {existingItem?.heroImageUrl && !heroImage && (
             // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Library's same rationale
             <img src={existingItem.heroImageUrl} alt="Current hero image" className="h-32 w-full max-w-xs rounded-md object-cover" />
-          ) : (
-            !existingItem && (
-              <input
-                id="review-hero-image"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                onChange={(e) => setHeroImage(e.target.files?.[0] ?? null)}
-                className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
-              />
-            )
           )}
-          {isRecordedLecture && !existingItem && (
+          <input
+            id="review-hero-image"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(e) => setHeroImage(e.target.files?.[0] ?? null)}
+            className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
+          />
+          {existingItem?.heroImageUrl && (
+            <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
+          )}
+          {isRecordedLecture && (
             <p className="text-xs text-muted-foreground">Leave blank to use the video&apos;s YouTube thumbnail (default).</p>
           )}
         </div>

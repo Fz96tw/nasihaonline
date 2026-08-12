@@ -5,10 +5,10 @@ import { updateReviewItemSchema } from "@/lib/validation/review";
 
 /**
  * PATCH /api/review-feedback/:id — editing a submission (title/description/
- * type/level/categories/tags/urls/de-id flag, plus the file/link source).
- * Submitter-only (enforced in updateReviewItem). Multipart rather than JSON,
- * same reason as POST /api/review-feedback: an optional replacement file
- * travels alongside the text fields in one request.
+ * type/level/categories/tags/urls/de-id flag, plus the file/link source and
+ * hero image). Submitter-only (enforced in updateReviewItem). Multipart
+ * rather than JSON, same reason as POST /api/review-feedback: an optional
+ * replacement file travels alongside the text fields in one request.
  */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   let user;
@@ -38,9 +38,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const fileField = formData.get("file");
   const file = fileField instanceof File && fileField.size > 0 ? fileField : null;
+  const heroImageField = formData.get("heroImage");
+  const heroImage = heroImageField instanceof File && heroImageField.size > 0 ? heroImageField : null;
 
   try {
-    const item = await updateReviewItem(id, user, { ...parsed.data, file });
+    const item = await updateReviewItem(id, user, { ...parsed.data, file, heroImage });
     return NextResponse.json(item);
   } catch (error) {
     if (error instanceof ReviewItemError) {

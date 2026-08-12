@@ -6,6 +6,7 @@ import {
   getKnowledgeDocumentUrl,
   uploadKnowledgeItemHeroImage,
   getKnowledgeItemHeroImageUrl,
+  deleteKnowledgeItemHeroImage,
   getProfileAvatarUrl,
   UploadValidationError,
 } from "@/lib/storage";
@@ -323,12 +324,14 @@ export async function updateReviewItem(
     externalUrl: string | null;
     deidentificationConfirmed: boolean;
     file: File | null;
+    heroImage: File | null;
   },
 ): Promise<{ id: string }> {
   const item = await db.reviewItem.findUnique({
     where: { id: itemId },
     select: {
       submitterId: true,
+      heroImageUrl: true,
       attachments: { select: { id: true, objectKey: true }, take: 1 },
     },
   });
@@ -369,6 +372,20 @@ export async function updateReviewItem(
     }
   }
 
+  // Same "upload the replacement, then delete the old object afterward"
+  // shape as updateKnowledgeItem's heroImageUrl handling — a new upload
+  // replaces whatever's there; no new file provided keeps the existing one
+  // as-is (there's no separate "remove image" action).
+  let heroImageUrl = item.heroImageUrl;
+  if (input.heroImage) {
+    try {
+      heroImageUrl = await uploadKnowledgeItemHeroImage(input.heroImage);
+    } catch (error) {
+      if (error instanceof UploadValidationError) throw new ReviewItemError(400, error.message);
+      throw error;
+    }
+  }
+
   // Drop the old attachment when it's being replaced by a new file, when
   // contentType moved to recorded_lecture (which stores youtubeUrl instead),
   // or when the edit switches from a file to an external link.
@@ -390,6 +407,7 @@ export async function updateReviewItem(
         contentType: input.contentType,
         level: input.level,
         youtubeUrl: isRecordedLecture ? input.youtubeUrl : null,
+        heroImageUrl,
         externalUrl: isRecordedLecture ? null : input.externalUrl,
         deidentificationConfirmed: input.deidentificationConfirmed,
         categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
@@ -398,6 +416,10 @@ export async function updateReviewItem(
       },
     });
   });
+
+  if (input.heroImage && item.heroImageUrl) {
+    await deleteKnowledgeItemHeroImage(item.heroImageUrl);
+  }
 
   if (dropsExistingAttachment) {
     await deleteKnowledgeDocument(existingAttachment!.objectKey);
