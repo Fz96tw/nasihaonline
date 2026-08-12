@@ -167,7 +167,7 @@ function CommentNode({
         <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-2">
             <Link href={`/members/${comment.authorId}`} aria-label={`View ${authorName}'s profile`} className="flex items-center gap-1.5">
-              <Avatar name={authorName} size="xs" />
+              <Avatar name={authorName} src={comment.avatarUrl} size="xs" />
               <span className="font-medium text-foreground hover:underline">{authorName}</span>
             </Link>
             {comment.removed && <Badge variant="neutral">Removed</Badge>}

@@ -68,7 +68,7 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
         <h1 className="mb-3 text-4xl font-extrabold tracking-tight">{item.title}</h1>
 
         <div className="mb-8 flex items-center gap-3">
-          <Avatar name={item.submitter.name ?? "Member"} size="sm" />
+          <Avatar name={item.submitter.name ?? "Member"} src={item.submitter.avatarUrl} size="sm" />
           <div className="text-sm text-muted-foreground">
             <div className="font-medium text-foreground">{item.submitter.name ?? "A member"}</div>
             <div>{formatDate(item.createdAt)}</div>
@@ -130,7 +130,7 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
       <h1 className="mb-3 text-4xl font-extrabold tracking-tight">{item.title}</h1>
 
       <div className="mb-8 flex items-center gap-3">
-        <Avatar name={item.submitter.name ?? "Member"} size="sm" />
+        <Avatar name={item.submitter.name ?? "Member"} src={item.submitter.avatarUrl} size="sm" />
         <div className="text-sm text-muted-foreground">
           <div className="font-medium text-foreground">{item.submitter.name ?? "A member"}</div>
           <div>{formatDate(item.createdAt)}</div>

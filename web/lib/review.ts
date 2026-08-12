@@ -110,7 +110,7 @@ export type ReviewItemDetail = {
   seekingReviewers: boolean;
   categories: { name: string; slug: string }[];
   tags: { name: string; slug: string }[];
-  submitter: { id: string; name: string | null };
+  submitter: { id: string; name: string | null; avatarUrl: string | null };
   createdAt: string;
   youtubeUrl: string | null;
   heroImageUrl: string | null;
@@ -151,6 +151,7 @@ export type ReviewCommentNode = {
   body: string;
   authorId: string;
   authorName: string | null;
+  avatarUrl: string | null;
   createdAt: string;
   editedAt: string | null;
   flagged: boolean;

@@ -682,7 +682,7 @@ function buildCommentTree(
     id: string;
     body: string;
     authorId: string;
-    author: { name: string | null };
+    author: { name: string | null; profile: { avatarUrl: string | null } | null };
     parentId: string | null;
     createdAt: Date;
     editedAt: Date | null;
@@ -698,6 +698,7 @@ function buildCommentTree(
         body: comment.removed ? "[Removed by a moderator]" : comment.body,
         authorId: comment.authorId,
         authorName: comment.author.name,
+        avatarUrl: getProfileAvatarUrl(comment.author.profile?.avatarUrl ?? null),
         createdAt: comment.createdAt.toISOString(),
         editedAt: comment.editedAt?.toISOString() ?? null,
         flagged: comment.flagged,
@@ -744,7 +745,7 @@ export async function getReviewItemDetail(itemId: string, actingUser: UserModel)
       status: true,
       seekingReviewers: true,
       submitterId: true,
-      submitter: { select: { id: true, name: true } },
+      submitter: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } },
       createdAt: true,
       youtubeUrl: true,
       heroImageUrl: true,
@@ -782,7 +783,11 @@ export async function getReviewItemDetail(itemId: string, actingUser: UserModel)
     seekingReviewers: item.seekingReviewers,
     categories: item.categories.map(({ category }) => category),
     tags: item.tags.map(({ tag }) => tag),
-    submitter: item.submitter,
+    submitter: {
+      id: item.submitter.id,
+      name: item.submitter.name,
+      avatarUrl: getProfileAvatarUrl(item.submitter.profile?.avatarUrl ?? null),
+    },
     createdAt: item.createdAt.toISOString(),
     youtubeUrl: hasFullAccess ? item.youtubeUrl : null,
     heroImageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl),
@@ -953,7 +958,7 @@ export async function getReviewComments(itemId: string): Promise<ReviewCommentNo
       id: true,
       body: true,
       authorId: true,
-      author: { select: { name: true } },
+      author: { select: { name: true, profile: { select: { avatarUrl: true } } } },
       parentId: true,
       createdAt: true,
       editedAt: true,
