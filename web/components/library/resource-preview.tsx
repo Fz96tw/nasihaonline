@@ -6,6 +6,24 @@ import { Button } from "@/components/ui/button";
 import { KnowledgeContentType } from "@/lib/generated/prisma/enums";
 import { youtubeEmbedUrl } from "@/lib/youtube";
 
+/** Friendly label for docs.google.com/drive.google.com links, whose path is a cryptic file ID rather than a filename. Returns null for non-Google URLs. */
+function googleWorkspaceLabel(url: string): string | null {
+  try {
+    const { hostname, pathname } = new URL(url);
+    if (hostname === "docs.google.com") {
+      if (pathname.startsWith("/document")) return "Google Doc";
+      if (pathname.startsWith("/spreadsheets")) return "Google Sheet";
+      if (pathname.startsWith("/presentation")) return "Google Slides";
+      if (pathname.startsWith("/forms")) return "Google Form";
+      return "Google Docs file";
+    }
+    if (hostname === "drive.google.com") return "Google Drive file";
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** Best-effort "name.ext"-style label for an external link's last path segment, falling back to its hostname (bare domain) or the raw URL (malformed). */
 function displayNameForUrl(url: string): string {
   try {
@@ -198,14 +216,26 @@ export function ResourcePreview({
   if (isRecordedLecture) {
     if (embedUrl) {
       return (
-        <div className="aspect-video w-full overflow-hidden rounded-md">
-          <iframe
-            src={embedUrl}
-            title={title}
-            className="h-full w-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
+        <div className="flex flex-col gap-3">
+          <div className="aspect-video w-full overflow-hidden rounded-md">
+            <iframe
+              src={embedUrl}
+              title={title}
+              className="h-full w-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+          {youtubeUrl && (
+            <a
+              href={youtubeUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="break-all text-center text-xs text-primary hover:underline"
+            >
+              {youtubeUrl}
+            </a>
+          )}
         </div>
       );
     }
@@ -230,8 +260,17 @@ export function ResourcePreview({
       <div className="flex flex-col items-center gap-3 py-10 text-center">
         <p className="text-sm text-muted-foreground">This resource is hosted externally.</p>
         <div className="w-full max-w-xs">
-          <p className="break-words text-sm font-medium">{displayNameForUrl(externalUrl)}</p>
-          <p className="break-all text-xs text-muted-foreground">{externalUrl}</p>
+          <p className="break-words text-sm font-medium">
+            {googleWorkspaceLabel(externalUrl) ?? displayNameForUrl(externalUrl)}
+          </p>
+          <a
+            href={externalUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="break-all text-xs text-primary hover:underline"
+          >
+            {externalUrl}
+          </a>
         </div>
         <Button asChild variant="outline" size="sm">
           <a href={externalUrl} target="_blank" rel="noreferrer">

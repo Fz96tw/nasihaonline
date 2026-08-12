@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import {
   uploadKnowledgeDocument,
   deleteKnowledgeDocument,
-  getKnowledgeDocumentUrl,
+  getReviewDocumentUrl,
   uploadKnowledgeItemHeroImage,
   getKnowledgeItemHeroImageUrl,
   deleteKnowledgeItemHeroImage,
@@ -466,7 +466,7 @@ export async function getReviewItemForEdit(id: string): Promise<ReviewItemForEdi
     deidentificationConfirmed: item.deidentificationConfirmed,
     submitterId: item.submitterId,
     attachment: item.attachments[0]
-      ? { fileName: item.attachments[0].fileName, url: getKnowledgeDocumentUrl(item.attachments[0].objectKey) }
+      ? { fileName: item.attachments[0].fileName, url: getReviewDocumentUrl(item.attachments[0].objectKey) }
       : null,
   };
 }
@@ -792,7 +792,7 @@ export async function getReviewItemDetail(itemId: string, actingUser: UserModel)
         ? {
             fileName: item.attachments[0].fileName,
             mimeType: item.attachments[0].mimeType,
-            url: getKnowledgeDocumentUrl(item.attachments[0].objectKey),
+            url: getReviewDocumentUrl(item.attachments[0].objectKey),
           }
         : null,
     deidentificationConfirmed: item.deidentificationConfirmed,

@@ -221,6 +221,17 @@ export function getKnowledgeDocumentUrl(objectKey: string): string {
 }
 
 /**
+ * Same documents/ bucket and getKnowledgeDocumentObject as the Knowledge
+ * Library, but ReviewItemAttachment rows aren't visible to
+ * /api/library/document's KnowledgeAttachment-only ownership check — Peer
+ * Review submissions need their own proxy route/URL so canViewReviewItem
+ * (not canViewKnowledgeItem) gates access instead.
+ */
+export function getReviewDocumentUrl(objectKey: string): string {
+  return `/api/review-feedback/document/${objectKey}`;
+}
+
+/**
  * Fetches a stored Knowledge Library document (documents/ bucket) for
  * streaming through the /api/library/document proxy — same shape/rationale
  * as getAttachmentObject/getAvatarObject, just the documents bucket.
