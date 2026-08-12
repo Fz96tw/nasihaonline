@@ -187,14 +187,21 @@ function PdfPreview({ url, fileName }: { url: string; fileName: string }) {
         // bundling this ESM worker directly breaks webpack/Terser's client build.
         pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
-        loadingTask = pdfjsLib.getDocument({ url });
+        // Without wasmUrl the worker can't locate its JBig2/JPX WASM
+        // decoders (used for embedded images in scanned PDFs) — decoding
+        // then fails silently per-image rather than erroring the whole
+        // document, so the page renders with that image simply missing.
+        loadingTask = pdfjsLib.getDocument({ url, wasmUrl: "/pdfjs-wasm/" });
         const doc = await loadingTask.promise;
         if (cancelled) return;
         pdfRef.current = doc;
         setPageCount(doc.numPages);
         setStatus("ready");
-      } catch {
-        if (!cancelled) setStatus("error");
+      } catch (err) {
+        if (!cancelled) {
+          console.error(`PdfPreview: getDocument failed for ${fileName}`, err);
+          setStatus("error");
+        }
       }
     })();
 
@@ -202,11 +209,19 @@ function PdfPreview({ url, fileName }: { url: string; fileName: string }) {
       cancelled = true;
       loadingTask?.destroy();
     };
-  }, [url]);
+  }, [url, fileName]);
 
   useEffect(() => {
     if (status !== "ready" || !pdfRef.current || !canvasRef.current || containerWidth === 0) return;
     let cancelled = false;
+    // React 18 Strict Mode double-invokes this effect in dev (mount, cleanup,
+    // mount again). The `cancelled` flag alone only suppressed the resulting
+    // state update — it didn't stop the in-flight page.render() call itself,
+    // so the second mount started a second render() on the same <canvas>
+    // while the first was still running, which pdf.js rejects outright
+    // ("Cannot use the same canvas during multiple render() operations").
+    // Capturing the RenderTask and cancelling it on cleanup avoids the race.
+    let renderTask: import("pdfjs-dist").RenderTask | null = null;
 
     (async () => {
       try {
@@ -229,16 +244,21 @@ function PdfPreview({ url, fileName }: { url: string; fileName: string }) {
         if (!context) return;
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-        await page.render({ canvasContext: context, viewport, canvas }).promise;
-      } catch {
-        if (!cancelled) setStatus("error");
+        renderTask = page.render({ canvasContext: context, viewport, canvas });
+        await renderTask.promise;
+      } catch (err) {
+        if (!cancelled) {
+          console.error(`PdfPreview: page ${pageNum} render failed for ${fileName}`, err);
+          setStatus("error");
+        }
       }
     })();
 
     return () => {
       cancelled = true;
+      renderTask?.cancel();
     };
-  }, [status, pageNum, containerWidth]);
+  }, [status, pageNum, containerWidth, fileName]);
 
   if (status === "error") {
     return <UnsupportedFilePreview url={url} fileName={fileName} />;

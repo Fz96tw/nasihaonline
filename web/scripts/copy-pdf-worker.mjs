@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -15,3 +15,13 @@ const dest = path.join(__dirname, "..", "public", "pdf.worker.min.mjs");
 mkdirSync(path.dirname(dest), { recursive: true });
 copyFileSync(src, dest);
 console.log("[copy-pdf-worker] copied pdf.worker.min.mjs to public/");
+
+// The worker decodes JBig2/JPX-encoded embedded images (common in scanned
+// PDFs) via these WASM binaries + JS fallbacks, fetched at runtime from the
+// `wasmUrl` passed to getDocument() (see PdfPreview in resource-preview.tsx)
+// — without them, decoding silently fails per-image (pdf.js treats it as
+// non-fatal) and the page renders with that image simply missing.
+const wasmSrc = path.join(__dirname, "..", "node_modules", "pdfjs-dist", "wasm");
+const wasmDest = path.join(__dirname, "..", "public", "pdfjs-wasm");
+cpSync(wasmSrc, wasmDest, { recursive: true });
+console.log("[copy-pdf-worker] copied pdfjs-dist/wasm/ to public/pdfjs-wasm/");
