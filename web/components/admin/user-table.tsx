@@ -84,7 +84,7 @@ export function UserTable({ users }: { users: AdminUser[] }) {
   const [role, setRole] = useState<RoleFilter>("all");
   const [tier, setTier] = useState<TierFilter>("all");
   const [suspendedFilter, setSuspendedFilter] = useState<SuspendedFilter>("all");
-  const [sort, setSort] = useState<Sort | null>(null);
+  const [sort, setSort] = useState<Sort | null>({ key: "lastActive", dir: "desc" });
 
   const toggleSort = (key: SortKey) => {
     setSort((current) =>
