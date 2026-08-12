@@ -66,12 +66,15 @@ export function WhatWeDoSection() {
                       Learn more <span aria-hidden="true">&rarr;</span>
                     </span>
                   </Link>
-                  <div className="flex flex-wrap justify-center gap-2">
+                  <div className="flex flex-col gap-2">
                     {links.map((link) => (
                       <Link
                         key={link.href}
                         href={link.href}
-                        className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                        className={cn(
+                          buttonVariants({ variant: "outline", size: "sm" }),
+                          "h-auto w-full whitespace-normal py-2 text-center leading-tight",
+                        )}
                       >
                         {link.label}
                       </Link>
@@ -83,7 +86,7 @@ export function WhatWeDoSection() {
           ))}
         </div>
         <Reveal className="mt-10 text-center">
-          <Button variant="outline" size="lg" asChild>
+          <Button variant="default" size="lg" asChild>
             <Link href="/contact">Contact Us</Link>
           </Button>
         </Reveal>

@@ -10,7 +10,7 @@ export function MembershipTiersSection() {
           <p className="text-base font-semibold uppercase tracking-wide text-primary">
             Community
           </p>
-          <h2 className="mt-3 text-4xl font-extrabold tracking-tight md:text-5xl">
+          <h2 className="mt-3 text-3xl font-extrabold tracking-[-.02em] md:text-4xl">
             Membership Tiers
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">
