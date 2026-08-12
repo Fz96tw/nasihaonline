@@ -89,23 +89,37 @@ export default async function DashboardPage() {
 
       <StatsRow userId={user.id} />
 
+      {/*
+        Schedule sits alone in column 1; Quick Actions + Inbox stack together
+        in column 2. They used to be three separately row-placed grid items
+        (Schedule row-span-2 alongside Quick Actions in row 1 / Inbox in row
+        2), but CSS Grid grows *both* auto row tracks to fit a row-spanning
+        item taller than its siblings — leaving dead space inside row 1,
+        below Quick Actions, before row 2 even starts. Grouping Quick Actions
+        + Inbox into one flex column makes them a single grid item, so any
+        leftover height (Schedule being taller than the two combined) lands
+        below Inbox instead of between the two widgets. The wrapper is
+        `contents` on mobile so it doesn't affect the flat order-1/2/3
+        stacking (Quick Actions above Schedule above Inbox), and becomes a
+        real flex column only at the lg breakpoint, once there's a second
+        column for it to occupy.
+      */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <StaggeredIn index={1} className="order-1 lg:order-none lg:col-start-2 lg:row-start-1 lg:self-start">
-          <QuickActionsWidget />
-        </StaggeredIn>
-        <StaggeredIn
-          index={0}
-          className="order-2 lg:order-none lg:col-start-1 lg:row-start-1 lg:row-span-2"
-        >
+        <StaggeredIn index={0} className="order-2 lg:order-none lg:col-start-1 lg:row-start-1">
           <Suspense fallback={<WidgetSkeleton />}>
             <ScheduleWidget userId={user.id} />
           </Suspense>
         </StaggeredIn>
-        <StaggeredIn index={2} className="order-3 lg:order-none lg:col-start-2 lg:row-start-2 lg:self-start">
-          <Suspense fallback={<WidgetSkeleton />}>
-            <InboxWidget userId={user.id} />
-          </Suspense>
-        </StaggeredIn>
+        <div className="contents lg:flex lg:flex-col lg:gap-6 lg:col-start-2 lg:row-start-1 lg:self-start">
+          <StaggeredIn index={1} className="order-1 lg:order-none">
+            <QuickActionsWidget />
+          </StaggeredIn>
+          <StaggeredIn index={2} className="order-3 lg:order-none">
+            <Suspense fallback={<WidgetSkeleton />}>
+              <InboxWidget userId={user.id} />
+            </Suspense>
+          </StaggeredIn>
+        </div>
       </div>
 
       <StaggeredIn index={3}>
