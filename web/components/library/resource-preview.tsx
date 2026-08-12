@@ -185,6 +185,14 @@ function PdfPreview({ url, fileName }: { url: string; fileName: string }) {
           </Button>
         </div>
       )}
+      {status === "ready" && (
+        <Button asChild variant="outline" size="sm">
+          <a href={url} target="_blank" rel="noreferrer" download={fileName}>
+            <Download className="mr-2 h-4 w-4" />
+            Download
+          </a>
+        </Button>
+      )}
     </div>
   );
 }
