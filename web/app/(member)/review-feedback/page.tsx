@@ -45,7 +45,7 @@ export default async function ReviewFeedbackPage() {
       <section className="mx-auto flex max-w-[1120px] flex-col gap-6 px-8 py-16">
         <div className="flex justify-end">
           <Button asChild>
-            <Link href="/review-feedback/new">Submit an Item</Link>
+            <Link href="/review-feedback/new">Create Request</Link>
           </Button>
         </div>
 

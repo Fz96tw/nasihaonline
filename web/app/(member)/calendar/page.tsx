@@ -59,7 +59,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: { r
           </Button>
           {canSubmitEvent && (
             <Button asChild>
-              <Link href="/calendar/new">Submit Event</Link>
+              <Link href="/calendar/new">Create Event</Link>
             </Button>
           )}
         </div>
