@@ -58,6 +58,11 @@ export function FeedRow({ item }: { item: FeedItem }) {
               )}
             </div>
             <div className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{item.excerpt}</div>
+            {item.replyExcerpt && (
+              <div className="mt-1 line-clamp-2 text-sm italic text-muted-foreground">
+                &ldquo;{item.replyExcerpt}&rdquo;
+              </div>
+            )}
             {item.volunteerNote && (
               <div className="mt-1 line-clamp-2 text-xs italic text-muted-foreground">
                 Looking for: {item.volunteerNote}

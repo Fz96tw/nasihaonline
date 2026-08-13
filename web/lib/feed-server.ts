@@ -215,6 +215,14 @@ export async function getFeedPage(params: {
         lastActivityAt: true,
         author: { select: AUTHOR_SELECT },
         forum: { select: { name: true, slug: true } },
+        // Latest post's author + body — a bump from a reply should credit
+        // the replier (not the thread creator) and show what they wrote.
+        // Falls back to `author` above when the thread has no posts yet.
+        posts: {
+          select: { author: { select: AUTHOR_SELECT }, body: true },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
         // posts includes the thread's own opening post, so replyCount below
         // subtracts one — same convention as toThreadListItem in forums-server.ts.
         _count: { select: { posts: true, views: true } },
@@ -340,26 +348,31 @@ export async function getFeedPage(params: {
       libraryViewCount: item._count.views,
       forumReplyCount: item.forumThread ? item.forumThread._count.posts - 1 : undefined,
     })),
-    ...forumThreads.map((thread): FeedItem => ({
-      type: "forum_thread",
-      id: thread.id,
-      title: thread.title,
+    ...forumThreads.map((thread): FeedItem => {
       // A thread bumped up by a fresh reply (lastActivityAt > createdAt)
-      // reads as "New activity" rather than "New thread" — it isn't new,
-      // it's resurfacing.
-      excerpt:
-        thread.lastActivityAt.getTime() > thread.createdAt.getTime()
-          ? `New activity in ${thread.forum.name}`
+      // reads as "Replied to" rather than "New thread" — it isn't new,
+      // it's resurfacing, and the row's author is the replier, not the
+      // thread's original creator.
+      const isReply = thread.lastActivityAt.getTime() > thread.createdAt.getTime();
+      const latestPost = thread.posts[0];
+      return {
+        type: "forum_thread",
+        id: thread.id,
+        title: thread.title,
+        excerpt: isReply
+          ? `Replied to a thread in ${thread.forum.name}`
           : `New thread in ${thread.forum.name}`,
-      href: withFeedRef(`/forums/${thread.forum.slug}/${thread.id}`),
-      timestamp: thread.lastActivityAt.toISOString(),
-      author: authorOf(thread.author),
-      // Forum threads have no per-thread hero image (no upload UI, no
-      // schema column) — every thread shows the same static default so the
-      // feed row still gets a thumbnail (see FeedRow's forum_thread layout).
-      imageUrl: "/images/forum-thread.jpg",
-      stats: { views: thread._count.views, comments: thread._count.posts - 1 },
-    })),
+        href: withFeedRef(`/forums/${thread.forum.slug}/${thread.id}`),
+        timestamp: thread.lastActivityAt.toISOString(),
+        author: authorOf(latestPost?.author ?? thread.author),
+        // Forum threads have no per-thread hero image (no upload UI, no
+        // schema column) — every thread shows the same static default so the
+        // feed row still gets a thumbnail (see FeedRow's forum_thread layout).
+        imageUrl: "/images/forum-thread.jpg",
+        stats: { views: thread._count.views, comments: thread._count.posts - 1 },
+        replyExcerpt: isReply && latestPost ? truncate(latestPost.body) : undefined,
+      };
+    }),
     ...announcements.map((announcement): FeedItem => ({
       type: "announcement",
       id: announcement.id,
