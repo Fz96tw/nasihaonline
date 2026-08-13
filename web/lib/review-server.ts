@@ -1252,7 +1252,10 @@ export async function getPendingVolunteerOffers(itemId: string): Promise<Pending
  * Submitter-only — opens or closes the volunteer call independently of
  * `status` (open/closed), so a submitter can stop new offers once they
  * have enough reviewers without closing the whole review, or open a call
- * later on an item that started as "Select Reviewers."
+ * later on an item that started as "Select Reviewers." Also bumps
+ * lastActivityAt so the audience change resurfaces the item near the top
+ * of the What's New feed, same "re-bump on new activity" convention as a
+ * ForumThread reply.
  */
 export async function toggleSeekingReviewers(itemId: string, actingUser: UserModel, value: boolean): Promise<{ id: string; seekingReviewers: boolean }> {
   const item = await db.reviewItem.findUnique({ where: { id: itemId }, select: { submitterId: true } });
@@ -1261,7 +1264,7 @@ export async function toggleSeekingReviewers(itemId: string, actingUser: UserMod
 
   const updated = await db.reviewItem.update({
     where: { id: itemId },
-    data: { seekingReviewers: value },
+    data: { seekingReviewers: value, lastActivityAt: new Date() },
     select: { id: true, seekingReviewers: true },
   });
   return updated;

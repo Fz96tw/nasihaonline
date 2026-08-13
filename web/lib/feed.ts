@@ -48,9 +48,11 @@ export type FeedItem = {
   libraryViewCount?: number;
   /** Only the welcome-new-member Announcement carries this — the member's tier, rendered as a badge after their name in the title. Null/undefined for every other Announcement and every other type. */
   titleTier?: Tier | null;
-  /** Only "peer_review" items carry this — a short CTA label rendered next to an inline ReviewOfferButton, so a member can volunteer straight from the feed row without clicking through. Null for the item's own submitter viewing their own feed entry; undefined for every other type. */
+  /** Only "peer_review" items with an open call (seekingReviewers) carry this — a short status label ("Open for reviewer volunteers") shown next to a Hand icon on every viewer's feed row, including the submitter's own. Null for an invite-only item; undefined for every other type. Whether an inline ReviewOfferButton also renders next to it is driven separately by canOfferToReview. */
   reviewOfferPrompt?: string | null;
-  /** Only "peer_review" items carry this — the viewer's own volunteer offer status, driving the inline ReviewOfferButton's initial state. Same null/undefined split as reviewOfferPrompt. */
+  /** Only "peer_review" items carry this — true when the viewer can click "Offer to Review" straight from the feed row (open call, and not their own submission). Undefined for every other type; false (not undefined) for the submitter's own open-call entry or an invite-only item, so reviewOfferPrompt can still render as a label-only row. */
+  canOfferToReview?: boolean;
+  /** Only "peer_review" items carry this — the viewer's own volunteer offer status, driving the inline ReviewOfferButton's initial state. Undefined when canOfferToReview is false. */
   myOfferStatus?: ReviewVolunteerStatus | null;
   /** Only "peer_review" items carry this — the submitter's optional note on what kind of feedback they're after, shown to prospective volunteers. Undefined for every other type; null when the submitter left it blank. */
   volunteerNote?: string | null;

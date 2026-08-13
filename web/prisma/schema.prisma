@@ -1500,6 +1500,13 @@ model ReviewItem {
   publishedKnowledgeItem    KnowledgeItem?       @relation(fields: [publishedKnowledgeItemId], references: [id])
   createdAt                 DateTime             @default(now())
   updatedAt                 DateTime             @updatedAt
+  // Bumped to now() by toggleSeekingReviewers whenever the audience changes
+  // (invite-only <-> open call) — drives the What's New feed's peer_review
+  // sort so a re-opened/closed call resurfaces near the top instead of only
+  // ever appearing once at its original createdAt, same convention as
+  // ForumThread.lastActivityAt. Left at createdAt for an item whose audience
+  // has never been toggled.
+  lastActivityAt            DateTime             @default(now())
 
   categories      ReviewItemCategory[]
   tags            ReviewItemTag[]

@@ -138,7 +138,7 @@ export function FeedRow({ item }: { item: FeedItem }) {
             <Hand className="h-3.5 w-3.5" />
             {item.reviewOfferPrompt}
           </span>
-          <ReviewOfferButton itemId={item.id} initialStatus={item.myOfferStatus ?? null} />
+          {item.canOfferToReview && <ReviewOfferButton itemId={item.id} initialStatus={item.myOfferStatus ?? null} />}
         </div>
       )}
     </li>

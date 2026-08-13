@@ -275,14 +275,19 @@ export async function getFeedPage(params: {
             ? [{ submitterId: viewerId }, { invitees: { some: { userId: viewerId } } }]
             : []),
         ],
-        ...(before ? { createdAt: { lt: before } } : {}),
+        // lastActivityAt (bumped by toggleSeekingReviewers whenever the
+        // audience changes, see review-server.ts) is the sort/cursor field
+        // here rather than createdAt, so an item whose audience was just
+        // opened/closed resurfaces near the top — same convention as the
+        // forumThreads branch above keying off its own lastActivityAt.
+        ...(before ? { lastActivityAt: { lt: before } } : {}),
       },
       select: {
         id: true,
         title: true,
         description: true,
         volunteerNote: true,
-        createdAt: true,
+        lastActivityAt: true,
         heroImageUrl: true,
         submitterId: true,
         seekingReviewers: true,
@@ -292,7 +297,7 @@ export async function getFeedPage(params: {
         // conditional select shape.
         volunteerOffers: { where: { userId: viewerId ?? "" }, select: { status: true } },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { lastActivityAt: "desc" },
       take: pageSize,
     }),
   ]);
@@ -419,14 +424,17 @@ export async function getFeedPage(params: {
             ? `${item.submitter.name ?? "A member"} invited you to review this.`
             : truncate(item.description),
         href: withFeedRef(`/review-feedback/${item.id}`),
-        timestamp: item.createdAt.toISOString(),
+        timestamp: item.lastActivityAt.toISOString(),
         author: authorOf(item.submitter),
         imageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl),
-        // Only an open call gets the "Offer to Review" prompt — an
-        // invite-only item's invitees are already in, and a submitter never
-        // gets it on their own item either way (offerToReview rejects that
-        // server-side too, see review-server.ts).
-        reviewOfferPrompt: item.seekingReviewers && !isSubmitter ? "Open for reviewer volunteers" : null,
+        // Every open-call item shows the "Open for reviewer volunteers"
+        // label, including on the submitter's own feed row — it's status
+        // information, not just a CTA. The inline "Offer to Review" button
+        // next to it is a separate, narrower gate: only a non-submitter can
+        // actually click it (offerToReview rejects a self-offer server-side
+        // too, see review-server.ts).
+        reviewOfferPrompt: item.seekingReviewers ? "Open for reviewer volunteers" : null,
+        canOfferToReview: item.seekingReviewers && !isSubmitter,
         myOfferStatus: item.volunteerOffers[0]?.status ?? null,
         volunteerNote: item.volunteerNote,
       };

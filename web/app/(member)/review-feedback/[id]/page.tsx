@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { BackLink } from "@/components/back-link";
 import { ResourcePreview } from "@/components/library/resource-preview";
 import { ManageReviewInvitees } from "@/components/review/manage-review-invitees";
+import { ReviewAudienceToggle } from "@/components/review/review-audience-toggle";
 import { ReviewCommentThread } from "@/components/review/review-comment-thread";
 import { VolunteerOffersPanel } from "@/components/review/volunteer-offers-panel";
 import { ReviewLifecycleActions } from "@/components/review/review-lifecycle-actions";
@@ -186,7 +187,8 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
       )}
 
       {item.isSubmitter ? (
-        <div className="mt-8">
+        <div className="mt-8 flex flex-col gap-6">
+          <ReviewAudienceToggle itemId={item.id} initialSeekingReviewers={item.seekingReviewers} inviteeCount={roster.length} />
           <ManageReviewInvitees itemId={item.id} initialRoster={roster} />
         </div>
       ) : (
