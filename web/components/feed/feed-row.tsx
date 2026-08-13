@@ -24,14 +24,6 @@ export function FeedRow({ item }: { item: FeedItem }) {
           item.reviewOfferPrompt && "pb-2",
         )}
       >
-        {isForumThread && item.imageUrl && (
-          // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
-          <img
-            src={item.imageUrl}
-            alt=""
-            className="aspect-square w-[15%] flex-shrink-0 rounded-md object-cover"
-          />
-        )}
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-start gap-2">
             <Avatar name={item.author.name ?? "NASIHA Member"} src={item.author.avatarUrl} size="sm" />
@@ -49,28 +41,40 @@ export function FeedRow({ item }: { item: FeedItem }) {
             </div>
           </div>
           <div className="min-w-0 flex-1">
-            <div className="mt-2 flex items-center gap-2">
-              <span className="text-base font-semibold">{item.title}</span>
-              {item.titleTier && (
-                <Badge variant={TIER_BADGE_VARIANT[item.titleTier]} className="flex-shrink-0">
-                  {DIRECTORY_TIER_LABELS[item.titleTier]}
-                </Badge>
+            <div className="flex items-start gap-1">
+              <div className="min-w-0 w-fit max-w-[60%]">
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-base font-semibold">{item.title}</span>
+                  {item.titleTier && (
+                    <Badge variant={TIER_BADGE_VARIANT[item.titleTier]} className="flex-shrink-0">
+                      {DIRECTORY_TIER_LABELS[item.titleTier]}
+                    </Badge>
+                  )}
+                </div>
+                <div className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{item.excerpt}</div>
+                {item.replyExcerpt && (
+                  <div className="mt-1 line-clamp-2 text-sm italic text-muted-foreground">
+                    &ldquo;{item.replyExcerpt}&rdquo;
+                  </div>
+                )}
+                {item.volunteerNote && (
+                  <div className="mt-1 line-clamp-2 text-xs italic text-muted-foreground">
+                    Looking for: {item.volunteerNote}
+                  </div>
+                )}
+                {item.eventStartsAt && (
+                  <div className="mt-0.5 text-xs text-muted-foreground">Event Date: {formatTimestamp(item.eventStartsAt)}</div>
+                )}
+              </div>
+              {isForumThread && item.imageUrl && (
+                // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
+                <img
+                  src={item.imageUrl}
+                  alt=""
+                  className="mt-2 aspect-square w-[11.25%] flex-shrink-0 rounded-md object-cover"
+                />
               )}
             </div>
-            <div className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{item.excerpt}</div>
-            {item.replyExcerpt && (
-              <div className="mt-1 line-clamp-2 text-sm italic text-muted-foreground">
-                &ldquo;{item.replyExcerpt}&rdquo;
-              </div>
-            )}
-            {item.volunteerNote && (
-              <div className="mt-1 line-clamp-2 text-xs italic text-muted-foreground">
-                Looking for: {item.volunteerNote}
-              </div>
-            )}
-            {item.eventStartsAt && (
-              <div className="mt-0.5 text-xs text-muted-foreground">Event Date: {formatTimestamp(item.eventStartsAt)}</div>
-            )}
             {!isForumThread && item.imageUrl && (
               // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
               <img
