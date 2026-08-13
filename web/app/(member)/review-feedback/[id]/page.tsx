@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { Shield } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import {
   getReviewItemDetail,
@@ -82,6 +83,9 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
             {item.submitter.name ?? "This member"} is looking for volunteer reviewers for this submission. Offer to
             review to get full access to the material and discussion once they accept.
           </p>
+          {item.volunteerNote && (
+            <p className="mb-4 text-sm italic text-muted-foreground">Looking for: {item.volunteerNote}</p>
+          )}
           <ReviewOfferButton itemId={item.id} initialStatus={item.myOfferStatus} />
         </div>
 
@@ -99,6 +103,7 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
   }
 
   const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
+  const isPrivilegedOverride = isPrivileged && !item.isSubmitter && !item.isInvitee;
   const roster = await getReviewItemRoster(id);
   const comments = await getReviewComments(id);
   const pendingOffers = item.isSubmitter && item.seekingReviewers ? await getPendingVolunteerOffers(id) : [];
@@ -112,6 +117,16 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
   return (
     <main className="mx-auto max-w-3xl px-8 py-16">
       <BackLink fallbackHref="/review-feedback" className="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline" />
+
+      {isPrivilegedOverride && (
+        <div className="mb-6 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/5 px-4 py-3 text-sm text-warning">
+          <Shield className="h-4 w-4 shrink-0" />
+          <span>
+            You&apos;re viewing this as a {user.role} — {item.submitter.name ?? "the submitter"} hasn&apos;t granted
+            you access directly.
+          </span>
+        </div>
+      )}
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {item.categories.map((category) => (
@@ -137,7 +152,13 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
         </div>
       </div>
 
-      <p className="mb-8 text-base leading-relaxed text-muted-foreground">{item.description}</p>
+      <p className={item.volunteerNote ? "mb-2 text-base leading-relaxed text-muted-foreground" : "mb-8 text-base leading-relaxed text-muted-foreground"}>
+        {item.description}
+      </p>
+
+      {item.volunteerNote && (
+        <p className="mb-8 text-sm italic text-muted-foreground">Looking for: {item.volunteerNote}</p>
+      )}
 
       <ResourcePreview
         title={item.title}

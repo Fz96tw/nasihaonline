@@ -28,6 +28,7 @@ const reviewItemBaseSchema = z.object({
     .refine((value) => /^https?:\/\//i.test(value), "Enter a valid URL (starting with http:// or https://)")
     .nullable(),
   deidentificationConfirmed: z.boolean(),
+  volunteerNote: z.string().trim().max(500).nullable(),
 });
 
 /** case_study requires the de-identification checkbox; recorded_lecture requires a YouTube URL. */
@@ -72,7 +73,6 @@ function requireAudienceInvariants(
 const reviewItemFormSchema = reviewItemBaseSchema.extend({
   audienceMode: z.enum(["invite", "volunteers"]),
   invitedUserIds: z.array(z.string()),
-  volunteerNote: z.string().trim().max(500).nullable(),
 });
 
 /** POST /api/review-feedback body shape — shared with the client form (zodResolver). */

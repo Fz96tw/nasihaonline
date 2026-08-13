@@ -268,6 +268,7 @@ export async function getFeedPage(params: {
         id: true,
         title: true,
         description: true,
+        volunteerNote: true,
         createdAt: true,
         heroImageUrl: true,
         submitterId: true,
@@ -397,6 +398,7 @@ export async function getFeedPage(params: {
       // it server-side too, see review-server.ts).
       reviewOfferPrompt: viewerId && item.submitterId === viewerId ? null : "Open for reviewer volunteers",
       myOfferStatus: item.volunteerOffers[0]?.status ?? null,
+      volunteerNote: item.volunteerNote,
     })),
   ].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 

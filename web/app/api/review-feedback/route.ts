@@ -65,6 +65,7 @@ export async function POST(request: Request) {
       deidentificationConfirmed: parsed.data.deidentificationConfirmed,
       invitedUserIds: parsed.data.audienceMode === "invite" ? parsed.data.invitedUserIds : [],
       seekingReviewers: parsed.data.audienceMode === "volunteers",
+      volunteerNote: parsed.data.audienceMode === "volunteers" ? parsed.data.volunteerNote : null,
       file,
       heroImage,
     });

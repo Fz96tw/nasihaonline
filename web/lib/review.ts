@@ -92,6 +92,7 @@ export type SeekingReviewersItem = {
   description: string;
   contentType: KnowledgeContentType;
   level: KnowledgeLevel;
+  volunteerNote: string | null;
   categories: { name: string }[];
   submitter: { id: string; name: string | null; avatarUrl: string | null };
   createdAt: string;
@@ -108,6 +109,7 @@ export type ReviewItemDetail = {
   level: KnowledgeLevel;
   status: ReviewItemStatus;
   seekingReviewers: boolean;
+  volunteerNote: string | null;
   categories: { name: string; slug: string }[];
   tags: { name: string; slug: string }[];
   submitter: { id: string; name: string | null; avatarUrl: string | null };
@@ -136,6 +138,8 @@ export type ReviewItemForEdit = {
   contentType: KnowledgeContentType;
   level: KnowledgeLevel;
   status: ReviewItemStatus;
+  seekingReviewers: boolean;
+  volunteerNote: string | null;
   categoryIds: string[];
   tagIds: string[];
   youtubeUrl: string | null;

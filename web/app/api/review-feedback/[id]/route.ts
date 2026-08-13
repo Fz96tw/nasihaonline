@@ -31,6 +31,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     youtubeUrl: formData.get("youtubeUrl") || null,
     externalUrl: formData.get("externalUrl") || null,
     deidentificationConfirmed: formData.get("deidentificationConfirmed") === "true",
+    volunteerNote: formData.get("volunteerNote") || null,
   });
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

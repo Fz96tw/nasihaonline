@@ -89,7 +89,7 @@ export function SubmitReviewItemForm({
           // separately via ManageReviewInvitees on the detail page.
           audienceMode: "invite",
           invitedUserIds: [],
-          volunteerNote: null,
+          volunteerNote: existingItem.volunteerNote,
         }
       : DEFAULT_VALUES,
     mode: "onTouched",
@@ -100,6 +100,11 @@ export function SubmitReviewItemForm({
   const isCaseStudy = contentType === KnowledgeContentType.case_study;
   const audienceMode = form.watch("audienceMode");
   const isInviteMode = audienceMode === "invite";
+  // Volunteer note only ever makes sense for an open call: at creation
+  // that's the "Request Volunteers" toggle; once submitted, seekingReviewers
+  // is fixed (this form doesn't expose changing it), so edit mode keys off
+  // the existing item's own value instead.
+  const showVolunteerNote = existingItem ? existingItem.seekingReviewers : !isInviteMode;
 
   async function onSubmit(values: CreateReviewItemValues) {
     setSubmitting(true);
@@ -122,8 +127,8 @@ export function SubmitReviewItemForm({
       if (!existingItem) {
         formData.append("audienceMode", values.audienceMode);
         formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
-        if (values.volunteerNote) formData.append("volunteerNote", values.volunteerNote);
       }
+      if (showVolunteerNote && values.volunteerNote) formData.append("volunteerNote", values.volunteerNote);
       if (!isRecordedLecture && sourceMode === "file" && file) formData.append("file", file);
       if (heroImage) formData.append("heroImage", heroImage);
 
@@ -203,7 +208,7 @@ export function SubmitReviewItemForm({
           />
         )}
 
-        {!existingItem && !isInviteMode && (
+        {showVolunteerNote && (
           <FormField
             control={form.control}
             name="volunteerNote"

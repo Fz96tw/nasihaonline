@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { LedgerStatus, LedgerTransactionType, ContributionSource } from "@/lib/generated/prisma/enums";
+import { LedgerStatus, LedgerTransactionType, ContributionSource, NotificationType } from "@/lib/generated/prisma/enums";
+import { createNotification } from "@/lib/notifications-server";
 import { logContributionSchema } from "@/lib/validation/contribution";
 
 /**
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
       },
     });
 
-    return tx.contributionLedger.create({
+    const entry = await tx.contributionLedger.create({
       data: {
         userId: user.id,
         eventId: event.id,
@@ -64,6 +65,20 @@ export async function POST(request: Request) {
         hours: rule.hours,
       },
     });
+
+    if (counterpartUserId) {
+      await createNotification(
+        {
+          recipientId: counterpartUserId,
+          type: NotificationType.contribution_confirmation_requested,
+          message: `${user.name ?? user.email} logged ${rule.hours.toNumber()} Knowledge Hours for "${rule.label}" and named you — please confirm.`,
+          link: "/contributions",
+        },
+        tx,
+      );
+    }
+
+    return entry;
   });
 
   return NextResponse.json({ id: ledgerEntry.id }, { status: 201 });

@@ -52,6 +52,8 @@ export type FeedItem = {
   reviewOfferPrompt?: string | null;
   /** Only "peer_review" items carry this — the viewer's own volunteer offer status, driving the inline ReviewOfferButton's initial state. Same null/undefined split as reviewOfferPrompt. */
   myOfferStatus?: ReviewVolunteerStatus | null;
+  /** Only "peer_review" items carry this — the submitter's optional note on what kind of feedback they're after, shown to prospective volunteers. Undefined for every other type; null when the submitter left it blank. */
+  volunteerNote?: string | null;
 };
 
 // Marks a feed row's href so the page it lands on (blog post, forum thread,

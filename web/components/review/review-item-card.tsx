@@ -128,6 +128,9 @@ export function SeekingReviewersCard({ item, currentUserId }: { item: SeekingRev
   return (
     <CardShell id={item.id} contentType={item.contentType} title={item.title} categories={item.categories}>
       <p className="line-clamp-3 text-sm text-muted-foreground">{item.description}</p>
+      {item.volunteerNote && (
+        <p className="line-clamp-2 text-xs italic text-muted-foreground">Looking for: {item.volunteerNote}</p>
+      )}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Avatar name={item.submitter.name ?? "Member"} src={item.submitter.avatarUrl} size="xs" />
         <span>From {item.submitter.name ?? "a member"}</span>

@@ -6,6 +6,7 @@ import { getSessionUser } from "@/lib/auth";
 import { Role } from "@/lib/generated/prisma/enums";
 import { StatsRow } from "@/components/dashboard/stats-row";
 import { AccountNoticesWidget } from "@/components/dashboard/account-notices-widget";
+import { PendingConfirmationsWidget } from "@/components/dashboard/pending-confirmations-widget";
 import { ScheduleWidget } from "@/components/dashboard/schedule-widget";
 import { InboxWidget } from "@/components/dashboard/inbox-widget";
 import { QuickActionsWidget } from "@/components/dashboard/quick-actions-widget";
@@ -82,6 +83,10 @@ export default async function DashboardPage() {
           </Link>
         </div>
       </div>
+
+      <Suspense fallback={null}>
+        <PendingConfirmationsWidget userId={user.id} />
+      </Suspense>
 
       <Suspense fallback={null}>
         <AccountNoticesWidget userId={user.id} />

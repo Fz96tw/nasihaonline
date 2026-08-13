@@ -799,6 +799,11 @@ enum NotificationType {
   // status-changing action.
   meeting_request_message
   contribution_awarded
+  // Sent to the named counterpart of a pending ContributionLedger entry
+  // (self-reported log, accepted meeting's earn side, or review feedback)
+  // — the "please confirm these Knowledge Hours" ping. Distinct from
+  // contribution_awarded, which fires once an entry is already confirmed.
+  contribution_confirmation_requested
   blog_comment
   forum_reply_mention
   // Explicit @Name tag (§4.8/§4.13) — distinct from forum_reply_mention
@@ -1483,6 +1488,11 @@ model ReviewItem {
   // volunteers alongside (or instead of) a fixed invitee list, and stop
   // accepting new offers at any time without closing the whole review.
   seekingReviewers          Boolean              @default(false)
+  // Submitter's note on what kind of feedback they're after (e.g. "just
+  // sanity-check my sources," "looking for a harsh critique") — set at
+  // creation time in "Request Volunteers" mode, shown to prospective
+  // volunteers deciding whether to offer. Optional even then.
+  volunteerNote             String?
   // Set once by publishReviewItemToLibrary (submitter-only, requires
   // status=closed) — the resulting KnowledgeItem always starts
   // pending_review, same Steward gate as any other Library submission.

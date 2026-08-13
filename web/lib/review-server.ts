@@ -127,6 +127,7 @@ export async function createReviewItem(
     deidentificationConfirmed: boolean;
     invitedUserIds: string[];
     seekingReviewers: boolean;
+    volunteerNote: string | null;
     file: File | null;
     heroImage: File | null;
   },
@@ -205,6 +206,7 @@ export async function createReviewItem(
       deidentificationConfirmed: input.deidentificationConfirmed,
       status: ReviewItemStatus.open,
       seekingReviewers: input.seekingReviewers,
+      volunteerNote: input.volunteerNote,
       categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
       tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
       attachments: attachment ? { create: [attachment] } : undefined,
@@ -323,6 +325,7 @@ export async function updateReviewItem(
     youtubeUrl: string | null;
     externalUrl: string | null;
     deidentificationConfirmed: boolean;
+    volunteerNote: string | null;
     file: File | null;
     heroImage: File | null;
   },
@@ -410,6 +413,7 @@ export async function updateReviewItem(
         heroImageUrl,
         externalUrl: isRecordedLecture ? null : input.externalUrl,
         deidentificationConfirmed: input.deidentificationConfirmed,
+        volunteerNote: input.volunteerNote,
         categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
         tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
         attachments: newAttachment ? { create: [newAttachment] } : undefined,
@@ -440,6 +444,8 @@ export async function getReviewItemForEdit(id: string): Promise<ReviewItemForEdi
       level: true,
       status: true,
       submitterId: true,
+      seekingReviewers: true,
+      volunteerNote: true,
       categories: { select: { categoryId: true } },
       tags: { select: { tagId: true } },
       youtubeUrl: true,
@@ -458,6 +464,8 @@ export async function getReviewItemForEdit(id: string): Promise<ReviewItemForEdi
     contentType: item.contentType,
     level: item.level,
     status: item.status,
+    seekingReviewers: item.seekingReviewers,
+    volunteerNote: item.volunteerNote,
     categoryIds: item.categories.map((c) => c.categoryId),
     tagIds: item.tags.map((t) => t.tagId),
     youtubeUrl: item.youtubeUrl,
@@ -744,6 +752,7 @@ export async function getReviewItemDetail(itemId: string, actingUser: UserModel)
       level: true,
       status: true,
       seekingReviewers: true,
+      volunteerNote: true,
       submitterId: true,
       submitter: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } },
       createdAt: true,
@@ -781,6 +790,7 @@ export async function getReviewItemDetail(itemId: string, actingUser: UserModel)
     level: item.level,
     status: item.status,
     seekingReviewers: item.seekingReviewers,
+    volunteerNote: item.volunteerNote,
     categories: item.categories.map(({ category }) => category),
     tags: item.tags.map(({ tag }) => tag),
     submitter: {
@@ -904,6 +914,15 @@ export async function postReviewComment(
               hours: rule.hours,
             },
           });
+          await createNotification(
+            {
+              recipientId: item.submitterId,
+              type: NotificationType.contribution_confirmation_requested,
+              message: `${author?.name ?? "A member"} earned ${rule.hours.toNumber()} Knowledge Hours reviewing "${item.title}" — please confirm.`,
+              link: "/contributions",
+            },
+            tx,
+          );
         }
       }
     }
@@ -1261,6 +1280,7 @@ export async function getSeekingReviewersFeed(viewerId: string): Promise<Seeking
       description: true,
       contentType: true,
       level: true,
+      volunteerNote: true,
       createdAt: true,
       categories: { select: { category: { select: { name: true } } } },
       submitter: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } },
@@ -1276,6 +1296,7 @@ export async function getSeekingReviewersFeed(viewerId: string): Promise<Seeking
     description: item.description,
     contentType: item.contentType,
     level: item.level,
+    volunteerNote: item.volunteerNote,
     categories: item.categories.map(({ category }) => category),
     submitter: {
       id: item.submitter.id,

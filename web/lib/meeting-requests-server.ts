@@ -714,6 +714,20 @@ export async function resolveMeetingRequest(
       tx,
     );
 
+    // Sender is the earn side's named counterpart (line ~675 above) — they
+    // need their own ping distinct from acceptedMessage, since that one
+    // goes to whichever party didn't click Accept and says nothing about
+    // confirming Hours.
+    await createNotification(
+      {
+        recipientId: meetingRequest.senderId,
+        type: NotificationType.contribution_confirmation_requested,
+        message: `${recipientUser?.name ?? "A member"} logged ${earnRule.hours.toNumber()} Knowledge Hours for your meeting: "${meetingRequest.topic}" — please confirm.`,
+        link: "/contributions",
+      },
+      tx,
+    );
+
     return updated;
   });
 
