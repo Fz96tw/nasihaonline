@@ -257,19 +257,24 @@ export async function getFeedPage(params: {
       orderBy: { openedAt: "desc" },
       take: pageSize,
     }),
-    // Peer Review & Feedback's open-call items — deliberately no
-    // viewer-based visibility filter (unlike the events/library restricted-
-    // audience OR-clauses above): an open call is public to every member by
-    // design, including the submitter's own feed (they just don't get the
-    // "Offer to Review" prompt on it, computed per-viewer below). Listing-
-    // only: only title/description/submitter/hero-image are selected here,
-    // never the attachment/externalUrl/youtubeUrl — the actual material
-    // stays gated behind an accepted offer, same as the dashboard's
-    // "Members Seeking Reviewers" tab.
+    // Peer Review & Feedback items — open-call (seekingReviewers) items are
+    // public to every member, same as before. Invite-only items now follow
+    // the same viewer-based OR-clause as the events/library restricted-
+    // audience branches above: they only ever reach the submitter or an
+    // invited reviewer's own feed, never a bystander's. Listing-only: only
+    // title/description/submitter/hero-image are selected here, never the
+    // attachment/externalUrl/youtubeUrl — the actual material stays gated
+    // behind canViewReviewItem/an accepted offer on the detail page, same as
+    // the dashboard's "Members Seeking Reviewers" tab.
     !wants("peer_review") ? Promise.resolve([]) : db.reviewItem.findMany({
       where: {
-        seekingReviewers: true,
         status: ReviewItemStatus.open,
+        OR: [
+          { seekingReviewers: true },
+          ...(viewerId
+            ? [{ submitterId: viewerId }, { invitees: { some: { userId: viewerId } } }]
+            : []),
+        ],
         ...(before ? { createdAt: { lt: before } } : {}),
       },
       select: {
@@ -280,6 +285,7 @@ export async function getFeedPage(params: {
         createdAt: true,
         heroImageUrl: true,
         submitterId: true,
+        seekingReviewers: true,
         submitter: { select: AUTHOR_SELECT },
         // Empty-string sentinel when there's no viewer — never a real user
         // id, so the where clause just matches nothing instead of needing a
@@ -396,23 +402,35 @@ export async function getFeedPage(params: {
       author: BOARD_SENDER,
       imageUrl: getSurveyHeroImageUrl(survey.heroImageUrl),
     })),
-    ...seekingReviewItems.map((item): FeedItem => ({
-      type: "peer_review",
-      id: item.id,
-      title: item.title,
-      excerpt: truncate(item.description),
-      href: withFeedRef(`/review-feedback/${item.id}`),
-      timestamp: item.createdAt.toISOString(),
-      author: authorOf(item.submitter),
-      imageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl),
-      // Submitter sees their own entry (this feed shows your own activity
-      // like every other type does) but never the offer prompt — offering
-      // to review your own submission isn't a thing (offerToReview rejects
-      // it server-side too, see review-server.ts).
-      reviewOfferPrompt: viewerId && item.submitterId === viewerId ? null : "Open for reviewer volunteers",
-      myOfferStatus: item.volunteerOffers[0]?.status ?? null,
-      volunteerNote: item.volunteerNote,
-    })),
+    ...seekingReviewItems.map((item): FeedItem => {
+      const isSubmitter = viewerId != null && item.submitterId === viewerId;
+      return {
+        type: "peer_review",
+        id: item.id,
+        title: item.title,
+        // An invite-only item only ever reaches the submitter or an invited
+        // reviewer (the where clause above) — for the invitee this reads as
+        // an invitation rather than the plain description, same framing
+        // swap as the restricted events/library branches above. The
+        // submitter still sees their own plain description, same as an
+        // open-call item.
+        excerpt:
+          !item.seekingReviewers && !isSubmitter
+            ? `${item.submitter.name ?? "A member"} invited you to review this.`
+            : truncate(item.description),
+        href: withFeedRef(`/review-feedback/${item.id}`),
+        timestamp: item.createdAt.toISOString(),
+        author: authorOf(item.submitter),
+        imageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl),
+        // Only an open call gets the "Offer to Review" prompt — an
+        // invite-only item's invitees are already in, and a submitter never
+        // gets it on their own item either way (offerToReview rejects that
+        // server-side too, see review-server.ts).
+        reviewOfferPrompt: item.seekingReviewers && !isSubmitter ? "Open for reviewer volunteers" : null,
+        myOfferStatus: item.volunteerOffers[0]?.status ?? null,
+        volunteerNote: item.volunteerNote,
+      };
+    }),
   ].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
   const hasMore = merged.length > pageSize;
