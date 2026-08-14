@@ -4,6 +4,7 @@ import type { MembershipApplicationModel } from "@/lib/generated/prisma/models/M
 import { TIER_LABELS } from "@/lib/validation/application-review";
 import { CONTACT_SERVICE_LABELS } from "@/lib/validation/contact";
 import { HOW_HEARD_LABELS } from "@/lib/validation/application";
+import { formatEventDateTime } from "@/lib/format-date";
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "NASIHA <no-reply@mail.nasihaforyou.org>";
@@ -133,17 +134,14 @@ export async function sendWelcomeEmail(
 export async function sendEventRegistrationConfirmationEmail(
   to: string,
   name: string,
-  event: { title: string; startsAt: Date; meetingUrl: string | null },
+  event: { title: string; startsAt: Date; timezone: string | null; meetingUrl: string | null },
 ) {
   if (!resend) {
     console.warn(`[email] RESEND_API_KEY not set — skipping event registration email to ${to}`);
     return;
   }
 
-  const when = event.startsAt.toLocaleString("en-US", {
-    dateStyle: "full",
-    timeStyle: "short",
-  });
+  const when = formatEventDateTime(event.startsAt, event.timezone);
 
   const joinLine = event.meetingUrl
     ? `Join with Google Meet: ${event.meetingUrl}`
@@ -337,17 +335,14 @@ export async function sendMeetingRequestEmail(
 export async function sendEventInviteEmail(
   to: string,
   name: string,
-  event: { hostName: string; title: string; startsAt: Date; link: string },
+  event: { hostName: string; title: string; startsAt: Date; timezone: string | null; link: string },
 ) {
   if (!resend) {
     console.warn(`[email] RESEND_API_KEY not set — skipping event invite email to ${to}`);
     return;
   }
 
-  const when = event.startsAt.toLocaleString("en-US", {
-    dateStyle: "full",
-    timeStyle: "short",
-  });
+  const when = formatEventDateTime(event.startsAt, event.timezone);
 
   try {
     await resend.emails.send({

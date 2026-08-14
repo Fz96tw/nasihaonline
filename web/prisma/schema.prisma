@@ -804,6 +804,16 @@ enum NotificationType {
   // — the "please confirm these Knowledge Hours" ping. Distinct from
   // contribution_awarded, which fires once an entry is already confirmed.
   contribution_confirmation_requested
+  // Sent to the entry's submitter (resolveContribution) when a peer or
+  // admin rejects their pending contribution — the rejection counterpart
+  // to contribution_awarded, which covers the confirm outcome.
+  contribution_rejected
+  // Sent to the named counterpart of a pending entry when an *admin*
+  // resolves it instead of them (confirm or reject either one, message
+  // text distinguishes) — without this, the entry just silently
+  // disappears from their "awaiting your confirmation" dashboard widget
+  // with no explanation of what happened to it.
+  contribution_resolved_by_admin
   blog_comment
   forum_reply_mention
   // Explicit @Name tag (§4.8/§4.13) — distinct from forum_reply_mention
@@ -945,6 +955,16 @@ model Event {
   host                      User            @relation("EventHost", fields: [hostId], references: [id])
   startsAt                  DateTime
   endsAt                    DateTime?
+  // IANA zone (e.g. "America/New_York") captured from the submitting
+  // member's browser at create/edit time — startsAt/endsAt are stored as
+  // UTC instants, so this is the only record of which wall-clock time the
+  // organizer actually meant. Notification/email "when" text formats
+  // against this rather than the server's own timezone (previously
+  // omitted entirely, which silently rendered in the server process's
+  // timezone instead of the organizer's). Nullable so pre-existing rows
+  // from before this field existed fall back to a fixed default at format
+  // time rather than needing a backfill.
+  timezone                  String?
   open                      Boolean         @default(false)
   heroImageUrl              String?
   meetingUrl                String?

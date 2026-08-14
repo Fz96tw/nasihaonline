@@ -16,6 +16,29 @@ export function formatTimestamp(iso: string): string {
   return `${datePart}, ${timePart}`;
 }
 
+// Fallback for events created before Event.timezone existed (nullable
+// backfill gap) — arbitrary but fixed, so old rows format consistently
+// rather than drifting with wherever the server process happens to run.
+const DEFAULT_EVENT_TIME_ZONE = "America/New_York";
+
+/**
+ * Formats an event's start (or any event-related) instant as e.g.
+ * "Tuesday, January 6, 2026 at 7:00 PM", in the given IANA timezone —
+ * normally Event.timezone, the zone captured from the organizer's browser
+ * at create/edit time. Without an explicit `timeZone` here,
+ * toLocaleString falls back to the *server process's* timezone (Node
+ * defaults to UTC in this app's containers), which is almost never the
+ * timezone the organizer actually meant — that was the bug this exists to
+ * prevent from recurring at each new call site.
+ */
+export function formatEventDateTime(date: Date, timeZone?: string | null): string {
+  return date.toLocaleString("en-US", {
+    dateStyle: "full",
+    timeStyle: "short",
+    timeZone: timeZone ?? DEFAULT_EVENT_TIME_ZONE,
+  });
+}
+
 /** "Just now" / "Xm ago" / "Xh ago" / "Xd ago", falling back to a short date past a week out. */
 export function formatRelativeTime(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();

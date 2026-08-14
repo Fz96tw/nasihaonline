@@ -112,6 +112,8 @@ export default async function AdminLedgerPage({
                 const hours = typeof metadata?.hours === "number" ? formatHours(metadata.hours) : "—";
                 const activity = typeof metadata?.activity === "string" ? metadata.activity : null;
                 const reason = typeof metadata?.reason === "string" ? metadata.reason : null;
+                const itemTitle = typeof metadata?.itemTitle === "string" ? metadata.itemTitle : null;
+                const itemHref = typeof metadata?.itemHref === "string" ? metadata.itemHref : null;
                 return (
                   <TableRow key={entry.id}>
                     <TableCell className="whitespace-nowrap text-muted-foreground">
@@ -121,7 +123,26 @@ export default async function AdminLedgerPage({
                     <TableCell>{formatAdminAction(entry.action)}</TableCell>
                     <TableCell>{targetUserName}</TableCell>
                     <TableCell className="text-right tabular-nums">{hours}</TableCell>
-                    <TableCell className="text-muted-foreground">{activity ?? reason ?? "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {activity ?? (reason ? null : "—")}
+                      {itemTitle && (
+                        <p className="mt-1 text-xs">
+                          {itemHref ? (
+                            <Link href={itemHref} className="hover:underline" target="_blank">
+                              {itemTitle}
+                            </Link>
+                          ) : (
+                            itemTitle
+                          )}
+                        </p>
+                      )}
+                      {reason && (
+                        <p className={activity || itemTitle ? "mt-1 text-xs" : undefined}>
+                          {activity || itemTitle ? "Reason: " : ""}
+                          {reason}
+                        </p>
+                      )}
+                    </TableCell>
                   </TableRow>
                 );
               })}

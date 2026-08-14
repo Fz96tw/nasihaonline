@@ -52,6 +52,13 @@ export function AdminLedgerQueue({ initialEntries }: { initialEntries: Contribut
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => null);
+        // 409/404 mean another admin already resolved (or the entry
+        // otherwise no longer exists as pending) — drop it from the list
+        // rather than leaving a stale row that looks actionable but will
+        // just fail again on retry.
+        if (res.status === 409 || res.status === 404) {
+          setEntries((current) => current.filter((entry) => entry.id !== id));
+        }
         throw new Error(typeof payload?.error === "string" ? payload.error : "Something went wrong.");
       }
       setEntries((current) => current.filter((entry) => entry.id !== id));
@@ -81,7 +88,19 @@ export function AdminLedgerQueue({ initialEntries }: { initialEntries: Contribut
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => null);
-        throw new Error(typeof payload?.error === "string" ? payload.error : "Something went wrong.");
+        const message = typeof payload?.error === "string" ? payload.error : "Something went wrong.";
+        if (res.status === 409 || res.status === 404) {
+          // Same "no longer actionable" case as confirm() above — drop the
+          // stale row and close the dialog, but surface the reason on the
+          // page-level banner instead of the dialog's own error text, since
+          // the dialog is gone by the time this renders.
+          setEntries((current) => current.filter((entry) => entry.id !== rejectTarget.id));
+          setRejectTarget(null);
+          setReason("");
+          setError(message);
+          return;
+        }
+        throw new Error(message);
       }
       setEntries((current) => current.filter((entry) => entry.id !== rejectTarget.id));
       setRejectTarget(null);
@@ -125,6 +144,13 @@ export function AdminLedgerQueue({ initialEntries }: { initialEntries: Contribut
                   <p className="mt-1 text-xs text-muted-foreground">
                     <Link href={`/library/${entry.libraryItem.id}`} className="hover:underline" target="_blank">
                       {entry.libraryItem.title}
+                    </Link>
+                  </p>
+                )}
+                {entry.reviewItem && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    <Link href={`/review-feedback/${entry.reviewItem.id}`} className="hover:underline" target="_blank">
+                      {entry.reviewItem.title}
                     </Link>
                   </p>
                 )}

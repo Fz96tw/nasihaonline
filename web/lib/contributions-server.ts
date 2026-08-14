@@ -1,14 +1,22 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { recordAdminAction } from "@/lib/audit-server";
-import { ContributionSource, LedgerStatus, LedgerTransactionType, Role } from "@/lib/generated/prisma/enums";
+import { createNotification } from "@/lib/notifications-server";
+import {
+  ContributionSource,
+  LedgerStatus,
+  LedgerTransactionType,
+  NotificationType,
+  Role,
+} from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
-import type {
-  ContributionMeetingRef,
-  ContributionPendingEntry,
-  ContributionRuleOption,
-  ContributionSummary,
-  ContributionTransaction,
+import {
+  formatHours,
+  type ContributionMeetingRef,
+  type ContributionPendingEntry,
+  type ContributionRuleOption,
+  type ContributionSummary,
+  type ContributionTransaction,
 } from "@/lib/contributions";
 
 /**
@@ -27,6 +35,42 @@ function meetingRequestRef(row: {
   const meeting = row.meetingRequestAsRequesterSpend ?? row.meetingRequestAsRecipientEarn;
   if (!meeting || meeting.proposedTimes.length === 0) return null;
   return { topic: meeting.topic, proposedTime: meeting.proposedTimes[0].toISOString() };
+}
+
+/**
+ * A flat {title, href} for whichever record actually triggered a ledger row
+ * — event/post/library/review each has its own detail page, so unlike
+ * getContributionHistory's separate `event`/`post`/`libraryItem`/`reviewItem`
+ * fields (rendered with type-specific styling), this collapses them into one
+ * generic reference for AdminActionLog metadata, where the Resolution
+ * History table just needs *a* link to identify the item, not to
+ * distinguish its type. Meeting requests have no standalone detail page
+ * (they're viewed inline in /inbox), so they fall back to a title with no
+ * href — same as this codebase's other unlinked meeting references.
+ */
+function contributionItemRef(row: {
+  event: {
+    attendance: { event: { id: string; title: string } } | null;
+    post: { slug: string; title: string } | null;
+    knowledgeItem: { id: string; title: string } | null;
+    reviewComment: { reviewItem: { id: string; title: string } } | null;
+  } | null;
+  meetingRequestAsRequesterSpend: { topic: string; proposedTimes: Date[] } | null;
+  meetingRequestAsRecipientEarn: { topic: string; proposedTimes: Date[] } | null;
+}): { title: string; href: string | null } | null {
+  if (row.event?.attendance?.event) {
+    return { title: row.event.attendance.event.title, href: `/calendar/${row.event.attendance.event.id}` };
+  }
+  if (row.event?.post) return { title: row.event.post.title, href: `/blog/${row.event.post.slug}` };
+  if (row.event?.knowledgeItem) {
+    return { title: row.event.knowledgeItem.title, href: `/library/${row.event.knowledgeItem.id}` };
+  }
+  if (row.event?.reviewComment?.reviewItem) {
+    return { title: row.event.reviewComment.reviewItem.title, href: `/review-feedback/${row.event.reviewComment.reviewItem.id}` };
+  }
+  const meeting = meetingRequestRef(row);
+  if (meeting) return { title: meeting.topic, href: null };
+  return null;
 }
 
 /** Activities selectable from the "Log Contribution" form (§4.4) — active, earn-type rules only. */
@@ -112,6 +156,7 @@ export async function getContributionHistory(userId: string): Promise<Contributi
           attendance: { include: { event: { select: { id: true, title: true } } } },
           post: { select: { slug: true, title: true } },
           knowledgeItem: { select: { id: true, title: true } },
+          reviewComment: { select: { reviewItem: { select: { id: true, title: true } } } },
         },
       },
       meetingRequestAsRequesterSpend: { select: { topic: true, proposedTimes: true } },
@@ -134,6 +179,7 @@ export async function getContributionHistory(userId: string): Promise<Contributi
     event: row.event?.attendance?.event ?? null,
     post: row.event?.post ?? null,
     libraryItem: row.event?.knowledgeItem ?? null,
+    reviewItem: row.event?.reviewComment?.reviewItem ?? null,
     note: row.event?.source === ContributionSource.self_reported ? row.event.note : null,
   }));
 }
@@ -161,7 +207,12 @@ export async function getPendingConfirmationsForCounterpart(
     orderBy: { createdAt: "asc" },
     include: {
       event: {
-        include: { rule: true, actor: { select: { name: true } }, knowledgeItem: { select: { id: true, title: true } } },
+        include: {
+          rule: true,
+          actor: { select: { name: true } },
+          knowledgeItem: { select: { id: true, title: true } },
+          reviewComment: { select: { reviewItem: { select: { id: true, title: true } } } },
+        },
       },
       meetingRequestAsRequesterSpend: { select: { topic: true, proposedTimes: true } },
       meetingRequestAsRecipientEarn: { select: { topic: true, proposedTimes: true } },
@@ -177,6 +228,7 @@ export async function getPendingConfirmationsForCounterpart(
     hours: row.hours.toNumber(),
     meetingRequest: meetingRequestRef(row),
     libraryItem: row.event?.knowledgeItem ?? null,
+    reviewItem: row.event?.reviewComment?.reviewItem ?? null,
   }));
 }
 
@@ -197,6 +249,7 @@ export async function getPendingLedgerEntriesForAdmin(): Promise<ContributionPen
           actor: { select: { name: true } },
           counterpart: { select: { name: true } },
           knowledgeItem: { select: { id: true, title: true } },
+          reviewComment: { select: { reviewItem: { select: { id: true, title: true } } } },
         },
       },
       meetingRequestAsRequesterSpend: { select: { topic: true, proposedTimes: true } },
@@ -213,6 +266,7 @@ export async function getPendingLedgerEntriesForAdmin(): Promise<ContributionPen
     hours: row.hours.toNumber(),
     meetingRequest: meetingRequestRef(row),
     libraryItem: row.event?.knowledgeItem ?? null,
+    reviewItem: row.event?.reviewComment?.reviewItem ?? null,
   }));
 }
 
@@ -259,7 +313,20 @@ export async function resolveContribution(
 ) {
   const entry = await db.contributionLedger.findUnique({
     where: { id: ledgerId },
-    include: { event: { include: { rule: true } }, user: { select: { name: true, email: true } } },
+    include: {
+      event: {
+        include: {
+          rule: true,
+          attendance: { include: { event: { select: { id: true, title: true } } } },
+          post: { select: { slug: true, title: true } },
+          knowledgeItem: { select: { id: true, title: true } },
+          reviewComment: { select: { reviewItem: { select: { id: true, title: true } } } },
+        },
+      },
+      meetingRequestAsRequesterSpend: { select: { topic: true, proposedTimes: true } },
+      meetingRequestAsRecipientEarn: { select: { topic: true, proposedTimes: true } },
+      user: { select: { name: true, email: true } },
+    },
   });
 
   if (!entry) throw new ContributionResolutionError(404, "Contribution not found.");
@@ -285,38 +352,115 @@ export async function resolveContribution(
     throw new ContributionResolutionError(400, "A reason is required to reject this contribution.");
   }
 
-  return db.$transaction(async (tx) => {
-    const updated = await tx.contributionLedger.update({
-      where: { id: ledgerId },
-      data: {
-        status: decision,
-        resolvedByUserId: actingUser.id,
-        resolvedAt: new Date(),
-        ...(trimmedReason ? { reason: trimmedReason } : {}),
-      },
-    });
-
-    if (isAdmin && !isNamedCounterpart) {
-      await recordAdminAction(
-        {
-          actorId: actingUser.id,
-          action: `ledger.${decision}`,
-          entityType: "ContributionLedger",
-          entityId: ledgerId,
-          metadata: {
-            targetUserId: entry.userId,
-            targetUserName: entry.user.name ?? entry.user.email,
-            hours: entry.hours.toNumber(),
-            activity: entry.event?.rule.label ?? entry.type,
-            reason: trimmedReason ?? null,
-          },
+  try {
+    return await db.$transaction(async (tx) => {
+      // The findUnique above is a fast-fail for the common sequential case
+      // (someone else's resolution already committed before this request
+      // even started) but isn't itself a safe guard against two requests
+      // racing each other — both could pass that check while the row is
+      // still `pending`. This updateMany's `where` re-asserts `status:
+      // pending` as part of the same atomic write Postgres uses to
+      // serialize concurrent UPDATEs on this row, so exactly one of two
+      // simultaneous resolutions affects a row (`count === 1`) and the
+      // other sees `count === 0` — a real compare-and-swap, not just a
+      // read-then-write TOCTOU check.
+      const result = await tx.contributionLedger.updateMany({
+        where: { id: ledgerId, status: LedgerStatus.pending },
+        data: {
+          status: decision,
+          resolvedByUserId: actingUser.id,
+          resolvedAt: new Date(),
+          ...(trimmedReason ? { reason: trimmedReason } : {}),
         },
-        tx,
+      });
+      if (result.count === 0) {
+        // Signals the race to the catch block below, which re-reads the
+        // row (outside this now-rolled-back transaction) to name who won
+        // it — throwing here aborts the transaction, so nothing else in
+        // this callback (the AdminActionLog write) is committed either.
+        throw new ContributionResolutionError(409, "raced");
+      }
+
+      const updated = await tx.contributionLedger.findUniqueOrThrow({ where: { id: ledgerId } });
+
+      if (isAdmin && !isNamedCounterpart) {
+        const itemRef = contributionItemRef(entry);
+        await recordAdminAction(
+          {
+            actorId: actingUser.id,
+            action: `ledger.${decision}`,
+            entityType: "ContributionLedger",
+            entityId: ledgerId,
+            metadata: {
+              targetUserId: entry.userId,
+              targetUserName: entry.user.name ?? entry.user.email,
+              hours: entry.hours.toNumber(),
+              activity: entry.event?.rule.label ?? entry.type,
+              reason: trimmedReason ?? null,
+              itemTitle: itemRef?.title ?? null,
+              itemHref: itemRef?.href ?? null,
+            },
+          },
+          tx,
+        );
+      }
+
+      const activity = entry.event?.rule.label ?? entry.type;
+
+      // Submitter never otherwise learns their entry was resolved — bell
+      // notification only, no email, matching every other contribution
+      // notification in this codebase. Skipped when the actor resolved
+      // their own entry (admins can do that; no need to tell yourself).
+      if (entry.userId !== actingUser.id) {
+        await createNotification(
+          {
+            recipientId: entry.userId,
+            type: decision === LedgerStatus.confirmed ? NotificationType.contribution_awarded : NotificationType.contribution_rejected,
+            message:
+              decision === LedgerStatus.confirmed
+                ? `Your "${activity}" contribution was confirmed — ${formatHours(entry.hours.toNumber())} Knowledge Hours added to your balance.`
+                : `Your "${activity}" contribution was rejected${trimmedReason ? `: ${trimmedReason}` : "."}`,
+            link: "/contributions",
+          },
+          tx,
+        );
+      }
+
+      // Named counterpart otherwise has no way to learn their pending
+      // "awaiting your confirmation" entry was resolved out from under them
+      // — it just disappears from their dashboard widget with no
+      // explanation. Only fires when an admin resolved in place of them
+      // (isNamedCounterpart false here means the counterpart isn't the one
+      // who just acted); when the counterpart resolves it themselves, they
+      // obviously already know.
+      if (isAdmin && !isNamedCounterpart && entry.event?.counterpartId) {
+        await createNotification(
+          {
+            recipientId: entry.event.counterpartId,
+            type: NotificationType.contribution_resolved_by_admin,
+            message: `An admin already ${decision} ${entry.user.name ?? entry.user.email}'s "${activity}" contribution — no action needed from you.`,
+            link: "/contributions",
+          },
+          tx,
+        );
+      }
+
+      return updated;
+    });
+  } catch (error) {
+    if (error instanceof ContributionResolutionError && error.status === 409) {
+      const latest = await db.contributionLedger.findUnique({
+        where: { id: ledgerId },
+        include: { resolvedByUser: { select: { name: true, email: true } } },
+      });
+      const resolverName = latest?.resolvedByUser?.name ?? latest?.resolvedByUser?.email ?? "someone else";
+      throw new ContributionResolutionError(
+        409,
+        `This contribution was already ${latest?.status ?? "resolved"} by ${resolverName}.`,
       );
     }
-
-    return updated;
-  });
+    throw error;
+  }
 }
 
 export class LedgerAdjustmentError extends Error {

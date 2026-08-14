@@ -19,6 +19,14 @@ const eventFieldsSchema = z.object({
     .refine((value) => /^https?:\/\//i.test(value), "Enter a valid URL (starting with http:// or https://)")
     .nullable(),
   deidentificationConfirmed: z.boolean(),
+  // The submitting browser's IANA zone (e.g. "America/New_York"), captured
+  // via Intl.DateTimeFormat().resolvedOptions().timeZone alongside
+  // startsAt/endsAt — see Event.timezone's schema comment. Nullable rather
+  // than required so a request that somehow omits it (an old client, a
+  // direct API call) still creates/edits the event rather than failing
+  // outright; formatEventDateTime falls back to a fixed default zone when
+  // it's null.
+  timezone: z.string().trim().min(1).nullable(),
 });
 
 // Case Discussion's de-identification checkbox (§11's hard requirement, not

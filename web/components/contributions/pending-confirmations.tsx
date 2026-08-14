@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -38,6 +39,13 @@ export function PendingConfirmations({ entries }: { entries: ContributionPending
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => null);
+        // 409/404 mean this was already resolved (by an admin, most likely,
+        // since the only other party who could act on it is this same
+        // member) — refetch so the stale row drops out instead of sitting
+        // there looking actionable.
+        if (res.status === 409 || res.status === 404) {
+          await queryClient.invalidateQueries({ queryKey: ["contributions-history"] });
+        }
         throw new Error(typeof payload?.error === "string" ? payload.error : "Something went wrong.");
       }
       await queryClient.invalidateQueries({ queryKey: ["contributions-history"] });
@@ -75,6 +83,20 @@ export function PendingConfirmations({ entries }: { entries: ContributionPending
                 <TableCell>{formatDate(entry.date)}</TableCell>
                 <TableCell>
                   {entry.activity}
+                  {entry.libraryItem && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      <Link href={`/library/${entry.libraryItem.id}`} className="hover:underline">
+                        {entry.libraryItem.title}
+                      </Link>
+                    </p>
+                  )}
+                  {entry.reviewItem && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      <Link href={`/review-feedback/${entry.reviewItem.id}`} className="hover:underline">
+                        {entry.reviewItem.title}
+                      </Link>
+                    </p>
+                  )}
                   {entry.meetingRequest && (
                     <p className="mt-1 text-xs text-muted-foreground">
                       Meeting: {entry.meetingRequest.topic} · proposed for{" "}

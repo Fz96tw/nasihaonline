@@ -40,6 +40,7 @@ const DEFAULT_VALUES: CreateEventValues = {
   open: false,
   meetingUrl: null,
   deidentificationConfirmed: false,
+  timezone: null,
   visibility: EventVisibility.community,
   invitedUserIds: [],
   meetLinkSource: "auto",
@@ -139,6 +140,7 @@ export function SubmitEventForm({
           open: existingEvent.open,
           meetingUrl: existingEvent.meetingUrl,
           deidentificationConfirmed: existingEvent.deidentificationConfirmed,
+          timezone: null,
           // The invited list itself isn't editable from this form
           // (Audience-Restricted Group Events — see ManageInvitees on the
           // event detail page for that) but visibility itself needs to be
@@ -181,6 +183,11 @@ export function SubmitEventForm({
       // storage), same conversion as RequestMeetingDialog's proposedTimes.
       formData.append("startsAt", new Date(values.startsAt).toISOString());
       if (values.endsAt) formData.append("endsAt", new Date(values.endsAt).toISOString());
+      // The zone startsAt/endsAt above were actually entered in — stored
+      // alongside them so notification/email "when" text can be formatted
+      // back into the organizer's wall-clock time instead of the server
+      // process's own timezone (see Event.timezone's schema comment).
+      formData.append("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
       // "Open to the public" doesn't make sense for a restricted event —
       // same "can't linger as true after switching away" rationale as
       // deidentificationConfirmed below.

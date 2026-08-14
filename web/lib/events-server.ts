@@ -23,6 +23,7 @@ import {
 } from "@/lib/google-calendar";
 import { createNotification } from "@/lib/notifications-server";
 import { sendEventInviteEmail, sendEventLifecycleEmail } from "@/lib/email";
+import { formatEventDateTime } from "@/lib/format-date";
 import {
   deleteEventHeroImage,
   getEventHeroImageUrl,
@@ -689,7 +690,7 @@ async function notifyInvitedUsers(
  */
 async function emailInvitedUsers(
   users: { email: string; name: string | null }[],
-  params: { eventId: string; title: string; hostName: string; startsAt: Date },
+  params: { eventId: string; title: string; hostName: string; startsAt: Date; timezone: string | null },
 ): Promise<void> {
   if (users.length === 0) return;
   const link = `${APP_URL}/calendar/${params.eventId}`;
@@ -699,6 +700,7 @@ async function emailInvitedUsers(
         hostName: params.hostName,
         title: params.title,
         startsAt: params.startsAt,
+        timezone: params.timezone,
         link,
       }),
     ),
@@ -732,6 +734,7 @@ export async function createEvent(
     open: boolean;
     meetingUrl: string | null;
     deidentificationConfirmed: boolean;
+    timezone: string | null;
     heroImage: File | null;
     visibility: EventVisibility;
     invitedUserIds: string[];
@@ -850,6 +853,7 @@ export async function createEvent(
         hostId,
         startsAt,
         endsAt,
+        timezone: input.timezone,
         open: input.open,
         heroImageUrl,
         meetingUrl,
@@ -878,7 +882,13 @@ export async function createEvent(
   // Best-effort, same rationale as every other email in lib/email.ts — the
   // Event/EventInvitee/Notification rows already exist by this point, so a
   // failed/unconfigured send must not undo the creation.
-  await emailInvitedUsers(invitedUsers, { eventId: event.id, title: input.title, hostName, startsAt });
+  await emailInvitedUsers(invitedUsers, {
+    eventId: event.id,
+    title: input.title,
+    hostName,
+    startsAt,
+    timezone: input.timezone,
+  });
 
   return { id: event.id };
 }
@@ -946,6 +956,7 @@ export async function updateEvent(
     open: boolean;
     meetingUrl: string | null;
     deidentificationConfirmed: boolean;
+    timezone: string | null;
     heroImage: File | null;
   },
 ): Promise<{ id: string }> {
@@ -1018,6 +1029,7 @@ export async function updateEvent(
         type: input.type,
         startsAt,
         endsAt,
+        timezone: input.timezone,
         open: input.open,
         heroImageUrl,
         meetingUrl: input.meetingUrl,
@@ -1060,7 +1072,7 @@ export async function updateEvent(
   // its committed audience via notifyEventAudience (shared with
   // cancelEvent), not just restricted events.
   if (timeChanged) {
-    const when = startsAt.toLocaleString("en-US", { dateStyle: "full", timeStyle: "short" });
+    const when = formatEventDateTime(startsAt, input.timezone);
     await notifyEventAudience(eventId, event.visibility, {
       type: NotificationType.event_rescheduled,
       subject: `Rescheduled: ${input.title}`,
@@ -1095,6 +1107,7 @@ export async function updateEventInvitees(
       googleEventId: true,
       cancelledAt: true,
       startsAt: true,
+      timezone: true,
     },
   });
   if (!event) throw new EventError(404, "Event not found.");
@@ -1174,7 +1187,13 @@ export async function updateEventInvitees(
   // Best-effort, same rationale as every other email/Google call in this
   // file — the DB rows already reflect the new invited list by this point.
   await Promise.all([
-    emailInvitedUsers(newInvitees, { eventId, title: event.title, hostName, startsAt: event.startsAt }),
+    emailInvitedUsers(newInvitees, {
+      eventId,
+      title: event.title,
+      hostName,
+      startsAt: event.startsAt,
+      timezone: event.timezone,
+    }),
     removeCandidates.length > 0
       ? Promise.allSettled(
           removeCandidates.map((row) =>
@@ -1392,10 +1411,10 @@ export async function rsvpToEvent(
 export async function registerForEvent(
   eventId: string,
   input: { email: string; name: string },
-): Promise<{ id: string; title: string; startsAt: Date; meetingUrl: string | null }> {
+): Promise<{ id: string; title: string; startsAt: Date; timezone: string | null; meetingUrl: string | null }> {
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { id: true, title: true, startsAt: true, open: true, visibility: true, meetingUrl: true },
+    select: { id: true, title: true, startsAt: true, timezone: true, open: true, visibility: true, meetingUrl: true },
   });
   if (!event) throw new EventError(404, "Event not found.");
   // The real enforcement point: even if `open` were ever true on a
@@ -1412,7 +1431,13 @@ export async function registerForEvent(
     update: { name: input.name },
   });
 
-  return { id: event.id, title: event.title, startsAt: event.startsAt, meetingUrl: event.meetingUrl };
+  return {
+    id: event.id,
+    title: event.title,
+    startsAt: event.startsAt,
+    timezone: event.timezone,
+    meetingUrl: event.meetingUrl,
+  };
 }
 
 function formatIcsDate(date: Date): string {

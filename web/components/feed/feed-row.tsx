@@ -11,9 +11,11 @@ import { cn } from "@/lib/utils";
 export function FeedRow({ item }: { item: FeedItem }) {
   const subtitle = [item.author.titleSpecialty, item.author.countryRegion].filter(Boolean).join(", ");
   // Forum threads always carry the same static default image (no per-thread
-  // upload), so they get a small left-side thumbnail instead of the
-  // full-width hero image other feed types render below their content.
+  // upload), so instead of the full-width hero image other feed types render
+  // below their content, it's shown as a small dimmed square in the
+  // top-right corner, with the title/excerpt text overlaid on top of it.
   const isForumThread = item.type === "forum_thread";
+  const hasThreadImage = isForumThread && !!item.imageUrl;
 
   return (
     <li>
@@ -42,38 +44,62 @@ export function FeedRow({ item }: { item: FeedItem }) {
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-start gap-1">
-              <div className="min-w-0 w-fit max-w-[60%]">
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="text-base font-semibold">{item.title}</span>
-                  {item.titleTier && (
-                    <Badge variant={TIER_BADGE_VARIANT[item.titleTier]} className="flex-shrink-0">
-                      {DIRECTORY_TIER_LABELS[item.titleTier]}
-                    </Badge>
+              <div className={cn("mt-2 min-w-0 flex-1", hasThreadImage && "relative")}>
+                {hasThreadImage && (
+                  <div className="absolute right-0 top-0 aspect-square w-[12%] overflow-hidden rounded-md">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
+                    <img src={item.imageUrl!} alt="" className="h-full w-full object-cover" />
+                    <div className="absolute inset-0 bg-white/70" />
+                  </div>
+                )}
+                <div className={cn(hasThreadImage && "relative z-10")}>
+                  <div className="flex items-center gap-2">
+                    <span className={cn("text-base font-semibold", hasThreadImage && "text-neutral-900")}>
+                      {item.title}
+                    </span>
+                    {item.titleTier && (
+                      <Badge variant={TIER_BADGE_VARIANT[item.titleTier]} className="flex-shrink-0">
+                        {DIRECTORY_TIER_LABELS[item.titleTier]}
+                      </Badge>
+                    )}
+                  </div>
+                  <div
+                    className={cn(
+                      "mt-0.5 line-clamp-2 text-sm",
+                      hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
+                    )}
+                  >
+                    {item.excerpt}
+                  </div>
+                  {item.replyExcerpt && (
+                    <div
+                      className={cn(
+                        "mt-1 line-clamp-2 text-sm italic",
+                        hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
+                      )}
+                    >
+                      &ldquo;{item.replyExcerpt}&rdquo;
+                    </div>
+                  )}
+                  {item.volunteerNote && (
+                    <div
+                      className={cn(
+                        "mt-1 line-clamp-2 text-xs italic",
+                        hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
+                      )}
+                    >
+                      Looking for: {item.volunteerNote}
+                    </div>
+                  )}
+                  {item.eventStartsAt && (
+                    <div
+                      className={cn("mt-0.5 text-xs", hasThreadImage ? "text-neutral-800" : "text-muted-foreground")}
+                    >
+                      Event Date: {formatTimestamp(item.eventStartsAt)}
+                    </div>
                   )}
                 </div>
-                <div className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{item.excerpt}</div>
-                {item.replyExcerpt && (
-                  <div className="mt-1 line-clamp-2 text-sm italic text-muted-foreground">
-                    &ldquo;{item.replyExcerpt}&rdquo;
-                  </div>
-                )}
-                {item.volunteerNote && (
-                  <div className="mt-1 line-clamp-2 text-xs italic text-muted-foreground">
-                    Looking for: {item.volunteerNote}
-                  </div>
-                )}
-                {item.eventStartsAt && (
-                  <div className="mt-0.5 text-xs text-muted-foreground">Event Date: {formatTimestamp(item.eventStartsAt)}</div>
-                )}
               </div>
-              {isForumThread && item.imageUrl && (
-                // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
-                <img
-                  src={item.imageUrl}
-                  alt=""
-                  className="mt-2 aspect-square w-[11.25%] flex-shrink-0 rounded-md object-cover"
-                />
-              )}
             </div>
             {!isForumThread && item.imageUrl && (
               // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale

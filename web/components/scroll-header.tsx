@@ -2,20 +2,37 @@
 
 import { useEffect, type ReactNode } from "react";
 
-const SCROLL_THRESHOLD = 20;
+// Two thresholds (instead of one) create a dead zone so scroll jitter near the
+// boundary (e.g. trackpad momentum/rubber-banding) can't flip the header back
+// and forth mid-transition.
+const COMPACT_THRESHOLD = 40;
+const EXPAND_THRESHOLD = 10;
 const HEADER_HEIGHT_EXPANDED = "92px";
 const HEADER_HEIGHT_COMPACT = "62px";
 
 export function ScrollHeader({ children }: { children: ReactNode }) {
   useEffect(() => {
     const root = document.documentElement;
-    const handleScroll = () => {
+    let isCompact = window.scrollY > COMPACT_THRESHOLD;
+
+    const applyState = (compact: boolean) => {
+      isCompact = compact;
       root.style.setProperty(
         "--header-height",
-        window.scrollY > SCROLL_THRESHOLD ? HEADER_HEIGHT_COMPACT : HEADER_HEIGHT_EXPANDED,
+        compact ? HEADER_HEIGHT_COMPACT : HEADER_HEIGHT_EXPANDED,
       );
     };
-    handleScroll();
+
+    const handleScroll = () => {
+      const y = window.scrollY;
+      if (!isCompact && y > COMPACT_THRESHOLD) {
+        applyState(true);
+      } else if (isCompact && y < EXPAND_THRESHOLD) {
+        applyState(false);
+      }
+    };
+
+    applyState(isCompact);
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);

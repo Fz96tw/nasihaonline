@@ -29,6 +29,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     open: formData.get("open") === "true",
     meetingUrl: formData.get("meetingUrl") || null,
     deidentificationConfirmed: formData.get("deidentificationConfirmed") === "true",
+    timezone: formData.get("timezone") || null,
   });
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

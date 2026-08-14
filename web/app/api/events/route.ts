@@ -56,6 +56,7 @@ export async function POST(request: Request) {
     open: formData.get("open") === "true",
     meetingUrl: formData.get("meetingUrl") || null,
     deidentificationConfirmed: formData.get("deidentificationConfirmed") === "true",
+    timezone: formData.get("timezone") || null,
     visibility: formData.get("visibility") || "community",
     invitedUserIds,
     meetLinkSource: formData.get("meetLinkSource") || "manual",
