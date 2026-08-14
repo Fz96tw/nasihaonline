@@ -21,7 +21,7 @@ const ACTIONS: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Write a blog", href: "/blog", icon: PenLine },
   { label: "Start a discussion", href: "/forums", icon: MessageSquare },
   { label: "Request a peer review", href: "/review-feedback", icon: ClipboardCheck },
-  { label: "Contribute to Knowledge Library", href: "/library/new", icon: BookOpen },
+  { label: "Add content to the Library", href: "/library/new", icon: BookOpen },
   { label: "Schedule an event", href: "/calendar", icon: CalendarPlus },
   { label: "Search member directory", href: "/members", icon: Search },
   { label: "Schedule 1-1 meeting", href: "/inbox", icon: Users },

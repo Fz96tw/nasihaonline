@@ -7,6 +7,7 @@ import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-ser
 import { getForumThreadDetail } from "@/lib/forums-server";
 import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS } from "@/lib/library";
+import { FEED_TYPE_LABELS } from "@/lib/feed";
 import { youtubeThumbnailUrl } from "@/lib/youtube";
 import { KnowledgeContentType, KnowledgeStatus, KnowledgeVisibility, Role } from "@/lib/generated/prisma/enums";
 import { Avatar } from "@/components/ui/avatar";
@@ -73,6 +74,8 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
           <img src={heroImageUrl} alt={item.title} className="h-full w-full object-cover" />
         </div>
       )}
+
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{FEED_TYPE_LABELS.library}</p>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {item.categories.map((category) => (

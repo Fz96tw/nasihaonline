@@ -343,6 +343,11 @@ const FORUMS: { name: string; description: string; displayOrder: number }[] = [
     description: "On-demand discussion threads for Knowledge Library resources, started from a resource's detail page.",
     displayOrder: 7,
   },
+  {
+    name: "Community Feedback",
+    description: "Suggestions, feature requests, and feedback on the platform and community programs.",
+    displayOrder: 8,
+  },
 ];
 
 // Sample blog posts (mixed draft/published, PRD §4.8) so 5.2+ has real data

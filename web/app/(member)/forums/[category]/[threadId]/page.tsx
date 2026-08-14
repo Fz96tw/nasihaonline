@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { CLINICAL_DISCUSSIONS_SLUG, getForumThreadAudienceBadge } from "@/lib/forums";
+import { FEED_TYPE_LABELS } from "@/lib/feed";
 import { ForumThreadVisibility, Role } from "@/lib/generated/prisma/enums";
 
 export async function generateMetadata({
@@ -61,6 +62,13 @@ export default async function ForumThreadPage({
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
       <BackLink fallbackHref={`/forums/${thread.forum.slug}`} />
       <div>
+        <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <span>{FEED_TYPE_LABELS.forum_thread}</span>
+          <span aria-hidden="true">·</span>
+          <Link href={`/forums/${thread.forum.slug}`} className="hover:text-foreground hover:underline">
+            {thread.forum.name}
+          </Link>
+        </p>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             {thread.pinned && <Pin className="h-4 w-4 text-primary" />}

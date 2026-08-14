@@ -46,7 +46,7 @@ export function FeedRow({ item }: { item: FeedItem }) {
             <div className="flex items-start gap-1">
               <div className={cn("mt-2 min-w-0 flex-1", hasThreadImage && "relative")}>
                 {hasThreadImage && (
-                  <div className="absolute right-0 top-0 aspect-square w-[12%] overflow-hidden rounded-md">
+                  <div className="absolute right-0 top-0 aspect-square w-[9%] overflow-hidden rounded-md">
                     {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
                     <img src={item.imageUrl!} alt="" className="h-full w-full object-cover" />
                     <div className="absolute inset-0 bg-white/70" />

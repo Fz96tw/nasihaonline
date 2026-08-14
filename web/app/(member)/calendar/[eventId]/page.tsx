@@ -10,6 +10,7 @@ import { EventDetail } from "@/components/calendar/event-detail";
 import { EventDiscussionLink } from "@/components/calendar/event-discussion-link";
 import { ForumThreadView } from "@/components/forums/forum-thread-view";
 import { BackLink } from "@/components/back-link";
+import { FEED_TYPE_LABELS } from "@/lib/feed";
 import { EventVisibility, Role } from "@/lib/generated/prisma/enums";
 
 export async function generateMetadata({ params }: { params: { eventId: string } }): Promise<Metadata> {
@@ -35,6 +36,7 @@ export default async function EventDetailPage({ params }: { params: { eventId: s
       <main className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
         <BackLink fallbackHref="/calendar" />
         <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{FEED_TYPE_LABELS.event}</p>
           <h1 className="mb-1 text-3xl font-bold tracking-tight">{event.title}</h1>
           {event.hostName ? <p className="text-sm text-muted-foreground">Hosted by {event.hostName}</p> : null}
         </div>

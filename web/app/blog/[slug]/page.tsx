@@ -5,6 +5,7 @@ import { getPublishedPostBySlug, getPostComments, getPostsByAuthor, getPostViewC
 import { getSessionUser } from "@/lib/auth";
 import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-server";
 import { countAllComments } from "@/lib/blog";
+import { FEED_TYPE_LABELS } from "@/lib/feed";
 import { Role } from "@/lib/generated/prisma/enums";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,8 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
         // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
         <img src={post.heroImageUrl} alt={post.title} className="mb-8 h-72 w-full rounded-lg object-cover" />
       )}
+
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{FEED_TYPE_LABELS.post}</p>
 
       <div className="mb-3 flex flex-wrap gap-1.5">
         {post.categories.map((category) => (

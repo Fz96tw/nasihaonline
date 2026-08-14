@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { Flame, Clock, ListOrdered } from "lucide-react";
+import { Flame, Clock, ListOrdered, ArrowDownAZ } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getForumCategories } from "@/lib/forums-server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,36 +15,39 @@ export const metadata: Metadata = {
   title: "Forums — NASIHA",
 };
 
-type ForumSort = "featured" | "active" | "recent";
+type ForumSort = "az" | "featured" | "active" | "recent";
 
 const FORUM_SORT_COOKIE = "forums_sort";
 
 const SORT_OPTIONS: { value: ForumSort; label: string; icon: ReactNode }[] = [
+  { value: "az", label: "A–Z", icon: <ArrowDownAZ className="h-4 w-4" /> },
   { value: "featured", label: "Featured order", icon: <ListOrdered className="h-4 w-4" /> },
   { value: "recent", label: "Most recent", icon: <Clock className="h-4 w-4" /> },
   { value: "active", label: "Most active", icon: <Flame className="h-4 w-4" /> },
 ];
 
 function isForumSort(value: string | undefined): value is ForumSort {
-  return value === "featured" || value === "active" || value === "recent";
+  return value === "az" || value === "featured" || value === "active" || value === "recent";
 }
 
 /**
- * /forums (§4.13) — member-only category list, sourced from the six
- * seeded Forum rows. "The primary space for asynchronous, community-wide
+ * /forums (§4.13) — member-only category list, sourced from the seeded
+ * Forum rows. "The primary space for asynchronous, community-wide
  * interaction" per Member_Communications.md. Sort buttons re-order the same
  * fetched list client-side-free via a `?sort=` param — cheap given there
- * are only six categories, no need for a real sort UI.
+ * are only a handful of categories, no need for a real sort UI. Defaults
+ * to alphabetical (A–Z).
  */
 export default async function ForumsPage({ searchParams }: { searchParams: { sort?: string } }) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
   const requestedSort = isForumSort(searchParams.sort) ? searchParams.sort : cookies().get(FORUM_SORT_COOKIE)?.value;
-  const sort: ForumSort = isForumSort(requestedSort) ? requestedSort : "featured";
+  const sort: ForumSort = isForumSort(requestedSort) ? requestedSort : "az";
 
   const forums = await getForumCategories();
   const sortedForums = [...forums].sort((a, b) => {
+    if (sort === "az") return a.name.localeCompare(b.name);
     if (sort === "active") return (b.postCount ?? 0) - (a.postCount ?? 0);
     if (sort === "recent") {
       return (b.lastActivityAt ?? "").localeCompare(a.lastActivityAt ?? "");

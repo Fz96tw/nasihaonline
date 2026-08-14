@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Shield } from "lucide-react";
+import { Shield, UserCheck } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import {
   getReviewItemDetail,
@@ -10,6 +10,7 @@ import {
   getPendingVolunteerOffers,
 } from "@/lib/review-server";
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS } from "@/lib/review";
+import { FEED_TYPE_LABELS } from "@/lib/feed";
 import { KnowledgeContentType, Role } from "@/lib/generated/prisma/enums";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +57,17 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
     return (
       <main className="mx-auto max-w-3xl px-8 py-16">
         <BackLink fallbackHref="/review-feedback" className="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline" />
+
+        {item.myOfferStatus === "pending" && (
+          <div className="mb-6 flex items-center gap-2 rounded-lg border border-success/40 bg-success/5 px-4 py-3 text-sm text-success">
+            <UserCheck className="h-4 w-4 shrink-0" />
+            <span>
+              You offered to review this submission — waiting for {item.submitter.name ?? "the submitter"} to respond.
+            </span>
+          </div>
+        )}
+
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{FEED_TYPE_LABELS.peer_review}</p>
 
         <div className="mb-3 flex flex-wrap items-center gap-2">
           {item.categories.map((category) => (
@@ -128,6 +140,19 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
           </span>
         </div>
       )}
+
+      {!item.isSubmitter && item.isInvitee && (
+        <div className="mb-6 flex items-center gap-2 rounded-lg border border-success/40 bg-success/5 px-4 py-3 text-sm text-success">
+          <UserCheck className="h-4 w-4 shrink-0" />
+          <span>
+            {item.myOfferStatus === "accepted"
+              ? "Your offer to review this submission was accepted."
+              : `${item.submitter.name ?? "The submitter"} asked you to review this submission.`}
+          </span>
+        </div>
+      )}
+
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{FEED_TYPE_LABELS.peer_review}</p>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {item.categories.map((category) => (

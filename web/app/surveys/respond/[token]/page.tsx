@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getInvitationByToken } from "@/lib/surveys-server";
 import { SurveyRespondForm } from "@/components/survey-respond-form";
 import { BackLink } from "@/components/back-link";
+import { FEED_TYPE_LABELS } from "@/lib/feed";
 
 // Maps the ?ref=<source> marker /surveys/[id] forwards here to where "back"
 // should go — an emailed-link visitor (no ref, often no session) has
@@ -47,6 +48,7 @@ export default async function SurveyRespondPage({
             className="mb-4 max-h-64 w-full rounded-md object-cover"
           />
         )}
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{FEED_TYPE_LABELS.survey}</p>
         <h1 className="text-3xl font-bold tracking-tight">{invitation.surveyTitle}</h1>
         {invitation.surveyDescription && (
           <p className="mt-2 text-muted-foreground">{invitation.surveyDescription}</p>

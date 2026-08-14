@@ -25,6 +25,7 @@ import {
 } from "@/lib/events";
 import type { DirectoryMember } from "@/lib/members";
 import { useHasMounted } from "@/lib/use-has-mounted";
+import { FEED_TYPE_LABELS } from "@/lib/feed";
 
 function formatEventDateRange(startsAt: string, endsAt: string | null) {
   const start = new Date(startsAt);
@@ -97,6 +98,7 @@ export function EventDetail({
       )}
 
       <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{FEED_TYPE_LABELS.event}</p>
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>
           <Badge variant="neutral">{EVENT_TYPE_LABELS[event.type]}</Badge>
