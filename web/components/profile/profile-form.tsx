@@ -115,6 +115,11 @@ export function ProfileForm({
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-8" noValidate>
         <ProfilePhotoUpload name={form.watch("name") || "?"} avatarUrl={avatarUrl} />
 
+        <p className="text-sm text-muted-foreground">
+          Fields marked with <span className="text-destructive">*</span> are required to
+          complete your profile.
+        </p>
+
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <section className="flex flex-col gap-4 rounded-[10px] border bg-card p-6 shadow-sm">
             <div>
@@ -148,7 +153,10 @@ export function ProfileForm({
               name="countryRegion"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Country / Region</FormLabel>
+                  <FormLabel>
+                    Country / Region <span className="text-destructive">*</span>
+                    <span className="sr-only"> (required)</span>
+                  </FormLabel>
                   <FormControl>
                     <Input placeholder="e.g. Pakistan, United Kingdom, Nigeria" {...field} />
                   </FormControl>
@@ -182,7 +190,10 @@ export function ProfileForm({
               name="titleSpecialty"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Title / Specialty</FormLabel>
+                  <FormLabel>
+                    Title / Specialty <span className="text-destructive">*</span>
+                    <span className="sr-only"> (required)</span>
+                  </FormLabel>
                   <FormControl>
                     <Input placeholder="e.g. Cardiologist, Medical Student" {...field} />
                   </FormControl>
@@ -196,7 +207,10 @@ export function ProfileForm({
               name="careerStage"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Career Stage</FormLabel>
+                  <FormLabel>
+                    Career Stage <span className="text-destructive">*</span>
+                    <span className="sr-only"> (required)</span>
+                  </FormLabel>
                   <FormControl>
                     <Input placeholder="e.g. Practicing physician, Resident / Fellow" {...field} />
                   </FormControl>
@@ -225,10 +239,16 @@ export function ProfileForm({
               name="skillIds"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Areas of Expertise</FormLabel>
+                  <FormLabel>
+                    Areas of Expertise <span className="text-destructive">*</span>
+                    <span className="sr-only"> (required)</span>
+                  </FormLabel>
                   <FormControl>
                     <TagPicker options={availableSkills} value={field.value} onChange={field.onChange} triggerLabel="Add a skill…" searchPlaceholder="Search skills…" emptyText="No skill found." />
                   </FormControl>
+                  <FormDescription>
+                    Required unless you list something under Other Expertise below.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -243,7 +263,10 @@ export function ProfileForm({
                   <FormControl>
                     <Textarea rows={2} placeholder="e.g. Regional dialect proficiency, niche subspecialty" {...field} />
                   </FormControl>
-                  <FormDescription>Separate with commas.</FormDescription>
+                  <FormDescription>
+                    Separate with commas. Also counts toward the required Areas of Expertise
+                    if you haven&apos;t added any skills above.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -254,7 +277,10 @@ export function ProfileForm({
               name="learningTopics"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Topics I Want to Learn</FormLabel>
+                  <FormLabel>
+                    Topics I Want to Learn <span className="text-destructive">*</span>
+                    <span className="sr-only"> (required)</span>
+                  </FormLabel>
                   <FormControl>
                     <Textarea rows={3} placeholder="e.g. Oncology, palliative care, healthcare leadership…" {...field} />
                   </FormControl>
@@ -289,7 +315,10 @@ export function ProfileForm({
               name="availability"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Availability</FormLabel>
+                  <FormLabel>
+                    Availability <span className="text-destructive">*</span>
+                    <span className="sr-only"> (required)</span>
+                  </FormLabel>
                   <FormDescription>How can you participate? Select all that apply.</FormDescription>
                   <div className="flex flex-col gap-2">
                     {Object.values(ApplicationAvailability).map((value) => (
