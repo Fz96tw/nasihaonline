@@ -9,6 +9,7 @@ import { ForumThreadView } from "@/components/forums/forum-thread-view";
 import { ManageThreadInvitees } from "@/components/forums/manage-thread-invitees";
 import { ThreadViewCounter } from "@/components/forums/thread-view-counter";
 import { BackLink } from "@/components/back-link";
+import { SavedBanner } from "@/components/saved-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
@@ -61,6 +62,7 @@ export default async function ForumThreadPage({
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
       <BackLink fallbackHref={`/forums/${thread.forum.slug}`} />
+      <SavedBanner />
       <div>
         <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           <span>{FEED_TYPE_LABELS.forum_thread}</span>

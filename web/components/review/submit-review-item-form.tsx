@@ -67,7 +67,6 @@ export function SubmitReviewItemForm({
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [sourceMode, setSourceMode] = useState<"file" | "link">(existingItem?.externalUrl ? "link" : "file");
   const [heroImage, setHeroImage] = useState<File | null>(null);
@@ -109,7 +108,6 @@ export function SubmitReviewItemForm({
   async function onSubmit(values: CreateReviewItemValues) {
     setSubmitting(true);
     setError(null);
-    setSaved(false);
     try {
       const csrfToken = await getCsrfToken();
       const formData = new FormData();
@@ -148,12 +146,14 @@ export function SubmitReviewItemForm({
         );
       }
       if (existingItem) {
-        setSaved(true);
-        router.refresh();
+        // Replace (not push) so this edit page's history entry doesn't
+        // linger for BackLink's router.back() on the details page to land
+        // on — same rationale as WritePostForm/EditThreadForm.
+        router.replace(`/review-feedback/${existingItem.id}?saved=1`);
       } else {
         router.push("/review-feedback");
-        router.refresh();
       }
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
@@ -501,11 +501,6 @@ export function SubmitReviewItemForm({
         )}
 
         {error && <p className="text-sm text-destructive">{error}</p>}
-        {saved && !error && (
-          <p className="text-sm text-success" role="status">
-            Changes saved.
-          </p>
-        )}
 
         <div>
           <Button type="submit" disabled={submitting}>

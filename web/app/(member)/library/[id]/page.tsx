@@ -20,6 +20,7 @@ import { LibraryDiscussionLink } from "@/components/library/library-discussion-l
 import { LibraryViewCounter } from "@/components/library/library-view-counter";
 import { ManageLibraryInvitees } from "@/components/library/manage-invitees";
 import { ForumThreadView } from "@/components/forums/forum-thread-view";
+import { SavedBanner } from "@/components/saved-banner";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
@@ -67,6 +68,7 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
   return (
     <main className="mx-auto max-w-3xl px-8 py-16">
       <BackLink fallbackHref="/library" className="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline" />
+      <SavedBanner />
 
       {heroImageUrl && (
         <div className="mb-6 flex h-72 w-full items-center justify-center overflow-hidden rounded-lg bg-muted">

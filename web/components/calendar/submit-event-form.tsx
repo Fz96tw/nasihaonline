@@ -223,7 +223,14 @@ export function SubmitEventForm({
         );
       }
       const { id } = await res.json();
-      router.push(existingEvent ? `/calendar/${id}` : "/calendar");
+      if (existingEvent) {
+        // Replace (not push) so this edit page's history entry doesn't
+        // linger for BackLink's router.back() on the details page to land
+        // on — same rationale as WritePostForm/EditThreadForm.
+        router.replace(`/calendar/${id}?saved=1`);
+      } else {
+        router.push("/calendar");
+      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");

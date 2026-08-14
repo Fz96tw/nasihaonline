@@ -100,7 +100,7 @@ export function WritePostForm({
       // submitted, so it shouldn't linger in history for Back to land on
       // (see BackLink, which relies on router.back() to whatever the
       // requester actually arrived from rather than a hardcoded route).
-      router.replace(`/blog/${slug}`);
+      router.replace(existingPost ? `/blog/${slug}?saved=1` : `/blog/${slug}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");

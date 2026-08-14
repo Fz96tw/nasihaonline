@@ -162,7 +162,14 @@ export function SubmitResourceForm({
               : "Something went wrong. Please try again.",
         );
       }
-      router.push("/library/mine");
+      if (existingItem) {
+        // Replace (not push) so this edit page's history entry doesn't
+        // linger for BackLink's router.back() on the details page to land
+        // on — same rationale as WritePostForm/EditThreadForm.
+        router.replace(`/library/${existingItem.id}?saved=1`);
+      } else {
+        router.push("/library/mine");
+      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");

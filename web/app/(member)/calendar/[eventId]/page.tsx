@@ -7,6 +7,7 @@ import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-ser
 import { getForumThreadDetail } from "@/lib/forums-server";
 import { EVENTS_FORUM_SLUG } from "@/lib/forums";
 import { EventDetail } from "@/components/calendar/event-detail";
+import { SavedBanner } from "@/components/saved-banner";
 import { EventDiscussionLink } from "@/components/calendar/event-discussion-link";
 import { ForumThreadView } from "@/components/forums/forum-thread-view";
 import { BackLink } from "@/components/back-link";
@@ -86,6 +87,7 @@ export default async function EventDetailPage({ params }: { params: { eventId: s
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
       <BackLink fallbackHref="/calendar" />
+      <SavedBanner />
 
       <EventDetail
         event={event}

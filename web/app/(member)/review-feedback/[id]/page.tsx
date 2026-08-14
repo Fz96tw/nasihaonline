@@ -23,6 +23,7 @@ import { ReviewCommentThread } from "@/components/review/review-comment-thread";
 import { VolunteerOffersPanel } from "@/components/review/volunteer-offers-panel";
 import { ReviewLifecycleActions } from "@/components/review/review-lifecycle-actions";
 import { ReviewOfferButton } from "@/components/review/review-offer-button";
+import { SavedBanner } from "@/components/saved-banner";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
@@ -130,6 +131,7 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
   return (
     <main className="mx-auto max-w-3xl px-8 py-16">
       <BackLink fallbackHref="/review-feedback" className="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline" />
+      <SavedBanner />
 
       {isPrivilegedOverride && (
         <div className="mb-6 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/5 px-4 py-3 text-sm text-warning">

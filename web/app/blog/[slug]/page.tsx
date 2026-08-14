@@ -13,6 +13,7 @@ import { CommentThread } from "@/components/blog/comment-thread";
 import { PostFlagButton } from "@/components/blog/post-flag-button";
 import { PostViewCounter } from "@/components/blog/post-view-counter";
 import { BackLink } from "@/components/back-link";
+import { SavedBanner } from "@/components/saved-banner";
 import { PostCard } from "@/components/blog/post-card";
 import { PostAuthorInfo } from "@/components/blog/post-author-info";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -47,6 +48,7 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
   return (
     <main className="mx-auto max-w-3xl px-8 py-16">
       <BackLink fallbackHref="/blog" className="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline" />
+      <SavedBanner />
 
       {post.heroImageUrl && (
         // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
