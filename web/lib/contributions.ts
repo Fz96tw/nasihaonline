@@ -47,6 +47,8 @@ export type ContributionTransaction = {
   post: { slug: string; title: string } | null;
   /** Set only for library_submission-sourced rows — the KnowledgeItem whose publication earned the hours. */
   libraryItem: { id: string; title: string } | null;
+  /** Set only for review_feedback-sourced rows — the peer-review item the feedback was given on. */
+  reviewItem: { id: string; title: string } | null;
   /** Set only for self_reported rows with a note — free text, no linked record to point to. */
   note: string | null;
 };
@@ -68,6 +70,8 @@ export type ContributionPendingEntry = {
   meetingRequest: ContributionMeetingRef | null;
   /** Set only for library_submission-sourced rows — the KnowledgeItem whose publication earned the hours. */
   libraryItem: { id: string; title: string } | null;
+  /** Set only for review_feedback-sourced rows — the peer-review item the feedback was given on. */
+  reviewItem: { id: string; title: string } | null;
 };
 
 /** Trims a trailing ".0" so whole-hour balances read as e.g. "3" rather than "3.0". */
@@ -86,3 +90,20 @@ export const LEDGER_STATUS_BADGE_VARIANT: Record<LedgerStatus, "success" | "warn
   [LedgerStatus.pending]: "warning",
   [LedgerStatus.rejected]: "danger",
 };
+
+/**
+ * Same labels as `FEED_TYPE_LABELS` (lib/feed.ts) for the item types shared
+ * with the What's New feed, so a transaction's linked item reads the same
+ * way in both places. "Meeting" has no feed-type equivalent (the feed
+ * doesn't surface meeting requests); rows with no linked item at all
+ * (self-reported activity with no counterpart record, or an admin
+ * adjustment) fall back to "Manual".
+ */
+export function transactionItemTypeLabel(transaction: ContributionTransaction): string {
+  if (transaction.event) return "Event";
+  if (transaction.post) return "Blog";
+  if (transaction.libraryItem) return "Library";
+  if (transaction.reviewItem) return "Peer Review";
+  if (transaction.meetingRequest) return "Meeting";
+  return "Manual";
+}

@@ -4,6 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import { ContributionsSummaryBar } from "@/components/contributions/summary-bar";
 import { ContributionsHistoryTable } from "@/components/contributions/history-table";
 import { PendingConfirmations } from "@/components/contributions/pending-confirmations";
+import { KnowledgeExchangeTable } from "@/components/home/knowledge-exchange-table";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import {
   type ContributionPendingEntry,
   type ContributionRuleOption,
@@ -55,8 +62,18 @@ export function ContributionsPanel({
       {data.pendingConfirmations.length > 0 && (
         <PendingConfirmations entries={data.pendingConfirmations} />
       )}
-      <ContributionsSummaryBar summary={data.summary} rules={rules} />
-      <ContributionsHistoryTable transactions={data.transactions} />
+      <ContributionsSummaryBar summary={data.summary} />
+      <Accordion type="single" collapsible>
+        <AccordionItem value="how-it-works" className="border-none">
+          <AccordionTrigger className="w-fit flex-none grow-0 gap-2 font-heading text-lg font-semibold hover:no-underline">
+            How Knowledge Hours work
+          </AccordionTrigger>
+          <AccordionContent className="pt-2">
+            <KnowledgeExchangeTable />
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+      <ContributionsHistoryTable transactions={data.transactions} rules={rules} />
     </div>
   );
 }

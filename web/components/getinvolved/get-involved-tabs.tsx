@@ -11,23 +11,37 @@ import { TierPreviewStrip } from "@/components/join/tier-preview-strip";
 import { DonateForm } from "@/components/donate-form";
 import type { AdmissionPhase } from "@/lib/generated/prisma/enums";
 
+const TAB_VALUES = ["how-it-works", "join", "support"] as const;
+type TabValue = (typeof TAB_VALUES)[number];
+
+function isTabValue(value: string | undefined): value is TabValue {
+  return TAB_VALUES.includes(value as TabValue);
+}
+
 export function GetInvolvedTabs({
   phase,
   defaultName,
   defaultEmail,
   success,
   canceled,
+  initialTab,
 }: {
   phase: AdmissionPhase;
   defaultName?: string;
   defaultEmail?: string;
   success?: boolean;
   canceled?: boolean;
+  initialTab?: string;
 }) {
-  const [tab, setTab] = useState("how-it-works");
+  const [tab, setTab] = useState<TabValue>(
+    isTabValue(initialTab) ? initialTab : "how-it-works",
+  );
 
   return (
-    <Tabs value={tab} onValueChange={setTab}>
+    <Tabs
+      value={tab}
+      onValueChange={(value) => setTab(isTabValue(value) ? value : "how-it-works")}
+    >
       <div className="mx-auto max-w-6xl px-4 pt-12 md:px-8">
         <TabsList
           className="h-auto w-full items-end justify-start gap-1 overflow-x-auto overflow-y-hidden rounded-none bg-transparent p-0 [-ms-overflow-style:none] [scrollbar-width:none] [touch-action:pan-x] [&::-webkit-scrollbar]:hidden"

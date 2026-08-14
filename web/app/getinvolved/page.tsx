@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default async function GetInvolvedPage({
   searchParams,
 }: {
-  searchParams: { success?: string; canceled?: string };
+  searchParams: { success?: string; canceled?: string; tab?: string };
 }) {
   const [phase, user] = await Promise.all([getAdmissionPhase(), getSessionUser()]);
 
@@ -41,6 +41,7 @@ export default async function GetInvolvedPage({
         defaultEmail={user?.email ?? undefined}
         success={Boolean(searchParams.success)}
         canceled={Boolean(searchParams.canceled)}
+        initialTab={searchParams.tab}
       />
     </main>
   );

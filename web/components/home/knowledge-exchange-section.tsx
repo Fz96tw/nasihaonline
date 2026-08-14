@@ -3,7 +3,7 @@ import { Reveal } from "@/components/home/reveal";
 
 export function KnowledgeExchangeSection() {
   return (
-    <section className="px-8 py-20">
+    <section id="knowledge-exchange" className="scroll-mt-[calc(var(--header-height)+16px)] px-8 py-20">
       <div className="mx-auto max-w-[960px]">
         <Reveal>
           <div className="mx-auto max-w-[640px] text-center">

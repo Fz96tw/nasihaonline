@@ -96,8 +96,10 @@ export function LogContributionDialog({ rules }: { rules: ContributionRuleOption
         <DialogHeader>
           <DialogTitle>Log Contribution</DialogTitle>
           <DialogDescription>
-            Submit an activity for confirmation. It enters as pending and won&apos;t affect your balance
-            until it&apos;s confirmed.
+            Most Knowledge Hours are credited automatically based on your activity and appear in
+            your history below. Only use this if something didn&apos;t show up on its own, or a
+            past submission was rejected and you&apos;d like an admin to take another look. It
+            enters as pending and won&apos;t affect your balance until it&apos;s confirmed.
           </DialogDescription>
         </DialogHeader>
 
@@ -158,6 +160,10 @@ export function LogContributionDialog({ rules }: { rules: ContributionRuleOption
                       onChange={(event) => field.onChange(event.target.value)}
                     />
                   </FormControl>
+                  <FormDescription>
+                    If this is a resubmission of something rejected, or an activity the system
+                    should normally catch automatically, explain what happened here.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
