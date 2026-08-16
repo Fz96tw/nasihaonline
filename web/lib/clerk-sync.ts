@@ -51,25 +51,41 @@ export async function upsertUserFromClerkData(
     orderBy: { createdAt: "desc" },
   });
 
-  const user = await db.user.upsert({
-    where: { clerkUserId },
-    create: {
-      clerkUserId,
-      email,
-      name: nameFromMetadata(publicMetadata),
-      role: roleFromMetadata(publicMetadata),
-      tier: tierFromMetadata(publicMetadata),
-      requiresProfileOnboarding: true,
-      profile: {
-        create: {
-          countryRegion: approvedApplication?.countryRegion || undefined,
-          titleSpecialty: approvedApplication?.professionalTitle || undefined,
-          linkedinUrl: approvedApplication?.linkedinUrl || undefined,
+  let user: UserModel;
+  try {
+    user = await db.user.upsert({
+      where: { clerkUserId },
+      create: {
+        clerkUserId,
+        email,
+        name: nameFromMetadata(publicMetadata),
+        role: roleFromMetadata(publicMetadata),
+        tier: tierFromMetadata(publicMetadata),
+        requiresProfileOnboarding: true,
+        profile: {
+          create: {
+            countryRegion: approvedApplication?.countryRegion || undefined,
+            titleSpecialty: approvedApplication?.professionalTitle || undefined,
+            linkedinUrl: approvedApplication?.linkedinUrl || undefined,
+          },
         },
       },
-    },
-    update: { email, role: roleFromMetadata(publicMetadata), tier: tierFromMetadata(publicMetadata) },
-  });
+      update: { email, role: roleFromMetadata(publicMetadata), tier: tierFromMetadata(publicMetadata) },
+    });
+  } catch (error) {
+    // A brand-new session's first page load fires several concurrent RSC
+    // requests, each calling this function before any has committed a row
+    // for this clerkUserId yet. Prisma's upsert compiles to
+    // INSERT ... ON CONFLICT ("clerkUserId") DO UPDATE, which only guards
+    // the clerkUserId arbiter — a concurrent insert racing on the separate
+    // `email` unique constraint still raises a hard P2002 instead of being
+    // absorbed by ON CONFLICT. A P2002 here can only mean a concurrent call
+    // already created the row for this clerkUserId, so just fetch it.
+    const isDuplicate =
+      typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "P2002";
+    if (!isDuplicate) throw error;
+    user = await db.user.findUniqueOrThrow({ where: { clerkUserId } });
+  }
 
   // The nested Profile row above (create branch only) was otherwise never
   // enqueued for Meilisearch indexing — enqueueProfileIndexSync was only
