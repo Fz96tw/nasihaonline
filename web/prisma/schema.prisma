@@ -1109,6 +1109,11 @@ model Attendance {
   userId      String
   user        User           @relation("EventAttendance", fields: [userId], references: [id], onDelete: Cascade)
   role        AttendanceRole @default(attendee)
+  // Which occurrence of a recurring event this attendance is for — equals
+  // the event's own startsAt for a non-recurring event. Part of the unique
+  // key below so a recurring host earns Knowledge Hours once per session
+  // instead of once ever for the whole series (see EventRecurrence comment).
+  occurrenceDate DateTime
   checkedInAt DateTime       @default(now())
   createdAt   DateTime       @default(now())
 
@@ -1116,7 +1121,7 @@ model Attendance {
   // posted (§4.4/§4.6). The other direction of ContributionEvent.attendanceId.
   contributionEvent ContributionEvent?
 
-  @@unique([eventId, userId])
+  @@unique([eventId, userId, occurrenceDate])
   @@index([eventId])
   @@map("attendance")
 }

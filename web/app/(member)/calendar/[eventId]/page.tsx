@@ -20,12 +20,24 @@ export async function generateMetadata({ params }: { params: { eventId: string }
   return { title: event ? `${event.title} — Calendar — NASIHA` : "Event unavailable — NASIHA" };
 }
 
-/** /calendar/[eventId] (§4.6) — single-event detail, member-only like /calendar itself. */
-export default async function EventDetailPage({ params }: { params: { eventId: string } }) {
+/**
+ * /calendar/[eventId] (§4.6) — single-event detail, member-only like
+ * /calendar itself. `?occurrence=` (a recurring event's specific session
+ * ISO start, set by CalendarView's occurrence-aware links) resolves which
+ * session this view is for; a bare link (e.g. from a notification) falls
+ * back to the series' next upcoming occurrence.
+ */
+export default async function EventDetailPage({
+  params,
+  searchParams,
+}: {
+  params: { eventId: string };
+  searchParams: { occurrence?: string };
+}) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const event = await getMemberEventById(user.id, params.eventId);
+  const event = await getMemberEventById(user.id, params.eventId, searchParams.occurrence);
   if (!event) notFound();
 
   // A cancellation notification links straight here, so this can't 404 once
@@ -65,10 +77,12 @@ export default async function EventDetailPage({ params }: { params: { eventId: s
   // "registered guests" is structurally always empty (a restricted event
   // can never also be `open`, the only way EventRegistration rows exist).
   const [attendees, hostProfile, roster, attendanceChecklist] = await Promise.all([
-    canEdit && !isRestricted ? getEventAttendees(event.id) : Promise.resolve(null),
+    canEdit && !isRestricted ? getEventAttendees(event.seriesId) : Promise.resolve(null),
     getDirectoryMemberById(event.hostId),
-    isRestricted ? getEventRoster(event.id) : Promise.resolve(null),
-    canEdit && isRestricted && isPast ? getEventAttendanceChecklist(event.id) : Promise.resolve(null),
+    isRestricted ? getEventRoster(event.seriesId) : Promise.resolve(null),
+    canEdit && isRestricted && isPast
+      ? getEventAttendanceChecklist(event.seriesId, new Date(event.startsAt))
+      : Promise.resolve(null),
   ]);
 
   // Inert for an Events-forum thread specifically (isKnowledgeItemThreadVisible
@@ -101,7 +115,7 @@ export default async function EventDetailPage({ params }: { params: { eventId: s
 
       {!event.forumThreadId && (
         <div className="border-t pt-8">
-          <EventDiscussionLink eventId={event.id} initialThreadId={event.forumThreadId} />
+          <EventDiscussionLink eventId={event.seriesId} initialThreadId={event.forumThreadId} />
         </div>
       )}
 

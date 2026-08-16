@@ -30,6 +30,17 @@ export type PublicEvent = {
   open: boolean;
   heroImageUrl: string | null;
   hostName: string | null;
+  /**
+   * Real Event.id — equals `id` for a non-recurring event; for a
+   * recurring one, `id` is a synthetic per-occurrence id
+   * (`${seriesId}::${occurrenceStartIso}`) while `seriesId` is the real
+   * row every write action (RSVP, cancel, edit, .ics, roster/attendance)
+   * must target.
+   */
+  seriesId: string;
+  isRecurring: boolean;
+  /** Human summary (e.g. "Weekly on Tue") — present only when isRecurring. */
+  recurrenceSummary: string | null;
 };
 
 // /events for a signed-in viewer (§4.6): same shape the public listing gets
@@ -141,19 +152,26 @@ export type DashboardUpcomingEvent = {
   startsAt: string;
   rsvped: boolean;
   meetingUrl: string | null;
+  seriesId: string;
+  isRecurring: boolean;
 };
 
 // /admin/events (§4.4/§4.6) — a past event awaiting (or already past) its
 // host attendance-recording action, the trigger for the auto-earn ledger
 // transaction.
 export type PastEventForAttendance = {
+  /** occurrenceId for a recurring event, plain Event.id otherwise. */
   id: string;
+  seriesId: string;
+  /** ISO instant of this specific past session — the value recordHostAttendance/recordAttendeeAttendance's occurrenceDate must be set to. */
+  occurrenceDate: string;
   title: string;
   type: EventType;
   startsAt: string;
   hostId: string;
   hostName: string | null;
   attendanceRecorded: boolean;
+  isRecurring: boolean;
 };
 
 // /members/[memberId]'s Events section (§4.5/§4.6) — events this member has

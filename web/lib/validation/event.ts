@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { EventType, EventVisibility } from "@/lib/generated/prisma/enums";
+import { EventType, EventVisibility, RecurrenceFrequency } from "@/lib/generated/prisma/enums";
 
 // Shared by createEventSchema and updateEventSchema below — startsAt/endsAt
 // are ISO strings (converted from the browser's datetime-local input
@@ -90,6 +90,48 @@ function requireRestrictedEventInvariants(
   }
 }
 
+// Repeat schedule (§4.6 "Recurring events") — null means "does not repeat".
+// Shared by createEventSchema and updateEventSchema: editing an
+// already-recurring series' rule (or adding/removing recurrence entirely)
+// is the supported "whole series" edit, unlike the create-only
+// invitedUserIds/meetLinkSource fields.
+const recurrenceInputSchema = z
+  .object({
+    frequency: z.nativeEnum(RecurrenceFrequency),
+    interval: z.coerce.number().int().min(1).max(52),
+    byWeekday: z.array(z.number().int().min(0).max(6)).max(7),
+    // ISO string like startsAt/endsAt — parsed to a Date in events-server.ts.
+    until: z.string().trim().min(1).nullable(),
+  })
+  .nullable();
+
+function requireRecurrenceInvariants(
+  data: { startsAt: string; recurrence: z.infer<typeof recurrenceInputSchema> },
+  ctx: z.RefinementCtx,
+) {
+  if (!data.recurrence) return;
+  if (data.recurrence.frequency === RecurrenceFrequency.weekly && data.recurrence.byWeekday.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["recurrence", "byWeekday"],
+      message: "Select at least one day of the week.",
+    });
+  }
+  if (data.recurrence.until) {
+    const until = new Date(data.recurrence.until);
+    const startsAt = new Date(data.startsAt);
+    if (Number.isNaN(until.getTime())) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["recurrence", "until"], message: "Enter a valid end date." });
+    } else if (until <= startsAt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["recurrence", "until"],
+        message: '"Repeat until" must be after the start date.',
+      });
+    }
+  }
+}
+
 /**
  * POST /api/events body shape — "Submit Event" (§4.6). Shared between the
  * client form (zodResolver) and the API route's server-side parse.
@@ -99,9 +141,11 @@ export const createEventSchema = eventFieldsSchema
     visibility: z.nativeEnum(EventVisibility),
     invitedUserIds: z.array(z.string()),
     meetLinkSource: z.enum(["auto", "manual"]),
+    recurrence: recurrenceInputSchema,
   })
   .superRefine(requireDeidentificationForCaseDiscussion)
-  .superRefine(requireRestrictedEventInvariants);
+  .superRefine(requireRestrictedEventInvariants)
+  .superRefine(requireRecurrenceInvariants);
 
 export type CreateEventValues = z.infer<typeof createEventSchema>;
 
@@ -111,6 +155,9 @@ export type CreateEventValues = z.infer<typeof createEventSchema>;
  * untouched by an edit — starting one at all is the on-demand "Start a
  * Discussion" button on the event detail page, not a create/edit form field.
  */
-export const updateEventSchema = eventFieldsSchema.superRefine(requireDeidentificationForCaseDiscussion);
+export const updateEventSchema = eventFieldsSchema
+  .extend({ recurrence: recurrenceInputSchema })
+  .superRefine(requireDeidentificationForCaseDiscussion)
+  .superRefine(requireRecurrenceInvariants);
 
 export type UpdateEventValues = z.infer<typeof updateEventSchema>;

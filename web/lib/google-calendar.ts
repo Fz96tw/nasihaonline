@@ -67,6 +67,8 @@ export async function createMeetingCalendarEvent(input: {
   durationMinutes?: number;
   attendees: { email: string; name: string }[];
   description?: string;
+  /** RFC 5545 "RRULE:..." line (from lib/recurrence.ts' buildRRuleString) — when set, creates a native recurring Calendar event instead of a one-off. */
+  recurrenceRule?: string;
 }): Promise<CreatedMeetingEvent> {
   const auth = getOAuthClient();
   if (!auth) {
@@ -95,6 +97,7 @@ export async function createMeetingCalendarEvent(input: {
             conferenceSolutionKey: { type: "hangoutsMeet" },
           },
         },
+        ...(input.recurrenceRule ? { recurrence: [input.recurrenceRule] } : {}),
       },
     });
 
@@ -184,6 +187,45 @@ export async function updateMeetingCalendarEventTime(
     });
   } catch (error) {
     console.error("[google-calendar] Failed to sync meeting calendar event time", error);
+  }
+}
+
+/**
+ * Patches the recurrence rule on a Calendar event created by
+ * createMeetingCalendarEvent() with a recurrenceRule — used when a host
+ * edits a recurring event's repeat schedule. `recurrenceRule: null` clears
+ * recurrence (verify empirically against a real calendar before relying on
+ * this: Google's own `recurrence: []` semantics for "convert back to a
+ * single event" aren't guaranteed the same across API versions — this
+ * plan's assumption is untested against production Calendar behavior). If
+ * the new BYDAY no longer includes the master's own start.dateTime weekday,
+ * Google still accepts the patch but the master's own start.dateTime stays
+ * on the old weekday while instances follow the new rule — cosmetically odd
+ * in Google's own UI, harmless here since this app never reads start.dateTime
+ * back. Best-effort, same non-fatal philosophy as the rest of this file.
+ */
+export async function updateMeetingCalendarEventRecurrence(
+  googleEventId: string,
+  recurrenceRule: string | null,
+): Promise<void> {
+  const auth = getOAuthClient();
+  if (!auth) {
+    console.warn("[google-calendar] Google Calendar isn't configured — skipping recurrence sync");
+    return;
+  }
+
+  try {
+    const calendar = google.calendar({ version: "v3", auth });
+    await calendar.events.patch({
+      calendarId: CALENDAR_ID,
+      eventId: googleEventId,
+      sendUpdates: "all",
+      requestBody: {
+        recurrence: recurrenceRule ? [recurrenceRule] : [],
+      },
+    });
+  } catch (error) {
+    console.error("[google-calendar] Failed to sync meeting calendar event recurrence", error);
   }
 }
 

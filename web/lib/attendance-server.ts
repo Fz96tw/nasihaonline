@@ -14,6 +14,7 @@ import { createNotification } from "@/lib/notifications-server";
 import { formatHours } from "@/lib/contributions";
 import { getProfileAvatarUrl } from "@/lib/storage";
 import type { AttendanceChecklistMember, PastEventForAttendance } from "@/lib/events";
+import { expandOccurrences, type RecurrenceInput } from "@/lib/recurrence";
 
 /** The rate-card key that prices hosting an event (§4.4, seeded in prisma/seed.ts). */
 const HOST_EVENT_ACTIVITY_KEY = "lecture_webinar";
@@ -34,32 +35,78 @@ export class AttendanceError extends Error {
   }
 }
 
-/** Past events (already started), newest-started-first, for the admin attendance-recording queue (§4.4/§4.6). */
+/**
+ * Past events (already started), newest-session-first, for the admin
+ * attendance-recording queue (§4.4/§4.6). A recurring event expands into
+ * one queue row per past occurrence (bounded [event.startsAt, now], capped
+ * per series) — each independently flagged by matching a host-role
+ * Attendance row's occurrenceDate, since a recurring host earns Knowledge
+ * Hours once per session, not once for the whole series.
+ */
 export async function getPastEventsForAttendance(): Promise<PastEventForAttendance[]> {
+  const now = new Date();
   const events = await db.event.findMany({
-    where: { startsAt: { lt: new Date() } },
+    where: { OR: [{ startsAt: { lt: now } }, { recurrence: { isNot: null } }] },
     select: {
       id: true,
       title: true,
       type: true,
       startsAt: true,
+      endsAt: true,
       hostId: true,
       host: { select: { name: true } },
-      attendances: { where: { role: AttendanceRole.host }, select: { id: true } },
+      recurrence: { select: { frequency: true, interval: true, byWeekday: true, until: true } },
+      attendances: { where: { role: AttendanceRole.host }, select: { occurrenceDate: true } },
     },
     orderBy: { startsAt: "desc" },
     take: 100,
   });
 
-  return events.map((event) => ({
-    id: event.id,
-    title: event.title,
-    type: event.type,
-    startsAt: event.startsAt.toISOString(),
-    hostId: event.hostId,
-    hostName: event.host.name,
-    attendanceRecorded: event.attendances.length > 0,
-  }));
+  const rows: PastEventForAttendance[] = [];
+  for (const event of events) {
+    const recordedDates = new Set(event.attendances.map((row) => row.occurrenceDate.getTime()));
+    if (!event.recurrence) {
+      if (event.startsAt >= now) continue;
+      rows.push({
+        id: event.id,
+        seriesId: event.id,
+        occurrenceDate: event.startsAt.toISOString(),
+        title: event.title,
+        type: event.type,
+        startsAt: event.startsAt.toISOString(),
+        hostId: event.hostId,
+        hostName: event.host.name,
+        attendanceRecorded: recordedDates.has(event.startsAt.getTime()),
+        isRecurring: false,
+      });
+      continue;
+    }
+
+    const recurrenceInput: RecurrenceInput = {
+      frequency: event.recurrence.frequency,
+      interval: event.recurrence.interval,
+      byWeekday: event.recurrence.byWeekday,
+      until: event.recurrence.until,
+    };
+    const occurrences = expandOccurrences(event, recurrenceInput, event.startsAt, now, { limit: 100 });
+    for (const occurrence of occurrences) {
+      if (occurrence.occurrenceStart >= now) continue;
+      rows.push({
+        id: occurrence.occurrenceId,
+        seriesId: event.id,
+        occurrenceDate: occurrence.occurrenceStart.toISOString(),
+        title: event.title,
+        type: event.type,
+        startsAt: occurrence.occurrenceStart.toISOString(),
+        hostId: event.hostId,
+        hostName: event.host.name,
+        attendanceRecorded: recordedDates.has(occurrence.occurrenceStart.getTime()),
+        isRecurring: true,
+      });
+    }
+  }
+
+  return rows.sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime());
 }
 
 /**
@@ -78,6 +125,7 @@ export async function getPastEventsForAttendance(): Promise<PastEventForAttendan
  */
 export async function recordHostAttendance(
   eventId: string,
+  occurrenceDate: Date,
   actingUser: UserModel,
 ): Promise<{ attendanceId: string; ledgerEntryId: string; hoursEarned: number }> {
   const event = await db.event.findUnique({
@@ -93,7 +141,7 @@ export async function recordHostAttendance(
   }
 
   const existing = await db.attendance.findUnique({
-    where: { eventId_userId: { eventId, userId: event.hostId } },
+    where: { eventId_userId_occurrenceDate: { eventId, userId: event.hostId, occurrenceDate } },
   });
   if (existing) {
     throw new AttendanceError(409, "Attendance has already been recorded for this event's host.");
@@ -106,7 +154,7 @@ export async function recordHostAttendance(
 
   return db.$transaction(async (tx) => {
     const attendance = await tx.attendance.create({
-      data: { eventId, userId: event.hostId, role: AttendanceRole.host },
+      data: { eventId, userId: event.hostId, role: AttendanceRole.host, occurrenceDate },
     });
 
     const contributionEvent = await tx.contributionEvent.create({
@@ -151,7 +199,10 @@ export async function recordHostAttendance(
  * getEventAttendees/getEventRoster) — the page only renders this for a
  * restricted, past event the viewer can already edit.
  */
-export async function getEventAttendanceChecklist(eventId: string): Promise<AttendanceChecklistMember[]> {
+export async function getEventAttendanceChecklist(
+  eventId: string,
+  occurrenceDate: Date,
+): Promise<AttendanceChecklistMember[]> {
   const [invitees, recorded] = await Promise.all([
     db.eventInvitee.findMany({
       where: { eventId },
@@ -159,7 +210,7 @@ export async function getEventAttendanceChecklist(eventId: string): Promise<Atte
       orderBy: { createdAt: "asc" },
     }),
     db.attendance.findMany({
-      where: { eventId, role: AttendanceRole.attendee },
+      where: { eventId, role: AttendanceRole.attendee, occurrenceDate },
       select: { userId: true },
     }),
   ]);
@@ -188,6 +239,7 @@ export async function getEventAttendanceChecklist(eventId: string): Promise<Atte
 export async function recordAttendeeAttendance(
   eventId: string,
   targetUserId: string,
+  occurrenceDate: Date,
   actingUser: UserModel,
 ): Promise<{ attendanceId: string; ledgerEntryId: string; hoursEarned: number }> {
   const event = await db.event.findUnique({
@@ -206,7 +258,7 @@ export async function recordAttendeeAttendance(
     throw new AttendanceError(403, "Only the event's host or an admin can record attendance.");
   }
 
-  if (event.startsAt >= new Date()) {
+  if (occurrenceDate >= new Date()) {
     throw new AttendanceError(409, "Attendance can only be recorded after the event has happened.");
   }
 
@@ -217,7 +269,7 @@ export async function recordAttendeeAttendance(
   if (!invited) throw new AttendanceError(400, "This member wasn't invited to this event.");
 
   const existing = await db.attendance.findUnique({
-    where: { eventId_userId: { eventId, userId: targetUserId } },
+    where: { eventId_userId_occurrenceDate: { eventId, userId: targetUserId, occurrenceDate } },
   });
   if (existing) {
     throw new AttendanceError(409, "Attendance has already been recorded for this member.");
@@ -230,7 +282,7 @@ export async function recordAttendeeAttendance(
 
   return db.$transaction(async (tx) => {
     const attendance = await tx.attendance.create({
-      data: { eventId, userId: targetUserId, role: AttendanceRole.attendee },
+      data: { eventId, userId: targetUserId, role: AttendanceRole.attendee, occurrenceDate },
     });
 
     const contributionEvent = await tx.contributionEvent.create({

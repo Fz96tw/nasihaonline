@@ -22,7 +22,9 @@ export async function ScheduleWidget({ userId }: { userId: string }) {
       id: `event-${event.id}`,
       title: event.title,
       dateTime: event.startsAt,
-      href: `/calendar/${event.id}`,
+      href: event.isRecurring
+        ? `/calendar/${event.seriesId}?occurrence=${encodeURIComponent(event.startsAt)}`
+        : `/calendar/${event.seriesId}`,
       badge: event.rsvped ? ({ label: "Going", variant: "success" } as const) : null,
       joinUrl: event.meetingUrl,
       joinLabel: "Join the session",

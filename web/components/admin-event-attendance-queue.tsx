@@ -24,21 +24,22 @@ export function AdminEventAttendanceQueue({ initialEvents }: { initialEvents: Pa
   const [error, setError] = useState<string | null>(null);
   const hasMounted = useHasMounted();
 
-  async function recordAttendance(eventId: string) {
-    setPendingId(eventId);
+  async function recordAttendance(row: PastEventForAttendance) {
+    setPendingId(row.id);
     setError(null);
     try {
       const csrfToken = await getCsrfToken();
-      const res = await fetch(`/api/events/${eventId}/attendance`, {
+      const res = await fetch(`/api/events/${row.seriesId}/attendance`, {
         method: "POST",
-        headers: { "x-csrf-token": csrfToken },
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        body: JSON.stringify({ occurrenceDate: row.occurrenceDate }),
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => null);
         throw new Error(typeof payload?.error === "string" ? payload.error : "Something went wrong.");
       }
       setEvents((current) =>
-        current.map((event) => (event.id === eventId ? { ...event, attendanceRecorded: true } : event)),
+        current.map((event) => (event.id === row.id ? { ...event, attendanceRecorded: true } : event)),
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -73,7 +74,10 @@ export function AdminEventAttendanceQueue({ initialEvents }: { initialEvents: Pa
           {events.map((event) => (
             <TableRow key={event.id}>
               <TableCell>{hasMounted ? formatDate(event.startsAt) : null}</TableCell>
-              <TableCell>{event.title}</TableCell>
+              <TableCell>
+                {event.title}
+                {event.isRecurring && <Badge variant="neutral" className="ml-2">Session</Badge>}
+              </TableCell>
               <TableCell>{EVENT_TYPE_LABELS[event.type]}</TableCell>
               <TableCell>{event.hostName ?? "Unknown"}</TableCell>
               <TableCell>
@@ -85,7 +89,7 @@ export function AdminEventAttendanceQueue({ initialEvents }: { initialEvents: Pa
               </TableCell>
               <TableCell className="text-right">
                 {!event.attendanceRecorded && (
-                  <Button size="sm" disabled={pendingId === event.id} onClick={() => recordAttendance(event.id)}>
+                  <Button size="sm" disabled={pendingId === event.id} onClick={() => recordAttendance(event)}>
                     {pendingId === event.id ? "Recording…" : "Record host attendance"}
                   </Button>
                 )}

@@ -46,7 +46,7 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
   // (§4.6's /events/[eventId]) for any event, open or members-only — a
   // signed-in member already has the fuller /calendar/[eventId] view, so
   // this card itself stays non-interactive above its RSVP CTA for them.
-  const detailHref = !isSignedIn ? `/events/${event.id}` : null;
+  const detailHref = !isSignedIn ? `/events/${event.seriesId}` : null;
 
   return (
     <Card className="flex h-full flex-col overflow-hidden">
@@ -62,6 +62,11 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>
             <Badge variant="neutral">{EVENT_TYPE_LABELS[event.type]}</Badge>
+            {event.isRecurring && event.recurrenceSummary ? (
+              <Badge variant="neutral" title={event.recurrenceSummary}>
+                Repeats
+              </Badge>
+            ) : null}
           </div>
           <CardTitle className="text-xl">{event.title}</CardTitle>
           <p className="text-sm text-muted-foreground">
@@ -79,9 +84,9 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
       </CardLinkWrapper>
       <CardFooter className="mt-auto pt-0">
         {isSignedIn ? (
-          <RsvpButton eventId={event.id} rsvped={rsvped} onToggled={(result) => setRsvped(result.rsvped)} />
+          <RsvpButton eventId={event.seriesId} rsvped={rsvped} onToggled={(result) => setRsvped(result.rsvped)} />
         ) : event.open ? (
-          <RegisterButton eventId={event.id} eventTitle={event.title} />
+          <RegisterButton eventId={event.seriesId} eventTitle={event.title} />
         ) : (
           <Button size="sm" asChild>
             <Link href="/join">Join to RSVP</Link>

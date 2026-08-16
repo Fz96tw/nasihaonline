@@ -47,6 +47,20 @@ export async function POST(request: Request) {
     }
   }
 
+  // Repeat schedule (§4.6 recurring events) — same JSON-encoded-field
+  // pattern as invitedUserIds above; absent/malformed means "does not
+  // repeat" rather than a hard error, since createEventSchema's
+  // requireRecurrenceInvariants only fires when recurrence is non-null.
+  let recurrence: unknown = null;
+  const recurrenceRaw = formData.get("recurrence");
+  if (typeof recurrenceRaw === "string" && recurrenceRaw.length > 0) {
+    try {
+      recurrence = JSON.parse(recurrenceRaw);
+    } catch {
+      recurrence = null;
+    }
+  }
+
   const parsed = createEventSchema.safeParse({
     title: formData.get("title"),
     description: formData.get("description") || null,
@@ -60,6 +74,7 @@ export async function POST(request: Request) {
     visibility: formData.get("visibility") || "community",
     invitedUserIds,
     meetLinkSource: formData.get("meetLinkSource") || "manual",
+    recurrence,
   });
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

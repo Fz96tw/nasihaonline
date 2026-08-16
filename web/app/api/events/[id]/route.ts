@@ -20,6 +20,19 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   }
 
   const formData = await request.formData();
+
+  // Same JSON-encoded-field pattern as POST /api/events — absent/malformed
+  // means "does not repeat".
+  let recurrence: unknown = null;
+  const recurrenceRaw = formData.get("recurrence");
+  if (typeof recurrenceRaw === "string" && recurrenceRaw.length > 0) {
+    try {
+      recurrence = JSON.parse(recurrenceRaw);
+    } catch {
+      recurrence = null;
+    }
+  }
+
   const parsed = updateEventSchema.safeParse({
     title: formData.get("title"),
     description: formData.get("description") || null,
@@ -30,6 +43,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     meetingUrl: formData.get("meetingUrl") || null,
     deidentificationConfirmed: formData.get("deidentificationConfirmed") === "true",
     timezone: formData.get("timezone") || null,
+    recurrence,
   });
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

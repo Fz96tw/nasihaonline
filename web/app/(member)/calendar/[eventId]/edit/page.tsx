@@ -43,6 +43,7 @@ export default async function EditEventPage({ params }: { params: { eventId: str
           heroImageUrl: event.heroImageUrl,
           deidentificationConfirmed: event.deidentificationConfirmed,
           visibility: event.visibility,
+          recurrence: event.recurrence,
         }}
       />
     </main>

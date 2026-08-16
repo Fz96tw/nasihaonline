@@ -9,11 +9,12 @@ import { getEventIcs } from "@/lib/events-server";
  * a signed-in viewer who's RSVP'd `going` — same gate as /calendar and the
  * public /events listing.
  */
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await getSessionUser();
+  const occurrence = new URL(request.url).searchParams.get("occurrence") ?? undefined;
 
-  const result = await getEventIcs(id, user?.id ?? null);
+  const result = await getEventIcs(id, user?.id ?? null, occurrence);
   if (!result) {
     return NextResponse.json({ error: "Event not found." }, { status: 404 });
   }

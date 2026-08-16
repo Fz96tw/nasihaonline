@@ -18,6 +18,13 @@ function formatEventDateTime(iso: string) {
   });
 }
 
+/** Detail-page link for one occurrence — targets the real series id, carrying `?occurrence=` for a recurring event so the page resolves to this specific session. */
+function eventDetailHref(event: MemberEvent): string {
+  return event.isRecurring
+    ? `/calendar/${event.seriesId}?occurrence=${encodeURIComponent(event.startsAt)}`
+    : `/calendar/${event.seriesId}`;
+}
+
 // RSVP/meetingUrl are controlled by the parent CalendarView (not local
 // state here) so they survive the "Upcoming List" tab panel being
 // unmounted and remounted when the user switches to Month and back.
@@ -40,7 +47,7 @@ export function EventListItem({
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row">
         {event.heroImageUrl ? (
           <Link
-            href={`/calendar/${event.id}`}
+            href={eventDetailHref(event)}
             className="block aspect-video w-full overflow-hidden rounded-md bg-muted sm:aspect-auto sm:h-[9rem] sm:w-64 sm:flex-shrink-0"
           >
             {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
@@ -51,12 +58,17 @@ export function EventListItem({
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>
             <Badge variant="neutral">{EVENT_TYPE_LABELS[event.type]}</Badge>
+            {event.isRecurring && event.recurrenceSummary ? (
+              <Badge variant="neutral" title={event.recurrenceSummary}>
+                Repeats
+              </Badge>
+            ) : null}
             <span className="flex items-center gap-1 text-xs text-muted-foreground" title="Registered or RSVP'd">
               <Users className="h-3.5 w-3.5" />
               {attendeeCount}
             </span>
           </div>
-          <Link href={`/calendar/${event.id}`} className="block truncate font-medium hover:underline">
+          <Link href={eventDetailHref(event)} className="block truncate font-medium hover:underline">
             {event.title}
           </Link>
           {event.hostName ? (
@@ -78,8 +90,8 @@ export function EventListItem({
         </div>
       </div>
       <div className="flex flex-shrink-0 flex-col items-start gap-2 sm:items-end">
-        {!isHost && <RsvpButton eventId={event.id} rsvped={rsvped} onToggled={onRsvpToggled} />}
-        <AddToCalendarButton eventId={event.id} />
+        {!isHost && <RsvpButton eventId={event.seriesId} rsvped={rsvped} onToggled={onRsvpToggled} />}
+        <AddToCalendarButton eventId={event.seriesId} occurrenceIso={event.isRecurring ? event.startsAt : undefined} />
       </div>
     </li>
   );

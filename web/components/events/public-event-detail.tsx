@@ -78,7 +78,7 @@ export function PublicEventDetail({ event }: { event: PublicEvent }) {
 
       <div className="flex flex-wrap items-center gap-3">
         {!isPast && event.open ? (
-          <RegisterButton eventId={event.id} eventTitle={event.title} />
+          <RegisterButton eventId={event.seriesId} eventTitle={event.title} />
         ) : null}
         {!isPast && !event.open ? (
           <>

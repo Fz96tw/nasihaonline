@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import type { EventClickArg, EventContentArg, EventInput } from "@fullcalendar/core";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Repeat } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,12 @@ function toFullCalendarEvents(events: MemberEvent[]): EventInput[] {
     title: event.title,
     start: event.startsAt,
     end: event.endsAt ?? undefined,
-    extendedProps: { kind: "event" as const, open: event.open },
+    extendedProps: {
+      kind: "event" as const,
+      open: event.open,
+      seriesId: event.seriesId,
+      isRecurring: event.isRecurring,
+    },
   }));
 }
 
@@ -67,11 +72,13 @@ function renderEventContent(arg: EventContentArg) {
   const kind = arg.event.extendedProps.kind as "event" | "meeting";
   const open = arg.event.extendedProps.open as boolean | undefined;
   const isPending = arg.event.extendedProps.isPending as boolean | undefined;
+  const isRecurring = arg.event.extendedProps.isRecurring as boolean | undefined;
   const dotColor =
     kind === "meeting" ? (isPending ? "bg-purple-300" : "bg-purple-500") : open ? "bg-emerald-500" : "bg-blue-500";
   return (
     <div className="flex items-center gap-1 overflow-hidden px-1">
       <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dotColor}`} />
+      {isRecurring && <Repeat className="h-2.5 w-2.5 flex-shrink-0 text-muted-foreground" />}
       <span className="truncate text-xs">{arg.event.title}</span>
     </div>
   );
@@ -113,8 +120,11 @@ export function CalendarView({
     window.localStorage.setItem(CALENDAR_TAB_STORAGE_KEY, value);
   }
 
+  // Keyed by seriesId, not the per-occurrence id — RSVP is a per-series
+  // action (§4.6), so toggling any one occurrence must reflect across every
+  // occurrence of the same series rendered here.
   const resolvedEvents = useMemo(
-    () => events.map((event) => ({ ...event, ...rsvpState[event.id] })),
+    () => events.map((event) => ({ ...event, ...rsvpState[event.seriesId] })),
     [events, rsvpState],
   );
 
@@ -158,7 +168,13 @@ export function CalendarView({
       router.push(`/inbox?item=${arg.event.id}`);
       return;
     }
-    router.push(`/calendar/${arg.event.id}`);
+    const seriesId = arg.event.extendedProps.seriesId as string;
+    const isRecurring = arg.event.extendedProps.isRecurring as boolean;
+    if (isRecurring && arg.event.start) {
+      router.push(`/calendar/${seriesId}?occurrence=${encodeURIComponent(arg.event.start.toISOString())}`);
+    } else {
+      router.push(`/calendar/${seriesId}`);
+    }
   }
 
   return (
@@ -228,7 +244,7 @@ export function CalendarView({
                         <EventListItem
                           event={item}
                           isHost={item.hostId === currentUserId}
-                          onRsvpToggled={(result) => handleRsvpToggled(item.id, result)}
+                          onRsvpToggled={(result) => handleRsvpToggled(item.seriesId, result)}
                         />
                       ) : (
                         <UpcomingMeetingItem meeting={item} />

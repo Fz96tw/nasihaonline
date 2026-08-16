@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { EventType, EventVisibility, NotificationType, Role, RSVPStatus } from "@/lib/generated/prisma/enums";
+import { EventType, EventVisibility, NotificationType, RecurrenceFrequency, Role, RSVPStatus } from "@/lib/generated/prisma/enums";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import type {
@@ -19,11 +19,13 @@ import {
   cancelMeetingCalendarEvent,
   createMeetingCalendarEvent,
   updateMeetingCalendarEventAttendees,
+  updateMeetingCalendarEventRecurrence,
   updateMeetingCalendarEventTime,
 } from "@/lib/google-calendar";
 import { createNotification } from "@/lib/notifications-server";
 import { sendEventInviteEmail, sendEventLifecycleEmail } from "@/lib/email";
 import { formatEventDateTime } from "@/lib/format-date";
+import { buildRRule, buildRRuleString, describeRecurrence, expandOccurrences, type RecurrenceInput } from "@/lib/recurrence";
 import {
   deleteEventHeroImage,
   getEventHeroImageUrl,
@@ -39,6 +41,98 @@ import {
 // http(s) URLs.
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
+// ===== Recurring events (§4.6) — shared expansion helpers =====
+
+const RECURRENCE_SELECT = { frequency: true, interval: true, byWeekday: true, until: true } as const;
+
+type RecurrenceRow = {
+  frequency: RecurrenceFrequency;
+  interval: number;
+  byWeekday: number[];
+  until: Date | null;
+};
+
+function toRecurrenceInput(recurrence: RecurrenceRow): RecurrenceInput {
+  return {
+    frequency: recurrence.frequency,
+    interval: recurrence.interval,
+    byWeekday: recurrence.byWeekday,
+    until: recurrence.until,
+  };
+}
+
+function recurrenceInputsEqual(a: RecurrenceInput | null, b: RecurrenceInput | null): boolean {
+  if (a === null && b === null) return true;
+  if (a === null || b === null) return false;
+  const aWeekdays = [...a.byWeekday].sort((x, y) => x - y);
+  const bWeekdays = [...b.byWeekday].sort((x, y) => x - y);
+  return (
+    a.frequency === b.frequency &&
+    a.interval === b.interval &&
+    (a.until?.getTime() ?? null) === (b.until?.getTime() ?? null) &&
+    aWeekdays.length === bWeekdays.length &&
+    aWeekdays.every((day, index) => day === bWeekdays[index])
+  );
+}
+
+/**
+ * Turns one Event row into one or more listing rows: a non-recurring event
+ * passes through unchanged (1:1, same as before recurring events existed);
+ * a recurring event's EventRecurrence rule is expanded into every
+ * occurrence within [rangeStart, rangeEnd], each becoming its own row with
+ * a synthetic occurrenceId. Occurrences aren't materialized as separate
+ * Event rows in the database — see EventRecurrence's schema comment — so
+ * every read path that lists events must call this rather than mapping
+ * rows 1:1.
+ */
+function expandEventForListing<
+  T extends { id: string; startsAt: Date; endsAt: Date | null; recurrence: RecurrenceRow | null },
+>(
+  event: T,
+  rangeStart: Date,
+  rangeEnd: Date,
+): Array<T & { occurrenceStart: Date; occurrenceEnd: Date | null; occurrenceId: string; isRecurring: boolean }> {
+  if (!event.recurrence) {
+    return [
+      { ...event, occurrenceStart: event.startsAt, occurrenceEnd: event.endsAt, occurrenceId: event.id, isRecurring: false },
+    ];
+  }
+  const occurrences = expandOccurrences(event, toRecurrenceInput(event.recurrence), rangeStart, rangeEnd, {
+    limit: 200,
+  });
+  return occurrences.map((occurrence) => ({
+    ...event,
+    occurrenceStart: occurrence.occurrenceStart,
+    occurrenceEnd: occurrence.occurrenceEnd,
+    occurrenceId: occurrence.occurrenceId,
+    isRecurring: true,
+  }));
+}
+
+const MONTH_MS = 1000 * 60 * 60 * 24 * 30;
+
+/**
+ * A recurring master's own `startsAt` can be long in the past for a
+ * still-ongoing series (e.g. a weekly halaqa that started a year ago) — the
+ * plain `startsAt: { gte: now }` filter every listing query used before
+ * recurring events existed would wrongly exclude it. OR'd alongside that
+ * filter (via AND with the rest of a query's where clause) so a recurring
+ * master with a past startsAt but a still-active (or unbounded) `until` is
+ * still fetched; expandEventForListing does the real per-occurrence date
+ * filtering afterward.
+ */
+function recurringSeriesStillActiveOrUpcoming(now: Date): Prisma.EventWhereInput {
+  return {
+    OR: [
+      { startsAt: { gte: now } },
+      {
+        recurrence: { isNot: null },
+        OR: [{ recurrence: { until: null } }, { recurrence: { until: { gte: now } } }],
+      },
+    ],
+  };
+}
+
 // The server-side enforcement point for public event visibility (§4.6):
 // meetingUrl and deidentificationConfirmed are never selected here, so no
 // caller of this function — page or API route — can leak them to an
@@ -46,8 +140,10 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 // gated meeting link) are added by a later objective's own query, not this
 // one.
 export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
+  const now = new Date();
+  const rangeEnd = new Date(now.getTime() + 6 * MONTH_MS);
   const events = await db.event.findMany({
-    where: { startsAt: { gte: new Date() }, visibility: EventVisibility.community, cancelledAt: null },
+    where: { visibility: EventVisibility.community, cancelledAt: null, ...recurringSeriesStillActiveOrUpcoming(now) },
     select: {
       id: true,
       title: true,
@@ -58,21 +154,28 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
       open: true,
       heroImageUrl: true,
       host: { select: { name: true } },
+      recurrence: { select: RECURRENCE_SELECT },
     },
     orderBy: { startsAt: "asc" },
   });
 
-  return events.map((event) => ({
-    id: event.id,
-    title: event.title,
-    description: event.description,
-    type: event.type,
-    startsAt: event.startsAt.toISOString(),
-    endsAt: event.endsAt?.toISOString() ?? null,
-    open: event.open,
-    heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
-    hostName: event.host.name,
-  }));
+  return events
+    .flatMap((event) => expandEventForListing(event, now, rangeEnd))
+    .sort((a, b) => a.occurrenceStart.getTime() - b.occurrenceStart.getTime())
+    .map((event) => ({
+      id: event.occurrenceId,
+      title: event.title,
+      description: event.description,
+      type: event.type,
+      startsAt: event.occurrenceStart.toISOString(),
+      endsAt: event.occurrenceEnd?.toISOString() ?? null,
+      open: event.open,
+      heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
+      hostName: event.host.name,
+      seriesId: event.id,
+      isRecurring: event.isRecurring,
+      recurrenceSummary: event.recurrence ? describeRecurrence(toRecurrenceInput(event.recurrence)) : null,
+    }));
 }
 
 // /events/[eventId] — the public detail page for a signed-out visitor.
@@ -98,6 +201,7 @@ export async function getPublicEventById(eventId: string): Promise<PublicEvent |
       open: true,
       heroImageUrl: true,
       host: { select: { name: true } },
+      recurrence: { select: RECURRENCE_SELECT },
     },
   });
   if (!event) return null;
@@ -112,6 +216,9 @@ export async function getPublicEventById(eventId: string): Promise<PublicEvent |
     open: event.open,
     heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
     hostName: event.host.name,
+    seriesId: event.id,
+    isRecurring: event.recurrence !== null,
+    recurrenceSummary: event.recurrence ? describeRecurrence(toRecurrenceInput(event.recurrence)) : null,
   };
 }
 
@@ -122,13 +229,19 @@ export async function getPublicEventById(eventId: string): Promise<PublicEvent |
 // actual RSVP toggle for members-only events. userId null (no session)
 // always yields rsvped: false.
 export async function getEventsForViewer(userId: string | null): Promise<EventWithRsvp[]> {
+  const now = new Date();
+  const rangeEnd = new Date(now.getTime() + 6 * MONTH_MS);
   const events = await db.event.findMany({
     where: {
-      startsAt: { gte: new Date() },
       cancelledAt: null,
-      OR: [
-        { visibility: EventVisibility.community },
-        ...(userId ? [{ hostId: userId }, { invitees: { some: { userId } } }] : []),
+      AND: [
+        {
+          OR: [
+            { visibility: EventVisibility.community },
+            ...(userId ? [{ hostId: userId }, { invitees: { some: { userId } } }] : []),
+          ],
+        },
+        recurringSeriesStillActiveOrUpcoming(now),
       ],
     },
     select: {
@@ -143,23 +256,30 @@ export async function getEventsForViewer(userId: string | null): Promise<EventWi
       visibility: true,
       host: { select: { name: true } },
       rsvps: userId ? { where: { userId, status: RSVPStatus.going }, select: { id: true } } : false,
+      recurrence: { select: RECURRENCE_SELECT },
     },
     orderBy: { startsAt: "asc" },
   });
 
-  return events.map((event) => ({
-    id: event.id,
-    title: event.title,
-    description: event.description,
-    type: event.type,
-    startsAt: event.startsAt.toISOString(),
-    endsAt: event.endsAt?.toISOString() ?? null,
-    open: event.open,
-    heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
-    hostName: event.host.name,
-    rsvped: userId ? event.rsvps.length > 0 : false,
-    visibility: event.visibility,
-  }));
+  return events
+    .flatMap((event) => expandEventForListing(event, now, rangeEnd))
+    .sort((a, b) => a.occurrenceStart.getTime() - b.occurrenceStart.getTime())
+    .map((event) => ({
+      id: event.occurrenceId,
+      title: event.title,
+      description: event.description,
+      type: event.type,
+      startsAt: event.occurrenceStart.toISOString(),
+      endsAt: event.occurrenceEnd?.toISOString() ?? null,
+      open: event.open,
+      heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
+      hostName: event.host.name,
+      rsvped: userId ? event.rsvps.length > 0 : false,
+      visibility: event.visibility,
+      seriesId: event.id,
+      isRecurring: event.isRecurring,
+      recurrenceSummary: event.recurrence ? describeRecurrence(toRecurrenceInput(event.recurrence)) : null,
+    }));
 }
 
 // /calendar (§4.6) — the one place meetingUrl is ever exposed, and only for
@@ -173,6 +293,15 @@ export async function getEventsForViewer(userId: string | null): Promise<EventWi
 // "Upcoming List" tab derives its own future-only view client-side
 // (CalendarView) rather than this query doing it server-side.
 export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
+  // Recurring events have no month-cursor param to bound expansion by the
+  // month actually being browsed (FullCalendar fetches this whole dataset
+  // once) — a fixed 6-months-back/6-months-forward window is a generous
+  // middle ground: a member browsing further than that in either direction
+  // simply won't see recurring occurrences there, an accepted v1 gap.
+  // One-off events keep passing through unfiltered, exactly as before.
+  const now = new Date();
+  const rangeStart = new Date(now.getTime() - 6 * MONTH_MS);
+  const rangeEnd = new Date(now.getTime() + 6 * MONTH_MS);
   const events = await db.event.findMany({
     where: {
       cancelledAt: null,
@@ -193,6 +322,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
       hostId: true,
       host: { select: { name: true } },
       rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
+      recurrence: { select: RECURRENCE_SELECT },
       // Going RSVPs (members) plus EventRegistrations (non-members) — same
       // merge as getEventEngagementForAdmin's attendee/interest count.
       _count: {
@@ -206,33 +336,39 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
     orderBy: { startsAt: "asc" },
   });
 
-  return events.map((event) => {
-    const rsvped = event.rsvps.length > 0;
-    return {
-      id: event.id,
-      title: event.title,
-      description: event.description,
-      type: event.type,
-      startsAt: event.startsAt.toISOString(),
-      endsAt: event.endsAt?.toISOString() ?? null,
-      open: event.open,
-      heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
-      hostId: event.hostId,
-      hostName: event.host.name,
-      rsvped,
-      // This listing query filters cancelledAt: null above, so every result here is live.
-      cancelled: false,
-      // The host can always join their own meeting — they never auto-RSVP
-      // to their own event, so gating this on `rsvped` alone would hide it
-      // from the one person who definitely needs it.
-      meetingUrl: rsvped || event.hostId === userId ? event.meetingUrl : null,
-      attendeeCount: event._count.rsvps + event._count.registrations,
-      forumThreadId: event.forumThread?.id ?? null,
-      forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
-      viewCount: event._count.views,
-      visibility: event.visibility,
-    };
-  });
+  return events
+    .flatMap((event) => expandEventForListing(event, rangeStart, rangeEnd))
+    .sort((a, b) => a.occurrenceStart.getTime() - b.occurrenceStart.getTime())
+    .map((event) => {
+      const rsvped = event.rsvps.length > 0;
+      return {
+        id: event.occurrenceId,
+        title: event.title,
+        description: event.description,
+        type: event.type,
+        startsAt: event.occurrenceStart.toISOString(),
+        endsAt: event.occurrenceEnd?.toISOString() ?? null,
+        open: event.open,
+        heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
+        hostId: event.hostId,
+        hostName: event.host.name,
+        rsvped,
+        // This listing query filters cancelledAt: null above, so every result here is live.
+        cancelled: false,
+        // The host can always join their own meeting — they never auto-RSVP
+        // to their own event, so gating this on `rsvped` alone would hide it
+        // from the one person who definitely needs it.
+        meetingUrl: rsvped || event.hostId === userId ? event.meetingUrl : null,
+        attendeeCount: event._count.rsvps + event._count.registrations,
+        forumThreadId: event.forumThread?.id ?? null,
+        forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
+        viewCount: event._count.views,
+        visibility: event.visibility,
+        seriesId: event.id,
+        isRecurring: event.isRecurring,
+        recurrenceSummary: event.recurrence ? describeRecurrence(toRecurrenceInput(event.recurrence)) : null,
+      };
+    });
 }
 
 // /calendar/[eventId] — single-event detail view. Not filtered by startsAt
@@ -243,7 +379,11 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
 // straight here, and the invitee who just got notified needs the page to
 // resolve with a "this event was cancelled" state rather than 404. The page
 // is responsible for rendering that state off the returned `cancelled` flag.
-export async function getMemberEventById(userId: string, eventId: string): Promise<MemberEvent | null> {
+export async function getMemberEventById(
+  userId: string,
+  eventId: string,
+  occurrenceStartIso?: string,
+): Promise<MemberEvent | null> {
   const event = await db.event.findFirst({
     where: {
       id: eventId,
@@ -265,6 +405,7 @@ export async function getMemberEventById(userId: string, eventId: string): Promi
       hostId: true,
       host: { select: { name: true } },
       rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
+      recurrence: { select: RECURRENCE_SELECT },
       _count: {
         select: {
           rsvps: { where: { status: RSVPStatus.going } },
@@ -276,14 +417,33 @@ export async function getMemberEventById(userId: string, eventId: string): Promi
   });
   if (!event) return null;
 
+  // Resolve which occurrence this detail view is for. A bare
+  // /calendar/[eventId] link (e.g. from a notification) has no
+  // ?occurrence= — falls back to the series' next upcoming occurrence, or
+  // its most recent past one if the series has already ended.
+  let occurrenceStart = event.startsAt;
+  let occurrenceEnd = event.endsAt;
+  if (event.recurrence) {
+    const recurrenceInput = toRecurrenceInput(event.recurrence);
+    const requested = occurrenceStartIso ? new Date(occurrenceStartIso) : null;
+    const durationMs = event.endsAt ? event.endsAt.getTime() - event.startsAt.getTime() : null;
+    let resolved: Date | null = requested && !Number.isNaN(requested.getTime()) ? requested : null;
+    if (!resolved) {
+      const rule = buildRRule(recurrenceInput, event.startsAt);
+      resolved = rule.after(new Date(), true) ?? rule.before(new Date(), true) ?? event.startsAt;
+    }
+    occurrenceStart = resolved;
+    occurrenceEnd = durationMs !== null ? new Date(resolved.getTime() + durationMs) : null;
+  }
+
   const rsvped = event.rsvps.length > 0;
   return {
-    id: event.id,
+    id: event.recurrence ? `${event.id}::${occurrenceStart.toISOString()}` : event.id,
     title: event.title,
     description: event.description,
     type: event.type,
-    startsAt: event.startsAt.toISOString(),
-    endsAt: event.endsAt?.toISOString() ?? null,
+    startsAt: occurrenceStart.toISOString(),
+    endsAt: occurrenceEnd?.toISOString() ?? null,
     open: event.open,
     heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
     hostId: event.hostId,
@@ -297,6 +457,9 @@ export async function getMemberEventById(userId: string, eventId: string): Promi
     forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
     viewCount: event._count.views,
     visibility: event.visibility,
+    seriesId: event.id,
+    isRecurring: event.recurrence !== null,
+    recurrenceSummary: event.recurrence ? describeRecurrence(toRecurrenceInput(event.recurrence)) : null,
   };
 }
 
@@ -555,23 +718,31 @@ export async function getDashboardUpcomingEvents(
   // dashboard the moment its start time passes.
   const startOfToday = new Date();
   startOfToday.setUTCHours(0, 0, 0, 0);
+  // Dashboard widget only ever needs a handful of soonest items — 3 months
+  // is generous headroom for `limit` to have candidates even if the next
+  // few weeks are sparse.
+  const rangeEnd = new Date(startOfToday.getTime() + 3 * MONTH_MS);
 
   const events = await db.event.findMany({
     where: {
-      startsAt: { gte: startOfToday },
       cancelledAt: null,
-      // A restricted event's organizer/invitees see it unconditionally —
-      // they shouldn't have to RSVP to their own private event just to
-      // have it surface here. A community event keeps its pre-existing
-      // "open OR I've RSVP'd" gate unchanged (the host isn't auto-included
-      // for a community event either, same as before this objective).
-      OR: [
-        { hostId: userId },
-        { invitees: { some: { userId } } },
+      AND: [
+        // A restricted event's organizer/invitees see it unconditionally —
+        // they shouldn't have to RSVP to their own private event just to
+        // have it surface here. A community event keeps its pre-existing
+        // "open OR I've RSVP'd" gate unchanged (the host isn't auto-included
+        // for a community event either, same as before this objective).
         {
-          visibility: EventVisibility.community,
-          OR: [{ open: true }, { rsvps: { some: { userId, status: RSVPStatus.going } } }],
+          OR: [
+            { hostId: userId },
+            { invitees: { some: { userId } } },
+            {
+              visibility: EventVisibility.community,
+              OR: [{ open: true }, { rsvps: { some: { userId, status: RSVPStatus.going } } }],
+            },
+          ],
         },
+        recurringSeriesStillActiveOrUpcoming(startOfToday),
       ],
     },
     select: {
@@ -579,27 +750,34 @@ export async function getDashboardUpcomingEvents(
       title: true,
       type: true,
       startsAt: true,
+      endsAt: true,
       hostId: true,
       meetingUrl: true,
       rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
+      recurrence: { select: RECURRENCE_SELECT },
     },
     orderBy: { startsAt: "asc" },
-    take: limit,
   });
 
-  return events.map((event) => {
-    const rsvped = event.rsvps.length > 0;
-    return {
-      id: event.id,
-      title: event.title,
-      type: event.type,
-      startsAt: event.startsAt.toISOString(),
-      rsvped,
-      // Same gate as getMemberEvents: the host can always join their own
-      // meeting even though they never auto-RSVP to their own event.
-      meetingUrl: rsvped || event.hostId === userId ? event.meetingUrl : null,
-    };
-  });
+  return events
+    .flatMap((event) => expandEventForListing(event, startOfToday, rangeEnd))
+    .sort((a, b) => a.occurrenceStart.getTime() - b.occurrenceStart.getTime())
+    .slice(0, limit)
+    .map((event) => {
+      const rsvped = event.rsvps.length > 0;
+      return {
+        id: event.occurrenceId,
+        title: event.title,
+        type: event.type,
+        startsAt: event.occurrenceStart.toISOString(),
+        rsvped,
+        // Same gate as getMemberEvents: the host can always join their own
+        // meeting even though they never auto-RSVP to their own event.
+        meetingUrl: rsvped || event.hostId === userId ? event.meetingUrl : null,
+        seriesId: event.id,
+        isRecurring: event.isRecurring,
+      };
+    });
 }
 
 // /admin/event-registrations — a merged view of who's engaged with each
@@ -739,6 +917,12 @@ export async function createEvent(
     visibility: EventVisibility;
     invitedUserIds: string[];
     meetLinkSource: "auto" | "manual";
+    recurrence: {
+      frequency: RecurrenceFrequency;
+      interval: number;
+      byWeekday: number[];
+      until: string | null;
+    } | null;
   },
 ): Promise<{ id: string }> {
   const startsAt = new Date(input.startsAt);
@@ -756,6 +940,23 @@ export async function createEvent(
       throw new EventError(400, "End time must be after the start time.");
     }
   }
+
+  let recurrenceUntil: Date | null = null;
+  if (input.recurrence?.until) {
+    recurrenceUntil = new Date(input.recurrence.until);
+    if (Number.isNaN(recurrenceUntil.getTime())) {
+      throw new EventError(400, '"Repeat until" date isn\'t valid.');
+    }
+  }
+  const recurrenceInput: RecurrenceInput | null = input.recurrence
+    ? {
+        frequency: input.recurrence.frequency,
+        interval: input.recurrence.interval,
+        byWeekday: input.recurrence.frequency === RecurrenceFrequency.weekly ? input.recurrence.byWeekday : [],
+        until: recurrenceUntil,
+      }
+    : null;
+  const recurrenceRuleString = recurrenceInput ? buildRRuleString(recurrenceInput, startsAt) : null;
 
   // Belt-and-suspenders: createEventSchema already blocks an unconfirmed
   // Case Discussion client- and server-side, but this is the one place no
@@ -839,6 +1040,7 @@ export async function createEvent(
       durationMinutes: endsAt ? Math.round((endsAt.getTime() - startsAt.getTime()) / 60_000) : undefined,
       attendees,
       description: input.description ?? undefined,
+      recurrenceRule: recurrenceRuleString ?? undefined,
     });
     meetingUrl = created.meetingUrl;
     googleEventId = created.googleEventId;
@@ -863,6 +1065,18 @@ export async function createEvent(
       },
       select: { id: true },
     });
+
+    if (recurrenceInput) {
+      await tx.eventRecurrence.create({
+        data: {
+          eventId: created.id,
+          frequency: recurrenceInput.frequency,
+          interval: recurrenceInput.interval,
+          byWeekday: recurrenceInput.byWeekday,
+          until: recurrenceInput.until,
+        },
+      });
+    }
 
     if (invitedUsers.length > 0) {
       await tx.eventInvitee.createMany({
@@ -917,6 +1131,7 @@ export async function getEventForEdit(eventId: string) {
       deidentificationConfirmed: true,
       hostId: true,
       visibility: true,
+      recurrence: { select: RECURRENCE_SELECT },
     },
   });
   if (!event) return null;
@@ -934,6 +1149,14 @@ export async function getEventForEdit(eventId: string) {
     visibility: event.visibility,
     deidentificationConfirmed: event.deidentificationConfirmed,
     hostId: event.hostId,
+    recurrence: event.recurrence
+      ? {
+          frequency: event.recurrence.frequency,
+          interval: event.recurrence.interval,
+          byWeekday: event.recurrence.byWeekday,
+          until: event.recurrence.until?.toISOString() ?? null,
+        }
+      : null,
   };
 }
 
@@ -958,6 +1181,12 @@ export async function updateEvent(
     deidentificationConfirmed: boolean;
     timezone: string | null;
     heroImage: File | null;
+    recurrence: {
+      frequency: RecurrenceFrequency;
+      interval: number;
+      byWeekday: number[];
+      until: string | null;
+    } | null;
   },
 ): Promise<{ id: string }> {
   const event = await db.event.findUnique({
@@ -970,6 +1199,7 @@ export async function updateEvent(
       endsAt: true,
       visibility: true,
       googleEventId: true,
+      recurrence: { select: RECURRENCE_SELECT },
     },
   });
   if (!event) throw new EventError(404, "Event not found.");
@@ -1008,6 +1238,27 @@ export async function updateEvent(
     throw new EventError(400, "Case Discussion events require the de-identification confirmation.");
   }
 
+  let recurrenceUntil: Date | null = null;
+  if (input.recurrence?.until) {
+    recurrenceUntil = new Date(input.recurrence.until);
+    if (Number.isNaN(recurrenceUntil.getTime())) {
+      throw new EventError(400, '"Repeat until" date isn\'t valid.');
+    }
+  }
+  const recurrenceInput: RecurrenceInput | null = input.recurrence
+    ? {
+        frequency: input.recurrence.frequency,
+        interval: input.recurrence.interval,
+        byWeekday: input.recurrence.frequency === RecurrenceFrequency.weekly ? input.recurrence.byWeekday : [],
+        until: recurrenceUntil,
+      }
+    : null;
+  // Compared against the pre-update EventRecurrence fetched above (not the
+  // input object identity) so re-submitting the form with an unchanged
+  // repeat schedule never fires a needless Google Calendar patch below.
+  const priorRecurrence = event.recurrence ? toRecurrenceInput(event.recurrence) : null;
+  const recurrenceChanged = !recurrenceInputsEqual(recurrenceInput, priorRecurrence);
+
   let heroImageUrl = event.heroImageUrl;
   if (input.heroImage) {
     try {
@@ -1044,6 +1295,28 @@ export async function updateEvent(
       where: { eventId: event.id },
       data: { title: input.title },
     });
+
+    if (recurrenceInput) {
+      await tx.eventRecurrence.upsert({
+        where: { eventId: event.id },
+        create: {
+          eventId: event.id,
+          frequency: recurrenceInput.frequency,
+          interval: recurrenceInput.interval,
+          byWeekday: recurrenceInput.byWeekday,
+          until: recurrenceInput.until,
+        },
+        update: {
+          frequency: recurrenceInput.frequency,
+          interval: recurrenceInput.interval,
+          byWeekday: recurrenceInput.byWeekday,
+          until: recurrenceInput.until,
+        },
+      });
+    } else if (event.recurrence) {
+      await tx.eventRecurrence.delete({ where: { eventId: event.id } });
+    }
+
     return result;
   });
 
@@ -1066,6 +1339,14 @@ export async function updateEvent(
   // philosophy as every other Google call in this file.
   if (timeChanged && event.googleEventId) {
     await updateMeetingCalendarEventTime(event.googleEventId, startsAt, endsAt);
+  }
+
+  // Keep the underlying Google Calendar event's recurrence in sync when the
+  // host changes (or adds/removes) the repeat schedule — same best-effort
+  // philosophy as the time sync above.
+  if (recurrenceChanged && event.googleEventId) {
+    const recurrenceRuleString = recurrenceInput ? buildRRuleString(recurrenceInput, startsAt) : null;
+    await updateMeetingCalendarEventRecurrence(event.googleEventId, recurrenceRuleString);
   }
 
   // Reschedule notification (Objective 03) — every visibility now notifies
@@ -1466,6 +1747,9 @@ export function buildEventIcs(event: {
   startsAt: Date;
   endsAt: Date | null;
   meetingUrl: string | null;
+  /** Series' repeat rule, if any — anchored at the master Event's own startsAt, per RFC 5545. */
+  recurrence?: RecurrenceInput | null;
+  recurrenceAnchor?: Date;
 }): string {
   const start = formatIcsDate(event.startsAt);
   const end = formatIcsDate(event.endsAt ?? new Date(event.startsAt.getTime() + 60 * 60 * 1000));
@@ -1479,6 +1763,10 @@ export function buildEventIcs(event: {
     "PRODID:-//Nasiha//Events//EN",
     "CALSCALE:GREGORIAN",
     "BEGIN:VEVENT",
+    // RFC 5545: all instances of a recurring event share one UID — there's
+    // no per-instance RECURRENCE-ID override given the app's no-exceptions
+    // recurrence model (§4.6), so a single-occurrence download still just
+    // carries the whole series' RRULE with that occurrence's own DTSTART/DTEND.
     `UID:${event.id}@nasihaonline`,
     `DTSTAMP:${formatIcsDate(new Date())}`,
     `DTSTART:${start}`,
@@ -1491,6 +1779,9 @@ export function buildEventIcs(event: {
   if (event.meetingUrl) {
     lines.push(`LOCATION:${escapeIcsText(event.meetingUrl)}`);
   }
+  if (event.recurrence) {
+    lines.push(buildRRuleString(event.recurrence, event.recurrenceAnchor ?? event.startsAt));
+  }
   lines.push("END:VEVENT", "END:VCALENDAR");
 
   return lines.join("\r\n");
@@ -1502,10 +1793,23 @@ export function buildEventIcs(event: {
  * /events listing, just applied to the file download instead of a page
  * render. `userId` is null for an unauthenticated request.
  */
-export async function getEventIcs(eventId: string, userId: string | null): Promise<{ title: string; ics: string } | null> {
+export async function getEventIcs(
+  eventId: string,
+  userId: string | null,
+  occurrenceStartIso?: string,
+): Promise<{ title: string; ics: string } | null> {
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { id: true, title: true, description: true, startsAt: true, endsAt: true, meetingUrl: true, hostId: true },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      startsAt: true,
+      endsAt: true,
+      meetingUrl: true,
+      hostId: true,
+      recurrence: { select: RECURRENCE_SELECT },
+    },
   });
   if (!event) return null;
 
@@ -1520,8 +1824,29 @@ export async function getEventIcs(eventId: string, userId: string | null): Promi
 
   // Same host exception as getMemberEvents/getMemberEventById/rsvpToEvent.
   const canSeeMeetingUrl = rsvped || (userId !== null && userId === event.hostId);
+
+  let startsAt = event.startsAt;
+  let endsAt = event.endsAt;
+  if (event.recurrence && occurrenceStartIso) {
+    const requested = new Date(occurrenceStartIso);
+    if (!Number.isNaN(requested.getTime())) {
+      const durationMs = event.endsAt ? event.endsAt.getTime() - event.startsAt.getTime() : null;
+      startsAt = requested;
+      endsAt = durationMs !== null ? new Date(requested.getTime() + durationMs) : null;
+    }
+  }
+
   return {
     title: event.title,
-    ics: buildEventIcs({ ...event, meetingUrl: canSeeMeetingUrl ? event.meetingUrl : null }),
+    ics: buildEventIcs({
+      id: event.id,
+      title: event.title,
+      description: event.description,
+      startsAt,
+      endsAt,
+      meetingUrl: canSeeMeetingUrl ? event.meetingUrl : null,
+      recurrence: event.recurrence ? toRecurrenceInput(event.recurrence) : null,
+      recurrenceAnchor: event.startsAt,
+    }),
   };
 }

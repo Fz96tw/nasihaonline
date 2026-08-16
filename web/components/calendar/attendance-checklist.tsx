@@ -16,9 +16,12 @@ import type { AttendanceChecklistMember } from "@/lib/events";
  */
 export function AttendanceChecklist({
   eventId,
+  occurrenceDate,
   initialMembers,
 }: {
   eventId: string;
+  /** ISO instant of the specific session this checklist is for (the master's own startsAt for a non-recurring event). */
+  occurrenceDate: string;
   initialMembers: AttendanceChecklistMember[];
 }) {
   const [members, setMembers] = useState(initialMembers);
@@ -33,7 +36,7 @@ export function AttendanceChecklist({
       const res = await fetch(`/api/events/${eventId}/attendance/attendees`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({ userId, occurrenceDate }),
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => null);

@@ -25,9 +25,10 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { EventType, EventVisibility } from "@/lib/generated/prisma/enums";
+import { EventType, EventVisibility, RecurrenceFrequency } from "@/lib/generated/prisma/enums";
 import { EVENT_TYPE_LABELS } from "@/lib/events";
 import { createEventSchema, updateEventSchema, type CreateEventValues } from "@/lib/validation/event";
+import { describeRecurrence } from "@/lib/recurrence";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { InviteePicker } from "@/components/members/invitee-picker";
 
@@ -44,7 +45,21 @@ const DEFAULT_VALUES: CreateEventValues = {
   visibility: EventVisibility.community,
   invitedUserIds: [],
   meetLinkSource: "auto",
+  recurrence: null,
 };
+
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function toggleWeekday(byWeekday: number[], day: number): number[] {
+  return byWeekday.includes(day) ? byWeekday.filter((d) => d !== day) : [...byWeekday, day].sort((a, b) => a - b);
+}
+
+/** Default "Repeat until" when the checkbox is first turned on: 90 days after the event's start (or from now, if the start field isn't filled in yet). */
+function defaultUntilIso(startsAtLocal: string): string {
+  const start = startsAtLocal ? new Date(startsAtLocal) : new Date();
+  const anchor = Number.isNaN(start.getTime()) ? new Date() : start;
+  return new Date(anchor.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString();
+}
 
 /** Converts a stored ISO timestamp to the local "YYYY-MM-DDTHH:mm" value a <input type="datetime-local"> expects. */
 function toDatetimeLocalValue(iso: string | null): string {
@@ -85,6 +100,12 @@ type ExistingEvent = {
   heroImageUrl: string | null;
   deidentificationConfirmed: boolean;
   visibility: EventVisibility;
+  recurrence: {
+    frequency: RecurrenceFrequency;
+    interval: number;
+    byWeekday: number[];
+    until: string | null;
+  } | null;
 };
 
 /**
@@ -149,6 +170,7 @@ export function SubmitEventForm({
           visibility: existingEvent.visibility,
           invitedUserIds: [],
           meetLinkSource: "manual",
+          recurrence: existingEvent.recurrence,
         }
       : DEFAULT_VALUES,
     mode: "onTouched",
@@ -205,6 +227,7 @@ export function SubmitEventForm({
         formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
         formData.append("meetLinkSource", values.meetLinkSource);
       }
+      if (values.recurrence) formData.append("recurrence", JSON.stringify(values.recurrence));
       if (heroImage) formData.append("heroImage", heroImage);
 
       const res = await fetch(existingEvent ? `/api/events/${existingEvent.id}` : "/api/events", {
@@ -372,6 +395,129 @@ export function SubmitEventForm({
             )}
           />
         </div>
+
+        <FormField
+          control={form.control}
+          name="recurrence"
+          render={({ field }) => {
+            const recurrence = field.value;
+            const repeats = recurrence !== null;
+            return (
+              <FormItem className="rounded-md border p-4">
+                <div className="flex flex-row items-center justify-between gap-4">
+                  <div>
+                    <FormLabel>Repeat</FormLabel>
+                    <FormDescription>
+                      Changing the repeat schedule on an existing series updates all upcoming occurrences —
+                      there&apos;s no way to edit or skip a single date.
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={repeats}
+                      onCheckedChange={(checked) =>
+                        field.onChange(
+                          checked
+                            ? { frequency: RecurrenceFrequency.weekly, interval: 1, byWeekday: [], until: null }
+                            : null,
+                        )
+                      }
+                    />
+                  </FormControl>
+                </div>
+                {repeats && recurrence && (
+                  <div className="mt-3 flex flex-col gap-3">
+                    <Select
+                      value={recurrence.frequency}
+                      onValueChange={(value) =>
+                        field.onChange({
+                          ...recurrence,
+                          frequency: value as RecurrenceFrequency,
+                          byWeekday: value === RecurrenceFrequency.weekly ? recurrence.byWeekday : [],
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={RecurrenceFrequency.daily}>Daily</SelectItem>
+                        <SelectItem value={RecurrenceFrequency.weekly}>Weekly</SelectItem>
+                        <SelectItem value={RecurrenceFrequency.monthly}>Monthly</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <div className="flex items-center gap-2 text-sm">
+                      <span>Every</span>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={52}
+                        className="w-16"
+                        value={recurrence.interval}
+                        onChange={(e) =>
+                          field.onChange({ ...recurrence, interval: Math.max(1, Number(e.target.value) || 1) })
+                        }
+                      />
+                      <span>
+                        {recurrence.frequency === RecurrenceFrequency.daily
+                          ? "day(s)"
+                          : recurrence.frequency === RecurrenceFrequency.weekly
+                            ? "week(s)"
+                            : "month(s)"}
+                      </span>
+                    </div>
+
+                    {recurrence.frequency === RecurrenceFrequency.weekly && (
+                      <div className="flex gap-1">
+                        {WEEKDAY_LABELS.map((label, day) => (
+                          <Button
+                            key={label}
+                            type="button"
+                            size="sm"
+                            variant={recurrence.byWeekday.includes(day) ? "default" : "outline"}
+                            onClick={() => field.onChange({ ...recurrence, byWeekday: toggleWeekday(recurrence.byWeekday, day) })}
+                          >
+                            {label}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={recurrence.until !== null}
+                        onCheckedChange={(checked) =>
+                          field.onChange({
+                            ...recurrence,
+                            until: checked === true ? defaultUntilIso(form.getValues("startsAt")) : null,
+                          })
+                        }
+                      />
+                      <span>Repeat until</span>
+                      {recurrence.until && (
+                        <Input
+                          type="date"
+                          className="w-auto"
+                          value={recurrence.until.slice(0, 10)}
+                          onChange={(e) => field.onChange({ ...recurrence, until: `${e.target.value}T23:59:59.000Z` })}
+                        />
+                      )}
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      {describeRecurrence({
+                        ...recurrence,
+                        until: recurrence.until ? new Date(recurrence.until) : null,
+                      })}
+                    </p>
+                  </div>
+                )}
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
 
         {!existingEvent ? (
           <div className="flex flex-col gap-3">

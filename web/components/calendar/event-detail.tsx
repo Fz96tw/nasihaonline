@@ -108,7 +108,12 @@ export function EventDetail({
               {event.attendeeCount}
             </span>
           )}
-          <EventViewCounter eventId={event.id} initialViews={event.viewCount} />
+          <EventViewCounter eventId={event.seriesId} initialViews={event.viewCount} />
+          {event.isRecurring && event.recurrenceSummary ? (
+            <Badge variant="neutral" title={event.recurrenceSummary}>
+              {event.recurrenceSummary}
+            </Badge>
+          ) : null}
         </div>
         <h1 className="mb-1 text-3xl font-bold tracking-tight">{event.title}</h1>
         {hostProfile ? (
@@ -160,22 +165,27 @@ export function EventDetail({
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3">
-        {!isPast && !isHost && <RsvpButton eventId={event.id} rsvped={event.rsvped} onToggled={handleRsvpToggled} />}
-        {!isPast && <AddToCalendarButton eventId={event.id} />}
+        {!isPast && !isHost && <RsvpButton eventId={event.seriesId} rsvped={event.rsvped} onToggled={handleRsvpToggled} />}
+        {!isPast && (
+          <AddToCalendarButton
+            eventId={event.seriesId}
+            occurrenceIso={event.isRecurring ? event.startsAt : undefined}
+          />
+        )}
         {canEdit && (
           <Button size="sm" variant="outline" asChild>
-            <Link href={`/calendar/${event.id}/edit`}>
+            <Link href={`/calendar/${event.seriesId}/edit`}>
               <Pencil className="mr-1.5 h-4 w-4" />
               Edit Event
             </Link>
           </Button>
         )}
-        {canEdit && <CancelEventButton eventId={event.id} title={event.title} />}
+        {canEdit && <CancelEventButton eventId={event.seriesId} title={event.title} />}
       </div>
 
       {roster ? (
         canEdit ? (
-          <ManageInvitees eventId={event.id} initialRoster={roster} />
+          <ManageInvitees eventId={event.seriesId} initialRoster={roster} />
         ) : (
           <div className="flex flex-col gap-2 border-t pt-6">
             <h2 className="text-sm font-semibold">Invited members ({roster.length})</h2>
@@ -227,7 +237,11 @@ export function EventDetail({
       ) : null}
 
       {attendanceChecklist ? (
-        <AttendanceChecklist eventId={event.id} initialMembers={attendanceChecklist} />
+        <AttendanceChecklist
+          eventId={event.seriesId}
+          occurrenceDate={event.startsAt}
+          initialMembers={attendanceChecklist}
+        />
       ) : null}
     </div>
   );
