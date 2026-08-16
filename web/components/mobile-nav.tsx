@@ -15,7 +15,6 @@ import {
   Mail,
   Menu,
   MessageSquare,
-  PenLine,
   UserPlus,
   Users,
   type LucideIcon,
@@ -53,7 +52,6 @@ const OUR_MISSION_LINKS: NavLink[] = [
 
 const COMMUNITY_LINKS: NavLink[] = [
   { href: "/events", label: "Events Calendar", icon: CalendarDays },
-  { href: "/blog", label: "Blogs", icon: PenLine },
   { href: "/library", label: "Knowledge Library", icon: BookOpen, restricted: true },
   { href: "/forums", label: "Forums", icon: MessageSquare, restricted: true },
   { href: "/review-feedback", label: "Peer Review & Feedback", icon: ClipboardCheck, restricted: true },

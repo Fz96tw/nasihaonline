@@ -12,13 +12,11 @@ import {
 } from "@/lib/generated/prisma/enums";
 import {
   getProfileAvatarUrl,
-  getPostHeroImageUrl,
   getEventHeroImageUrl,
   getAnnouncementHeroImageUrl,
   getSurveyHeroImageUrl,
   getKnowledgeItemHeroImageUrl,
 } from "@/lib/storage";
-import { excerptFromHtml } from "@/lib/blog";
 import { withFeedRef, type FeedItem, type FeedCursor } from "@/lib/feed";
 import { youtubeThumbnailUrl } from "@/lib/youtube";
 
@@ -98,7 +96,7 @@ export async function getFeedPage(params: {
   const wants = (type: FeedItem["type"]) => !params.types || params.types.includes(type);
   const viewerId = params.viewerId;
 
-  const [events, posts, libraryItems, forumThreads, announcements, surveys, seekingReviewItems] = await Promise.all([
+  const [events, libraryItems, forumThreads, announcements, surveys, seekingReviewItems] = await Promise.all([
     !wants("event") ? Promise.resolve([]) : db.event.findMany({
       where: {
         ...(before ? { createdAt: { lt: before } } : {}),
@@ -132,24 +130,6 @@ export async function getFeedPage(params: {
         forumThread: { select: { _count: { select: { posts: true } } } },
       },
       orderBy: { createdAt: "desc" },
-      take: pageSize,
-    }),
-    !wants("post") ? Promise.resolve([]) : db.post.findMany({
-      where: { publishedAt: { not: null }, ...(before ? { publishedAt: { lt: before } } : {}) },
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        body: true,
-        heroImageUrl: true,
-        publishedAt: true,
-        author: { select: AUTHOR_SELECT },
-        // Comment rows carry `postId` directly regardless of reply nesting
-        // (see PostComment's parentId self-relation), so this count already
-        // matches lib/blog.ts's countAllComments total on the detail page.
-        _count: { select: { comments: true, views: true } },
-      },
-      orderBy: { publishedAt: "desc" },
       take: pageSize,
     }),
     !wants("library") ? Promise.resolve([]) : db.knowledgeItem.findMany({
@@ -324,18 +304,6 @@ export async function getFeedPage(params: {
       forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : undefined,
       eventStartsAt: event.startsAt.toISOString(),
       eventViewCount: event._count.views,
-    })),
-    ...posts.map((post): FeedItem => ({
-      type: "post",
-      id: post.id,
-      title: post.title,
-      excerpt: excerptFromHtml(post.body, EXCERPT_LENGTH),
-      href: withFeedRef(`/blog/${post.slug}`),
-      // publishedAt is never null here — the where clause above excludes drafts.
-      timestamp: (post.publishedAt as Date).toISOString(),
-      author: authorOf(post.author),
-      imageUrl: getPostHeroImageUrl(post.heroImageUrl),
-      stats: { views: post._count.views, comments: post._count.comments },
     })),
     ...libraryItems.map((item): FeedItem => ({
       type: "library",

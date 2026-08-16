@@ -327,52 +327,38 @@ POST /api/messages
 
 ---
 
-# Blog Domain
+# Knowledge Library Domain
+
+Blog was consolidated into this domain as the `blog_post` content type — writing and publishing a post is now a Library submission like any other, gated by the same Steward pre-publish review queue. Old `/blog`/`/blog/[slug]` URLs 308-redirect here via a `LegacyBlogSlug` lookup table.
 
 ## Features
 
-- draft posts
-- publish posts
-- categories
-- tags
-- comments
+- upload resources (file, external link, or YouTube URL depending on content type) or write one (`blog_post`, a rich-text body instead)
+- categorize resources
+- search resources
+- preview documents, or render a `blog_post`'s body inline
+- contributor attribution
+- Steward pre-publish review queue
 
 ## Models
 
-- Post
-- PostCategory
-- PostTag
-- PostComment
+- KnowledgeItem (`contentType` includes `blog_post`; `body` is rich text, set only for that type)
+- KnowledgeCategory
+- KnowledgeTag
+- KnowledgeAttachment
+- LegacyBlogSlug (redirect-only lookup for retired `/blog/[slug]` URLs)
 
 ## Routes
 
 ```text
-/blog
-/blog/[slug]
+/library
+/library/[id]
+/library/new
 ```
 
 ## Editor
 
-Tiptap
-
----
-
-# Knowledge Library Domain
-
-## Features
-
-- upload resources
-- categorize resources
-- search resources
-- preview documents
-- contributor attribution
-
-## Models
-
-- KnowledgeItem
-- KnowledgeCategory
-- KnowledgeTag
-- KnowledgeAttachment
+Tiptap (used for the `blog_post` content type's body)
 
 ## Tools
 
@@ -410,7 +396,7 @@ Meilisearch
 - new message
 - event reminder
 - membership update
-- blog comment
+- forum reply / library discussion reply
 - contribution awarded
 
 ## Channels
@@ -523,8 +509,6 @@ event-assets/
  /about
  /join
  /events
- /blog
- /blog/[slug]
 ```
 
 ## Authenticated
@@ -660,8 +644,7 @@ Kubernetes
 
 ## Phase 5
 
-- blogs
-- knowledge library
+- knowledge library (blogging folded in as a content type)
 - search
 
 ---

@@ -3,12 +3,11 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { getMyPosts } from "@/lib/blog-server";
 import { getMySubmissions } from "@/lib/library-server";
 import { getEventsHostedByMember } from "@/lib/events-server";
 import { getMemberForumThreads } from "@/lib/forums-server";
 import { getMyMeetingRequests } from "@/lib/meeting-requests-server";
-import { POST_STATUS_LABELS, POST_STATUS_BADGE_VARIANT } from "@/lib/blog";
+import { KnowledgeContentType } from "@/lib/generated/prisma/enums";
 import { STATUS_LABELS, STATUS_BADGE_VARIANT } from "@/lib/library";
 import { MEETING_REQUEST_STATUS_LABELS, MEETING_REQUEST_STATUS_BADGE_VARIANT } from "@/lib/meeting-requests";
 import { Badge } from "@/components/ui/badge";
@@ -116,8 +115,7 @@ export default async function MyPostsPage() {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const [posts, submissions, events, threads, meetings] = await Promise.all([
-    getMyPosts(user.id),
+  const [submissions, events, threads, meetings] = await Promise.all([
     getMySubmissions(user.id),
     getEventsHostedByMember(user.id, user.id),
     getMemberForumThreads(user.id, user.id, true),
@@ -126,22 +124,18 @@ export default async function MyPostsPage() {
 
   const now = Date.now();
 
-  const blogRows: ActivityRow[] = posts.map((post) => {
-    const status = post.publishedAt ? "published" : "draft";
-    return {
-      id: post.id,
-      type: "Blog",
-      title: post.title,
-      status: { label: POST_STATUS_LABELS[status], variant: POST_STATUS_BADGE_VARIANT[status] },
-      date: post.createdAt,
-      href: `/blog/${post.slug}/edit`,
-      actionLabel: "Edit",
-    };
-  });
+  // Blog was consolidated into the Library as the blog_post content type —
+  // both tabs read from the same getMySubmissions query, split by
+  // contentType, so a member's own blog posts still show up under a
+  // separate "Blog Posts" tab (matching how they likely still think of
+  // "things I wrote" vs. "things I curated") without ever double-counting
+  // an item in both the Blog and Library tabs/rows.
+  const blogSubmissions = submissions.filter((item) => item.contentType === KnowledgeContentType.blog_post);
+  const libraryOnlySubmissions = submissions.filter((item) => item.contentType !== KnowledgeContentType.blog_post);
 
   const libraryRows: ActivityRow[] = submissions.map((item) => ({
     id: item.id,
-    type: "Library",
+    type: item.contentType === KnowledgeContentType.blog_post ? "Blog" : "Library",
     title: item.title,
     status: { label: STATUS_LABELS[item.status], variant: STATUS_BADGE_VARIANT[item.status] },
     date: item.createdAt,
@@ -181,7 +175,7 @@ export default async function MyPostsPage() {
     actionLabel: "View",
   }));
 
-  const allRows = [...blogRows, ...libraryRows, ...eventRows, ...forumRows, ...meetingRows].sort(
+  const allRows = [...libraryRows, ...eventRows, ...forumRows, ...meetingRows].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
   );
 
@@ -204,14 +198,14 @@ export default async function MyPostsPage() {
 
       <MyPostsTabs
         allCount={allRows.length}
-        blogCount={blogRows.length}
-        libraryCount={libraryRows.length}
+        blogCount={blogSubmissions.length}
+        libraryCount={libraryOnlySubmissions.length}
         eventsCount={eventRows.length}
         forumCount={forumRows.length}
         meetingsCount={meetingRows.length}
         allContent={<ActivityTable rows={allRows} showType emptyMessage="You haven't created anything yet." />}
-        blogContent={<ActivityTable rows={blogRows} emptyMessage="You haven't written any blog posts yet." />}
-        libraryContent={<MySubmissionsTable submissions={submissions} />}
+        blogContent={<MySubmissionsTable submissions={blogSubmissions} />}
+        libraryContent={<MySubmissionsTable submissions={libraryOnlySubmissions} />}
         eventsContent={<ActivityTable rows={eventRows} emptyMessage="You haven't hosted any events yet." />}
         forumContent={
           <ActivityTable

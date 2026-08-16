@@ -1,28 +1,19 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { KnowledgeStatus } from "@/lib/generated/prisma/enums";
-import { excerptFromHtml } from "@/lib/blog";
 import type { ModerationItem } from "@/lib/moderation";
 
 /**
  * GET /admin/content (§4.11) — "one shared moderation queue, not a separate
- * one per domain" (§4.13). Pulls the three domains' independently-flagged
- * rows into a single list, newest first, rather than three separate tabs.
+ * one per domain" (§4.13). Pulls the two domains' independently-flagged
+ * rows into a single list, newest first, rather than separate tabs. Blog's
+ * former flagged Post/PostComment rows are covered here too, now that Blog
+ * has been consolidated into the Library as the blog_post content type —
+ * a flagged blog post is a flagged KnowledgeItem, a flagged blog comment is
+ * a flagged ForumPost in its discussion thread.
  */
 export async function getFlaggedContent(): Promise<ModerationItem[]> {
-  const [posts, knowledgeItems, forumPosts, postComments] = await Promise.all([
-    db.post.findMany({
-      where: { flagged: true },
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        body: true,
-        flagReason: true,
-        createdAt: true,
-        author: { select: { name: true } },
-      },
-    }),
+  const [knowledgeItems, forumPosts] = await Promise.all([
     db.knowledgeItem.findMany({
       where: { status: KnowledgeStatus.flagged },
       select: {
@@ -45,30 +36,9 @@ export async function getFlaggedContent(): Promise<ModerationItem[]> {
         thread: { select: { id: true, title: true, forum: { select: { slug: true } } } },
       },
     }),
-    db.postComment.findMany({
-      where: { flagged: true },
-      select: {
-        id: true,
-        body: true,
-        flagReason: true,
-        createdAt: true,
-        author: { select: { name: true } },
-        post: { select: { slug: true, title: true } },
-      },
-    }),
   ]);
 
   const items: ModerationItem[] = [
-    ...posts.map((post) => ({
-      id: post.id,
-      type: "blog_post" as const,
-      title: post.title,
-      excerpt: excerptFromHtml(post.body),
-      authorName: post.author.name,
-      flagReason: post.flagReason,
-      createdAt: post.createdAt.toISOString(),
-      href: `/blog/${post.slug}`,
-    })),
     ...knowledgeItems.map((item) => ({
       id: item.id,
       type: "library_item" as const,
@@ -89,16 +59,6 @@ export async function getFlaggedContent(): Promise<ModerationItem[]> {
       createdAt: post.createdAt.toISOString(),
       href: `/forums/${post.thread.forum.slug}/${post.thread.id}`,
     })),
-    ...postComments.map((comment) => ({
-      id: comment.id,
-      type: "blog_comment" as const,
-      title: comment.post.title,
-      excerpt: comment.body,
-      authorName: comment.author.name,
-      flagReason: comment.flagReason,
-      createdAt: comment.createdAt.toISOString(),
-      href: `/blog/${comment.post.slug}#comment-${comment.id}`,
-    })),
   ];
 
   return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -106,12 +66,10 @@ export async function getFlaggedContent(): Promise<ModerationItem[]> {
 
 /** Cheap count for the `/admin` dashboard badge — avoids fetching full rows just to size the queue. */
 export async function getFlaggedContentCount(): Promise<number> {
-  const [posts, knowledgeItems, forumPosts, postComments] = await Promise.all([
-    db.post.count({ where: { flagged: true } }),
+  const [knowledgeItems, forumPosts] = await Promise.all([
     db.knowledgeItem.count({ where: { status: KnowledgeStatus.flagged } }),
     db.forumPost.count({ where: { flagged: true } }),
-    db.postComment.count({ where: { flagged: true } }),
   ]);
 
-  return posts + knowledgeItems + forumPosts + postComments;
+  return knowledgeItems + forumPosts;
 }

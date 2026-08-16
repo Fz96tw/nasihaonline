@@ -3,11 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getDirectoryMemberById } from "@/lib/members-server";
 import { getMemberForumThreads } from "@/lib/forums-server";
-import { getPublishedPostsByAuthor } from "@/lib/blog-server";
 import { getEventsHostedByMember } from "@/lib/events-server";
 import { getPublishedKnowledgeItemsByContributor } from "@/lib/library-server";
 import { MemberProfileView } from "@/components/members/member-profile-view";
-import { MemberBlogPosts } from "@/components/members/member-blog-posts";
 import { MemberHostedEvents } from "@/components/members/member-hosted-events";
 import { MemberLibraryItems } from "@/components/members/member-library-items";
 import { MemberForumThreads } from "@/components/members/member-forum-threads";
@@ -36,8 +34,7 @@ export default async function MemberProfilePage({ params }: { params: { memberId
 
   const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
 
-  const [posts, events, libraryItems, forumThreads] = await Promise.all([
-    getPublishedPostsByAuthor(params.memberId),
+  const [events, libraryItems, forumThreads] = await Promise.all([
     getEventsHostedByMember(params.memberId, user.id),
     getPublishedKnowledgeItemsByContributor(params.memberId, user.id, isPrivileged),
     getMemberForumThreads(params.memberId, user.id, isPrivileged),
@@ -54,7 +51,6 @@ export default async function MemberProfilePage({ params }: { params: { memberId
 
       <MemberProfileView member={member} currentUserId={user.id} />
 
-      <MemberBlogPosts posts={posts} />
       <MemberHostedEvents events={events} />
       <MemberLibraryItems items={libraryItems} canEdit={canEditLibraryItems} />
       <MemberForumThreads threads={forumThreads} />

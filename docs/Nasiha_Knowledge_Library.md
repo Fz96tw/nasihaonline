@@ -18,7 +18,7 @@ The Knowledge Library houses content across three categories, mirroring Nasiha's
 ### Teach — Original Content
 Content created by Nasiha members specifically for the community:
 - Recorded lectures and webinars
-- Written educational summaries and explainers
+- Written educational summaries and explainers — formally represented in the platform as the Library's `blog_post` content type, once its own standalone Blog section before being folded into the Library
 - Teaching cases (anonymized and de-identified)
 - Slide decks and presentation materials shared by lecturers
 

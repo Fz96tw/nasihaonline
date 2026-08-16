@@ -76,9 +76,6 @@ export async function SiteHeader() {
             <Link href={user ? "/calendar" : "/events"}>Events Calendar</Link>
           </DropdownMenuItem>
           <DropdownMenuItem className="text-base" asChild>
-            <Link href="/blog">Blogs</Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem className="text-base" asChild>
             <Link href="/library" className={cn("justify-between", !user && "text-muted-foreground")}>
               Knowledge Library
               {!user && (

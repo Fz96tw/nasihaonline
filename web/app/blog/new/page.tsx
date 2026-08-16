@@ -1,33 +1,9 @@
-import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
-import { getPostCategories, getPostTags } from "@/lib/blog-server";
-import { WritePostForm } from "@/components/blog/write-post-form";
+import { permanentRedirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Write New Blog Post — NASIHA",
-};
-
-// "Write a Post" (§4.8) — member-auth only, no tier gate (unlike Submit
-// Event). Not under middleware's isProtectedPageRoute since /blog itself
-// must stay public; this redirect is the enforcement point, mirroring
-// /calendar/new's pattern.
-export default async function NewBlogPostPage() {
-  const user = await getSessionUser();
-  if (!user) redirect("/sign-in");
-
-  const [categories, tags] = await Promise.all([getPostCategories(), getPostTags()]);
-
-  return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-8 p-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Write New Blog Post</h1>
-        <p className="text-muted-foreground">
-          Share your knowledge with the NASIHA community. You&apos;ll be listed as the author.
-        </p>
-      </div>
-
-      <WritePostForm categories={categories} tags={tags} />
-    </main>
-  );
+// Blog was consolidated into the Knowledge Library as the blog_post content
+// type — see /home/nadeem/.claude/plans/ancient-exploring-music.md.
+// /library/new itself enforces the sign-in gate "Write a Post" used to
+// enforce here; no need to duplicate that check before redirecting.
+export default function NewBlogPostPage() {
+  permanentRedirect("/library/new?type=blog_post");
 }

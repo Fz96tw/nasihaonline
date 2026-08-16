@@ -5,11 +5,10 @@
 
 import type { ReviewVolunteerStatus, Tier } from "@/lib/generated/prisma/enums";
 
-export type FeedItemType = "event" | "post" | "library" | "forum_thread" | "announcement" | "survey" | "peer_review";
+export type FeedItemType = "event" | "library" | "forum_thread" | "announcement" | "survey" | "peer_review";
 
 export const FEED_TYPE_LABELS: Record<FeedItemType, string> = {
   event: "Event",
-  post: "Blog",
   library: "Library",
   forum_thread: "Forum",
   announcement: "Announcement",
@@ -34,7 +33,7 @@ export type FeedItem = {
   author: { name: string | null; avatarUrl: string | null; titleSpecialty: string | null; countryRegion: string | null };
   /** Events, blog posts, announcements, and surveys carry a hero image; library items get one only for recorded lectures (YouTube thumbnail) — null otherwise. Forum threads always carry the same static default (/images/forum-thread.jpg), rendered by FeedRow as a small left-side thumbnail rather than the full-width image used by other types. */
   imageUrl: string | null;
-  /** Only blog posts carry the eye/comment counts shown on /blog/[slug] (§4.8) — undefined for every other type. */
+  /** Only forum threads carry the combined eye/reply count shown on their detail page — undefined for every other type. Library items (including blog_post) carry libraryViewCount + forumReplyCount separately instead. */
   stats?: { views: number; comments: number };
   /** Only events carry a registered/RSVP'd count — undefined for every other type. */
   attendeeCount?: number;

@@ -51,7 +51,7 @@ const ADMIN_SECTIONS = [
   {
     href: "/admin/content",
     title: "Content Moderation",
-    description: "Review flagged Blog posts, Library items, and Forum posts.",
+    description: "Review flagged Library items and Forum posts.",
     countKey: "content",
     group: "Content & Trust",
   },

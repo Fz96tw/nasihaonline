@@ -80,12 +80,15 @@ export function SubmitResourceForm({
   tags,
   existingItem,
   currentUserId,
+  initialContentType,
 }: {
   categories: KnowledgeCategoryOption[];
   tags: KnowledgeTagOption[];
   existingItem?: KnowledgeItemForEdit;
   /** Current user's id — excludes them from the invitee picker's suggestions (create mode only). */
   currentUserId?: string;
+  /** Preselects the content-type dropdown in create mode (e.g. `?type=` on /library/new) — ignored when editing, since existingItem.contentType already wins. */
+  initialContentType?: KnowledgeContentType;
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -115,7 +118,9 @@ export function SubmitResourceForm({
           visibility: KnowledgeVisibility.public,
           invitedUserIds: [],
         }
-      : DEFAULT_VALUES,
+      : initialContentType
+        ? { ...DEFAULT_VALUES, contentType: initialContentType }
+        : DEFAULT_VALUES,
     mode: "onTouched",
   });
 

@@ -2,14 +2,9 @@ import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireRole } from "@/lib/auth";
 import { Role } from "@/lib/generated/prisma/enums";
 import { moderationActionSchema } from "@/lib/validation/moderation";
-import { PostError, PostCommentError, resolvePostFlag, resolvePostCommentFlag } from "@/lib/blog-server";
 import { KnowledgeItemError, resolveFlaggedKnowledgeItem } from "@/lib/library-server";
 import { ForumError, resolveForumPostFlag } from "@/lib/forums-server";
-import {
-  enqueuePostIndexSync,
-  enqueueKnowledgeItemIndexSync,
-  enqueueForumThreadIndexSync,
-} from "@/lib/queues/search-index-queue";
+import { enqueueKnowledgeItemIndexSync, enqueueForumThreadIndexSync } from "@/lib/queues/search-index-queue";
 
 /**
  * PATCH /api/admin/content/:id — the one shared moderation-queue endpoint
@@ -34,33 +29,17 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   }
 
   try {
-    if (parsed.data.type === "blog_post") {
-      const post = await resolvePostFlag(params.id, parsed.data.action, admin.id);
-      await enqueuePostIndexSync(post.id);
-      return NextResponse.json({ item: post });
-    }
-
     if (parsed.data.type === "library_item") {
       const item = await resolveFlaggedKnowledgeItem(params.id, parsed.data.action, admin.id);
       await enqueueKnowledgeItemIndexSync(item.id);
       return NextResponse.json({ item });
     }
 
-    if (parsed.data.type === "blog_comment") {
-      const comment = await resolvePostCommentFlag(params.id, parsed.data.action, admin.id);
-      return NextResponse.json({ item: comment });
-    }
-
     const post = await resolveForumPostFlag(params.id, parsed.data.action, admin.id);
     await enqueueForumThreadIndexSync(post.threadId);
     return NextResponse.json({ item: post });
   } catch (error) {
-    if (
-      error instanceof PostError ||
-      error instanceof PostCommentError ||
-      error instanceof KnowledgeItemError ||
-      error instanceof ForumError
-    ) {
+    if (error instanceof KnowledgeItemError || error instanceof ForumError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     throw error;

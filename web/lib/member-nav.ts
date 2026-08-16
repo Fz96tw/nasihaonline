@@ -6,7 +6,6 @@ import {
   Inbox,
   LayoutDashboard,
   MessageSquare,
-  PenLine,
   Rss,
   Shield,
   Users,
@@ -27,8 +26,8 @@ export type NavSection = {
   items: NavItem[];
 };
 
-// Blogs (§4.8), the full Knowledge Library (§4.9, including 5.5's
-// search/browse landing), and Forums (§4.13, live as of 5.6) are all live.
+// The full Knowledge Library (§4.9, including the blog_post content type
+// Blog was consolidated into) and Forums (§4.13, live as of 5.6) are live.
 export const MEMBER_NAV_SECTIONS: NavSection[] = [
   {
     title: "Main",
@@ -44,7 +43,6 @@ export const MEMBER_NAV_SECTIONS: NavSection[] = [
       { label: "Message Inbox", href: "/inbox", icon: Inbox },
       { label: "Events Calendar", href: "/calendar", icon: CalendarDays },
       { label: "Forums", href: "/forums", icon: MessageSquare },
-      { label: "Blogs", href: "/blog", icon: PenLine },
       { label: "Knowledge Library", href: "/library", icon: BookOpen },
       { label: "Peer Review & Feedback", href: "/review-feedback", icon: ClipboardCheck },
     ],
