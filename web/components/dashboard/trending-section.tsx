@@ -6,7 +6,6 @@ import { getTrendingAnnouncements } from "@/lib/announcements-server";
 import { getTrendingSurveys } from "@/lib/surveys-server";
 import { getTrendingEvents } from "@/lib/events-server";
 import { getTrendingLibraryItems } from "@/lib/library-server";
-import { getTrendingPosts } from "@/lib/blog-server";
 import { getTrendingForumThreads } from "@/lib/forums-server";
 
 function formatUpdatedAgo(iso: string) {
@@ -42,12 +41,11 @@ export async function TrendingSection({
   userId: string;
   isPrivileged: boolean;
 }) {
-  const [announcements, surveys, events, libraryItems, posts, forumThreads] = await Promise.all([
+  const [announcements, surveys, events, libraryItems, forumThreads] = await Promise.all([
     getTrendingAnnouncements(),
     getTrendingSurveys(),
     getTrendingEvents(userId, isPrivileged),
     getTrendingLibraryItems(userId, isPrivileged),
-    getTrendingPosts(),
     getTrendingForumThreads(userId, isPrivileged),
   ]);
 
@@ -90,16 +88,6 @@ export async function TrendingSection({
         title: item.title,
         href: `/library/${item.id}`,
         metric: formatViews(item.viewCount),
-      })),
-    },
-    {
-      key: "blog",
-      label: "Blog",
-      items: posts.map((post) => ({
-        id: post.id,
-        title: post.title,
-        href: `/blog/${post.slug}`,
-        metric: formatViews(post.viewCount),
       })),
     },
     {

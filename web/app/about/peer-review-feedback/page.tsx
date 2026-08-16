@@ -9,12 +9,12 @@ const SECTIONS = [
   {
     eyebrow: "What It Looks Like",
     title: "Evidence-Based Critique, Not Just Encouragement",
-    body: "Members give each other honest, constructive feedback on work, research, and educational content — in forum threads, on blog posts, and in one-on-one expert consultations. The goal is genuine improvement, rooted in a shared commitment to growth across disciplines.",
+    body: "Members give each other honest, constructive feedback on work, research, and educational content — in forum threads, on Library submissions, and in one-on-one expert consultations. The goal is genuine improvement, rooted in a shared commitment to growth across disciplines.",
   },
   {
     eyebrow: "Where It Happens",
-    title: "Forums, Consultations, and Comments",
-    body: "The Clinical Discussions forum hosts case-based questions and diagnostic feedback; Teaching & Mentorship covers pedagogical advice. For deeper feedback, any member can find an expert in the Directory and Request a Meeting for a structured consultation. Blog posts and library resources can also carry comments and community flags for accuracy.",
+    title: "Forums, Consultations, and Discussions",
+    body: "The Clinical Discussions forum hosts case-based questions and diagnostic feedback; Teaching & Mentorship covers pedagogical advice. For deeper feedback, any member can find an expert in the Directory and Request a Meeting for a structured consultation. Every Library resource — including member-written blog posts — can also carry an on-demand discussion thread and community flags for accuracy.",
   },
   {
     eyebrow: "Trust & Safety",

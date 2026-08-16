@@ -32,7 +32,6 @@ const ACTIVITIES = [
     href: "/about/teaching-sharing",
     links: [
       { label: "Upcoming Events", href: "/events" },
-      { label: "Read the Blog", href: "/blog" },
       { label: "Browse the Forums", href: "/forums" },
     ],
   },

@@ -18,7 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { LucideIcon } from "lucide-react";
 
 const ACTIONS: { label: string; href: string; icon: LucideIcon }[] = [
-  { label: "Write a blog", href: "/blog", icon: PenLine },
+  { label: "Write a blog post", href: "/library/new?type=blog_post", icon: PenLine },
   { label: "Start a discussion", href: "/forums", icon: MessageSquare },
   { label: "Request a peer review", href: "/review-feedback", icon: ClipboardCheck },
   { label: "Add content to the Library", href: "/library/new", icon: BookOpen },

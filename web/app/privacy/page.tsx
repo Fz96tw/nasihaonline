@@ -9,7 +9,7 @@ const SECTIONS = [
   {
     eyebrow: "What We Collect",
     title: "Information You Provide",
-    body: "Name, email, professional title, specialty, career stage, country/region, bio, areas of expertise, and — if you choose to upload one — a profile photo. Membership applications also collect a professional reference. Using the platform generates additional records: Knowledge Hours ledger entries, event RSVPs and attendance, forum posts, library submissions, blog posts, and messages you send to other members.",
+    body: "Name, email, professional title, specialty, career stage, country/region, bio, areas of expertise, and — if you choose to upload one — a profile photo. Membership applications also collect a professional reference. Using the platform generates additional records: Knowledge Hours ledger entries, event RSVPs and attendance, forum posts, library submissions (including blog posts), and messages you send to other members.",
   },
   {
     eyebrow: "How We Use It",

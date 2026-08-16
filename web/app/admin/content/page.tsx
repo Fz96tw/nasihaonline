@@ -35,7 +35,7 @@ export default async function AdminContentPage() {
         </Link>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">Content Moderation</h1>
         <p className="text-muted-foreground">
-          Flagged Blog posts, Library items, and Forum posts — one shared queue.
+          Flagged Library items (blog posts included) and Forum posts — one shared queue.
         </p>
       </div>
 

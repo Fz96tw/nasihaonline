@@ -3,7 +3,6 @@ import {
   MessageSquare,
   BookOpen,
   ClipboardCheck,
-  PenLine,
   HeartHandshake,
   Stethoscope,
   ClipboardList,
@@ -29,7 +28,7 @@ type WorkflowItem = {
  * Trigger/confirmation copy is hardcoded, matching the earlier EARN_ITEMS/
  * SPEND_ITEMS/WORKFLOW_ITEMS precedent this file replaces — verified against
  * lib/contributions-server.ts, lib/meeting-requests-server.ts, and
- * lib/blog-server.ts at write-time, but not derived from ContributionRule, so
+ * lib/library-server.ts at write-time, but not derived from ContributionRule, so
  * it can drift from actual code behavior. The code and PRD.md remain the
  * source of truth.
  */
@@ -50,10 +49,10 @@ const EARN_ITEMS: WorkflowItem[] = [
   },
   {
     icon: BookOpen,
-    label: "Curate resource",
+    label: "Curate a resource",
     value: "0.5 hrs",
     detail:
-      "Self-reported after the fact. If you name a peer who can vouch for it, they confirm it; otherwise it goes to an admin for review.",
+      "Covers any Knowledge Library submission — articles, case write-ups, blog posts, guidelines, and more. Credited once a Library Steward publishes it. Since there's no other member party to the act of publishing, an admin confirms it rather than a peer.",
   },
   {
     icon: ClipboardCheck,
@@ -61,13 +60,6 @@ const EARN_ITEMS: WorkflowItem[] = [
     value: "0.5 hrs",
     detail:
       "Credited the first time you comment on someone's Peer Review & Feedback submission — replying again on the same item doesn't earn more. Needs the submitter's confirmation before it counts, same as a knowledge discussion.",
-  },
-  {
-    icon: PenLine,
-    label: "Write a blog post",
-    value: "0.5 hrs",
-    detail:
-      "Credited automatically the moment your post is published. Since there's no other member party to the act of publishing, an admin confirms it rather than a peer.",
   },
   {
     icon: HeartHandshake,
