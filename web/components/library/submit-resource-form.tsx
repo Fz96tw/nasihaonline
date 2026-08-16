@@ -29,10 +29,12 @@ import {
 import { createKnowledgeItemSchema, type CreateKnowledgeItemValues } from "@/lib/validation/knowledge";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { InviteePicker } from "@/components/members/invitee-picker";
+import { TiptapEditor } from "@/components/blog/tiptap-editor";
 
 const DEFAULT_VALUES: CreateKnowledgeItemValues = {
   title: "",
   description: "",
+  body: null,
   contentType: "" as KnowledgeContentType,
   level: "" as KnowledgeLevel,
   categoryIds: [],
@@ -98,6 +100,7 @@ export function SubmitResourceForm({
       ? {
           title: existingItem.title,
           description: existingItem.description,
+          body: existingItem.body,
           contentType: existingItem.contentType,
           level: existingItem.level,
           categoryIds: existingItem.categoryIds,
@@ -119,6 +122,7 @@ export function SubmitResourceForm({
   const contentType = form.watch("contentType");
   const isRecordedLecture = contentType === KnowledgeContentType.recorded_lecture;
   const isCaseStudy = contentType === KnowledgeContentType.case_study;
+  const isBlogPost = contentType === KnowledgeContentType.blog_post;
   const visibility = form.watch("visibility");
   const isRestricted = visibility === KnowledgeVisibility.restricted;
 
@@ -130,12 +134,14 @@ export function SubmitResourceForm({
       const formData = new FormData();
       formData.append("title", values.title);
       formData.append("description", values.description);
+      if (isBlogPost && values.body) formData.append("body", values.body);
       formData.append("contentType", values.contentType);
       formData.append("level", values.level);
       values.categoryIds.forEach((categoryId) => formData.append("categoryIds", categoryId));
       values.tagIds.forEach((tagId) => formData.append("tagIds", tagId));
       if (isRecordedLecture && values.youtubeUrl) formData.append("youtubeUrl", values.youtubeUrl);
-      if (!isRecordedLecture && sourceMode === "link" && values.externalUrl) {
+      const requiresAttachmentOrLink = !isRecordedLecture && !isBlogPost;
+      if (requiresAttachmentOrLink && sourceMode === "link" && values.externalUrl) {
         formData.append("externalUrl", values.externalUrl);
       }
       formData.append("deidentificationConfirmed", String(isCaseStudy && values.deidentificationConfirmed));
@@ -144,7 +150,7 @@ export function SubmitResourceForm({
         formData.append("visibility", values.visibility);
         formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
       }
-      if (!isRecordedLecture && sourceMode === "file" && file) formData.append("file", file);
+      if (requiresAttachmentOrLink && sourceMode === "file" && file) formData.append("file", file);
       if (heroImage) formData.append("heroImage", heroImage);
 
       const res = await fetch(existingItem ? `/api/library/${existingItem.id}` : "/api/library", {
@@ -242,19 +248,21 @@ export function SubmitResourceForm({
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Description</FormLabel>
-              <FormControl>
-                <Textarea rows={4} {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {!isBlogPost && (
+          <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Description</FormLabel>
+                <FormControl>
+                  <Textarea rows={4} {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <FormField
@@ -383,6 +391,20 @@ export function SubmitResourceForm({
                     value={field.value ?? ""}
                     onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
                   />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        ) : isBlogPost ? (
+          <FormField
+            control={form.control}
+            name="body"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Post</FormLabel>
+                <FormControl>
+                  <TiptapEditor content={field.value ?? ""} onChange={field.onChange} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

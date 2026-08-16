@@ -29,6 +29,7 @@ import { createNotification } from "@/lib/notifications-server";
 import { recordAdminAction } from "@/lib/audit-server";
 import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import { sendLibraryInviteEmail, sendLibraryLifecycleEmail } from "@/lib/email";
+import { excerptFromHtml } from "@/lib/blog";
 import type {
   KnowledgeCategoryOption,
   KnowledgeCategoryWithCount,
@@ -203,6 +204,7 @@ export async function createKnowledgeItem(
   input: {
     title: string;
     description: string;
+    body: string | null;
     contentType: KnowledgeContentType;
     level: KnowledgeLevel;
     categoryIds: string[];
@@ -222,6 +224,10 @@ export async function createKnowledgeItem(
   }
   if (input.contentType === KnowledgeContentType.case_study && !input.deidentificationConfirmed) {
     throw new KnowledgeItemError(400, "You must confirm all patient information has been de-identified.");
+  }
+  const isBlogPost = input.contentType === KnowledgeContentType.blog_post;
+  if (isBlogPost && !input.body?.trim()) {
+    throw new KnowledgeItemError(400, "Write your post before submitting.");
   }
 
   const isRestricted = input.visibility === KnowledgeVisibility.restricted;
@@ -251,15 +257,16 @@ export async function createKnowledgeItem(
   if (isRecordedLecture && !input.youtubeUrl) {
     throw new KnowledgeItemError(400, "A YouTube URL is required for a recorded lecture.");
   }
-  if (!isRecordedLecture && input.file && input.externalUrl) {
+  const requiresAttachmentOrLink = !isRecordedLecture && !isBlogPost;
+  if (requiresAttachmentOrLink && input.file && input.externalUrl) {
     throw new KnowledgeItemError(400, "Choose either a file upload or an external link, not both.");
   }
-  if (!isRecordedLecture && !input.file && !input.externalUrl) {
+  if (requiresAttachmentOrLink && !input.file && !input.externalUrl) {
     throw new KnowledgeItemError(400, "A file upload or external link is required for this content type.");
   }
 
   let attachment: { objectKey: string; fileName: string; mimeType: string; sizeBytes: number } | null = null;
-  if (!isRecordedLecture && input.file) {
+  if (requiresAttachmentOrLink && input.file) {
     try {
       attachment = await uploadKnowledgeDocument(input.file);
     } catch (error) {
@@ -288,13 +295,16 @@ export async function createKnowledgeItem(
   const item = await db.knowledgeItem.create({
     data: {
       title: input.title,
-      description: input.description,
+      // blog_post has no separate excerpt input — same "derive it from the
+      // body" UX as Blog's Post.body/excerpt split.
+      description: isBlogPost ? excerptFromHtml(input.body ?? "") : input.description,
+      body: isBlogPost ? input.body : null,
       contentType: input.contentType,
       level: input.level,
       contributorId,
       youtubeUrl: isRecordedLecture ? input.youtubeUrl : null,
       heroImageUrl,
-      externalUrl: isRecordedLecture ? null : input.externalUrl,
+      externalUrl: requiresAttachmentOrLink ? input.externalUrl : null,
       deidentificationConfirmed: input.deidentificationConfirmed,
       licenseConsented: true,
       status: KnowledgeStatus.pending_review,
@@ -324,6 +334,7 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
       id: true,
       title: true,
       description: true,
+      body: true,
       contentType: true,
       level: true,
       status: true,
@@ -343,6 +354,7 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
     id: item.id,
     title: item.title,
     description: item.description,
+    body: item.body,
     contentType: item.contentType,
     level: item.level,
     status: item.status,
@@ -376,6 +388,7 @@ export async function updateKnowledgeItem(
   input: {
     title: string;
     description: string;
+    body: string | null;
     contentType: KnowledgeContentType;
     level: KnowledgeLevel;
     categoryIds: string[];
@@ -407,6 +420,10 @@ export async function updateKnowledgeItem(
   if (input.contentType === KnowledgeContentType.case_study && !input.deidentificationConfirmed) {
     throw new KnowledgeItemError(400, "You must confirm all patient information has been de-identified.");
   }
+  const isBlogPost = input.contentType === KnowledgeContentType.blog_post;
+  if (isBlogPost && !input.body?.trim()) {
+    throw new KnowledgeItemError(400, "Write your post before submitting.");
+  }
 
   const categories = await db.knowledgeCategory.findMany({
     where: { id: { in: input.categoryIds } },
@@ -420,16 +437,17 @@ export async function updateKnowledgeItem(
   if (isRecordedLecture && !input.youtubeUrl) {
     throw new KnowledgeItemError(400, "A YouTube URL is required for a recorded lecture.");
   }
-  if (!isRecordedLecture && input.file && input.externalUrl) {
+  const requiresAttachmentOrLink = !isRecordedLecture && !isBlogPost;
+  if (requiresAttachmentOrLink && input.file && input.externalUrl) {
     throw new KnowledgeItemError(400, "Choose either a file upload or an external link, not both.");
   }
   const existingAttachment = item.attachments[0] ?? null;
-  if (!isRecordedLecture && !input.file && !existingAttachment && !input.externalUrl) {
+  if (requiresAttachmentOrLink && !input.file && !existingAttachment && !input.externalUrl) {
     throw new KnowledgeItemError(400, "A file upload or external link is required for this content type.");
   }
 
   let newAttachment: { objectKey: string; fileName: string; mimeType: string; sizeBytes: number } | null = null;
-  if (!isRecordedLecture && input.file) {
+  if (requiresAttachmentOrLink && input.file) {
     try {
       newAttachment = await uploadKnowledgeDocument(input.file);
     } catch (error) {
@@ -458,11 +476,11 @@ export async function updateKnowledgeItem(
 
   const nextStatus = item.status === KnowledgeStatus.rejected ? KnowledgeStatus.pending_review : item.status;
   // Drop the old attachment when it's being replaced by a new file, when
-  // contentType moved to recorded_lecture (which stores youtubeUrl instead),
-  // or when the edit switches from a file to an external link.
+  // contentType moved to recorded_lecture/blog_post (neither stores an
+  // attachment), or when the edit switches from a file to an external link.
   const dropsExistingAttachment =
     existingAttachment !== null &&
-    (isRecordedLecture || newAttachment !== null || (!isRecordedLecture && input.externalUrl !== null));
+    (isRecordedLecture || isBlogPost || newAttachment !== null || (requiresAttachmentOrLink && input.externalUrl !== null));
 
   const updated = await db.$transaction(async (tx) => {
     await tx.knowledgeItemTag.deleteMany({ where: { knowledgeItemId: item.id } });
@@ -474,12 +492,13 @@ export async function updateKnowledgeItem(
       where: { id: item.id },
       data: {
         title: input.title,
-        description: input.description,
+        description: isBlogPost ? excerptFromHtml(input.body ?? "") : input.description,
+        body: isBlogPost ? input.body : null,
         contentType: input.contentType,
         level: input.level,
         youtubeUrl: isRecordedLecture ? input.youtubeUrl : null,
         heroImageUrl,
-        externalUrl: isRecordedLecture ? null : input.externalUrl,
+        externalUrl: requiresAttachmentOrLink ? input.externalUrl : null,
         deidentificationConfirmed: input.deidentificationConfirmed,
         status: nextStatus,
         categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
@@ -598,6 +617,7 @@ export async function getPublishedKnowledgeItemById(
     },
     select: {
       ...LIBRARY_CARD_SELECT,
+      body: true,
       deidentificationConfirmed: true,
       tags: { select: { tag: { select: { name: true, slug: true } } } },
       forumThread: { select: { id: true, _count: { select: { posts: true } } } },
@@ -608,6 +628,7 @@ export async function getPublishedKnowledgeItemById(
 
   return {
     ...toLibraryCard(item),
+    body: item.body,
     deidentificationConfirmed: item.deidentificationConfirmed,
     tags: item.tags.map(({ tag }) => tag),
     forumThreadId: item.forumThread?.id ?? null,

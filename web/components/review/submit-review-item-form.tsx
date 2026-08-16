@@ -270,11 +270,16 @@ export function SubmitReviewItemForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {Object.values(KnowledgeContentType).map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {CONTENT_TYPE_LABELS[value]}
-                      </SelectItem>
-                    ))}
+                    {/* blog_post is Library-only (it has no attachment/externalUrl to
+                        review, and its own review gate already runs through the
+                        Steward queue) — excluded from Peer Review & Feedback's type list. */}
+                    {Object.values(KnowledgeContentType)
+                      .filter((value) => value !== KnowledgeContentType.blog_post)
+                      .map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {CONTENT_TYPE_LABELS[value]}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
                 <FormMessage />

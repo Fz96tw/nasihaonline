@@ -23,6 +23,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const parsed = updateKnowledgeItemSchema.safeParse({
     title: formData.get("title"),
     description: formData.get("description"),
+    body: formData.get("body") || null,
     contentType: formData.get("contentType"),
     level: formData.get("level"),
     categoryIds: formData.getAll("categoryIds"),

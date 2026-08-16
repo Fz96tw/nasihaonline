@@ -130,8 +130,8 @@ model User {
   tierHistoryEntries TierHistory[] @relation("TierHistorySubject")
   tierChangesMade    TierHistory[] @relation("TierHistoryActor")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
   // Last authenticated request, stamped (throttled) in getSessionUser() —
   // the only per-request activity signal in the schema; see lib/auth.ts.
   lastActiveAt DateTime?
@@ -1103,19 +1103,19 @@ model EventRegistration {
 // row is the trigger for the §4.4 auto-posted Knowledge Hours earn
 // transaction; `attendee`-role rows are just a record.
 model Attendance {
-  id          String         @id @default(cuid())
-  eventId     String
-  event       Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  userId      String
-  user        User           @relation("EventAttendance", fields: [userId], references: [id], onDelete: Cascade)
-  role        AttendanceRole @default(attendee)
+  id             String         @id @default(cuid())
+  eventId        String
+  event          Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User           @relation("EventAttendance", fields: [userId], references: [id], onDelete: Cascade)
+  role           AttendanceRole @default(attendee)
   // Which occurrence of a recurring event this attendance is for — equals
   // the event's own startsAt for a non-recurring event. Part of the unique
   // key below so a recurring host earns Knowledge Hours once per session
   // instead of once ever for the whole series (see EventRecurrence comment).
   occurrenceDate DateTime
-  checkedInAt DateTime       @default(now())
-  createdAt   DateTime       @default(now())
+  checkedInAt    DateTime       @default(now())
+  createdAt      DateTime       @default(now())
 
   // Set only for a host-role row, once the auto-earn transaction has been
   // posted (§4.4/§4.6). The other direction of ContributionEvent.attendanceId.
@@ -1274,11 +1274,15 @@ enum KnowledgeStatus {
 
 // Drives the "recorded lecture uses youtubeUrl instead of a
 // KnowledgeAttachment" rule (§4.9) and the Library's content-type filter.
+// `blog_post` is the former standalone Blog domain (§4.8), folded in as a
+// content type once Blog was consolidated into the Library — it uses
+// KnowledgeItem.body instead of an attachment/externalUrl/youtubeUrl.
 enum KnowledgeContentType {
   recorded_lecture
   article
   case_study
   guideline
+  blog_post
 }
 
 // "Career-stage level" filter (§4.9) — the level *the content targets*, not
@@ -1366,6 +1370,11 @@ model KnowledgeItem {
   id                        String               @id @default(cuid())
   title                     String
   description               String
+  // Full rich-text (Tiptap) article content — populated only for
+  // contentType = blog_post (and any future long-form type). `description`
+  // stays the short excerpt shown on cards/search, auto-derived from this
+  // via excerptFromHtml, same split Blog's Post.body/excerpt had.
+  body                      String?
   contentType               KnowledgeContentType
   status                    KnowledgeStatus      @default(pending_review)
   level                     KnowledgeLevel
@@ -1413,6 +1422,9 @@ model KnowledgeItem {
   // submission published via publishReviewItemToLibrary — the other
   // direction of ReviewItem.publishedKnowledgeItem.
   publishedFromReviewItem ReviewItem?
+  // The other direction of LegacyBlogSlug.knowledgeItem — populated only
+  // for blog_post items created by the Blog-to-Library migration script.
+  legacyBlogSlugs         LegacyBlogSlug[]
 
   @@index([contributorId])
   @@index([status])
@@ -1470,6 +1482,20 @@ model KnowledgeAttachment {
 
   @@index([knowledgeItemId])
   @@map("knowledge_attachments")
+}
+
+// Redirect-only lookup for old /blog/[slug] URLs, populated by the one-time
+// Blog-to-Library data migration script (never written by app code) —
+// standalone rather than a field on KnowledgeItem so it can be dropped
+// cleanly once redirects are no longer needed, without touching the live
+// model. `slug` is Post.slug as it existed at migration time.
+model LegacyBlogSlug {
+  slug            String        @id
+  knowledgeItemId String
+  knowledgeItem   KnowledgeItem @relation(fields: [knowledgeItemId], references: [id], onDelete: Cascade)
+
+  @@index([knowledgeItemId])
+  @@map("legacy_blog_slugs")
 }
 
 // ===== Peer Review & Feedback =====
@@ -1732,21 +1758,21 @@ enum ForumThreadVisibility {
 }
 
 model ForumThread {
-  id         String                @id @default(cuid())
-  forumId    String
-  forum      Forum                 @relation(fields: [forumId], references: [id])
-  authorId   String
-  author     User                  @relation("ForumThreadAuthor", fields: [authorId], references: [id])
-  title      String
-  pinned     Boolean               @default(false)
-  visibility ForumThreadVisibility @default(community)
-  createdAt  DateTime              @default(now())
-  updatedAt  DateTime              @updatedAt
+  id             String                @id @default(cuid())
+  forumId        String
+  forum          Forum                 @relation(fields: [forumId], references: [id])
+  authorId       String
+  author         User                  @relation("ForumThreadAuthor", fields: [authorId], references: [id])
+  title          String
+  pinned         Boolean               @default(false)
+  visibility     ForumThreadVisibility @default(community)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
   // Bumped to the latest reply's createdAt (or left at createdAt if the
   // thread has no replies yet) by createForumPost — drives the What's New
   // feed's forum_thread sort so a thread with fresh activity resurfaces
   // instead of only ever appearing once at its original creation time.
-  lastActivityAt DateTime @default(now())
+  lastActivityAt DateTime              @default(now())
 
   posts    ForumPost[]
   views    ThreadView[]

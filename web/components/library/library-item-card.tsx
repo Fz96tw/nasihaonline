@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, ClipboardList, Eye, FileText, MessageSquare, PlayCircle, Stethoscope, type LucideIcon } from "lucide-react";
+import { BookOpen, ClipboardList, Eye, FileText, MessageSquare, PenLine, PlayCircle, Stethoscope, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ const CONTENT_TYPE_ICONS: Record<KnowledgeContentType, LucideIcon> = {
   [KnowledgeContentType.article]: FileText,
   [KnowledgeContentType.case_study]: Stethoscope,
   [KnowledgeContentType.guideline]: ClipboardList,
+  [KnowledgeContentType.blog_post]: PenLine,
 };
 
 function formatDate(iso: string) {

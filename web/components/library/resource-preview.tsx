@@ -321,15 +321,21 @@ export function ResourcePreview({
   youtubeUrl,
   externalUrl,
   attachment,
+  body,
 }: {
   title: string;
   contentType: KnowledgeContentType;
   youtubeUrl: string | null;
   externalUrl: string | null;
   attachment: { fileName: string; mimeType: string; url: string } | null;
+  body?: string | null;
 }) {
   const isRecordedLecture = contentType === KnowledgeContentType.recorded_lecture;
   const embedUrl = isRecordedLecture && youtubeUrl ? youtubeEmbedUrl(youtubeUrl) : null;
+
+  if (contentType === KnowledgeContentType.blog_post) {
+    return <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: body ?? "" }} />;
+  }
 
   if (isRecordedLecture) {
     if (embedUrl) {

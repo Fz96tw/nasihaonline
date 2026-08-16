@@ -14,7 +14,13 @@ import { KnowledgeContentType, KnowledgeLevel, KnowledgeVisibility } from "@/lib
  */
 const knowledgeItemBaseSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(200),
-  description: z.string().trim().min(1, "Description is required").max(2000),
+  // Required for every content type except blog_post, where it's
+  // auto-derived server-side from `body` (excerptFromHtml) rather than
+  // typed by the contributor — see withContentTypeRefinements below.
+  description: z.string().trim().max(2000),
+  // Full rich-text (Tiptap) article content — required only for
+  // contentType = blog_post, which has no attachment/externalUrl/youtubeUrl.
+  body: z.string().trim().nullable(),
   contentType: z.nativeEnum(KnowledgeContentType, { message: "Select a content type" }),
   level: z.nativeEnum(KnowledgeLevel, { message: "Select a career-stage level" }),
   categoryIds: z.array(z.string()).min(1, "Select at least one category"),
@@ -39,7 +45,12 @@ const knowledgeItemBaseSchema = z.object({
   deidentificationConfirmed: z.boolean(),
 });
 
-/** case_study requires the de-identification checkbox; recorded_lecture requires a YouTube URL. */
+/**
+ * case_study requires the de-identification checkbox; recorded_lecture
+ * requires a YouTube URL; blog_post requires body instead of description
+ * (auto-derived server-side) — every other type requires description, typed
+ * by the contributor as today.
+ */
 function withContentTypeRefinements<Schema extends z.ZodType<z.infer<typeof knowledgeItemBaseSchema>>>(
   schema: Schema,
 ) {
@@ -57,6 +68,13 @@ function withContentTypeRefinements<Schema extends z.ZodType<z.infer<typeof know
         path: ["youtubeUrl"],
         message: "A YouTube URL is required for a recorded lecture.",
       });
+    }
+    if (data.contentType === KnowledgeContentType.blog_post) {
+      if (!data.body || data.body.replace(/<[^>]+>/g, "").trim().length === 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["body"], message: "Write your post before submitting." });
+      }
+    } else if (data.description.length === 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["description"], message: "Description is required" });
     }
   });
 }

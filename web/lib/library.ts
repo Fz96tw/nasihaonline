@@ -8,6 +8,7 @@ export const CONTENT_TYPE_LABELS: Record<KnowledgeContentType, string> = {
   [KnowledgeContentType.article]: "Article / Summary",
   [KnowledgeContentType.case_study]: "Case Study",
   [KnowledgeContentType.guideline]: "Guideline",
+  [KnowledgeContentType.blog_post]: "Blog Post",
 };
 
 export const LEVEL_LABELS: Record<KnowledgeLevel, string> = {
@@ -100,6 +101,8 @@ export type KnowledgeItemDetail = LibraryCard & {
   forumThreadId: string | null;
   forumReplyCount: number | null;
   viewCount: number;
+  // Full rich-text (Tiptap) content — set only for contentType = blog_post.
+  body: string | null;
 };
 
 /**
@@ -120,6 +123,8 @@ export type KnowledgeItemForEdit = {
   id: string;
   title: string;
   description: string;
+  // Full rich-text (Tiptap) content — set only for contentType = blog_post.
+  body: string | null;
   contentType: KnowledgeContentType;
   level: KnowledgeLevel;
   status: KnowledgeStatus;

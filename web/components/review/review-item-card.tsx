@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, ClipboardList, FileText, Hand, MessageSquare, PlayCircle, Stethoscope, type LucideIcon } from "lucide-react";
+import { BookOpen, ClipboardList, FileText, Hand, MessageSquare, PenLine, PlayCircle, Stethoscope, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
@@ -14,6 +14,10 @@ const CONTENT_TYPE_ICONS: Record<KnowledgeContentType, LucideIcon> = {
   [KnowledgeContentType.article]: FileText,
   [KnowledgeContentType.case_study]: Stethoscope,
   [KnowledgeContentType.guideline]: ClipboardList,
+  // Not actually selectable from Peer Review & Feedback's submit form
+  // (blog_post is Library-only) — mapped only so this Record stays
+  // exhaustive over the shared KnowledgeContentType enum.
+  [KnowledgeContentType.blog_post]: PenLine,
 };
 
 function formatDate(iso: string) {

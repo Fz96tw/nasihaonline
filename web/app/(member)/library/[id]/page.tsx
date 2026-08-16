@@ -120,7 +120,9 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
         <LibraryViewCounter itemId={item.id} initialViews={item.viewCount} />
       </div>
 
-      <p className="mb-8 text-base leading-relaxed text-muted-foreground">{item.description}</p>
+      {item.contentType !== KnowledgeContentType.blog_post && (
+        <p className="mb-8 text-base leading-relaxed text-muted-foreground">{item.description}</p>
+      )}
 
       <ResourcePreview
         title={item.title}
@@ -128,6 +130,7 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
         youtubeUrl={item.youtubeUrl}
         externalUrl={item.externalUrl}
         attachment={item.attachment}
+        body={item.body}
       />
 
       <div className="mt-6 flex flex-wrap items-center gap-3">

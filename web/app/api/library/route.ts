@@ -36,6 +36,7 @@ export async function POST(request: Request) {
   const parsed = createKnowledgeItemSchema.safeParse({
     title: formData.get("title"),
     description: formData.get("description"),
+    body: formData.get("body") || null,
     contentType: formData.get("contentType"),
     level: formData.get("level"),
     categoryIds: formData.getAll("categoryIds"),
