@@ -104,6 +104,13 @@ export default async function EventDetailPage({
       <SavedBanner />
 
       <EventDetail
+        // Forces a full remount when navigating between occurrences of the
+        // same recurring series (event.id is the per-occurrence synthetic
+        // id) — the route path itself doesn't change, only ?occurrence=, so
+        // Next's router reuses the existing component instance rather than
+        // remounting it, and EventDetail's internal useState(initialEvent)
+        // would otherwise keep showing whichever occurrence first mounted.
+        key={event.id}
         event={event}
         canEdit={canEdit}
         isHost={isHost}
