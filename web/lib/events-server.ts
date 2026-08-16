@@ -1041,6 +1041,7 @@ export async function createEvent(
       attendees,
       description: input.description ?? undefined,
       recurrenceRule: recurrenceRuleString ?? undefined,
+      timeZone: input.timezone,
     });
     meetingUrl = created.meetingUrl;
     googleEventId = created.googleEventId;
@@ -1338,7 +1339,7 @@ export async function updateEvent(
   // auto-generation isn't restricted-only). Best-effort, same non-fatal
   // philosophy as every other Google call in this file.
   if (timeChanged && event.googleEventId) {
-    await updateMeetingCalendarEventTime(event.googleEventId, startsAt, endsAt);
+    await updateMeetingCalendarEventTime(event.googleEventId, startsAt, endsAt, input.timezone);
   }
 
   // Keep the underlying Google Calendar event's recurrence in sync when the

@@ -69,6 +69,16 @@ export async function createMeetingCalendarEvent(input: {
   description?: string;
   /** RFC 5545 "RRULE:..." line (from lib/recurrence.ts' buildRRuleString) — when set, creates a native recurring Calendar event instead of a one-off. */
   recurrenceRule?: string;
+  /**
+   * IANA zone (e.g. "America/New_York") for start/end. Google's Calendar API
+   * accepts a bare UTC `dateTime` (trailing "Z") with no `timeZone` for a
+   * one-off event, but *requires* an explicit `timeZone` once `recurrence`
+   * is set — omitting it 400s with "Missing time zone definition for start
+   * time" (confirmed live 2026-08-16). Always include when known, not just
+   * for the recurring case, since it's also what Google uses to display the
+   * event correctly to attendees regardless of recurrence.
+   */
+  timeZone?: string | null;
 }): Promise<CreatedMeetingEvent> {
   const auth = getOAuthClient();
   if (!auth) {
@@ -78,6 +88,7 @@ export async function createMeetingCalendarEvent(input: {
 
   const durationMinutes = input.durationMinutes ?? DEFAULT_MEETING_DURATION_MINUTES;
   const endsAt = new Date(input.startsAt.getTime() + durationMinutes * 60_000);
+  const timeZone = input.timeZone ?? undefined;
 
   try {
     const calendar = google.calendar({ version: "v3", auth });
@@ -88,8 +99,8 @@ export async function createMeetingCalendarEvent(input: {
       requestBody: {
         summary: input.topic,
         description: input.description,
-        start: { dateTime: input.startsAt.toISOString() },
-        end: { dateTime: endsAt.toISOString() },
+        start: { dateTime: input.startsAt.toISOString(), timeZone },
+        end: { dateTime: endsAt.toISOString(), timeZone },
         attendees: input.attendees.map((attendee) => ({ email: attendee.email, displayName: attendee.name })),
         conferenceData: {
           createRequest: {
@@ -163,6 +174,7 @@ export async function updateMeetingCalendarEventTime(
   googleEventId: string,
   startsAt: Date,
   endsAt: Date | null,
+  timeZone?: string | null,
 ): Promise<void> {
   const auth = getOAuthClient();
   if (!auth) {
@@ -173,6 +185,7 @@ export async function updateMeetingCalendarEventTime(
   // Mirrors createMeetingCalendarEvent's fallback: an Event without an
   // explicit endsAt still needs a real end time for the Calendar API.
   const resolvedEndsAt = endsAt ?? new Date(startsAt.getTime() + DEFAULT_MEETING_DURATION_MINUTES * 60_000);
+  const resolvedTimeZone = timeZone ?? undefined;
 
   try {
     const calendar = google.calendar({ version: "v3", auth });
@@ -181,8 +194,8 @@ export async function updateMeetingCalendarEventTime(
       eventId: googleEventId,
       sendUpdates: "all",
       requestBody: {
-        start: { dateTime: startsAt.toISOString() },
-        end: { dateTime: resolvedEndsAt.toISOString() },
+        start: { dateTime: startsAt.toISOString(), timeZone: resolvedTimeZone },
+        end: { dateTime: resolvedEndsAt.toISOString(), timeZone: resolvedTimeZone },
       },
     });
   } catch (error) {

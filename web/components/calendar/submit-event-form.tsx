@@ -415,13 +415,23 @@ export function SubmitEventForm({
                   <FormControl>
                     <Switch
                       checked={repeats}
-                      onCheckedChange={(checked) =>
-                        field.onChange(
-                          checked
-                            ? { frequency: RecurrenceFrequency.weekly, interval: 1, byWeekday: [], until: null }
-                            : null,
-                        )
-                      }
+                      onCheckedChange={(checked) => {
+                        if (!checked) {
+                          field.onChange(null);
+                          return;
+                        }
+                        // Default to the start date's own weekday so a host
+                        // who never touches the day picker doesn't hit the
+                        // "select at least one day" validation trap silently.
+                        const startsAt = new Date(form.getValues("startsAt"));
+                        const defaultWeekday = Number.isNaN(startsAt.getTime()) ? [] : [startsAt.getDay()];
+                        field.onChange({
+                          frequency: RecurrenceFrequency.weekly,
+                          interval: 1,
+                          byWeekday: defaultWeekday,
+                          until: null,
+                        });
+                      }}
                     />
                   </FormControl>
                 </div>
@@ -469,18 +479,29 @@ export function SubmitEventForm({
                     </div>
 
                     {recurrence.frequency === RecurrenceFrequency.weekly && (
-                      <div className="flex gap-1">
-                        {WEEKDAY_LABELS.map((label, day) => (
-                          <Button
-                            key={label}
-                            type="button"
-                            size="sm"
-                            variant={recurrence.byWeekday.includes(day) ? "default" : "outline"}
-                            onClick={() => field.onChange({ ...recurrence, byWeekday: toggleWeekday(recurrence.byWeekday, day) })}
-                          >
-                            {label}
-                          </Button>
-                        ))}
+                      <div className="flex flex-col gap-1">
+                        <div className="flex gap-1">
+                          {WEEKDAY_LABELS.map((label, day) => (
+                            <Button
+                              key={label}
+                              type="button"
+                              size="sm"
+                              variant={recurrence.byWeekday.includes(day) ? "default" : "outline"}
+                              onClick={() => field.onChange({ ...recurrence, byWeekday: toggleWeekday(recurrence.byWeekday, day) })}
+                            >
+                              {label}
+                            </Button>
+                          ))}
+                        </div>
+                        {/* FormMessage below only reads the top-level "recurrence"
+                            field's error, which has no .message of its own when
+                            the actual Zod issue is nested at recurrence.byWeekday —
+                            read that path directly so this doesn't fail silently. */}
+                        {form.formState.errors.recurrence?.byWeekday?.message ? (
+                          <p className="text-xs font-medium text-destructive">
+                            {String(form.formState.errors.recurrence.byWeekday.message)}
+                          </p>
+                        ) : null}
                       </div>
                     )}
 
@@ -504,6 +525,11 @@ export function SubmitEventForm({
                         />
                       )}
                     </div>
+                    {form.formState.errors.recurrence?.until?.message ? (
+                      <p className="text-xs font-medium text-destructive">
+                        {String(form.formState.errors.recurrence.until.message)}
+                      </p>
+                    ) : null}
 
                     <p className="text-xs text-muted-foreground">
                       {describeRecurrence({
