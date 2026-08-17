@@ -3,16 +3,13 @@
 import { db } from "@/lib/db";
 import {
   deleteProfileDocument,
-  deletePostDocument,
   deleteLibraryDocument,
   deleteForumDocument,
-  upsertPostDocument,
   upsertProfileDocument,
   upsertLibraryDocument,
   upsertForumDocument,
 } from "@/lib/meilisearch";
 import { DIRECTORY_TIERS } from "@/lib/members";
-import { excerptFromHtml } from "@/lib/blog";
 import { KnowledgeStatus, KnowledgeVisibility } from "@/lib/generated/prisma/enums";
 
 /**
@@ -51,45 +48,9 @@ export async function syncProfileToIndex(userId: string): Promise<void> {
 }
 
 /**
- * Re-derives publish state from the DB rather than trusting the caller,
- * same rationale as syncProfileToIndex — a post that's since been
- * unpublished (a future editing objective) is removed from the index
- * rather than left stale (§4.8/§7.2).
- */
-export async function syncPostToIndex(postId: string): Promise<void> {
-  const post = await db.post.findUnique({
-    where: { id: postId },
-    select: {
-      id: true,
-      title: true,
-      body: true,
-      publishedAt: true,
-      author: { select: { name: true } },
-      categories: { select: { category: { select: { name: true, slug: true } } } },
-      tags: { select: { tag: { select: { name: true } } } },
-    },
-  });
-
-  if (!post || !post.publishedAt) {
-    await deletePostDocument(postId);
-    return;
-  }
-
-  await upsertPostDocument({
-    id: post.id,
-    title: post.title,
-    excerpt: excerptFromHtml(post.body),
-    authorName: post.author.name,
-    categoryNames: post.categories.map(({ category }) => category.name),
-    categorySlugs: post.categories.map(({ category }) => category.slug),
-    tagNames: post.tags.map(({ tag }) => tag.name),
-  });
-}
-
-/**
  * Re-derives search eligibility from the DB rather than trusting the
- * caller, same "re-derive, don't trust" rule as syncProfileToIndex/
- * syncPostToIndex. `published` and `flagged` are both eligible — flagged
+ * caller, same "re-derive, don't trust" rule as syncProfileToIndex.
+ * `published` and `flagged` are both eligible — flagged
  * items "stay visible" per the community-flagging model (§4.9), including
  * in search; `pending_review`/`rejected` are removed. Restricted-visibility
  * items are excluded from search entirely, mirroring restricted events

@@ -29,18 +29,18 @@ import { createNotification } from "@/lib/notifications-server";
 import { recordAdminAction } from "@/lib/audit-server";
 import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import { sendLibraryInviteEmail, sendLibraryLifecycleEmail } from "@/lib/email";
-import { excerptFromHtml } from "@/lib/blog";
-import type {
-  KnowledgeCategoryOption,
-  KnowledgeCategoryWithCount,
-  KnowledgeItemDetail,
-  KnowledgeItemForEdit,
-  KnowledgeItemRosterMember,
-  KnowledgeTagOption,
-  LibraryCard,
-  LibrarySort,
-  MySubmission,
-  ReviewQueueItem,
+import {
+  excerptFromHtml,
+  type KnowledgeCategoryOption,
+  type KnowledgeCategoryWithCount,
+  type KnowledgeItemDetail,
+  type KnowledgeItemForEdit,
+  type KnowledgeItemRosterMember,
+  type KnowledgeTagOption,
+  type LibraryCard,
+  type LibrarySort,
+  type MySubmission,
+  type ReviewQueueItem,
 } from "@/lib/library";
 
 // Absolute, not relative — same rationale as events-server.ts's createEvent:

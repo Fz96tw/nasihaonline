@@ -5,13 +5,11 @@ import { SEARCH_INDEX_QUEUE_NAME, type SearchIndexSyncJob } from "@/lib/queues/s
 import { SURVEY_QUEUE_NAME, type SurveyJob } from "@/lib/queues/survey-queue";
 import {
   ensureLibraryIndexConfigured,
-  ensurePostsIndexConfigured,
   ensureProfilesIndexConfigured,
   ensureForumsIndexConfigured,
 } from "@/lib/meilisearch";
 import {
   syncKnowledgeItemToIndex,
-  syncPostToIndex,
   syncProfileToIndex,
   syncForumThreadToIndex,
 } from "@/lib/search-index-sync";
@@ -25,7 +23,6 @@ import { openSurveyNow, autoCloseSurveyIfDue } from "@/lib/surveys-lifecycle";
  */
 async function main() {
   await ensureProfilesIndexConfigured();
-  await ensurePostsIndexConfigured();
   await ensureLibraryIndexConfigured();
   await ensureForumsIndexConfigured();
 
@@ -34,8 +31,6 @@ async function main() {
     async (job) => {
       if (job.data.type === "profile") {
         await syncProfileToIndex(job.data.userId);
-      } else if (job.data.type === "post") {
-        await syncPostToIndex(job.data.postId);
       } else if (job.data.type === "knowledge") {
         await syncKnowledgeItemToIndex(job.data.knowledgeItemId);
       } else if (job.data.type === "forum") {
@@ -49,11 +44,9 @@ async function main() {
     const id =
       job.data.type === "profile"
         ? job.data.userId
-        : job.data.type === "post"
-          ? job.data.postId
-          : job.data.type === "knowledge"
-            ? job.data.knowledgeItemId
-            : job.data.threadId;
+        : job.data.type === "knowledge"
+          ? job.data.knowledgeItemId
+          : job.data.threadId;
     console.log(`[search-index-worker] synced ${job.data.type} ${id}`);
   });
   worker.on("failed", (job, error) => {

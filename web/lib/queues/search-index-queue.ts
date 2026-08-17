@@ -7,7 +7,6 @@ export const SEARCH_INDEX_QUEUE_NAME = "search-index-sync";
 
 export type SearchIndexSyncJob =
   | { type: "profile"; userId: string }
-  | { type: "post"; postId: string }
   | { type: "knowledge"; knowledgeItemId: string }
   | { type: "forum"; threadId: string };
 
@@ -46,22 +45,9 @@ export async function enqueueProfileIndexSync(userId: string): Promise<void> {
 }
 
 /**
- * Called from POST /api/blog (§4.8) so the Meilisearch index (§7.2) never
- * drifts from Postgres — same DB-write → BullMQ → index-sync pattern as
- * enqueueProfileIndexSync.
- */
-export async function enqueuePostIndexSync(postId: string): Promise<void> {
-  await getSearchIndexQueue().add(
-    "post-sync",
-    { type: "post", postId },
-    { removeOnComplete: true, removeOnFail: 50 },
-  );
-}
-
-/**
  * Called from POST /api/admin/library/:id/publish and POST /api/library/:id/flag
  * (§4.9) so the Meilisearch index (§7.2) never drifts from Postgres — same
- * DB-write → BullMQ → index-sync pattern as enqueuePostIndexSync.
+ * DB-write → BullMQ → index-sync pattern as enqueueProfileIndexSync.
  */
 export async function enqueueKnowledgeItemIndexSync(knowledgeItemId: string): Promise<void> {
   await getSearchIndexQueue().add(

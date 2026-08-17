@@ -155,3 +155,16 @@ export type ReviewQueueItem = {
   invitees: { name: string | null }[];
   createdAt: string;
 };
+
+// Plain-text excerpt from Tiptap-authored HTML — strips tags rather than
+// rendering, so a blog_post card/search result never leaks unclosed markup
+// from a truncation cut mid-tag. Used to auto-derive a blog_post's
+// description from its body (createKnowledgeItem/updateKnowledgeItem).
+export function excerptFromHtml(html: string, maxLength = 180): string {
+  const text = html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength).trimEnd()}…`;
+}

@@ -29,7 +29,7 @@ import {
 import { createKnowledgeItemSchema, type CreateKnowledgeItemValues } from "@/lib/validation/knowledge";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { InviteePicker } from "@/components/members/invitee-picker";
-import { TiptapEditor } from "@/components/blog/tiptap-editor";
+import { TiptapEditor } from "@/components/library/tiptap-editor";
 
 const DEFAULT_VALUES: CreateKnowledgeItemValues = {
   title: "",

@@ -86,9 +86,9 @@ model User {
   eventAttendances Attendance[]   @relation("EventAttendance")
   eventInvitations EventInvitee[] @relation("EventInvitee")
 
-  // Blog / Knowledge Library / Forums (§4.8/§4.9/§4.13).
-  postsAuthored             Post[]                 @relation("PostAuthor")
-  postComments              PostComment[]          @relation("PostCommentAuthor")
+  // Knowledge Library / Forums (§4.9/§4.13) — Blog was consolidated into
+  // the Library as the blog_post content type; the old Post/PostComment
+  // model tree and this relation are retired.
   knowledgeItemsContributed KnowledgeItem[]        @relation("KnowledgeContributor")
   knowledgeItemInvitations  KnowledgeItemInvitee[] @relation("KnowledgeItemInvitee")
   forumThreads              ForumThread[]          @relation("ForumThreadAuthor")
@@ -546,17 +546,14 @@ model ContributionEvent {
   attendanceId String?     @unique
   attendance   Attendance? @relation(fields: [attendanceId], references: [id])
 
-  // Set only for source = blog_post: the Post whose publication triggered
-  // this auto-earn (§4.4/§4.8). Same one-to-one audit-trail pattern as
-  // attendanceId — a given Post can only ever produce a single earn
-  // transaction, posted at publish time.
-  postId String? @unique
-  post   Post?   @relation(fields: [postId], references: [id])
-
   // Set only for source = library_submission: the KnowledgeItem whose
-  // publish triggered this auto-earn (§4.4/§4.9). Same one-to-one
-  // audit-trail pattern as postId — a given KnowledgeItem can only ever
-  // produce a single earn transaction, posted at publish time.
+  // publish triggered this auto-earn (§4.4/§4.9, blog_post included since
+  // Blog's consolidation into the Library — the former source = blog_post
+  // rows were repointed here by scripts/migrate-blog-to-library.ts, and
+  // the retired postId field/relation this comment used to describe has
+  // been dropped along with the Post model tree). Same one-to-one
+  // audit-trail pattern as attendanceId — a given KnowledgeItem can only
+  // ever produce a single earn transaction, posted at publish time.
   knowledgeItemId String?        @unique
   knowledgeItem   KnowledgeItem? @relation(fields: [knowledgeItemId], references: [id])
 
@@ -1126,138 +1123,10 @@ model Attendance {
   @@map("attendance")
 }
 
-// Phase 5 data model — Blog, Knowledge Library & Forums (PRD §4.8/§4.9/§4.13).
-// Data foundation only; editors, review-queue UI, and search indexing land
-// in later 5.x objectives.
-
-// ===== Blog (§4.8) =====
-
-// Managed taxonomy for blog topic chips (§4.8 — "should be a managed
-// taxonomy, not hardcoded"), same rationale as Skill.
-model PostCategory {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  slug      String   @unique
-  createdAt DateTime @default(now())
-
-  posts PostCategoryOnPost[]
-
-  @@map("post_categories")
-}
-
-// A Post can belong to more than one category (§4.8) — same many-to-many
-// join shape as PostTagOnPost, just against PostCategory instead of PostTag.
-model PostCategoryOnPost {
-  postId     String
-  post       Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
-  categoryId String
-  category   PostCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-
-  @@id([postId, categoryId])
-  @@index([categoryId])
-  @@map("post_categories_on_posts")
-}
-
-model PostTag {
-  id   String @id @default(cuid())
-  name String @unique
-  slug String @unique
-
-  posts PostTagOnPost[]
-
-  @@map("post_tags")
-}
-
-model PostTagOnPost {
-  postId String
-  post   Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
-  tagId  String
-  tag    PostTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
-
-  @@id([postId, tagId])
-  @@index([tagId])
-  @@map("post_tags_on_posts")
-}
-
-// Member-authored blog post (§4.8). `publishedAt` null = draft, set = live.
-// `licenseConsented` gates publish per the Risk_and_Liability.md content-terms
-// requirement (§4.15) — author retains IP, Nasiha gets a non-exclusive
-// display right. `heroImageUrl` is a MinIO object key (attachments/ bucket),
-// same "not a servable URL" convention as Profile.avatarUrl. `flagged`/
-// `flagReason` (added Phase 6, §4.11) give Blog the same post-publish
-// flaggability Library/Forums already had — a boolean + reason rather than
-// KnowledgeItem's status enum, since a Post's publish state is already
-// carried by `publishedAt` and doesn't need a combined enum.
-model Post {
-  id               String    @id @default(cuid())
-  title            String
-  slug             String    @unique
-  body             String
-  authorId         String
-  author           User      @relation("PostAuthor", fields: [authorId], references: [id])
-  heroImageUrl     String?
-  licenseConsented Boolean   @default(false)
-  publishedAt      DateTime?
-  flagged          Boolean   @default(false)
-  flagReason       String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  categories        PostCategoryOnPost[]
-  tags              PostTagOnPost[]
-  comments          PostComment[]
-  views             PostView[]
-  // The other direction of ContributionEvent.postId.
-  contributionEvent ContributionEvent?
-
-  @@index([authorId])
-  @@index([publishedAt])
-  @@map("posts")
-}
-
-// One row per unique viewer of a Post (§4.8), for the eye-icon view count.
-// `viewerKey` is "user:<User.id>" for a signed-in visit or "anon:<uuid>"
-// keyed off the nasiha_vid cookie for a signed-out one — the blog is
-// public-readable, so most traffic has no session to dedupe by.
-model PostView {
-  id        String   @id @default(cuid())
-  postId    String
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  viewerKey String
-  createdAt DateTime @default(now())
-
-  @@unique([postId, viewerKey])
-  @@map("post_views")
-}
-
-// Threaded comment on a Post (§4.8), mirroring InboxMessage's parentId
-// self-relation convention for replies. `flagged`/`flagReason`/`removed`
-// (added later) give per-comment moderation the same "takedown, not
-// deletion" shape as ForumPost — a removed comment keeps its row (and its
-// replies' threading intact) but never shows its real body again — while
-// Post.flagged/flagReason above stay reserved for flagging the whole post.
-model PostComment {
-  id       String @id @default(cuid())
-  postId   String
-  post     Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
-  authorId String
-  author   User   @relation("PostCommentAuthor", fields: [authorId], references: [id])
-  body     String
-
-  parentId String?
-  parent   PostComment?  @relation("PostCommentThread", fields: [parentId], references: [id])
-  replies  PostComment[] @relation("PostCommentThread")
-
-  flagged    Boolean @default(false)
-  flagReason String?
-  removed    Boolean @default(false)
-
-  createdAt DateTime @default(now())
-
-  @@index([postId])
-  @@index([parentId])
-  @@map("post_comments")
-}
+// Phase 5 data model — Knowledge Library & Forums (PRD §4.9/§4.13). Blog
+// (§4.8) was consolidated into the Library as the blog_post content type;
+// its old Post/PostCategory/PostTag/PostComment/PostView model tree lived
+// here until the cleanup migration that retired it.
 
 // ===== Knowledge Library (§4.9) =====
 

@@ -43,9 +43,7 @@ export type ContributionTransaction = {
   meetingRequest: ContributionMeetingRef | null;
   /** Set only for event_attendance-sourced rows — the calendar Event that earned the hours. */
   event: { id: string; title: string } | null;
-  /** Set only for blog_post-sourced rows — the Post whose publication earned the hours. */
-  post: { slug: string; title: string } | null;
-  /** Set only for library_submission-sourced rows — the KnowledgeItem whose publication earned the hours. */
+  /** Set only for library_submission-sourced rows — the KnowledgeItem whose publication earned the hours (blog_post included). */
   libraryItem: { id: string; title: string } | null;
   /** Set only for review_feedback-sourced rows — the peer-review item the feedback was given on. */
   reviewItem: { id: string; title: string } | null;
@@ -101,7 +99,6 @@ export const LEDGER_STATUS_BADGE_VARIANT: Record<LedgerStatus, "success" | "warn
  */
 export function transactionItemTypeLabel(transaction: ContributionTransaction): string {
   if (transaction.event) return "Event";
-  if (transaction.post) return "Blog";
   if (transaction.libraryItem) return "Library";
   if (transaction.reviewItem) return "Peer Review";
   if (transaction.meetingRequest) return "Meeting";

@@ -57,10 +57,10 @@ export type OpenPrivacyRequest = PrivacyDataRequestModel & {
 /**
  * GET /admin/privacy-requests's queue — open (pending) requests, each
  * flagged with whether the member has ContributionLedger entries or
- * authored content (Blog/Library/Forum). §4.4's immutable ledger means
- * those rows are retained even when a deletion request is fulfilled — the
- * admin queue surfaces that up front rather than leaving it to be
- * discovered mid-fulfillment.
+ * authored content (Library, blog posts included/Forum). §4.4's immutable
+ * ledger means those rows are retained even when a deletion request is
+ * fulfilled — the admin queue surfaces that up front rather than leaving it
+ * to be discovered mid-fulfillment.
  */
 export async function getOpenPrivacyRequests(): Promise<OpenPrivacyRequest[]> {
   const requests = await db.privacyDataRequest.findMany({
@@ -72,16 +72,11 @@ export async function getOpenPrivacyRequests(): Promise<OpenPrivacyRequest[]> {
   if (requests.length === 0) return [];
 
   const userIds = Array.from(new Set(requests.map((request) => request.userId)));
-  const [ledgerRows, postRows, knowledgeRows, forumPostRows] = await Promise.all([
+  const [ledgerRows, knowledgeRows, forumPostRows] = await Promise.all([
     db.contributionLedger.findMany({
       where: { userId: { in: userIds } },
       select: { userId: true },
       distinct: ["userId"],
-    }),
-    db.post.findMany({
-      where: { authorId: { in: userIds } },
-      select: { authorId: true },
-      distinct: ["authorId"],
     }),
     db.knowledgeItem.findMany({
       where: { contributorId: { in: userIds } },
@@ -97,7 +92,6 @@ export async function getOpenPrivacyRequests(): Promise<OpenPrivacyRequest[]> {
 
   const historyUserIds = new Set<string>([
     ...ledgerRows.map((row) => row.userId),
-    ...postRows.map((row) => row.authorId),
     ...knowledgeRows.map((row) => row.contributorId),
     ...forumPostRows.map((row) => row.authorId),
   ]);

@@ -42,11 +42,7 @@ function activityFilterKey(activity: string): string {
 
 function hasLinkedItem(transaction: ContributionTransaction): boolean {
   return Boolean(
-    transaction.event ||
-      transaction.post ||
-      transaction.libraryItem ||
-      transaction.reviewItem ||
-      transaction.meetingRequest,
+    transaction.event || transaction.libraryItem || transaction.reviewItem || transaction.meetingRequest,
   );
 }
 
@@ -211,14 +207,6 @@ export function ContributionsHistoryTable({
                         {itemTypeBadge}
                         <Link href={`/calendar/${transaction.event.id}`} className="hover:underline">
                           {transaction.event.title}
-                        </Link>
-                      </p>
-                    )}
-                    {transaction.post && (
-                      <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                        {itemTypeBadge}
-                        <Link href={`/blog/${transaction.post.slug}`} className="hover:underline">
-                          {transaction.post.title}
                         </Link>
                       </p>
                     )}

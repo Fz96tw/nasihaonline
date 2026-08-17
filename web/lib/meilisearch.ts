@@ -6,7 +6,6 @@ import { Meilisearch } from "meilisearch";
 import type { Tier, KnowledgeContentType, KnowledgeLevel } from "@/lib/generated/prisma/enums";
 
 export const PROFILES_INDEX_NAME = "profiles";
-export const POSTS_INDEX_NAME = "posts";
 export const LIBRARY_INDEX_NAME = "knowledge_items";
 export const FORUMS_INDEX_NAME = "forum_threads";
 
@@ -23,25 +22,12 @@ export type ProfileSearchDocument = {
   countryRegion: string | null;
 };
 
-// Blog search document (§4.8/§7.2) — only ever written for published Posts
-// (see syncPostToIndex); a post that reverts to unpublished is removed
-// rather than left stale, same "re-derive eligibility, don't trust the
-// caller" rule as ProfileSearchDocument.
-export type PostSearchDocument = {
-  id: string; // postId
-  title: string;
-  excerpt: string;
-  authorName: string | null;
-  categoryNames: string[];
-  categorySlugs: string[];
-  tagNames: string[];
-};
-
 // Library search document (§4.9/§7.2) — written for both `published` and
 // `flagged` items (see syncKnowledgeItemToIndex — flagged items "stay
 // visible," including in search, per the community-flagging model);
-// `pending_review`/`rejected` items are removed rather than left stale,
-// same rule as PostSearchDocument.
+// `pending_review`/`rejected` items are removed rather than left stale.
+// Covers the blog_post content type too, folded in from the former
+// standalone Blog domain's now-retired posts index.
 export type LibrarySearchDocument = {
   id: string; // knowledgeItemId
   title: string;
@@ -55,8 +41,8 @@ export type LibrarySearchDocument = {
 };
 
 // Forum search document (§4.13/§7.2) — one document per thread, rather
-// than one per post like PostSearchDocument's per-Post shape, since a
-// thread's replies are all part of the same conversation a search hit
+// than one per post, since a thread's replies are all part of the same
+// conversation a search hit
 // should land on; `body` concatenates the opening post and every reply so
 // a search matching only a reply's text still surfaces the thread.
 // Written for every thread (no publish/review gate unlike LibrarySearchDocument
@@ -87,10 +73,6 @@ function getClient(): Meilisearch {
 
 function getProfilesIndex() {
   return getClient().index<ProfileSearchDocument>(PROFILES_INDEX_NAME);
-}
-
-function getPostsIndex() {
-  return getClient().index<PostSearchDocument>(POSTS_INDEX_NAME);
 }
 
 function getLibraryIndex() {
@@ -130,34 +112,6 @@ export async function deleteProfileDocument(userId: string): Promise<void> {
 
 export async function searchProfileDocuments(query: string, limit = 50): Promise<ProfileSearchDocument[]> {
   const result = await getProfilesIndex().search(query, { limit });
-  return result.hits;
-}
-
-/** Same idempotent-settings rationale as ensureProfilesIndexConfigured. */
-export async function ensurePostsIndexConfigured(): Promise<void> {
-  const client = getClient();
-  await client.createIndex(POSTS_INDEX_NAME, { primaryKey: "id" }).catch(() => undefined);
-  const index = getPostsIndex();
-  await index.updateSearchableAttributes(["title", "excerpt", "authorName", "categoryNames", "tagNames"]);
-  await index.updateFilterableAttributes(["categorySlugs"]);
-}
-
-export async function upsertPostDocument(document: PostSearchDocument): Promise<void> {
-  await getPostsIndex().addDocuments([document]);
-}
-
-export async function deletePostDocument(postId: string): Promise<void> {
-  await getPostsIndex().deleteDocument(postId);
-}
-
-export async function searchPostDocuments(
-  query: string,
-  options: { categorySlug?: string; limit?: number } = {},
-): Promise<PostSearchDocument[]> {
-  const result = await getPostsIndex().search(query, {
-    limit: options.limit ?? 50,
-    filter: options.categorySlug ? `categorySlugs = "${options.categorySlug}"` : undefined,
-  });
   return result.hits;
 }
 

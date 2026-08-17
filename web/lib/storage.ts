@@ -258,31 +258,10 @@ export async function deleteKnowledgeDocument(objectKey: string | null): Promise
 }
 
 /**
- * Validates and stores a blog post's hero image in the attachments/ bucket.
- * Reuses the same size + magic-byte image validation as avatar uploads —
- * hero images are ordinary web images, just not the avatars/-bucket kind.
- * Returns the object key to persist on Post.heroImageUrl.
- */
-export async function uploadPostHeroImage(file: File): Promise<string> {
-  const { buffer, ext, mime } = await validateImageUpload(file);
-
-  await ensureBucket(BUCKET_ATTACHMENTS);
-  const key = `blog-hero/${crypto.randomUUID()}.${ext}`;
-  const minio = getClient();
-  await minio.putObject(BUCKET_ATTACHMENTS, key, buffer, buffer.length, {
-    "Content-Type": mime,
-  });
-  return key;
-}
-
-export function getPostHeroImageUrl(key: string | null): string | null {
-  if (!key) return null;
-  return `/api/blog/hero/${key}`;
-}
-
-/**
- * Same validation/storage shape as uploadPostHeroImage, for an Event's
- * optional hero image (§4.6). Returns the object key to persist on
+ * Validates and stores an Event's optional hero image (§4.6) in the
+ * attachments/ bucket. Reuses the same size + magic-byte image validation
+ * as avatar uploads — hero images are ordinary web images, just not the
+ * avatars/-bucket kind. Returns the object key to persist on
  * Event.heroImageUrl.
  */
 export async function uploadEventHeroImage(file: File): Promise<string> {
@@ -309,7 +288,7 @@ export function getEventHeroImageUrl(key: string | null): string | null {
   return `/api/events/hero/${key}`;
 }
 
-/** Same shape/rationale as deletePostHeroImage — called when an edit replaces an event's existing hero image. */
+/** Called when an edit replaces an event's existing hero image. */
 export async function deleteEventHeroImage(key: string | null): Promise<void> {
   if (!key || key === RESTRICTED_EVENT_DEFAULT_HERO_KEY) return;
   await ensureBucket(BUCKET_ATTACHMENTS);
@@ -318,7 +297,7 @@ export async function deleteEventHeroImage(key: string | null): Promise<void> {
 }
 
 /**
- * Same validation/storage shape as uploadPostHeroImage, for a Board
+ * Same validation/storage shape as uploadEventHeroImage, for a Board
  * Announcement's single optional cover image (§4.10). Returns the object
  * key to persist on Announcement.heroImageUrl.
  */
@@ -370,9 +349,10 @@ export function getSurveyHeroImageUrl(key: string | null): string | null {
 }
 
 /**
- * Same validation/storage shape as uploadPostHeroImage, for a Knowledge
- * Library item's optional cover image (§4.9). Returns the object key to
- * persist on KnowledgeItem.heroImageUrl.
+ * Same validation/storage shape as uploadEventHeroImage, for a Knowledge
+ * Library item's optional cover image (§4.9, including the blog_post
+ * content type). Returns the object key to persist on
+ * KnowledgeItem.heroImageUrl.
  */
 export async function uploadKnowledgeItemHeroImage(file: File): Promise<string> {
   const { buffer, ext, mime } = await validateImageUpload(file);
@@ -416,11 +396,4 @@ export async function getAttachmentObject(
   } catch {
     return null;
   }
-}
-
-export async function deletePostHeroImage(key: string | null): Promise<void> {
-  if (!key) return;
-  await ensureBucket(BUCKET_ATTACHMENTS);
-  const minio = getClient();
-  await minio.removeObject(BUCKET_ATTACHMENTS, key).catch(() => undefined);
 }

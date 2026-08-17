@@ -10,9 +10,7 @@
     "lint": "next lint",
     "worker": "tsx scripts/worker.ts",
     "reindex:profiles": "tsx scripts/reindex-profiles.ts",
-    "reindex:posts": "tsx scripts/reindex-posts.ts",
     "reindex:library": "tsx scripts/reindex-library.ts",
-    "migrate:blog-to-library": "tsx scripts/migrate-blog-to-library.ts",
     "get:google-refresh-token": "tsx scripts/get-google-refresh-token.ts"
   },
   "dependencies": {

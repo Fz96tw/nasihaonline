@@ -101,7 +101,11 @@ const CONTRIBUTION_RULES: {
   { activityKey: "knowledge_discussion", label: "Knowledge discussion", type: "earned", hours: 0.5 },
   { activityKey: "curate_resource", label: "Curate a resource", type: "earned", hours: 0.5 },
   { activityKey: "review_feedback", label: "Peer Review & Feedback given", type: "earned", hours: 0.5 },
-  { activityKey: "write_post", label: "Write a blog post", type: "earned", hours: 0.5 },
+  // write_post ("Write a blog post") is retired — Blog was consolidated
+  // into the Library, so writing a post now earns via curate_resource like
+  // any other submission. No longer seeded as active; the existing
+  // production row was deactivated (active: false) directly, kept for
+  // historical ledger rows rather than deleted.
   // "variable (seen: 2.0)" per §4.4 — 2.0 is the default rate; an admin
   // can override the hours on an individual ledger entry when logging.
   { activityKey: "admin_volunteer_work", label: "Administrative volunteer work", type: "earned", hours: 2.0 },
@@ -289,16 +293,11 @@ async function seedEvents() {
   console.log(`Seeded ${created} sample event(s) (${SAMPLE_EVENTS.length - created} already present).`);
 }
 
-// Managed blog taxonomy (§4.8 — "should be a managed taxonomy, not hardcoded").
-// Mirrors the same broad InterestArea labels members pick from on the
-// profile/join form (§3.3/§4.3) rather than a medical-specific list — the
-// platform isn't medical-only, so Blog/Library categories shouldn't be either.
-const POST_CATEGORIES = Object.values(INTEREST_AREA_LABELS);
-const POST_TAGS = ["guidelines", "case-study", "career-advice", "research-methods"];
-
-// Same taxonomy reused for the Knowledge Library so Blog and Library filters
-// stay aligned; not mandated as identical by the PRD but a reasonable shared
-// default an admin can diverge later via /admin CRUD (not yet built).
+// Managed Library taxonomy (§4.9 — "should be a managed taxonomy, not
+// hardcoded"). Mirrors the same broad InterestArea labels members pick from
+// on the profile/join form (§3.3/§4.3) rather than a medical-specific list —
+// the platform isn't medical-only, so Library categories (blog_post content
+// type included) shouldn't be either.
 const KNOWLEDGE_CATEGORIES = Object.values(INTEREST_AREA_LABELS);
 const KNOWLEDGE_TAGS = ["guidelines", "review-article", "recorded-lecture", "case-study"];
 
@@ -350,106 +349,6 @@ const FORUMS: { name: string; description: string; displayOrder: number }[] = [
   },
 ];
 
-// Sample blog posts (mixed draft/published, PRD §4.8) so 5.2+ has real data
-// to render immediately. Hosts/authors assigned round-robin from real
-// (Clerk-synced) members — same rationale as SAMPLE_EVENTS.
-const SAMPLE_POSTS: { title: string; body: string; categories: string[]; published: boolean; tags: string[] }[] = [
-  {
-    title: "Heart Failure Guidelines: What Changed in the Latest Update",
-    body: "A summary of the key changes clinicians should know about in the latest heart failure management guidelines.",
-    // Demonstrates a post spanning more than one category (§4.8).
-    categories: ["Healthcare", "Clinical Research"],
-    published: true,
-    tags: ["guidelines"],
-  },
-  {
-    title: "Navigating Your First Year as an Early-Career Researcher",
-    body: "Practical advice for early-career members starting out in clinical research, from finding a mentor to publishing your first paper.",
-    categories: ["Clinical Research"],
-    published: true,
-    tags: ["career-advice", "research-methods"],
-  },
-  {
-    title: "A De-Identified Case Discussion Worth Revisiting",
-    body: "Draft notes on a complex oncology case discussed at a recent roundtable — still being written up.",
-    categories: ["Healthcare"],
-    published: false,
-    tags: ["case-study"],
-  },
-];
-
-async function seedBlog() {
-  const categoriesByName = new Map<string, { id: string }>();
-  for (const name of POST_CATEGORIES) {
-    const category = await db.postCategory.upsert({
-      where: { name },
-      update: {},
-      create: { name, slug: slugify(name) },
-    });
-    categoriesByName.set(name, category);
-  }
-  console.log(`Seeded ${POST_CATEGORIES.length} post categories.`);
-
-  const tagsByName = new Map<string, { id: string }>();
-  for (const name of POST_TAGS) {
-    const tag = await db.postTag.upsert({
-      where: { name },
-      update: {},
-      create: { name, slug: slugify(name) },
-    });
-    tagsByName.set(name, tag);
-  }
-  console.log(`Seeded ${POST_TAGS.length} post tags.`);
-
-  const authors = await db.user.findMany({
-    where: { role: { in: ["member", "moderator", "admin"] } },
-    orderBy: { createdAt: "asc" },
-  });
-  if (authors.length === 0) {
-    console.log("No members found yet — skipping blog seed (run again once at least one member exists).");
-    return;
-  }
-
-  let created = 0;
-  for (let i = 0; i < SAMPLE_POSTS.length; i++) {
-    const sample = SAMPLE_POSTS[i];
-    const existing = await db.post.findFirst({ where: { title: sample.title } });
-    if (existing) continue;
-
-    const categoryIds = sample.categories.map((name) => categoriesByName.get(name)!.id);
-    const post = await db.post.create({
-      data: {
-        title: sample.title,
-        slug: slugify(sample.title),
-        body: sample.body,
-        authorId: authors[i % authors.length].id,
-        categories: { create: categoryIds.map((categoryId) => ({ categoryId })) },
-        licenseConsented: true,
-        publishedAt: sample.published ? new Date() : null,
-        tags: { create: sample.tags.map((name) => ({ tagId: tagsByName.get(name)!.id })) },
-      },
-    });
-
-    // Demonstrate the threaded PostComment self-relation on the first
-    // published post: a top-level comment plus a reply.
-    if (sample.published && created === 0) {
-      const topLevel = await db.postComment.create({
-        data: { postId: post.id, authorId: authors[(i + 1) % authors.length].id, body: "Great summary, thank you!" },
-      });
-      await db.postComment.create({
-        data: {
-          postId: post.id,
-          authorId: authors[i % authors.length].id,
-          body: "Glad it was helpful!",
-          parentId: topLevel.id,
-        },
-      });
-    }
-
-    created += 1;
-  }
-  console.log(`Seeded ${created} sample post(s) (${SAMPLE_POSTS.length - created} already present).`);
-}
 
 // Sample Knowledge Library items covering the review workflow (§4.9): a
 // published article with an attachment, a pending_review case study, and a
@@ -683,7 +582,6 @@ async function main() {
   console.log(`Seeded ${CONTRIBUTION_RULES.length} contribution rules.`);
 
   await seedEvents();
-  await seedBlog();
   await seedKnowledgeLibrary();
   await seedForums();
   await backfillEventForumThreads();

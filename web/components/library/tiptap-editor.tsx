@@ -9,11 +9,11 @@ const TOOLBAR_BUTTON_CLASSES =
   "flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground";
 
 /**
- * "Write a Post" rich-text editor (§4.8's "Tiptap per system-design.md").
- * Emits sanitized-by-Tiptap HTML on every change via onChange — that HTML
- * is what's persisted as Post.body and rendered back on /blog/[slug]
- * through dangerouslySetInnerHTML (PostBody), same as any other
- * server-rendered rich-text field in this codebase.
+ * Rich-text editor for the Library's blog_post content type (§4.9's "Tiptap
+ * per system-design.md"). Emits sanitized-by-Tiptap HTML on every change via
+ * onChange — that HTML is what's persisted as KnowledgeItem.body and
+ * rendered back on /library/[id] via ResourcePreview's dangerouslySetInnerHTML,
+ * same as any other server-rendered rich-text field in this codebase.
  */
 export function TiptapEditor({
   content,

@@ -30,15 +30,13 @@ function startOfCalendarMonth(date: Date): Date {
  * would land in, rather than a single `lastActiveAt` field.
  */
 async function activeMemberIds(since: Date, until: Date): Promise<Set<string>> {
-  const [ledger, rsvps, forumPosts, posts, comments, knowledgeItems] = await Promise.all([
+  const [ledger, rsvps, forumPosts, knowledgeItems] = await Promise.all([
     db.contributionLedger.findMany({
       where: { createdAt: { gte: since, lt: until } },
       select: { userId: true },
     }),
     db.rSVP.findMany({ where: { createdAt: { gte: since, lt: until } }, select: { userId: true } }),
     db.forumPost.findMany({ where: { createdAt: { gte: since, lt: until } }, select: { authorId: true } }),
-    db.post.findMany({ where: { createdAt: { gte: since, lt: until } }, select: { authorId: true } }),
-    db.postComment.findMany({ where: { createdAt: { gte: since, lt: until } }, select: { authorId: true } }),
     db.knowledgeItem.findMany({
       where: { createdAt: { gte: since, lt: until } },
       select: { contributorId: true },
@@ -49,8 +47,6 @@ async function activeMemberIds(since: Date, until: Date): Promise<Set<string>> {
   for (const row of ledger) ids.add(row.userId);
   for (const row of rsvps) ids.add(row.userId);
   for (const row of forumPosts) ids.add(row.authorId);
-  for (const row of posts) ids.add(row.authorId);
-  for (const row of comments) ids.add(row.authorId);
   for (const row of knowledgeItems) ids.add(row.contributorId);
   return ids;
 }

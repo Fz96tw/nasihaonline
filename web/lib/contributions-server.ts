@@ -39,8 +39,8 @@ function meetingRequestRef(row: {
 
 /**
  * A flat {title, href} for whichever record actually triggered a ledger row
- * — event/post/library/review each has its own detail page, so unlike
- * getContributionHistory's separate `event`/`post`/`libraryItem`/`reviewItem`
+ * — event/library/review each has its own detail page, so unlike
+ * getContributionHistory's separate `event`/`libraryItem`/`reviewItem`
  * fields (rendered with type-specific styling), this collapses them into one
  * generic reference for AdminActionLog metadata, where the Resolution
  * History table just needs *a* link to identify the item, not to
@@ -51,7 +51,6 @@ function meetingRequestRef(row: {
 function contributionItemRef(row: {
   event: {
     attendance: { event: { id: string; title: string } } | null;
-    post: { slug: string; title: string } | null;
     knowledgeItem: { id: string; title: string } | null;
     reviewComment: { reviewItem: { id: string; title: string } } | null;
   } | null;
@@ -61,7 +60,6 @@ function contributionItemRef(row: {
   if (row.event?.attendance?.event) {
     return { title: row.event.attendance.event.title, href: `/calendar/${row.event.attendance.event.id}` };
   }
-  if (row.event?.post) return { title: row.event.post.title, href: `/blog/${row.event.post.slug}` };
   if (row.event?.knowledgeItem) {
     return { title: row.event.knowledgeItem.title, href: `/library/${row.event.knowledgeItem.id}` };
   }
@@ -154,7 +152,6 @@ export async function getContributionHistory(userId: string): Promise<Contributi
           rule: true,
           counterpart: { select: { name: true } },
           attendance: { include: { event: { select: { id: true, title: true } } } },
-          post: { select: { slug: true, title: true } },
           knowledgeItem: { select: { id: true, title: true } },
           reviewComment: { select: { reviewItem: { select: { id: true, title: true } } } },
         },
@@ -177,7 +174,6 @@ export async function getContributionHistory(userId: string): Promise<Contributi
     reason: row.status === LedgerStatus.rejected ? row.reason : null,
     meetingRequest: meetingRequestRef(row),
     event: row.event?.attendance?.event ?? null,
-    post: row.event?.post ?? null,
     libraryItem: row.event?.knowledgeItem ?? null,
     reviewItem: row.event?.reviewComment?.reviewItem ?? null,
     note: row.event?.source === ContributionSource.self_reported ? row.event.note : null,
@@ -318,7 +314,6 @@ export async function resolveContribution(
         include: {
           rule: true,
           attendance: { include: { event: { select: { id: true, title: true } } } },
-          post: { select: { slug: true, title: true } },
           knowledgeItem: { select: { id: true, title: true } },
           reviewComment: { select: { reviewItem: { select: { id: true, title: true } } } },
         },
