@@ -26,7 +26,7 @@ export async function GET(_request: Request, { params }: { params: { key: string
   const objectKey = params.key.join("/");
   const attachment = await db.knowledgeAttachment.findFirst({
     where: { objectKey },
-    select: { knowledgeItem: { select: { status: true, contributorId: true } } },
+    select: { fileName: true, knowledgeItem: { select: { status: true, contributorId: true } } },
   });
   if (!attachment) {
     return new NextResponse(null, { status: 404 });
@@ -48,10 +48,28 @@ export async function GET(_request: Request, { params }: { params: { key: string
     return new NextResponse(null, { status: 404 });
   }
 
-  return new NextResponse(Readable.toWeb(object.stream as Readable) as ReadableStream, {
-    headers: {
-      "Content-Type": object.contentType,
-      "Cache-Control": "private, max-age=3600",
-    },
-  });
+  // The stored Content-Type is the uploader's browser-supplied file.type
+  // (§storage.ts uploadKnowledgeDocument) — untrusted. Forcing a download
+  // instead of an inline render, plus nosniff, keeps a malicious upload
+  // (e.g. an HTML file) from executing same-origin when this URL is opened
+  // directly rather than viewed through the in-app preview. Images are
+  // exempted: components/library/resource-preview.tsx's ImagePreview loads
+  // this same URL via a plain <img src>, and Chrome/Firefox refuse to paint
+  // an <img> whose response carries Content-Disposition: attachment — it's
+  // treated as a download instead, breaking the in-app preview. That's safe
+  // to skip only because uploadKnowledgeDocument's MIME allowlist already
+  // limits image/* uploads to raster formats (jpeg/png/webp/gif/bmp), none
+  // of which execute script when painted into an <img>.
+  const headers: Record<string, string> = {
+    "Content-Type": object.contentType,
+    "X-Content-Type-Options": "nosniff",
+    "Cache-Control": "private, max-age=3600",
+  };
+  if (!object.contentType.startsWith("image/")) {
+    const asciiFallbackName = attachment.fileName.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "'");
+    headers["Content-Disposition"] =
+      `attachment; filename="${asciiFallbackName}"; filename*=UTF-8''${encodeURIComponent(attachment.fileName)}`;
+  }
+
+  return new NextResponse(Readable.toWeb(object.stream as Readable) as ReadableStream, { headers });
 }

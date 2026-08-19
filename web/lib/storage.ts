@@ -177,18 +177,34 @@ export async function deleteAvatarObject(key: string | null): Promise<void> {
 }
 
 // KnowledgeAttachment binaries are "document/article/case-study only —
-// never for video" (§4.9). Unlike avatar uploads, documents come in many
-// legitimate formats (pdf/doc/docx/ppt/pptx/txt/images of scanned pages),
-// so there's no fixed magic-byte allowlist to check against — instead this
-// rejects the one disallowed category (video) by extension and declared
-// MIME type, rather than allowlisting every acceptable format.
+// never for video" (§4.9). No fixed magic-byte check (unlike
+// validateImageUpload) since legitimate documents come in many binary
+// formats pdf.js/the OS can't sniff from a handful of header bytes — instead
+// this validates the browser-declared MIME type against an explicit
+// allowlist. That allowlist doubles as XSS hardening: without it, an
+// uploaded .html/.svg file would be stored and later served back by
+// /api/library/document with a Content-Type that renders/executes in the
+// browser rather than downloading.
 const VIDEO_EXTENSIONS = ["mp4", "mov", "avi", "mkv", "webm", "wmv", "flv", "m4v"];
+const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "text/plain",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/bmp",
+]);
 
 /**
- * Validates a Knowledge Library document upload (size + not-a-video check),
- * then stores it in the documents/ bucket. Returns the fields needed to
- * populate a KnowledgeAttachment row — objectKey is not a servable URL, same
- * convention as Profile.avatarUrl.
+ * Validates a Knowledge Library document upload (size, not-a-video, and
+ * MIME allowlist), then stores it in the documents/ bucket. Returns the
+ * fields needed to populate a KnowledgeAttachment row — objectKey is not a
+ * servable URL, same convention as Profile.avatarUrl.
  */
 export async function uploadKnowledgeDocument(
   file: File,
@@ -201,6 +217,11 @@ export async function uploadKnowledgeDocument(
   if (file.type.startsWith("video/") || VIDEO_EXTENSIONS.includes(ext)) {
     throw new UploadValidationError(
       "Video files are not accepted here — submit a recorded lecture as a YouTube link instead.",
+    );
+  }
+  if (!ALLOWED_DOCUMENT_MIME_TYPES.has(file.type)) {
+    throw new UploadValidationError(
+      "Unsupported file type — upload a PDF, Word, PowerPoint, plain text, or image (JPEG/PNG/WebP/GIF/BMP) file.",
     );
   }
 

@@ -148,8 +148,8 @@ function TextPreview({ url, fileName }: { url: string; fileName: string }) {
 /**
  * Renders a PDF attachment page-by-page onto a canvas via pdfjs-dist (per
  * system-design.md — not the browser's built-in PDF viewer). Non-PDF
- * document types (doc/docx/ppt — uploadKnowledgeDocument accepts anything
- * that isn't video) fall back to a download link, since PDF.js only renders
+ * document types (doc/docx/ppt — allowed by uploadKnowledgeDocument's MIME
+ * allowlist) fall back to a download link, since PDF.js only renders
  * PDFs. Plain text (.txt) and images are routed to TextPreview/ImagePreview
  * instead of landing here, per ResourcePreview's attachment dispatch below.
  */
