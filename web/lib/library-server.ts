@@ -580,6 +580,57 @@ export async function updateKnowledgeItem(
 }
 
 /**
+ * Deletes a submission (§4.9) and everything attached to it — contributor or
+ * Library Steward/admin only, same ownership rule as updateKnowledgeItem.
+ * KnowledgeAttachment/categories/tags/invitees/views/legacyBlogSlugs cascade
+ * via the schema; ForumThread does not (no onDelete clause) and is hard-
+ * deleted here, per the confirmed UX ("delete the discussion, not just
+ * detach it") — its own ForumPost/ForumThreadInvitee/ThreadView rows then
+ * cascade off the thread. ContributionEvent and ReviewItem.publishedKnowledgeItemId
+ * also lack a cascade and are deliberately *not* deleted: nulling the FK
+ * keeps a contributor's already-earned Knowledge Hours record and a
+ * peer-review item's history intact after the Library item they produced is
+ * removed. MinIO objects and the Meilisearch doc aren't touched by the DB
+ * transaction — cleaned up by the caller/below, same two-step order as
+ * updateKnowledgeItem's hero-image/attachment cleanup above.
+ */
+export async function deleteKnowledgeItem(itemId: string, actingUser: UserModel): Promise<void> {
+  const item = await db.knowledgeItem.findUnique({
+    where: { id: itemId },
+    select: {
+      id: true,
+      contributorId: true,
+      heroImageUrl: true,
+      attachments: { select: { objectKey: true } },
+      forumThread: { select: { id: true } },
+    },
+  });
+  if (!item) throw new KnowledgeItemError(404, "Resource not found.");
+
+  const isPrivileged = actingUser.role === Role.admin || actingUser.role === Role.moderator;
+  if (!isPrivileged && item.contributorId !== actingUser.id) {
+    throw new KnowledgeItemError(403, "Only the submitter or a Library Steward/admin can delete this resource.");
+  }
+
+  await db.$transaction(async (tx) => {
+    if (item.forumThread) {
+      await tx.forumThread.delete({ where: { id: item.forumThread.id } });
+    }
+    await tx.contributionEvent.updateMany({ where: { knowledgeItemId: item.id }, data: { knowledgeItemId: null } });
+    await tx.reviewItem.updateMany({
+      where: { publishedKnowledgeItemId: item.id },
+      data: { publishedKnowledgeItemId: null },
+    });
+    await tx.knowledgeItem.delete({ where: { id: item.id } });
+  });
+
+  for (const attachment of item.attachments) {
+    await deleteKnowledgeDocument(attachment.objectKey);
+  }
+  await deleteKnowledgeItemHeroImage(item.heroImageUrl);
+}
+
+/**
  * /library browse listing (§4.9) — plain Postgres query filtered/sorted by
  * createdAt for a browse view (`q` absent), or a Meilisearch-backed query
  * for `q` present (§7.2/§9), same "real query goes to Meilisearch, browse
@@ -672,6 +723,7 @@ export async function getPublishedKnowledgeItemById(
       deidentificationConfirmed: true,
       tags: { select: { tag: { select: { name: true, slug: true } } } },
       forumThread: { select: { id: true, _count: { select: { posts: true } } } },
+      contributionEvent: { select: { id: true } },
       _count: { select: { views: true } },
     },
   });
@@ -685,6 +737,7 @@ export async function getPublishedKnowledgeItemById(
     forumThreadId: item.forumThread?.id ?? null,
     forumReplyCount: item.forumThread ? item.forumThread._count.posts - 1 : null,
     viewCount: item._count.views,
+    hasEarnedHours: item.contributionEvent !== null,
   };
 }
 
@@ -1086,14 +1139,16 @@ export async function getMySubmissions(contributorId: string): Promise<MySubmiss
       status: true,
       categories: { select: { category: { select: { name: true } } } },
       createdAt: true,
+      contributionEvent: { select: { id: true } },
     },
     orderBy: { createdAt: "desc" },
   });
 
-  return items.map((item) => ({
+  return items.map(({ contributionEvent, ...item }) => ({
     ...item,
     categories: item.categories.map(({ category }) => category),
     createdAt: item.createdAt.toISOString(),
+    hasEarnedHours: contributionEvent !== null,
   }));
 }
 

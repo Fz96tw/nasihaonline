@@ -129,6 +129,8 @@ function PostNode({
   const [editBody, setEditBody] = useState(post.body);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const authorName = post.authorName ?? "NASIHA Member";
   const canEdit = !post.removed && (post.authorId === currentUserId || isPrivileged);
 
@@ -153,6 +155,28 @@ function PostNode({
       setEditError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setEditSubmitting(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!window.confirm("Delete this post? This can't be undone.")) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const csrfToken = await getCsrfToken();
+      const res = await fetch(`/api/forums/posts/${post.id}`, {
+        method: "DELETE",
+        headers: { "x-csrf-token": csrfToken },
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        throw new Error(typeof payload?.error === "string" ? payload.error : "Something went wrong.");
+      }
+      onPosted();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -253,6 +277,16 @@ function PostNode({
               {editing ? "Cancel" : "Edit"}
             </button>
           )}
+          {canEdit && (
+            <button
+              type="button"
+              className="text-xs font-medium text-destructive hover:underline disabled:opacity-50"
+              disabled={deleting}
+              onClick={handleDelete}
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </button>
+          )}
           {!post.removed && !flagged && (
             <button
               type="button"
@@ -265,6 +299,7 @@ function PostNode({
             </button>
           )}
         </div>
+        {deleteError && <p className="mt-1 text-xs text-destructive">{deleteError}</p>}
         {flagError && <p className="mt-1 text-xs text-destructive">{flagError}</p>}
         <FlagContentDialog
           open={flagDialogOpen}

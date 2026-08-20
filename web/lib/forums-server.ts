@@ -899,6 +899,38 @@ export async function updateForumPost(
 }
 
 /**
+ * DELETE /api/forums/posts/:postId — the author (or a moderator/admin)
+ * removing their own post directly, without going through the
+ * flag-then-moderator-resolve queue. Lands in the same state as
+ * resolveForumPostFlag's "remove" action (removed: true, row and any
+ * threaded replies kept intact, body placeholder'd in getForumThreadDetail)
+ * — self-delete and moderator-remove are just two paths to that state, so
+ * this also clears a pending flag/flagReason: there's nothing left for a
+ * moderator to review once the content is already gone.
+ */
+export async function deleteForumPost(
+  postId: string,
+  actingUserId: string,
+  isPrivileged: boolean,
+): Promise<{ id: string; threadId: string }> {
+  const post = await db.forumPost.findUnique({
+    where: { id: postId },
+    select: { id: true, authorId: true, threadId: true, removed: true },
+  });
+  if (!post) throw new ForumError(404, "Post not found.");
+  if (post.removed) throw new ForumError(400, "This post has already been removed.");
+  if (!isPrivileged && actingUserId !== post.authorId) {
+    throw new ForumError(403, "Only the post's author or a moderator/admin can delete it.");
+  }
+
+  return db.forumPost.update({
+    where: { id: postId },
+    data: { removed: true, flagged: false, flagReason: null },
+    select: { id: true, threadId: true },
+  });
+}
+
+/**
  * PATCH /api/forums/threads/:threadId/invitees — adds and/or removes
  * members from a restricted standalone thread's invited list after
  * creation (Member-Initiated Restricted Forum Threads, §4.13/§11.16),

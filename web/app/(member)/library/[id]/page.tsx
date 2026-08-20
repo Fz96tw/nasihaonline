@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { BackLink } from "@/components/back-link";
 import { ResourcePreview } from "@/components/library/resource-preview";
 import { LibraryFlagButton } from "@/components/library/library-flag-button";
+import { DeleteLibraryItemButton } from "@/components/library/delete-library-item-button";
 import { LibraryDiscussionLink } from "@/components/library/library-discussion-link";
 import { LibraryViewCounter } from "@/components/library/library-view-counter";
 import { ManageLibraryInvitees } from "@/components/library/manage-invitees";
@@ -138,6 +139,14 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
           <Button asChild size="sm" variant="outline">
             <Link href={`/library/${item.id}/edit`}>Edit Resource</Link>
           </Button>
+        )}
+        {canEdit && (
+          <DeleteLibraryItemButton
+            itemId={item.id}
+            title={item.title}
+            hasEarnedHours={item.hasEarnedHours}
+            redirectTo="/library/mine"
+          />
         )}
         {item.status === KnowledgeStatus.published && <LibraryFlagButton itemId={item.id} initialFlagged={false} />}
         {!item.forumThreadId && <LibraryDiscussionLink itemId={item.id} initialThreadId={item.forumThreadId} />}

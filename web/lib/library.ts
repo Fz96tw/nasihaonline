@@ -54,6 +54,8 @@ export type MySubmission = {
   status: KnowledgeStatus;
   categories: { name: string }[];
   createdAt: string;
+  // See KnowledgeItemDetail.hasEarnedHours.
+  hasEarnedHours: boolean;
 };
 
 /** /library browse card (§4.9) — published or flagged items only. */
@@ -103,6 +105,10 @@ export type KnowledgeItemDetail = LibraryCard & {
   viewCount: number;
   // Full rich-text (Tiptap) content — set only for contentType = blog_post.
   body: string | null;
+  // Whether this item has already earned the contributor a ContributionEvent
+  // (Knowledge Hours) — surfaced so the delete confirmation can reassure
+  // them that credit already earned isn't lost by removing the resource.
+  hasEarnedHours: boolean;
 };
 
 /**

@@ -3,6 +3,7 @@ import { CONTENT_TYPE_LABELS, STATUS_BADGE_VARIANT, STATUS_LABELS } from "@/lib/
 import type { MySubmission } from "@/lib/library";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DeleteLibraryItemButton } from "@/components/library/delete-library-item-button";
 
 /** Shared by /library/mine and /my-posts's Library tab — a member's own submissions, at any status. */
 export function MySubmissionsTable({ submissions }: { submissions: MySubmission[] }) {
@@ -41,9 +42,16 @@ export function MySubmissionsTable({ submissions }: { submissions: MySubmission[
                 {new Date(item.createdAt).toLocaleDateString()}
               </TableCell>
               <TableCell className="text-right">
-                <Link href={`/library/${item.id}/edit`} className="text-sm text-primary hover:underline">
-                  Edit
-                </Link>
+                <div className="flex items-center justify-end gap-3">
+                  <Link href={`/library/${item.id}/edit`} className="text-sm text-primary hover:underline">
+                    Edit
+                  </Link>
+                  <DeleteLibraryItemButton
+                    itemId={item.id}
+                    title={item.title}
+                    hasEarnedHours={item.hasEarnedHours}
+                  />
+                </div>
               </TableCell>
             </TableRow>
           ))}

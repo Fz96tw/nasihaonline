@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
-import { KnowledgeItemError, updateKnowledgeItem } from "@/lib/library-server";
+import { KnowledgeItemError, deleteKnowledgeItem, updateKnowledgeItem } from "@/lib/library-server";
 import { updateKnowledgeItemSchema } from "@/lib/validation/knowledge";
 import { enqueueKnowledgeItemIndexSync } from "@/lib/queues/search-index-queue";
 
@@ -45,6 +45,34 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     const item = await updateKnowledgeItem(params.id, user, { ...parsed.data, file, heroImage });
     await enqueueKnowledgeItemIndexSync(item.id);
     return NextResponse.json({ id: item.id });
+  } catch (error) {
+    if (error instanceof KnowledgeItemError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    throw error;
+  }
+}
+
+/**
+ * DELETE /api/library/:id — removing a submission (§4.9), contributor /
+ * Library Steward / admin only (enforced in deleteKnowledgeItem). Re-syncing
+ * the index afterward re-derives eligibility from the DB (now gone) and
+ * removes the Meilisearch doc, same "re-derive, don't trust the caller"
+ * shape as every other write path here.
+ */
+export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
+  let user;
+  try {
+    user = await requireUser();
+  } catch (error) {
+    if (error instanceof AuthError) return authErrorResponse(error);
+    throw error;
+  }
+
+  try {
+    await deleteKnowledgeItem(params.id, user);
+    await enqueueKnowledgeItemIndexSync(params.id);
+    return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof KnowledgeItemError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
