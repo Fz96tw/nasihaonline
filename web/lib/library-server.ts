@@ -1,4 +1,5 @@
 import "server-only";
+import sanitizeHtml from "sanitize-html";
 import { db } from "@/lib/db";
 import {
   uploadKnowledgeDocument,
@@ -46,6 +47,43 @@ import {
 // Absolute, not relative — same rationale as events-server.ts's createEvent:
 // lib/linkify.tsx's linkifyText only turns absolute http(s) URLs into links.
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
+
+// blog_post's KnowledgeItem.body is rendered back via dangerouslySetInnerHTML
+// on /library/[id] (ResourcePreview) for every viewer, not just the author —
+// TiptapEditor's toolbar/schema is a UI affordance, not a trust boundary,
+// since createKnowledgeItem/updateKnowledgeItem are ordinary API routes any
+// client can call directly with an arbitrary `body` string. Strips every tag
+// except the ones StarterKit's schema can actually produce (bold/italic/
+// strike/code marks, headings, lists, blockquote, hr, code block) and every
+// attribute (StarterKit never emits one), which also eliminates on*=
+// handlers and javascript: URLs without needing a URL/attribute allowlist.
+const BLOG_POST_ALLOWED_TAGS = [
+  "p",
+  "br",
+  "strong",
+  "b",
+  "em",
+  "i",
+  "s",
+  "strike",
+  "code",
+  "pre",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "ul",
+  "ol",
+  "li",
+  "blockquote",
+  "hr",
+];
+
+function sanitizeBlogPostBody(html: string): string {
+  return sanitizeHtml(html, { allowedTags: BLOG_POST_ALLOWED_TAGS, allowedAttributes: {} });
+}
 
 const LIBRARY_CARD_SELECT = {
   id: true,
@@ -229,6 +267,15 @@ export async function createKnowledgeItem(
   if (isBlogPost && !input.body?.trim()) {
     throw new KnowledgeItemError(400, "Write your post before submitting.");
   }
+  // Sanitized once here (rather than inline at the db.create below) so both
+  // the stored body and the excerpt derived from it below share one
+  // sanitized value — a body that's nothing but disallowed markup (e.g.
+  // just a <script> tag) collapses to empty and re-triggers the same
+  // "write your post" rejection, instead of silently saving a blank post.
+  const sanitizedBody = isBlogPost ? sanitizeBlogPostBody(input.body ?? "") : null;
+  if (isBlogPost && !sanitizedBody?.trim()) {
+    throw new KnowledgeItemError(400, "Write your post before submitting.");
+  }
 
   const isRestricted = input.visibility === KnowledgeVisibility.restricted;
   const invitedUsers = isRestricted
@@ -297,8 +344,8 @@ export async function createKnowledgeItem(
       title: input.title,
       // blog_post has no separate excerpt input — same "derive it from the
       // body" UX as Blog's Post.body/excerpt split.
-      description: isBlogPost ? excerptFromHtml(input.body ?? "") : input.description,
-      body: isBlogPost ? input.body : null,
+      description: isBlogPost ? excerptFromHtml(sanitizedBody ?? "") : input.description,
+      body: sanitizedBody,
       contentType: input.contentType,
       level: input.level,
       contributorId,
@@ -424,6 +471,10 @@ export async function updateKnowledgeItem(
   if (isBlogPost && !input.body?.trim()) {
     throw new KnowledgeItemError(400, "Write your post before submitting.");
   }
+  const sanitizedBody = isBlogPost ? sanitizeBlogPostBody(input.body ?? "") : null;
+  if (isBlogPost && !sanitizedBody?.trim()) {
+    throw new KnowledgeItemError(400, "Write your post before submitting.");
+  }
 
   const categories = await db.knowledgeCategory.findMany({
     where: { id: { in: input.categoryIds } },
@@ -492,8 +543,8 @@ export async function updateKnowledgeItem(
       where: { id: item.id },
       data: {
         title: input.title,
-        description: isBlogPost ? excerptFromHtml(input.body ?? "") : input.description,
-        body: isBlogPost ? input.body : null,
+        description: isBlogPost ? excerptFromHtml(sanitizedBody ?? "") : input.description,
+        body: sanitizedBody,
         contentType: input.contentType,
         level: input.level,
         youtubeUrl: isRecordedLecture ? input.youtubeUrl : null,
