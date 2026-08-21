@@ -81,7 +81,7 @@ export async function enqueueForumThreadIndexSync(threadId: string): Promise<voi
  * /api/events/:id/cancel — same DB-write → BullMQ → index-sync pattern as
  * enqueueForumThreadIndexSync. Not called from invitee-list routes: the
  * search index document carries no visibility/invitee data (per-viewer
- * authorization happens at query time, lib/search-server.ts), so an
+ * authorization happens at query time, getFeedPage (lib/feed-server.ts)), so an
  * invitee-list change never affects what's indexed.
  */
 export async function enqueueEventIndexSync(eventId: string): Promise<void> {

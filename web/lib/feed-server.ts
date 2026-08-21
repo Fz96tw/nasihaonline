@@ -19,6 +19,14 @@ import {
 } from "@/lib/storage";
 import { withFeedRef, type FeedItem, type FeedCursor } from "@/lib/feed";
 import { youtubeThumbnailUrl } from "@/lib/youtube";
+import {
+  searchEventDocuments,
+  searchLibraryDocuments,
+  searchForumDocuments,
+  searchAnnouncementDocuments,
+  searchSurveyDocuments,
+  searchReviewItemDocuments,
+} from "@/lib/meilisearch";
 
 const DEFAULT_PAGE_SIZE = 20;
 const EXCERPT_LENGTH = 180;
@@ -90,16 +98,56 @@ export async function getFeedPage(params: {
    * this function today, but the type stays honest).
    */
   viewerId: string | null;
+  /**
+   * Free-text search (What's New feed's own inline search box, just below
+   * the type filter pills — not a separate search UI). When present, each
+   * domain's Meilisearch index (lib/meilisearch.ts) is queried first for
+   * relevance-ranked hit ids, then that domain's existing Prisma query below
+   * is additionally constrained to `id: { in: hitIds }` — layered on top of,
+   * never replacing, the same per-viewer visibility where-clause every
+   * domain already applies. This is why search results never need a
+   * separate authorization pass the way a general cross-app search would:
+   * getFeedPage's own queries were already the authorization boundary.
+   */
+  q?: string;
 }): Promise<{ items: FeedItem[]; nextCursor: FeedCursor | null; hasMore: boolean }> {
   const pageSize = params.pageSize ?? DEFAULT_PAGE_SIZE;
   const before = params.cursor ? new Date(params.cursor.ts) : null;
   const wants = (type: FeedItem["type"]) => !params.types || params.types.includes(type);
   const viewerId = params.viewerId;
+  const query = params.q?.trim() || null;
+
+  // null = search inactive, no id filter applied to that domain; [] = search
+  // active but zero Meilisearch hits, so the domain's query below should
+  // deliberately match nothing rather than falling through to the unfiltered
+  // browse behavior. Skipped entirely for a domain the caller doesn't want,
+  // same short-circuit `wants()` already uses elsewhere in this function.
+  const [eventHitIds, libraryHitIds, forumHitIds, announcementHitIds, surveyHitIds, reviewHitIds] = !query
+    ? [null, null, null, null, null, null]
+    : await Promise.all([
+        wants("event") ? searchEventDocuments(query).then((hits) => hits.map((hit) => hit.id)) : Promise.resolve([]),
+        wants("library")
+          ? searchLibraryDocuments(query).then((hits) => hits.map((hit) => hit.id))
+          : Promise.resolve([]),
+        wants("forum_thread")
+          ? searchForumDocuments(query).then((hits) => hits.map((hit) => hit.id))
+          : Promise.resolve([]),
+        wants("announcement")
+          ? searchAnnouncementDocuments(query).then((hits) => hits.map((hit) => hit.id))
+          : Promise.resolve([]),
+        wants("survey")
+          ? searchSurveyDocuments(query).then((hits) => hits.map((hit) => hit.id))
+          : Promise.resolve([]),
+        wants("peer_review")
+          ? searchReviewItemDocuments(query).then((hits) => hits.map((hit) => hit.id))
+          : Promise.resolve([]),
+      ]);
 
   const [events, libraryItems, forumThreads, announcements, surveys, seekingReviewItems] = await Promise.all([
-    !wants("event") ? Promise.resolve([]) : db.event.findMany({
+    !wants("event") || eventHitIds?.length === 0 ? Promise.resolve([]) : db.event.findMany({
       where: {
         ...(before ? { createdAt: { lt: before } } : {}),
+        ...(eventHitIds ? { id: { in: eventHitIds } } : {}),
         cancelledAt: null,
         OR: [
           { visibility: EventVisibility.community },
@@ -132,10 +180,11 @@ export async function getFeedPage(params: {
       orderBy: { createdAt: "desc" },
       take: pageSize,
     }),
-    !wants("library") ? Promise.resolve([]) : db.knowledgeItem.findMany({
+    !wants("library") || libraryHitIds?.length === 0 ? Promise.resolve([]) : db.knowledgeItem.findMany({
       where: {
         status: KnowledgeStatus.published,
         ...(before ? { createdAt: { lt: before } } : {}),
+        ...(libraryHitIds ? { id: { in: libraryHitIds } } : {}),
         // Same restricted-audience shape as the events branch above
         // (Objective 04's read-path filter, mirrored here): a restricted
         // item only ever reaches an invited member's feed, never its own
@@ -164,7 +213,7 @@ export async function getFeedPage(params: {
       orderBy: { createdAt: "desc" },
       take: pageSize,
     }),
-    !wants("forum_thread") ? Promise.resolve([]) : db.forumThread.findMany({
+    !wants("forum_thread") || forumHitIds?.length === 0 ? Promise.resolve([]) : db.forumThread.findMany({
       // eventId: null excludes the Events forum's auto-created threads —
       // those already surface as their parent Event's own feed row (with
       // forumReplyCount above), so listing them again here would be a
@@ -183,6 +232,7 @@ export async function getFeedPage(params: {
         // fresh activity resurfaces near the top instead of only ever
         // appearing once at its original creation time.
         ...(before ? { lastActivityAt: { lt: before } } : {}),
+        ...(forumHitIds ? { id: { in: forumHitIds } } : {}),
         OR: [
           { visibility: ForumThreadVisibility.community },
           ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
@@ -210,12 +260,13 @@ export async function getFeedPage(params: {
       orderBy: { lastActivityAt: "desc" },
       take: pageSize,
     }),
-    !wants("announcement") ? Promise.resolve([]) : db.announcement.findMany({
+    !wants("announcement") || announcementHitIds?.length === 0 ? Promise.resolve([]) : db.announcement.findMany({
       where: {
         sentAt: { not: null },
         retractedAt: null,
         showInFeed: true,
         ...(before ? { sentAt: { lt: before } } : {}),
+        ...(announcementHitIds ? { id: { in: announcementHitIds } } : {}),
       },
       select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true, welcomeTier: true },
       orderBy: { sentAt: "desc" },
@@ -227,11 +278,12 @@ export async function getFeedPage(params: {
     // actionable/live" rationale as Announcement's sentAt+retractedAt
     // filter. No author select needed — like Announcement, the real sending
     // admin is masked behind BOARD_SENDER on this member-facing surface.
-    !wants("survey") ? Promise.resolve([]) : db.survey.findMany({
+    !wants("survey") || surveyHitIds?.length === 0 ? Promise.resolve([]) : db.survey.findMany({
       where: {
         status: SurveyStatus.open,
         audienceMembers: true,
         ...(before ? { openedAt: { lt: before } } : {}),
+        ...(surveyHitIds ? { id: { in: surveyHitIds } } : {}),
       },
       select: { id: true, title: true, description: true, heroImageUrl: true, openedAt: true },
       orderBy: { openedAt: "desc" },
@@ -246,7 +298,7 @@ export async function getFeedPage(params: {
     // attachment/externalUrl/youtubeUrl — the actual material stays gated
     // behind canViewReviewItem/an accepted offer on the detail page, same as
     // the dashboard's "Members Seeking Reviewers" tab.
-    !wants("peer_review") ? Promise.resolve([]) : db.reviewItem.findMany({
+    !wants("peer_review") || reviewHitIds?.length === 0 ? Promise.resolve([]) : db.reviewItem.findMany({
       where: {
         status: ReviewItemStatus.open,
         OR: [
@@ -261,6 +313,7 @@ export async function getFeedPage(params: {
         // opened/closed resurfaces near the top — same convention as the
         // forumThreads branch above keying off its own lastActivityAt.
         ...(before ? { lastActivityAt: { lt: before } } : {}),
+        ...(reviewHitIds ? { id: { in: reviewHitIds } } : {}),
       },
       select: {
         id: true,

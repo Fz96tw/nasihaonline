@@ -168,8 +168,7 @@ function isOwnThreadVisible(thread: OwnThreadAccess, viewerId: string | undefine
   return thread.authorId === viewerId || thread.invitees.some((invitee) => invitee.userId === viewerId);
 }
 
-/** Exported for lib/search-server.ts's global search — reused rather than reimplemented, same 3-part visibility check every other read path here enforces. */
-export function isThreadVisible(
+function isThreadVisible(
   thread: { event: EventThreadAccess; knowledgeItem: KnowledgeItemThreadAccess } & OwnThreadAccess,
   viewerId: string | undefined,
   isPrivileged: boolean,

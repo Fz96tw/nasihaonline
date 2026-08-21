@@ -10,11 +10,14 @@ export function FeedList({
   initialCursor,
   initialHasMore,
   activeType,
+  q,
 }: {
   initialItems: FeedItem[];
   initialCursor: FeedCursor | null;
   initialHasMore: boolean;
   activeType?: FeedItemType;
+  /** Active search query (What's New feed's inline search box), threaded into "Load more" pagination. */
+  q?: string;
 }) {
   const [items, setItems] = useState(initialItems);
   const [cursor, setCursor] = useState(initialCursor);
@@ -26,7 +29,8 @@ export function FeedList({
     setLoading(true);
     try {
       const typeParam = activeType ? `&type=${activeType}` : "";
-      const response = await fetch(`/api/whats-new?cursor=${encodeFeedCursor(cursor)}${typeParam}`);
+      const qParam = q ? `&q=${encodeURIComponent(q)}` : "";
+      const response = await fetch(`/api/whats-new?cursor=${encodeFeedCursor(cursor)}${typeParam}${qParam}`);
       if (!response.ok) return;
       const data = (await response.json()) as { items: FeedItem[]; nextCursor: FeedCursor | null; hasMore: boolean };
       setItems((prev) => [...prev, ...data.items]);

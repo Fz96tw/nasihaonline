@@ -61,13 +61,12 @@ export async function syncProfileToIndex(userId: string): Promise<void> {
  * `published` and `flagged` are both eligible — flagged items "stay
  * visible" per the community-flagging model (§4.9), including in search;
  * `pending_review`/`rejected` are removed. Restricted-visibility items ARE
- * indexed (unlike the original per-domain search boxes' index-eligibility,
- * this no longer excludes them for everyone) — global search's
- * per-viewer authorization (lib/search-server.ts, mirroring
- * getPublishedKnowledgeItems' own visibility OR-clause) decides at query
- * time whether a given viewer gets to see a restricted hit, the same
- * "authorize at query time, not index time" split every other domain in
- * global search uses.
+ * indexed (unlike the original per-domain search box's index-eligibility,
+ * this no longer excludes them for everyone) — the What's New feed's search
+ * (getFeedPage, lib/feed-server.ts, mirroring getPublishedKnowledgeItems'
+ * own visibility OR-clause) decides at query time whether a given viewer
+ * gets to see a restricted hit, the same "authorize at query time, not
+ * index time" split every other domain here uses.
  */
 export async function syncKnowledgeItemToIndex(knowledgeItemId: string): Promise<void> {
   const item = await db.knowledgeItem.findUnique({
@@ -114,7 +113,7 @@ export async function syncKnowledgeItemToIndex(knowledgeItemId: string): Promise
  * Every thread is indexed regardless of restriction (`ForumThread.visibility`/
  * `ForumThreadInvitee`, or a restriction inherited from a linked Event/
  * KnowledgeItem) — per-viewer authorization for a restricted thread is
- * enforced at query time by lib/search-server.ts's global search (via
+ * enforced at query time by getFeedPage (lib/feed-server.ts) (via
  * lib/forums-server.ts's isThreadVisible), not by excluding it here. The
  * only "not eligible" case is the thread no longer existing.
  */
@@ -150,7 +149,7 @@ export async function syncForumThreadToIndex(threadId: string): Promise<void> {
  * every sync* function above. Index-eligibility only excludes a cancelled
  * event — restricted (`invited`-visibility) events ARE indexed here;
  * per-viewer authorization (community/host/invitee/admin) is enforced at
- * query time by lib/search-server.ts's global search, mirroring
+ * query time by getFeedPage (lib/feed-server.ts), mirroring
  * getMemberEventById's own where-clause, not by excluding restricted events
  * from the index for everyone.
  */
@@ -250,7 +249,7 @@ export async function syncSurveyToIndex(surveyId: string): Promise<void> {
  * all — a ReviewItem's submitter/invitee must be able to find their own
  * item via search regardless of status or seekingReviewers, so that
  * boolean logic (canViewReviewItem/canPreviewReviewItem, lib/review-server.ts)
- * is applied entirely at query time by lib/search-server.ts. The only
+ * is applied entirely at query time by getFeedPage (lib/feed-server.ts). The only
  * "not eligible" case is the item no longer existing (deleted).
  */
 export async function syncReviewItemToIndex(reviewItemId: string): Promise<void> {

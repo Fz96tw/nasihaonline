@@ -92,8 +92,7 @@ export function canViewReviewItem(
  * for a caller who only clears this and not canViewReviewItem — so the
  * detail page renders an "Offer to Review" preview instead of notFound().
  */
-/** Exported for lib/search-server.ts's global search — reused rather than reimplemented. */
-export function canPreviewReviewItem(
+function canPreviewReviewItem(
   item: { submitterId: string; invitees: { userId: string }[]; seekingReviewers: boolean; status: ReviewItemStatus },
   actingUser: UserModel,
 ): boolean {

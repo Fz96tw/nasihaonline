@@ -67,11 +67,11 @@ export type ForumSearchDocument = {
   forumSlug: string;
 };
 
-// Event search document (global search, Objective "Index Events,
-// Announcements, Surveys, and Peer Review for search") — no visibility/
-// invitee data carried here: unlike restricted-item exclusion elsewhere in
-// this file, per-viewer authorization for Event happens at query time (see
-// lib/search-server.ts), re-derived fresh from Postgres on every search
+// Event search document (Objective "Index Events, Announcements, Surveys,
+// and Peer Review for search") — no visibility/invitee data carried here:
+// unlike restricted-item exclusion elsewhere in this file, per-viewer
+// authorization for Event happens at query time (see getFeedPage,
+// lib/feed-server.ts), re-derived fresh from Postgres on every search
 // rather than baked into the document. Only a cancelled event is excluded
 // from the index itself (see syncEventToIndex).
 export type EventSearchDocument = {
@@ -95,7 +95,7 @@ export type AnnouncementSearchDocument = {
 
 // Survey search document — status kept filterable so the UI can badge a
 // closed survey; no per-member visibility gate exists for Survey (see
-// lib/search-server.ts), so this is the same eligibility check used at
+// getFeedPage (lib/feed-server.ts)), so this is the same eligibility check used at
 // both index- and query-time.
 export type SurveySearchDocument = {
   id: string; // surveyId
@@ -109,7 +109,7 @@ export type SurveySearchDocument = {
 // status/seekingReviewers gate at index time: a submitter/invitee must be
 // able to find their own item via search regardless of status, so
 // eligibility (canViewReviewItem/canPreviewReviewItem) is applied entirely
-// at query time (lib/search-server.ts).
+// at query time (getFeedPage (lib/feed-server.ts)).
 export type ReviewItemSearchDocument = {
   id: string; // reviewItemId
   title: string;

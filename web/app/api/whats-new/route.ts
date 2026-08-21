@@ -15,6 +15,12 @@ export async function GET(request: NextRequest) {
 
   const cursor = decodeFeedCursor(request.nextUrl.searchParams.get("cursor"));
   const type = request.nextUrl.searchParams.get("type");
-  const page = await getFeedPage({ cursor, types: isFeedItemType(type) ? [type] : undefined, viewerId: user.id });
+  const q = request.nextUrl.searchParams.get("q") ?? undefined;
+  const page = await getFeedPage({
+    cursor,
+    types: isFeedItemType(type) ? [type] : undefined,
+    viewerId: user.id,
+    q,
+  });
   return NextResponse.json(page);
 }

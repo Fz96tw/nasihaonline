@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { NavDropdown } from "@/components/nav-dropdown";
 import { NotificationBell } from "@/components/notifications/notification-bell";
-import { GlobalSearch } from "@/components/search/global-search";
 import { AdminReviewIcon } from "@/components/admin/admin-review-icon";
 import { UserMenu } from "@/components/user-menu";
 import { MobileNav } from "@/components/mobile-nav";
@@ -153,7 +152,6 @@ export async function SiteHeader() {
                 <AdminReviewIcon />
               </div>
             )}
-            <GlobalSearch />
             <NotificationBell />
             <UserMenu name={user.name ?? user.email} avatarUrl={profile?.avatarUrl ?? null} />
           </>

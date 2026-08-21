@@ -6,6 +6,8 @@ import { getSessionUser } from "@/lib/auth";
 import { getFeedPage } from "@/lib/feed-server";
 import { FEED_TYPES, FEED_TYPE_LABELS, isFeedItemType } from "@/lib/feed";
 import { FeedList } from "@/components/feed/feed-list";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -16,16 +18,18 @@ export const metadata: Metadata = {
 export default async function WhatsNewPage({
   searchParams,
 }: {
-  searchParams: { type?: string };
+  searchParams: { type?: string; q?: string };
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
   const activeType = isFeedItemType(searchParams.type) ? searchParams.type : undefined;
+  const q = searchParams.q?.trim() || undefined;
   const { items, nextCursor, hasMore } = await getFeedPage({
     cursor: null,
     types: activeType ? [activeType] : undefined,
     viewerId: user.id,
+    q,
   });
 
   const filterLinkClasses = (isActive: boolean) =>
@@ -57,13 +61,22 @@ export default async function WhatsNewPage({
         ))}
       </div>
 
+      <form action="/whats-new" method="get" className="flex gap-2">
+        {activeType ? <input type="hidden" name="type" value={activeType} /> : null}
+        <Input type="search" name="q" defaultValue={q} placeholder="Search the feed…" className="max-w-sm" />
+        <Button type="submit" variant="outline">
+          Search
+        </Button>
+      </form>
+
       <div className="rounded-[10px] border">
         <FeedList
-          key={activeType ?? "all"}
+          key={`${activeType ?? "all"}-${q ?? ""}`}
           initialItems={items}
           initialCursor={nextCursor}
           initialHasMore={hasMore}
           activeType={activeType}
+          q={q}
         />
       </div>
     </main>
