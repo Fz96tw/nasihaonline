@@ -1,0 +1,477 @@
+<title>Technical Launch Checklist</title>
+<style>
+body {
+  font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 32px 20px 100px;
+  line-height: 1.55;
+  color: #171b24;
+  background: #ffffff;
+  font-size: 15px;
+}
+h1 { font-size: 1.7rem; margin-bottom: 4px; }
+.subtitle { color: #444; max-width: 70ch; }
+.howto {
+  margin: 24px 0 36px;
+  padding: 14px 18px;
+  border: 1px solid #ddd;
+  background: #f7f7f8;
+}
+.howto p { margin: 6px 0; font-size: 0.92rem; color: #333; }
+.howto b { color: #111; }
+section.qa-section {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 3px solid #222;
+}
+h2 { font-size: 1.15rem; margin: 0 0 4px; }
+.section-code { font-size: 0.8rem; color: #777; letter-spacing: .04em; }
+.need { color: #444; font-size: 0.9rem; margin: 6px 0 14px; }
+.need b { color: #111; }
+h3 {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin: 18px 0 6px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid #ccc;
+}
+h3.must { color: #a3221f; }
+h3.should { color: #1a4fa3; }
+h3.nice { color: #555; }
+ul { margin: 0 0 4px; padding-left: 22px; }
+li { margin-bottom: 8px; }
+.note { color: #8a5a00; font-size: 0.88em; }
+a { color: #1a4fa3; }
+footer {
+  margin-top: 48px;
+  padding-top: 14px;
+  border-top: 1px solid #ccc;
+  font-size: 0.85rem;
+  color: #666;
+}
+</style>
+
+<h1>Technical Launch Checklist</h1>
+<p class="subtitle">The same pre-launch checklist as the engineering team's launch manifest, translated into plain clicking-around steps. No accounts, code, or jargon knowledge needed beyond what's written here — just a web browser and the logins your team gives you.</p>
+
+<div class="howto">
+  <p><b>How to run this:</b> pick a section (or a few) that match logins you've been given, and work top to bottom in the real app. If something doesn't match what's described, don't try to fix it — just write down what you saw and tell your engineering contact.</p>
+  <p><b>Must work</b> — a core path; if this is broken, we should hold the launch. <b>Should work</b> — important, should get fixed soon, but wouldn't necessarily delay launch on its own. <b>Nice to check</b> — a secondary path, only if you have time left.</p>
+  <p><b>"Expected" notes:</b> a note marked Expected means the team already knows the app behaves this way and it's intentional for now — confirm it behaves as described, there's nothing to report there.</p>
+  <p><b>What you'll need:</b> every section lists the login(s) or setup it needs. Ask your engineering contact for any accounts, test emails, or test payment card you don't already have — don't use your own real payment card or an account that matters to you personally.</p>
+</div>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 1</div>
+  <h2>Public Website (before signing in)</h2>
+  <p class="need"><b>You'll need:</b> A web browser in a private/incognito window (so you're not signed in), on your phone or computer.</p>
+
+  <h3 class="must">Must work</h3>
+  <ul>
+    <li>Go to the <a href="https://nasihaforyou.org/" target="_blank" rel="noopener">NASIHA home page</a>. It should load with a welcome banner, a short "how it works" explanation, and buttons to join or donate.</li>
+    <li>From "Community," click <a href="https://nasihaforyou.org/events" target="_blank" rel="noopener">Events Calendar</a> while signed out. You should see upcoming events; open ones show a "Register" button, and members-only events invite you to join instead of showing a way to RSVP.</li>
+    <li>Register for an open event as a visitor using just your name and email — no account needed. Afterward, check that email for a confirmation with the meeting link (if there is one) and an invitation to become a member.</li>
+    <li>Click <a href="https://nasihaforyou.org/join" target="_blank" rel="noopener">Join NASIHA</a> (top right). The form should only ask for name, email, country, title, which membership tier you want, how you heard about NASIHA, an optional LinkedIn link, an email-updates checkbox, and a required "I agree to the Code of Conduct" checkbox — nothing more.</li>
+    <li>Submit that application. You should see a confirmation message, and you should NOT be signed into any account afterward.</li>
+    <li>Click "Support Us" in the top menu, or go directly to <a href="https://nasihaforyou.org/donate" target="_blank" rel="noopener">the donation page</a>. It should load without requiring you to sign in, and offer both a one-time and a monthly giving option.</li>
+  </ul>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>Click "Our Mission" in the top menu, then <a href="https://nasihaforyou.org/about" target="_blank" rel="noopener">About</a>. The page should load with NASIHA's mission and values.</li>
+    <li>From "Our Mission," click <a href="https://nasihaforyou.org/our-team" target="_blank" rel="noopener">Our Team</a>. You should see photos (or initials) and short bios for founders, board members, and partners. <span class="note">Note: some partner bios may be blank — that's a known content gap, not a bug to report.</span></li>
+    <li>From "Our Mission," click <a href="https://nasihaforyou.org/contact" target="_blank" rel="noopener">Contact Us</a> and submit the form. (Ask whoever is testing the Admin Console to confirm your message arrived in Contact Messages.)</li>
+    <li>Scroll to the bottom of any public page. A short disclaimer that NASIHA is educational and not professional advice should appear in the footer.</li>
+    <li>Find the <a href="https://nasihaforyou.org/privacy" target="_blank" rel="noopener">Privacy Policy</a> link (usually in the footer) and open it without signing in. It should explain what information NASIHA collects and how to ask for your data or request it be deleted.</li>
+  </ul>
+</section>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 2</div>
+  <h2>Applying, Approval &amp; First Login</h2>
+  <p class="need"><b>You'll need:</b> An admin teammate to work with, plus one email address you can access that has never been used on the site before.</p>
+
+  <h3 class="must">Must work</h3>
+  <ul>
+    <li>Submit a new application through <a href="https://nasihaforyou.org/join" target="_blank" rel="noopener">Join NASIHA</a> using your fresh test email.</li>
+    <li>Have your admin teammate open <a href="https://nasihaforyou.org/admin/applications" target="_blank" rel="noopener">Review Applications</a> and open your application — it should show only identity details (name, email, title, LinkedIn, country, requested tier, how you heard about us), not a long personal history.</li>
+    <li>Have them approve your application and pick a membership tier. You should receive an invite email with a link to set up your account.</li>
+    <li>Open that invite link and set a password. It should work without errors.</li>
+    <li>After the welcome screen, confirm you land on your profile and can't reach anything else — try visiting <a href="https://nasihaforyou.org/dashboard" target="_blank" rel="noopener">the Dashboard</a> directly — until you fill in career stage, country/region, title/specialty, availability, and your areas of expertise.</li>
+    <li>After saving those profile fields, confirm the rest of the site (<a href="https://nasihaforyou.org/dashboard" target="_blank" rel="noopener">Dashboard</a>, <a href="https://nasihaforyou.org/members" target="_blank" rel="noopener">Member Directory</a>, etc.) is now reachable.</li>
+  </ul>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>The first time you sign in, you should see a one-time "Welcome to NASIHA" screen.</li>
+    <li>Submit a second test application and have your admin teammate reject it with a note. Confirm the applicant is notified of the rejection.</li>
+    <li>Go to the <a href="https://nasihaforyou.org/donate" target="_blank" rel="noopener">Donate page</a>, check "Also apply to become a Friend of NASIHA," and submit a donation. Ask your admin teammate to confirm a new Friend-tier application shows up flagged as coming from a donation, and that donating a second time with the same email doesn't create a duplicate.</li>
+  </ul>
+</section>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 3</div>
+  <h2>Signing In &amp; Who Can See What</h2>
+  <p class="need"><b>You'll need:</b> One regular member account, one admin account, and a private/incognito browser window.</p>
+
+  <h3 class="must">Must work</h3>
+  <ul>
+    <li>Go to the <a href="https://nasihaforyou.org/sign-in" target="_blank" rel="noopener">sign-in page</a>. It should show a clean sign-in form, and correct credentials should land you on the Dashboard.</li>
+    <li>Use "Forgot password" from the <a href="https://nasihaforyou.org/sign-in" target="_blank" rel="noopener">sign-in page</a>, follow the reset email, and sign in with your new password.</li>
+    <li>Sign out completely, then try to visit a members-only page like <a href="https://nasihaforyou.org/dashboard" target="_blank" rel="noopener">Dashboard</a>, <a href="https://nasihaforyou.org/library" target="_blank" rel="noopener">Knowledge Library</a>, or <a href="https://nasihaforyou.org/members" target="_blank" rel="noopener">Member Directory</a>. You should be sent to the sign-in page.</li>
+    <li>Signed out, try to visit the <a href="https://nasihaforyou.org/admin" target="_blank" rel="noopener">Admin Console</a> directly. You should also be sent to sign-in.</li>
+    <li>Signed in as a normal (non-admin) member, try to visit the <a href="https://nasihaforyou.org/admin" target="_blank" rel="noopener">Admin Console</a>. You should see a clear "Forbidden" message — not a crash and not an endless redirect.</li>
+    <li>Sign out, and confirm you're immediately locked out of member pages again.</li>
+    <li>Ask whoever is testing Trust &amp; Safety to suspend a disposable test account, then confirm that account can no longer sign in — while its old posts, library items, and Knowledge Hours history still show up normally to everyone else. <span class="note">Coordinate with whoever tests section 16 (Safety &amp; Reporting Concerns).</span></li>
+  </ul>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>Try an intentionally wrong password. You should see a clear error message, not a blank page or crash.</li>
+  </ul>
+
+  <h3 class="nice">Nice to check</h3>
+  <ul>
+    <li>While already signed in, try visiting the <a href="https://nasihaforyou.org/sign-in" target="_blank" rel="noopener">sign-in page</a> again. You should be redirected straight to the Dashboard, not shown a broken form.</li>
+  </ul>
+</section>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 4</div>
+  <h2>Your Profile &amp; Photo</h2>
+  <p class="need"><b>You'll need:</b> One member account, and a second member account to double-check visibility from.</p>
+
+  <h3 class="must">Must work</h3>
+  <ul>
+    <li>Click your avatar (top right) and open "My Profile," or go directly to <a href="https://nasihaforyou.org/profile" target="_blank" rel="noopener">your profile page</a>. Edit each field — bio, title, career stage, expertise, topics you want to learn, country/region — save, then reload the page to confirm the changes stuck.</li>
+  </ul>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>Upload a profile photo (a normal JPEG, PNG, or WebP file). It should replace your initials in the top menu, on your profile, and on your card in the Member Directory.</li>
+    <li>Try uploading a very large photo (20MB+) or an unsupported file type like a .gif. You should get a clear rejection message, not a crash.</li>
+    <li>Turn off "List me in Member Directory." Ask your second tester to confirm you've disappeared from the Directory.</li>
+    <li>Turn off "show my specialty and location." Confirm your second tester no longer sees those fields on your card.</li>
+  </ul>
+
+  <h3 class="nice">Nice to check</h3>
+  <ul>
+    <li>Remove your photo. You should fall back cleanly to your initials on a colored circle everywhere it appeared.</li>
+  </ul>
+</section>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 5</div>
+  <h2>Member Directory</h2>
+  <p class="need"><b>You'll need:</b> A member account; a Friend-tier account if one exists.</p>
+
+  <h3 class="must">Must work</h3>
+  <ul>
+    <li>Open <a href="https://nasihaforyou.org/members" target="_blank" rel="noopener">Member Directory</a>. You should see a grid of cards with photo/initials, title, country, membership tier badge, and areas of expertise.</li>
+    <li>Confirm a Friend-tier member never shows up in the Directory grid, in search results, or in any filtered view.</li>
+  </ul>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>Search by typing a name, title, country, or area of expertise. The right people should show up.</li>
+    <li>Use the tier filter to narrow to just Active, Associate, or Student members — there should be no option to filter for "Friend."</li>
+    <li>On any card, click "Send Message" and separately "Request Meeting." Each should open the <a href="https://nasihaforyou.org/inbox" target="_blank" rel="noopener">Inbox</a> with a new item already addressed to that person.</li>
+  </ul>
+</section>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 6</div>
+  <h2>Dashboard &amp; What's New</h2>
+  <p class="need"><b>You'll need:</b> A member account with some existing activity (an event, a library submission) if possible.</p>
+
+  <h3 class="must">Must work</h3>
+  <ul>
+    <li>Open the <a href="https://nasihaforyou.org/dashboard" target="_blank" rel="noopener">Dashboard</a>. You should see your Knowledge Hours balance, lifetime hours earned, sessions contributed, an upcoming-events box, a recently-added-Library box (blog posts included), and the total member count.</li>
+    <li>Confirm a private/invite-only event, thread, or library item never shows up in someone else's What's New feed unless they were invited.</li>
+  </ul>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>Click each Quick Actions shortcut (Log Contribution, Submit Event, etc.) and confirm each one takes you to the right page.</li>
+    <li>If you have anything awaiting your confirmation, it should show in a "pending confirmations" box on the Dashboard, and clicking it should take you to your <a href="https://nasihaforyou.org/contributions" target="_blank" rel="noopener">Knowledge Hours page</a>.</li>
+    <li>Open <a href="https://nasihaforyou.org/whats-new" target="_blank" rel="noopener">What's New</a> from the top menu. You should see one feed of recent activity — Library items, Forum threads, events — newest first.</li>
+  </ul>
+</section>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 7</div>
+  <h2>Knowledge Hours (Your Contribution Credits)</h2>
+  <p class="need"><b>You'll need:</b> Two member accounts that can act as counterparts to each other, plus an admin account.</p>
+
+  <h3 class="must">Must work</h3>
+  <ul>
+    <li>Open your <a href="https://nasihaforyou.org/contributions" target="_blank" rel="noopener">Knowledge Hours page</a>. You should see your current confirmed balance, lifetime earned/spent totals, and a full history of transactions labeled confirmed, pending, or rejected.</li>
+    <li>Click "Log Contribution" and name your other test account as the counterpart. It should show up as pending for them to confirm or reject.</li>
+    <li>As the counterpart, confirm one — the original person's balance should update. Reject a second one — the balance should stay put, and the rejected entry should still be visible in the history (not deleted).</li>
+    <li>Host an event and mark attendance for it. A confirmed "earned hours" entry should post automatically, with no extra step.</li>
+    <li>Accept a meeting request from someone. The requester should immediately get a confirmed "spent hours" entry, and you (the one who accepted) should get a pending "earned hours" entry that only counts once they confirm it.</li>
+  </ul>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>Check the small Knowledge Hours number badge in the top navigation — it should reflect only your confirmed balance, and update right after you confirm something.</li>
+    <li>Have your admin teammate post a manual adjustment from the <a href="https://nasihaforyou.org/admin/ledger" target="_blank" rel="noopener">Knowledge Hours Ledger</a> in the Admin Console — it should require them to type a reason.</li>
+  </ul>
+</section>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 8</div>
+  <h2>Events Calendar</h2>
+  <p class="need"><b>You'll need:</b> A regular member, a Friend-tier account, and someone with Google Calendar access to double-check syncing.</p>
+
+  <h3 class="must">Must work</h3>
+  <ul>
+    <li>As a regular (non-Friend) member, submit a new event from the <a href="https://nasihaforyou.org/calendar" target="_blank" rel="noopener">Events Calendar</a> page. It should show up on the calendar, and if it's a community event open to the public, on the <a href="https://nasihaforyou.org/events" target="_blank" rel="noopener">public Events page</a> too.</li>
+    <li>RSVP to an event, then cancel your RSVP. Both changes should show up immediately.</li>
+    <li>Try to publish a "Case Discussion" event without checking the box confirming no one's identifying details are shared — it should refuse to publish until you check it.</li>
+    <li>Create a private, invite-only event with one invitee. Confirm it's completely hidden from the <a href="https://nasihaforyou.org/events" target="_blank" rel="noopener">public Events page</a>, the shared calendar, and every member who isn't invited — but the host and the invitee can both still see it.</li>
+    <li>Create a weekly recurring event with an end date. Confirm the right individual dates show up on the <a href="https://nasihaforyou.org/calendar" target="_blank" rel="noopener">calendar</a>, the upcoming list, and the <a href="https://nasihaforyou.org/events" target="_blank" rel="noopener">public Events page</a>.</li>
+    <li>Confirm the meeting/video link shows to people who RSVP'd and to guests who registered for an open event (by email) — but never on the <a href="https://nasihaforyou.org/events" target="_blank" rel="noopener">public Events listing</a> itself.</li>
+  </ul>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>Confirm a Friend-tier account has no way to submit an event.</li>
+    <li>As host, mark attendance for two different past dates of the same recurring event. Confirm you get two separate Knowledge Hours entries, not one.</li>
+    <li>Ask whoever manages the Google Calendar/Meet account to confirm the event synced there as one repeating entry, not a separate entry per date.</li>
+  </ul>
+
+  <h3 class="nice">Nice to check</h3>
+  <ul>
+    <li>Use "Add to calendar" on an event and confirm the downloaded file opens correctly in your own calendar app.</li>
+    <li>RSVP to (or cancel on) just one date of a recurring series. <span class="note">Expected: this applies to the whole series, not just that one date, since editing a single date isn't supported yet. Confirm it behaves this way; there's nothing to report.</span></li>
+    <li>From an event's page, click "Start a Discussion." It should create or open a linked conversation in the Forums, under Events Discussion.</li>
+  </ul>
+</section>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 9</div>
+  <h2>Message Inbox</h2>
+  <p class="need"><b>You'll need:</b> Two regular member accounts and a Friend-tier account.</p>
+
+  <h3 class="must">Must work</h3>
+  <ul>
+    <li>From another member's <a href="https://nasihaforyou.org/members" target="_blank" rel="noopener">Directory</a> card, click "Send Message." It should land in their Inbox, and they should be able to reply in the same conversation.</li>
+    <li>From a <a href="https://nasihaforyou.org/members" target="_blank" rel="noopener">Directory</a> card, click "Request Meeting," fill in a topic and a proposed time. The recipient should see it as something they can act on, not just a plain message.</li>
+    <li>As the recipient of a meeting request, try accepting it, declining it, and proposing a different time. Confirm the sender sees each status update.</li>
+    <li>Confirm a Friend-tier account has no way to start a new message or meeting request anywhere — and that other members can't find them in the "search for someone" picker either.</li>
+  </ul>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>From the <a href="https://nasihaforyou.org/inbox" target="_blank" rel="noopener">Inbox</a> page itself, use its own "search for someone" option to start a new message or meeting request without going back to the Directory first.</li>
+    <li>Confirm read/unread status is accurate and updates the moment you open something.</li>
+  </ul>
+</section>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 10</div>
+  <h2>Knowledge Library (Articles, Links, Videos &amp; Blog Posts)</h2>
+  <p class="need"><b>You'll need:</b> A member account and someone with Library Steward or admin access.</p>
+
+  <h3 class="must">Must work</h3>
+  <ul>
+    <li>Submit one of each type of content: an uploaded file, a link to an external site, a YouTube link, and a written blog-style post using the text editor, from the <a href="https://nasihaforyou.org/library" target="_blank" rel="noopener">Knowledge Library</a>. Each should say "pending review," not appear published right away.</li>
+    <li>Confirm a pending submission is visible only to you and to Stewards/admins — not in public Library search or browse.</li>
+    <li>Have your Steward/admin teammate approve a pending item from the <a href="https://nasihaforyou.org/admin/library/review-queue" target="_blank" rel="noopener">Library Review Queue</a>. It should now show up in Library search and browse.</li>
+    <li>Try to submit a "case study" without checking the box confirming no one's identifying details are shared — it should be blocked. Also confirm every submission requires agreeing to a content-licensing step before it can go through.</li>
+  </ul>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>Have them reject a pending item with a note from the <a href="https://nasihaforyou.org/admin/library/review-queue" target="_blank" rel="noopener">Library Review Queue</a>. Edit and resubmit it as the original contributor — it should go back to "pending review."</li>
+    <li>Edit something already published (as the original contributor, a Steward, or an admin). The change should go live right away, with no new review needed.</li>
+    <li>On a published item, click "Flag as inaccurate." It should stay visible on the site (not disappear automatically) but should show up in the shared moderation queue.</li>
+  </ul>
+
+  <h3 class="nice">Nice to check</h3>
+  <ul>
+    <li>From a Library item's page, click "Start a Discussion." It should create or open a linked conversation in the Forums, under Library Discussions.</li>
+    <li>If you know an old link to a blog post from before the site redesign, visit it. It should automatically forward you into the new Library page for that same post (you may be asked to sign in first, since Library is members-only).</li>
+  </ul>
+</section>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 11</div>
+  <h2>Discussion Forums</h2>
+  <p class="need"><b>You'll need:</b> Two member accounts and someone with moderator or admin access.</p>
+
+  <h3 class="must">Must work</h3>
+  <ul>
+    <li>Post a new thread and a reply in any category. Both should be visible to the whole membership.</li>
+    <li>Start a private, invite-only thread with one person invited. Confirm someone who isn't invited gets a "not found" page on the direct link, and the thread doesn't show up in browse, search, the author's profile, or anyone else's What's New feed.</li>
+  </ul>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>Open <a href="https://nasihaforyou.org/forums" target="_blank" rel="noopener">Forums</a> from the top menu. You should see seven browsable categories — notice that "Events Discussion" and "Library Discussions" are not listed there (they're only reachable via "Start a Discussion" from an event or library item).</li>
+    <li>In a post, type @ followed by someone's name. It should suggest matching members, and tagging them should send exactly one notification, not two.</li>
+    <li>As the thread's author (or an admin), add and then remove an invitee — access should change right away. Try removing the very last invitee — it should be blocked.</li>
+    <li>On a restricted thread, try @-tagging someone who isn't invited. It should be blocked, not silently sent.</li>
+    <li>Have your moderator/admin teammate confirm they can open a restricted thread through the shared moderation queue, even without being invited to it.</li>
+    <li>Flag a forum post. Confirm it shows up in the Admin Console's <a href="https://nasihaforyou.org/admin/content" target="_blank" rel="noopener">Content Moderation</a> queue alongside any flagged Library items, in one combined list.</li>
+  </ul>
+</section>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 12</div>
+  <h2>Peer Review &amp; Feedback</h2>
+  <p class="need"><b>You'll need:</b> Two member accounts.</p>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>Open <a href="https://nasihaforyou.org/review-feedback" target="_blank" rel="noopener">Peer Review &amp; Feedback</a> and submit a new request ("Create Request"). It should appear with a "pending" status.</li>
+    <li>Have your second account offer to review it. The original submitter should see the offer and be able to accept it.</li>
+    <li>If the request has a "restricted audience" option, confirm someone who wasn't invited can't see or open it.</li>
+  </ul>
+
+  <h3 class="nice">Nice to check</h3>
+  <ul>
+    <li>Both people should be able to post and see comments in the same conversation thread on that request.</li>
+    <li>Mark the request complete/resolved. Both people should see the status change.</li>
+  </ul>
+</section>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 13</div>
+  <h2>Surveys</h2>
+  <p class="need"><b>You'll need:</b> An admin account and a member account to receive the survey.</p>
+
+  <h3 class="must">Must work</h3>
+  <ul>
+    <li>Try reusing your own survey link to submit a second time, and try guessing at someone else's link — both should be blocked.</li>
+  </ul>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>Have your admin teammate build a set of questions, choose who it goes to, and save it as a draft in the <a href="https://nasihaforyou.org/admin/surveys" target="_blank" rel="noopener">Surveys</a> admin page.</li>
+    <li>Have them send it — confirm the list of recipients populates correctly on their end.</li>
+    <li>As the recipient, open your personal survey link and submit your answers.</li>
+    <li>Confirm your admin teammate can see your submitted answers on their end.</li>
+  </ul>
+</section>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 14</div>
+  <h2>Notifications &amp; Settings</h2>
+  <p class="need"><b>You'll need:</b> A member account and an admin/board account.</p>
+
+  <h3 class="must">Must work</h3>
+  <ul>
+    <li>Trigger a mention, a reply to your post, and a meeting request from someone else. Each should show up in your notification bell.</li>
+    <li>Have your admin/board teammate send a <a href="https://nasihaforyou.org/admin/announcements" target="_blank" rel="noopener">Board Announcement</a>. Confirm every member receives it, even members who've turned off other notification types.</li>
+    <li>Change your password from <a href="https://nasihaforyou.org/settings" target="_blank" rel="noopener">Settings</a>. It should succeed, and you should be able to sign in with the new password afterward.</li>
+  </ul>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>Click "Mark all read" — unread notifications should become read but stay in the list. Click "Clear read" — only already-read notifications should disappear; anything still unread should stay untouched.</li>
+    <li>Submit a request to export your data and a separate request to delete your data from <a href="https://nasihaforyou.org/settings" target="_blank" rel="noopener">Settings</a>. Confirm both show up for your admin teammate in the Admin Console's <a href="https://nasihaforyou.org/admin/privacy-requests" target="_blank" rel="noopener">Privacy Requests</a>.</li>
+  </ul>
+
+  <h3 class="nice">Nice to check</h3>
+  <ul>
+    <li>In <a href="https://nasihaforyou.org/settings" target="_blank" rel="noopener">Settings</a>, change how often you get digest emails. The change should save right away. <span class="note">Actually confirming the digest email itself arrives on schedule takes a longer-term check — just confirm the setting saves for this checklist.</span></li>
+  </ul>
+</section>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 15</div>
+  <h2>Donations</h2>
+  <p class="need"><b>You'll need:</b> A test payment card — ask your engineering contact for one (it looks like a normal 16-digit card number, with any future expiry date and any 3-digit code). Do not use a real card.</p>
+
+  <h3 class="must">Must work</h3>
+  <ul>
+    <li>Make a one-time test donation from the <a href="https://nasihaforyou.org/donate" target="_blank" rel="noopener">Donate page</a>. It should complete successfully and show up for your admin teammate in the Admin Console's <a href="https://nasihaforyou.org/admin/donations" target="_blank" rel="noopener">Donations</a> list.</li>
+    <li>If you donate using an email tied to an existing member account, confirm the donation has zero effect on that member's Knowledge Hours balance or membership tier.</li>
+  </ul>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>Make a recurring/monthly test donation. It should complete and be clearly marked as recurring.</li>
+  </ul>
+
+  <h3 class="nice">Nice to check</h3>
+  <ul>
+    <li>Have your admin teammate export the donations list as a spreadsheet file from the <a href="https://nasihaforyou.org/admin/donations" target="_blank" rel="noopener">Donations</a> page.</li>
+  </ul>
+</section>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 16</div>
+  <h2>Safety &amp; Reporting Concerns</h2>
+  <p class="need"><b>You'll need:</b> A member account, an admin account, and a disposable test account you're comfortable suspending.</p>
+
+  <h3 class="must">Must work</h3>
+  <ul>
+    <li>Confirm the Code of Conduct checkbox on the application form is required — it shouldn't be pre-checked, and you shouldn't be able to submit without it.</li>
+    <li>Report a Code of Conduct concern about another member. Confirm it shows up for your admin teammate in the Admin Console's <a href="https://nasihaforyou.org/admin/conduct" target="_blank" rel="noopener">Conduct</a> queue.</li>
+    <li>Have your admin teammate log a warning against your disposable test account — confirm it's visible to that member and to admins, but not shown publicly. Log a second warning — admins should now be able to suspend the account.</li>
+    <li>Confirm the suspended test account can no longer sign in or reach any member page — while its old posts and Knowledge Hours history stay visible and unchanged to everyone else.</li>
+  </ul>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>Confirm the educational-disclaimer text (that NASIHA isn't medical/legal advice) appears in the footer on every page, signed in or not.</li>
+    <li>Confirm the <a href="https://nasihaforyou.org/privacy" target="_blank" rel="noopener">Privacy Policy</a> is reachable without signing in and clearly explains members' data rights.</li>
+  </ul>
+</section>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 17</div>
+  <h2>Admin Console (admins only)</h2>
+  <p class="need"><b>You'll need:</b> An admin account, and a moderator account if one exists.</p>
+
+  <h3 class="must">Must work</h3>
+  <ul>
+    <li>Open the <a href="https://nasihaforyou.org/admin" target="_blank" rel="noopener">Admin Console</a>. Under "Membership &amp; People," open <a href="https://nasihaforyou.org/admin/users" target="_blank" rel="noopener">Users</a> — search/filter members, open someone's details, and check their history of inactivity nudges.</li>
+    <li>Under "Membership &amp; People," open <a href="https://nasihaforyou.org/admin/applications" target="_blank" rel="noopener">Review Applications</a> — filter by status, and approve/reject with a note.</li>
+    <li>Under "Content &amp; Trust," open <a href="https://nasihaforyou.org/admin/content" target="_blank" rel="noopener">Content Moderation</a> — confirm flagged Library items and flagged Forum posts show up together in one list.</li>
+    <li>Under "Money," open <a href="https://nasihaforyou.org/admin/ledger" target="_blank" rel="noopener">Knowledge Hours Ledger</a> — review pending contributions, confirm or reject with a reason, and post a manual adjustment.</li>
+    <li>Check that <a href="https://nasihaforyou.org/admin/conduct" target="_blank" rel="noopener">Conduct</a>, <a href="https://nasihaforyou.org/admin/privacy-requests" target="_blank" rel="noopener">Privacy Requests</a>, and <a href="https://nasihaforyou.org/admin/donations" target="_blank" rel="noopener">Donations</a> (under "Content &amp; Trust" and "Money") are each reachable and that you can act on items in them start to finish.</li>
+    <li>Under "Communications," open <a href="https://nasihaforyou.org/admin/announcements" target="_blank" rel="noopener">Announcements</a> — post a Board Announcement and confirm it actually gets delivered (cross-check with whoever is testing section 14, Notifications &amp; Settings).</li>
+    <li>While signed in as a non-admin (and non-moderator) member, try to visit every Admin Console page directly by typing its address. Each one should block you.</li>
+  </ul>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>Under "Membership &amp; People," open <a href="https://nasihaforyou.org/admin/team" target="_blank" rel="noopener">Our Team</a> — add, edit, remove, and reorder a team member, then confirm it updates immediately on the public <a href="https://nasihaforyou.org/our-team" target="_blank" rel="noopener">"Our Team"</a> page.</li>
+    <li>Under "Programs &amp; Reports," open <a href="https://nasihaforyou.org/admin/events" target="_blank" rel="noopener">Event Attendance</a> to manage events, and check <a href="https://nasihaforyou.org/admin/event-registrations" target="_blank" rel="noopener">Event Registrations</a> (under "Membership &amp; People") for exporting the anonymous list of open-event signups.</li>
+    <li>Under "Content &amp; Trust," open <a href="https://nasihaforyou.org/admin/library/review-queue" target="_blank" rel="noopener">Library Review Queue</a> and confirm it only handles content waiting to be published for the first time — separate from Content Moderation, which handles flags on things already published.</li>
+    <li>Under "Programs &amp; Reports," open <a href="https://nasihaforyou.org/admin/reports" target="_blank" rel="noopener">Reports</a> and confirm it shows real numbers, not placeholder zeros or dashes, across all four groups: Community Health, Knowledge Exchange Activity, Impact, and Organizational Health.</li>
+  </ul>
+
+  <h3 class="nice">Nice to check</h3>
+  <ul>
+    <li>On the main Admin Console page, confirm the current membership phase ("Referral-Driven Growth") is shown as something an admin can change, not text baked permanently into the page.</li>
+  </ul>
+</section>
+
+<section class="qa-section">
+  <div class="section-code">SECTION 18</div>
+  <h2>Phone Screens &amp; Loading/Error States</h2>
+  <p class="need"><b>You'll need:</b> A phone, or a narrow browser window on your computer; ask your engineering contact to simulate a slow connection if possible.</p>
+
+  <h3 class="must">Must work</h3>
+  <ul>
+    <li>Submit any form (like the application form) with a required field left blank. You should see a clear message pointing out what's missing — never a blank failure or a page full of technical error text.</li>
+  </ul>
+
+  <h3 class="should">Should work</h3>
+  <ul>
+    <li>On a phone (or a narrowed browser window), check <a href="https://nasihaforyou.org/" target="_blank" rel="noopener">Home</a>, <a href="https://nasihaforyou.org/dashboard" target="_blank" rel="noopener">Dashboard</a>, <a href="https://nasihaforyou.org/library" target="_blank" rel="noopener">Knowledge Library</a>, <a href="https://nasihaforyou.org/forums" target="_blank" rel="noopener">Forums</a>, and <a href="https://nasihaforyou.org/inbox" target="_blank" rel="noopener">Message Inbox</a>. Nothing should overlap, get cut off, or require sideways scrolling. On Inbox, you should see one list at a time (conversation list, then tap into a conversation), not two columns squeezed together.</li>
+    <li>On a data-heavy page (<a href="https://nasihaforyou.org/library" target="_blank" rel="noopener">Knowledge Library</a>, <a href="https://nasihaforyou.org/members" target="_blank" rel="noopener">Member Directory</a>, <a href="https://nasihaforyou.org/contributions" target="_blank" rel="noopener">Knowledge Hours</a>), ask your engineering contact to simulate a slow connection and confirm you see a real loading indicator, not a blank white flash.</li>
+    <li>Find a page or filter with zero results (a brand-new account's empty Inbox, or a Directory search for something that doesn't exist). You should see a friendly "nothing here yet" message, not a blank table.</li>
+  </ul>
+</section>
+
+<footer>
+  18 sections · pick whichever match the logins you have, in any order. This is a plain reference page — nothing here is saved, so re-check items each time you open it.
+</footer>

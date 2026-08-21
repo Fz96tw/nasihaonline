@@ -1,0 +1,1034 @@
+<title>Launch Manifest</title>
+<style>
+@font-face {
+  font-family: "Manifest Mono Fallback";
+  src: local("SF Mono"), local("Cascadia Code"), local("Roboto Mono"), local("Consolas");
+}
+
+:root {
+  --bg: #f5f6f9;
+  --surface: #ffffff;
+  --surface-2: #ecedf3;
+  --ink: #171b24;
+  --ink-dim: #5b6172;
+  --ink-faint: #8a90a2;
+  --border: #dcdfe7;
+  --accent: #3552d9;
+  --accent-ink: #ffffff;
+  --accent-soft: #e8ecfc;
+  --good: #1f9d6b;
+  --good-soft: #e2f5ec;
+  --warn: #a3690a;
+  --warn-soft: #fbf0dd;
+  --p0: #c23b3b;
+  --p0-soft: #fbe6e6;
+  --p1: #3552d9;
+  --p1-soft: #e8ecfc;
+  --p2: #6b7280;
+  --p2-soft: #eef0f3;
+  --shadow: 0 1px 2px rgba(23,27,36,.04), 0 8px 24px -12px rgba(23,27,36,.18);
+  --font-display: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-body: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1218;
+    --surface: #171b24;
+    --surface-2: #1e2330;
+    --ink: #edeff5;
+    --ink-dim: #9aa1b4;
+    --ink-faint: #6b7182;
+    --border: #2a3040;
+    --accent: #7e93ff;
+    --accent-ink: #0f1218;
+    --accent-soft: #202844;
+    --good: #45cf95;
+    --good-soft: #133327;
+    --warn: #e6ac47;
+    --warn-soft: #3a2c11;
+    --p0: #f1746c;
+    --p0-soft: #3a1c1c;
+    --p1: #7e93ff;
+    --p1-soft: #1d2440;
+    --p2: #9aa1b4;
+    --p2-soft: #232838;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0f1218;
+  --surface: #171b24;
+  --surface-2: #1e2330;
+  --ink: #edeff5;
+  --ink-dim: #9aa1b4;
+  --ink-faint: #6b7182;
+  --border: #2a3040;
+  --accent: #7e93ff;
+  --accent-ink: #0f1218;
+  --accent-soft: #202844;
+  --good: #45cf95;
+  --good-soft: #133327;
+  --warn: #e6ac47;
+  --warn-soft: #3a2c11;
+  --p0: #f1746c;
+  --p0-soft: #3a1c1c;
+  --p1: #7e93ff;
+  --p1-soft: #1d2440;
+  --p2: #9aa1b4;
+  --p2-soft: #232838;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+}
+
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100%;
+}
+
+a { color: var(--accent); }
+
+.wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 20px 80px;
+}
+
+/* ---------- Header ---------- */
+
+header.top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+
+.top-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 18px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 2.4vw, 2.15rem);
+  font-weight: 800;
+  letter-spacing: -.02em;
+  text-wrap: balance;
+  margin: 2px 0 0;
+  line-height: 1.08;
+}
+
+.subtitle {
+  color: var(--ink-dim);
+  font-size: 14.5px;
+  max-width: 62ch;
+  line-height: 1.55;
+  margin: 4px 0 0;
+}
+
+.readiness-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.meter {
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+
+.meter-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-dim);
+  margin-bottom: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.meter-labels b { color: var(--ink); font-weight: 700; }
+
+.meter-track {
+  height: 8px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 65%, var(--good)));
+  border-radius: 5px;
+  transition: width .35s ease;
+  width: 0%;
+}
+
+.controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.search {
+  position: relative;
+  flex: 1 1 200px;
+  min-width: 160px;
+}
+
+.search input {
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  padding: 8px 12px 8px 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.search input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.search::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  transform: translateY(-50%);
+  border: 1.5px solid var(--ink-faint);
+  border-radius: 50%;
+  background: linear-gradient(var(--ink-faint), var(--ink-faint)) no-repeat;
+  background-size: 1.5px 8px;
+  background-position: 15px 15px;
+  pointer-events: none;
+}
+.search::after {
+  content: "";
+  position: absolute;
+  left: 19px;
+  top: 65%;
+  width: 6px;
+  height: 1.5px;
+  background: var(--ink-faint);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+.chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.chip {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-dim);
+  cursor: pointer;
+  user-select: none;
+}
+.chip:hover { border-color: var(--accent); color: var(--ink); }
+.chip[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.icon-btn {
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+.icon-btn:hover { color: var(--ink); border-color: var(--ink-faint); }
+button:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---------- Legend / how-to ---------- */
+
+.howto {
+  margin-top: 22px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px,1fr));
+  gap: 16px 24px;
+}
+
+.howto h2 {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 6px;
+  font-weight: 700;
+}
+
+.howto p { margin: 0; font-size: 13px; color: var(--ink-dim); line-height: 1.5; }
+
+.legend-list { display: flex; flex-direction: column; gap: 6px; }
+.legend-item { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-dim); }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+/* ---------- Sections grid ---------- */
+
+.sections {
+  margin-top: 26px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(430px, 1fr));
+  gap: 18px;
+}
+
+.section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  border-left: 4px solid var(--p2);
+}
+.section[data-priority="P0"] { border-left-color: var(--p0); }
+.section[data-priority="P1"] { border-left-color: var(--p1); }
+.section[data-priority="P2"] { border-left-color: var(--p2); }
+.section.is-hidden { display: none; }
+
+.section-body { flex: 1; min-width: 0; padding: 16px 18px 14px; }
+
+.section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.section-heading { min-width: 0; }
+
+.section-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  letter-spacing: .06em;
+}
+
+.section-title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -.01em;
+  margin: 1px 0 0;
+}
+
+.badges { display: flex; gap: 6px; align-items: center; flex: none; }
+
+.pbadge {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 5px;
+  letter-spacing: .04em;
+}
+.pbadge.P0 { background: var(--p0-soft); color: var(--p0); }
+.pbadge.P1 { background: var(--p1-soft); color: var(--p1); }
+.pbadge.P2 { background: var(--p2-soft); color: var(--p2); }
+
+.tierbadge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: .04em;
+  margin-left: 6px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.tierbadge.auto { background: var(--good-soft); color: var(--good); }
+.tierbadge.setup { background: var(--accent-soft); color: var(--accent); }
+.tierbadge.manual { background: var(--warn-soft); color: var(--warn); }
+
+.autosummary {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.autosummary span { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-dim); }
+.autosummary b { color: var(--ink); font-weight: 700; }
+
+.count {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.section-need {
+  font-size: 12px;
+  color: var(--ink-faint);
+  margin: 6px 0 10px;
+  line-height: 1.4;
+}
+.section-need b { color: var(--ink-dim); font-weight: 600; }
+
+.assignee-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.assignee-row label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--ink-faint);
+  flex: none;
+}
+.assignee-row input {
+  flex: 1;
+  font-size: 12.5px;
+  font-family: var(--font-body);
+  padding: 5px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--ink);
+  min-width: 0;
+}
+.assignee-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.mini-track {
+  height: 4px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.mini-fill {
+  height: 100%;
+  background: var(--good);
+  width: 0%;
+  transition: width .3s ease;
+}
+
+ul.items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 2px;
+  border-top: 1px solid var(--border);
+}
+.item:first-child { border-top: none; }
+.item.is-hidden { display: none; }
+
+.item input[type="checkbox"] {
+  appearance: none;
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  border: 1.5px solid var(--ink-faint);
+  background: var(--surface);
+  flex: none;
+  margin-top: 2px;
+  cursor: pointer;
+  position: relative;
+}
+.item input[type="checkbox"]:hover { border-color: var(--accent); }
+.item input[type="checkbox"]:checked {
+  background: var(--good);
+  border-color: var(--good);
+}
+.item input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: 1.5px;
+  width: 4px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(40deg);
+}
+.item input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.item-text {
+  font-size: 13.3px;
+  line-height: 1.48;
+  color: var(--ink);
+}
+.item.is-done .item-text { color: var(--ink-faint); }
+.item.is-done label.item-label { text-decoration: none; }
+
+.item-note {
+  display: inline-block;
+  margin-left: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  color: var(--warn);
+  background: var(--warn-soft);
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.item-detail {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-faint);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+label.item-label { cursor: pointer; display: block; }
+
+.empty-state {
+  text-align: center;
+  color: var(--ink-faint);
+  font-size: 13.5px;
+  padding: 40px 20px;
+  grid-column: 1 / -1;
+}
+
+footer.page-footer {
+  max-width: 1180px;
+  margin: 40px auto 0;
+  padding: 18px 20px 10px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--ink-faint);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+</style>
+
+<header class="top">
+  <div class="top-inner">
+    <div>
+      <div class="eyebrow">NASIHA · Pre-Launch Smoke Test</div>
+      <h1>Launch Manifest</h1>
+      <p class="subtitle">Every workflow a real member, host, or admin can trigger in the live app, grouped so a small team can split it up and clear it before go-live. Check items off as you verify them — progress is saved in this browser.</p>
+    </div>
+    <div class="readiness-row">
+      <div class="meter">
+        <div class="meter-labels"><span>Overall readiness</span><span><b id="doneCount">0</b>/<span id="totalCount">0</span> checks cleared</span></div>
+        <div class="meter-track"><div class="meter-fill" id="meterFill"></div></div>
+      </div>
+      <div class="controls">
+        <div class="search"><input id="searchBox" type="text" placeholder="Search checks…" aria-label="Search checklist items"></div>
+        <div class="chip-row" id="priorityChips">
+          <button class="chip" data-priority="all" aria-pressed="true">All</button>
+          <button class="chip" data-priority="P0" aria-pressed="false">P0 · blocks launch</button>
+          <button class="chip" data-priority="P1" aria-pressed="false">P1 · should work</button>
+          <button class="chip" data-priority="P2" aria-pressed="false">P2 · nice to verify</button>
+        </div>
+        <div class="chip-row" id="tierChips">
+          <button class="chip" data-tier="all" aria-pressed="true">Any automation</button>
+          <button class="chip" data-tier="auto" aria-pressed="false">Auto-now</button>
+          <button class="chip" data-tier="setup" aria-pressed="false">Needs setup</button>
+          <button class="chip" data-tier="manual" aria-pressed="false">Manual-only</button>
+        </div>
+        <button class="icon-btn" id="resetBtn" type="button">Reset progress</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="howto">
+    <div>
+      <h2>How to run this</h2>
+      <p>Assign whole sections to testers — each is scoped to ~15–30 min and lists the accounts you'll need. Log into a real (non-prod-critical) account per role and work top to bottom. File anything that fails wherever your team tracks bugs; this page only tracks what's been checked, not the bug detail.</p>
+    </div>
+    <div>
+      <h2>Priority key</h2>
+      <div class="legend-list">
+        <div class="legend-item"><span class="dot" style="background:var(--p0)"></span><b>P0</b>&nbsp;— core path; a failure here should hold the launch</div>
+        <div class="legend-item"><span class="dot" style="background:var(--p1)"></span><b>P1</b>&nbsp;— important; fix soon, doesn't have to block</div>
+        <div class="legend-item"><span class="dot" style="background:var(--p2)"></span><b>P2</b>&nbsp;— secondary path, verify if time allows</div>
+      </div>
+    </div>
+    <div>
+      <h2>Known limitation tag</h2>
+      <p><span class="item-note">EXPECTED</span> next to a check means the PRD documents that behavior as a deliberate v1 gap (e.g. no single-occurrence edits on recurring events). Confirm it behaves as described — it isn't a bug to report.</p>
+    </div>
+    <div>
+      <h2>Automation tag</h2>
+      <p>Each check is also tagged for whether it's worth scripting once a test harness exists (there isn't one yet — see below). <span class="tierbadge auto">AUTO</span> deterministic app/DB logic, no live third party. <span class="tierbadge setup">SETUP</span> needs real Clerk/Stripe/Google/email plumbing first. <span class="tierbadge manual">MANUAL</span> genuinely needs a human (visual feel, long-horizon email tone).</p>
+      <div class="autosummary" style="margin-top:8px;">
+        <span><b id="autoCount">0</b> auto-now</span>
+        <span><b id="setupCount">0</b> needs setup</span>
+        <span><b id="manualCount">0</b> manual-only</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="sections" id="sections"></div>
+</div>
+
+<footer class="page-footer">
+  <span>18 sections · split across your test group by priority or by domain familiarity.</span>
+  <span>Progress stored locally per browser/device — each tester should open this on their own machine.</span>
+</footer>
+
+<script>
+const DATA = [
+  {
+    code: "PUB · 01", title: "Public Site & Marketing Pages", priority: "P0",
+    need: "Signed-out browser (private/incognito window).",
+    items: [
+      { t: "Home page loads: hero, how-it-works, tier explainer, and Join/Donate CTAs all work.", tier: "auto" },
+      { t: "/about loads with mission, values, and dedication content.", tier: "auto" },
+      { t: "/our-team shows a combined grid (Founders, Board, Partners) with role badge, photo-or-initials, and bio for each person.", tier: "auto", note: "Partner bios may be sparse or missing — a known content gap, not a rendering bug." },
+      { t: "Public /events lists upcoming events; open events show a 'Register' action, members-only events prompt to join instead of showing RSVP.", tier: "auto" },
+      { t: "Register for an open event as a signed-out visitor (name + email only) → confirmation email arrives with the meeting link (if set) and a membership pitch.", tier: "setup" },
+      { t: "/join loads the application form with only: name, email, country, title, tier preference, how-heard, optional LinkedIn, email opt-in, and a required Code of Conduct checkbox.", tier: "auto" },
+      { t: "Submit an application → confirmation message shown; no account or session is created.", tier: "auto" },
+      { t: "/contact form submits successfully (verify receipt with whoever tests Admin § Contact Messages).", tier: "auto" },
+      { t: "/donate loads for a signed-out visitor with one-time and monthly options.", tier: "auto" },
+      { t: "/privacy loads and describes what's collected and how to request access/deletion.", tier: "auto" },
+      { t: "The educational-disclaimer paragraph appears in the footer on every public page.", tier: "auto" },
+    ],
+  },
+  {
+    code: "MEM · 02", title: "Application → Approval → First Login", priority: "P0",
+    need: "An admin account + one fresh test email you control.",
+    items: [
+      { t: "Submit a new application through /join using a fresh test email.", tier: "auto" },
+      { t: "Admin sees it in /admin/applications and opens /admin/applications/[id] — only identity fields show (name, email, title, LinkedIn, country, requested tier, how-heard), no career-stage dossier.", tier: "auto" },
+      { t: "Admin approves and assigns a tier → an invite email goes out with an account-setup link.", tier: "setup" },
+      { t: "Open the invite link → lands on /accept-invite, sets a password successfully.", tier: "setup" },
+      { t: "First sign-in shows the one-time 'Welcome to NASIHA' /welcome splash.", tier: "auto" },
+      { t: "New member is redirected to /profile and blocked from every other member page until required fields (career stage, country/region, title/specialty, availability, expertise/topics-to-learn) are filled — confirm by typing /dashboard directly into the address bar.", tier: "auto" },
+      { t: "After saving those profile fields, /dashboard and other member pages become reachable.", tier: "auto" },
+      { t: "Reject a second test application with a note — confirm the applicant is notified.", tier: "setup" },
+      { t: "On /donate, check 'Also apply to become a Friend of NASIHA', submit → a Friend-tier application appears in /admin/applications flagged as donation-sourced; resubmitting with the same email doesn't create a duplicate.", tier: "auto" },
+    ],
+  },
+  {
+    code: "AUTH · 03", title: "Sign-in, Sessions & Access Control", priority: "P0",
+    need: "One member account, one admin account, a signed-out browser.",
+    items: [
+      { t: "/sign-in renders Clerk's sign-in form; correct credentials land on /dashboard.", tier: "setup" },
+      { t: "Wrong password shows a clear inline error, not a crash.", tier: "setup" },
+      { t: "'Forgot password' from /sign-in successfully resets the password; sign in with the new one.", tier: "setup" },
+      { t: "Visiting /sign-in or /accept-invite while already signed in redirects straight to /dashboard instead of showing a blank widget.", tier: "auto" },
+      { t: "Signed out, visiting any member route (/dashboard, /library, /members…) redirects to /sign-in.", tier: "auto" },
+      { t: "Signed out, visiting any /admin route redirects to /sign-in.", tier: "auto" },
+      { t: "Signed in as a non-admin member, visiting /admin shows a Forbidden message, not a crash or silent redirect loop.", tier: "auto" },
+      { t: "Signing out clears the session; member pages immediately require sign-in again.", tier: "auto" },
+      { t: "A suspended account cannot sign in or reach member routes, while their past posts/library items/ledger history still display normally to other members.", tier: "auto", note: "Coordinate with whoever tests § Trust & Safety to actually suspend a test account." },
+    ],
+  },
+  {
+    code: "PRO · 04", title: "Profile & Avatar", priority: "P0",
+    need: "One member account; a second account to check Directory visibility from.",
+    items: [
+      { t: "Edit each profile field (bio, title, career stage, expertise, topics to learn, country/region) and save — changes persist after a reload.", tier: "auto" },
+      { t: "Upload a profile photo (JPEG/PNG/WebP) — it replaces the initials avatar in the nav, profile hero, and Directory card.", tier: "auto" },
+      { t: "Upload an oversized or unsupported file (e.g. a 20MB image or a .gif) — rejected with a clear message, not a crash.", tier: "auto" },
+      { t: "Remove the photo — falls back cleanly to the initials + brand-color avatar everywhere.", tier: "auto" },
+      { t: "Turn off 'List me in Member Directory' — confirm from a second account that you no longer appear in /members.", tier: "auto" },
+      { t: "Turn off 'show my specialty and location' — confirm those fields are hidden on your card to other members.", tier: "auto" },
+    ],
+  },
+  {
+    code: "DIR · 05", title: "Member Directory", priority: "P1",
+    need: "A member account; a known Friend-tier account if one exists.",
+    items: [
+      { t: "/members shows a grid of cards with avatar/initials, title, country, tier badge, and expertise tags.", tier: "auto" },
+      { t: "Free-text search across name/title/country/expertise returns the expected people.", tier: "auto" },
+      { t: "Tier filter (Active/Associate/Student) narrows results correctly and offers no Friend option.", tier: "auto" },
+      { t: "A Friend-tier member never appears in the grid, in search, or in any filtered view.", tier: "auto" },
+      { t: "'Send Message' and 'Request Meeting' on a card open the correct Inbox composer pre-addressed to that member.", tier: "auto" },
+    ],
+  },
+  {
+    code: "DASH · 06", title: "Dashboard & What's New Feed", priority: "P1",
+    need: "A member account with some existing activity (events, library items) if possible.",
+    items: [
+      { t: "/dashboard shows hours balance, lifetime earned, sessions contributed, upcoming-events widget, recently-added-library widget (blog posts included), and total member count.", tier: "auto" },
+      { t: "Quick-actions widget links (Log Contribution, Submit Event, etc.) all go to the right place.", tier: "auto" },
+      { t: "Pending-confirmations widget lists items awaiting your confirmation and links through to /contributions.", tier: "auto" },
+      { t: "/whats-new shows recent activity across domains (library items, forum threads, events) newest first.", tier: "auto" },
+      { t: "A restricted (invite-only) event, thread, or library item never shows up in another member's feed unless they're invited.", tier: "auto" },
+    ],
+  },
+  {
+    code: "HRS · 07", title: "Knowledge Hours (Contributions Ledger)", priority: "P0",
+    need: "Two member accounts (to be counterparts to each other) + an admin account.",
+    items: [
+      { t: "/contributions shows current confirmed balance, lifetime earned/spent, and full transaction history with confirmed/pending/rejected status badges.", tier: "auto" },
+      { t: "Submit 'Log Contribution' naming the other test account as counterpart — it appears pending for them to confirm or reject.", tier: "auto" },
+      { t: "As the counterpart, confirm it — submitter's balance updates; reject a second one — balance stays put and the entry remains visible as rejected, not deleted.", tier: "auto" },
+      { t: "Host an event and record attendance — a confirmed earn transaction posts automatically, no manual step.", tier: "auto" },
+      { t: "Accept a meeting request — the requester gets an auto-confirmed spend transaction immediately, and the recipient gets a pending earn entry that only counts once the requester confirms it.", tier: "auto" },
+      { t: "Publish a Library submission — a pending, no-counterpart earn entry appears that requires admin confirmation from /admin/ledger.", tier: "auto" },
+      { t: "The nav's Knowledge Hours badge reflects the confirmed balance only, and updates right after a confirmation.", tier: "auto" },
+      { t: "Admin posts a manual 'adjusted' transaction from /admin/ledger — requires a reason note.", tier: "auto" },
+    ],
+  },
+  {
+    code: "EVT · 08", title: "Events & Calendar", priority: "P0",
+    need: "An Active/Associate/Student member, a Friend-tier account, an admin/host with Google Calendar access.",
+    items: [
+      { t: "Submit a new event from /calendar/new as an Active/Associate/Student member — it appears on /calendar and, if community + open, on public /events.", tier: "auto" },
+      { t: "Confirm a Friend-tier account cannot submit an event.", tier: "auto" },
+      { t: "RSVP to an event, then un-RSVP — attendee state updates both times.", tier: "auto" },
+      { t: "'Add to calendar' produces a valid .ics download.", tier: "auto" },
+      { t: "A Case Discussion event requires the de-identification checkbox before it can publish.", tier: "auto" },
+      { t: "Create a restricted (invite-only) event with one invitee — it's hidden from public /events, the community calendar, and non-invited members entirely; host and invitee can still see it.", tier: "auto" },
+      { t: "Create a weekly recurring event with an end date — correct occurrences appear on /calendar, the upcoming list, and public /events, each within its own bounded window.", tier: "auto" },
+      { t: "RSVP or cancel on one occurrence of a recurring series — applies to the whole series.", tier: "auto", note: "EXPECTED — no single-occurrence editing exists in v1." },
+      { t: "Record attendance as host for two different past occurrences of the same recurring event — two separate Knowledge Hours transactions post, not one.", tier: "auto" },
+      { t: "The event's Google Calendar entry syncs as one native recurring entry (RRULE), not one entry per occurrence.", tier: "setup", note: "Needs the Google Calendar/Meet admin account to verify." },
+      { t: "The meeting/video link shows to RSVP'd members and to a registered open-event guest via email, but never on the public /events listing itself.", tier: "setup" },
+      { t: "'Start a Discussion' on an event's detail page creates a linked thread in the Events Discussion forum.", tier: "auto" },
+    ],
+  },
+  {
+    code: "INB · 09", title: "Inbox — Messages & Meeting Requests", priority: "P1",
+    need: "Two non-Friend member accounts; a Friend-tier account.",
+    items: [
+      { t: "Send a message to another member from their Directory card — it lands in their /inbox and they can reply in-thread.", tier: "auto" },
+      { t: "Request a meeting (topic + proposed time) from a Directory card — recipient sees it as an actionable item, not just a message.", tier: "auto" },
+      { t: "From the Inbox page's own 'Message' / 'Request Meeting' picker, search by name and send without visiting the Directory first.", tier: "auto" },
+      { t: "Recipient can accept, decline, or propose a new time on a meeting request; sender sees the status update.", tier: "auto" },
+      { t: "A Friend-tier account has no compose entry point anywhere, and can't be reached via someone else's Inbox picker either.", tier: "auto" },
+      { t: "Read/unread state is accurate and updates when an item is opened.", tier: "auto" },
+    ],
+  },
+  {
+    code: "LIB · 10", title: "Knowledge Library (incl. Blog posts)", priority: "P0",
+    need: "A member account, a Library Steward or admin account.",
+    items: [
+      { t: "Submit one of each content type — file upload, external link, YouTube URL, and a written blog post (rich-text editor) — each enters pending_review, not published immediately.", tier: "auto" },
+      { t: "A pending submission is visible, with its status, only to its submitter and to Stewards/admins in /admin/library/review-queue — not in public browse or search.", tier: "auto" },
+      { t: "As a Steward/admin, publish a pending item — it now appears in /library search and browse.", tier: "auto" },
+      { t: "Reject a pending item with a note — editing it as the contributor resubmits it to pending_review.", tier: "auto" },
+      { t: "Edit an already-published item as contributor, Steward, or admin — the change goes live immediately with no re-review.", tier: "auto" },
+      { t: "A case-study submission requires the de-identification checkbox; every submission requires the content-licensing consent step before it can go in.", tier: "auto" },
+      { t: "Flag a published item as inaccurate — it stays visible (not auto-hidden) and shows up in the shared moderation queue.", tier: "auto" },
+      { t: "From a library item's detail page, click 'Start a Discussion' — creates/opens a linked thread in the Library Discussions forum.", tier: "auto" },
+      { t: "Visit an old /blog/[slug] URL for a migrated post — 308-redirects into /library/[id] (sign-in gate applies first, since Library is member-only).", tier: "auto" },
+      { t: "/blog and /blog/new redirect to /library?type=blog_post and /library/new?type=blog_post.", tier: "auto" },
+    ],
+  },
+  {
+    code: "FOR · 11", title: "Discussion Forums", priority: "P1",
+    need: "Two member accounts, a moderator/admin account.",
+    items: [
+      { t: "/forums lists the seven browsable categories; Events Discussion and Library Discussions are correctly absent from that index.", tier: "auto" },
+      { t: "Post a new thread and a reply in any category — visible to the full membership.", tier: "auto" },
+      { t: "Type @ plus a member's name in a post — autocomplete suggests Directory-eligible members, and tagging them fires one mention notification (not also a duplicate reply notification).", tier: "auto" },
+      { t: "Start a standalone restricted thread with one invitee — a non-invitee's direct link 404s, and the thread is absent from browse/search, the author's profile, and other members' What's New feeds.", tier: "auto" },
+      { t: "As author or admin, add and then remove an invitee on a restricted thread — access changes immediately; removing the last invitee is rejected.", tier: "auto" },
+      { t: "Try @-tagging someone who is not an invitee on a restricted thread — composer rejects it instead of silently sending.", tier: "auto" },
+      { t: "A moderator/admin can open a restricted thread via the shared moderation queue regardless of its visibility.", tier: "auto" },
+      { t: "Flag a forum post — it appears in /admin/content alongside flagged Library items in one shared queue.", tier: "auto" },
+    ],
+  },
+  {
+    code: "REV · 12", title: "Peer Review & Feedback", priority: "P2",
+    need: "Two member accounts.",
+    items: [
+      { t: "Submit a new request from /review-feedback/new ('Create Request') — appears with a pending status.", tier: "auto" },
+      { t: "A second member offers to review it — submitter sees the offer and can accept it.", tier: "auto" },
+      { t: "Both parties can post and see comments in the review's comment thread.", tier: "auto" },
+      { t: "If the request has a restricted-audience option, confirm a non-invited member can't see or open it.", tier: "auto" },
+      { t: "Mark the request complete/resolved via its lifecycle action — status updates for both parties.", tier: "auto" },
+    ],
+  },
+  {
+    code: "SRV · 13", title: "Surveys", priority: "P2",
+    need: "An admin account, a recipient member account.",
+    items: [
+      { t: "Admin builds a question set at /admin/surveys/new, sets an audience, saves as draft.", tier: "auto" },
+      { t: "Admin sends the survey — recipients list populates at /admin/surveys/[id]/recipients.", tier: "auto" },
+      { t: "Recipient opens their unique response link and submits answers.", tier: "auto" },
+      { t: "Submitted response appears in /admin/surveys/[id]/responses.", tier: "auto" },
+      { t: "A recipient can't reuse their token to resubmit, or use it to view someone else's response.", tier: "auto" },
+    ],
+  },
+  {
+    code: "SET · 14", title: "Notifications & Settings", priority: "P1",
+    need: "A member account, an admin/board account.",
+    items: [
+      { t: "Trigger a mention, a reply, and a meeting-request notification — each appears in the bell/notification feed.", tier: "auto" },
+      { t: "'Mark all read' clears unread state but keeps the rows; 'Clear read' removes only already-read notifications and never touches unread ones.", tier: "auto" },
+      { t: "Change digest frequency in /settings — the preference saves (actual send timing is best verified over a longer window).", tier: "manual", note: "The setting itself saves instantly and is easy to assert; judging the real digest email's content/timing over days is the part that resists automation." },
+      { t: "Admin sends a Board Announcement — every member receives it regardless of their own notification preferences.", tier: "auto" },
+      { t: "Change password from /settings — succeeds, and the new password signs you in.", tier: "auto" },
+      { t: "Submit a data export request and a data deletion request from /settings — both show up in /admin/privacy-requests.", tier: "auto" },
+    ],
+  },
+  {
+    code: "DON · 15", title: "Donations", priority: "P1",
+    need: "Stripe test mode, card 4242 4242 4242 4242, any future expiry/CVC/ZIP.",
+    items: [
+      { t: "Make a one-time test donation from /donate — completes and appears in /admin/donations.", tier: "setup" },
+      { t: "Make a recurring/monthly test donation — completes and is marked recurring.", tier: "setup" },
+      { t: "If the donor is also a member, confirm the donation has zero effect on their Knowledge Hours balance or tier.", tier: "auto" },
+      { t: "Export donations as CSV from /admin/donations.", tier: "auto" },
+    ],
+  },
+  {
+    code: "T&S · 16", title: "Trust & Safety / Compliance", priority: "P0",
+    need: "A member account, an admin account, a disposable test account you're willing to suspend.",
+    items: [
+      { t: "The educational-disclaimer text appears in the footer on every public and member page.", tier: "auto" },
+      { t: "The Code of Conduct checkbox is required (not pre-checked, not skippable) at application submission.", tier: "auto" },
+      { t: "Report a Code of Conduct concern about another member — it appears in the /admin/conduct queue.", tier: "auto" },
+      { t: "Admin logs a warning against a test member — visible to that member and to admins, not publicly. Log a second violation — admin can suspend.", tier: "auto" },
+      { t: "A suspended member can't sign in or reach member routes; their existing posts and ledger history stay visible to everyone else unchanged.", tier: "auto" },
+      { t: "/privacy is reachable without signing in and clearly describes data rights.", tier: "auto" },
+    ],
+  },
+  {
+    code: "ADM · 17", title: "Admin Console", priority: "P0",
+    need: "An admin account, a moderator account if one exists.",
+    items: [
+      { t: "/admin/users — search/filter members, open a user's detail, see their inactivity/nudge history.", tier: "auto" },
+      { t: "/admin/applications — filter by status/phase/referral source, approve/reject with notes.", tier: "auto" },
+      { t: "/admin/team — add, edit, remove, and reorder a team member — change reflects immediately on public /our-team.", tier: "auto" },
+      { t: "/admin/content — shared moderation queue shows flagged Library items and flagged Forum posts together.", tier: "auto" },
+      { t: "/admin/events and /admin/event-registrations — manage events and export anonymous open-event signups.", tier: "auto" },
+      { t: "/admin/ledger — review pending contributions, confirm/reject with a reason, post a manual adjustment.", tier: "auto" },
+      { t: "/admin/library/review-queue — handles only pre-publish review, distinct from /admin/content's post-publish flags.", tier: "auto" },
+      { t: "/admin/conduct, /admin/privacy-requests, /admin/donations — each queue is reachable and actionable end-to-end.", tier: "auto" },
+      { t: "/admin/reports shows real numbers (not placeholders) across all four KPI groups: Community Health, Knowledge Exchange Activity, Impact, Organizational Health.", tier: "auto" },
+      { t: "/admin/announcements — post a Board Announcement and confirm it actually delivers (cross-check § Settings).", tier: "auto" },
+      { t: "The current admission phase (Referral-Driven Growth) is shown from an admin-configurable setting, not hardcoded copy.", tier: "auto" },
+      { t: "Every /admin/* route correctly blocks a signed-in non-admin, non-moderator session.", tier: "auto" },
+    ],
+  },
+  {
+    code: "QA · 18", title: "Mobile & Loading/Empty/Error States", priority: "P1",
+    need: "A phone or a narrow browser window; a throttled network (devtools) helps.",
+    items: [
+      { t: "Spot-check Home, Dashboard, Library, Forums, and Inbox at phone width — nothing overlaps or overflows; Inbox collapses to a single list-then-detail column.", tier: "manual" },
+      { t: "Throttle the network on a data-heavy page (Library, Directory, Contributions) — a real loading state shows, not a blank flash.", tier: "auto" },
+      { t: "Trigger an empty state — a brand-new account's Inbox, or a filter with zero matches — shows a friendly empty message, not a blank table.", tier: "auto" },
+      { t: "Submit a form with a required field missing — shows a clear inline error, never a silent failure or a raw stack trace.", tier: "auto" },
+    ],
+  },
+];
+
+const STORAGE_KEY = "nasiha-launch-manifest-v1";
+
+function loadState() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
+  catch (e) { return {}; }
+}
+function saveState(state) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+}
+
+let state = loadState();
+if (!state.checks) state.checks = {};
+if (!state.assignees) state.assignees = {};
+
+const sectionsEl = document.getElementById("sections");
+let activePriority = "all";
+let activeTier = "all";
+let searchTerm = "";
+
+const TIER_LABEL = { auto: "AUTO", setup: "SETUP", manual: "MANUAL" };
+
+function itemId(sIdx, iIdx) { return sIdx + ":" + iIdx; }
+
+function render() {
+  sectionsEl.innerHTML = "";
+  let totalItems = 0, doneItems = 0;
+  let anyVisible = false;
+  let autoTotal = 0, setupTotal = 0, manualTotal = 0;
+
+  DATA.forEach((section, sIdx) => {
+    const secEl = document.createElement("section");
+    secEl.className = "section";
+    secEl.dataset.priority = section.priority;
+
+    let sectionDone = 0;
+    const itemsHtml = [];
+    let sectionHasVisible = false;
+
+    section.items.forEach((entry, iIdx) => {
+      const text = entry.t;
+      const note = entry.note || null;
+      const tier = entry.tier;
+      if (tier === "auto") autoTotal++;
+      else if (tier === "setup") setupTotal++;
+      else if (tier === "manual") manualTotal++;
+
+      const id = itemId(sIdx, iIdx);
+      const checked = !!state.checks[id];
+      totalItems++;
+      if (checked) { doneItems++; sectionDone++; }
+
+      const matchesSearch = !searchTerm || text.toLowerCase().includes(searchTerm) || section.title.toLowerCase().includes(searchTerm);
+      const matchesPriority = activePriority === "all" || section.priority === activePriority;
+      const matchesTier = activeTier === "all" || tier === activeTier;
+      const visible = matchesSearch && matchesPriority && matchesTier;
+      if (visible) sectionHasVisible = true;
+
+      itemsHtml.push(`
+        <li class="item ${checked ? "is-done" : ""} ${visible ? "" : "is-hidden"}">
+          <input type="checkbox" id="chk-${id}" data-id="${id}" ${checked ? "checked" : ""} />
+          <label class="item-label" for="chk-${id}">
+            <span class="item-text">${text}${note ? `<span class="item-note">${note.indexOf("EXPECTED") === 0 ? "EXPECTED" : "NOTE"}</span>` : ""}<span class="tierbadge ${tier}">${TIER_LABEL[tier]}</span></span>
+            ${note ? `<span class="item-detail">${note.replace(/^EXPECTED — /, "")}</span>` : ""}
+          </label>
+        </li>
+      `);
+    });
+
+    if (sectionHasVisible) anyVisible = true;
+    secEl.classList.toggle("is-hidden", !sectionHasVisible);
+
+    const pct = section.items.length ? Math.round((sectionDone / section.items.length) * 100) : 0;
+    const assignee = state.assignees[sIdx] || "";
+
+    secEl.innerHTML = `
+      <div class="section-body">
+        <div class="section-head">
+          <div class="section-heading">
+            <div class="section-code">${section.code}</div>
+            <h3 class="section-title">${section.title}</h3>
+          </div>
+          <div class="badges">
+            <span class="pbadge ${section.priority}">${section.priority}</span>
+            <span class="count">${sectionDone}/${section.items.length}</span>
+          </div>
+        </div>
+        <p class="section-need"><b>Needs:</b> ${section.need}</p>
+        <div class="assignee-row">
+          <label for="assignee-${sIdx}">Owner</label>
+          <input type="text" id="assignee-${sIdx}" data-sidx="${sIdx}" placeholder="Assign a name…" value="${assignee.replace(/"/g, '&quot;')}" />
+        </div>
+        <div class="mini-track"><div class="mini-fill" style="width:${pct}%"></div></div>
+        <ul class="items">${itemsHtml.join("")}</ul>
+      </div>
+    `;
+    sectionsEl.appendChild(secEl);
+  });
+
+  if (!anyVisible) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No checks match your search/filter.";
+    sectionsEl.appendChild(empty);
+  }
+
+  document.getElementById("doneCount").textContent = doneItems;
+  document.getElementById("totalCount").textContent = totalItems;
+  document.getElementById("meterFill").style.width = totalItems ? (doneItems / totalItems * 100) + "%" : "0%";
+  document.getElementById("autoCount").textContent = autoTotal;
+  document.getElementById("setupCount").textContent = setupTotal;
+  document.getElementById("manualCount").textContent = manualTotal;
+
+  sectionsEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+    cb.addEventListener("change", (e) => {
+      const id = e.target.dataset.id;
+      state.checks[id] = e.target.checked;
+      saveState(state);
+      render();
+    });
+  });
+
+  sectionsEl.querySelectorAll('.assignee-row input[type="text"]').forEach((inp) => {
+    inp.addEventListener("input", (e) => {
+      state.assignees[e.target.dataset.sidx] = e.target.value;
+      saveState(state);
+    });
+  });
+}
+
+document.getElementById("searchBox").addEventListener("input", (e) => {
+  searchTerm = e.target.value.trim().toLowerCase();
+  render();
+});
+
+document.getElementById("priorityChips").addEventListener("click", (e) => {
+  const btn = e.target.closest(".chip");
+  if (!btn) return;
+  activePriority = btn.dataset.priority;
+  document.querySelectorAll("#priorityChips .chip").forEach((c) => c.setAttribute("aria-pressed", c === btn ? "true" : "false"));
+  render();
+});
+
+document.getElementById("tierChips").addEventListener("click", (e) => {
+  const btn = e.target.closest(".chip");
+  if (!btn) return;
+  activeTier = btn.dataset.tier;
+  document.querySelectorAll("#tierChips .chip").forEach((c) => c.setAttribute("aria-pressed", c === btn ? "true" : "false"));
+  render();
+});
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (confirm("Clear all checked items and assigned owners in this browser?")) {
+    state = { checks: {}, assignees: {} };
+    saveState(state);
+    render();
+  }
+});
+
+render();
+</script>
