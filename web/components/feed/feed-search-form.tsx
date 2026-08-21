@@ -1,6 +1,7 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { useRef, useState } from "react";
+import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -12,23 +13,57 @@ import { Button } from "@/components/ui/button";
  * submits immediately rather than waiting for another button press, since
  * "go back to the unfiltered feed" isn't really a new search to type and
  * submit, it's undoing the current one.
+ *
+ * Ships its own clear (X) button rather than relying on the native
+ * `type="search"` clear control — that control is inconsistent across
+ * mobile browsers (often absent entirely), so it can't be the only way to
+ * clear the field.
  */
 export function FeedSearchForm({ activeType, q }: { activeType?: string; q?: string }) {
+  const [value, setValue] = useState(q ?? "");
+  const formRef = useRef<HTMLFormElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function clear() {
+    // Mutate the actual DOM input directly before submitting — setValue()
+    // alone won't have reached the DOM yet by the time requestSubmit() runs
+    // in this same synchronous handler (React batches the re-render), so
+    // the form would otherwise still submit the old value.
+    if (inputRef.current) inputRef.current.value = "";
+    setValue("");
+    formRef.current?.requestSubmit();
+  }
+
   return (
-    <form action="/whats-new" method="get" className="flex gap-2">
+    <form ref={formRef} action="/whats-new" method="get" className="flex gap-2">
       {activeType ? <input type="hidden" name="type" value={activeType} /> : null}
-      <Input
-        type="search"
-        name="q"
-        defaultValue={q}
-        placeholder="Search the feed…"
-        className="max-w-sm"
-        onChange={(event) => {
-          if (event.currentTarget.value === "") {
-            event.currentTarget.form?.requestSubmit();
-          }
-        }}
-      />
+      <div className="relative max-w-sm flex-1">
+        <Input
+          ref={inputRef}
+          type="search"
+          name="q"
+          value={value}
+          placeholder="Search the feed…"
+          className="pr-8 [&::-webkit-search-cancel-button]:appearance-none"
+          onChange={(event) => {
+            const next = event.currentTarget.value;
+            setValue(next);
+            if (next === "") {
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
+        />
+        {value ? (
+          <button
+            type="button"
+            onClick={clear}
+            aria-label="Clear search"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
       <Button type="submit" variant="outline" size="icon" aria-label="Search">
         <Search className="h-4 w-4" />
       </Button>
