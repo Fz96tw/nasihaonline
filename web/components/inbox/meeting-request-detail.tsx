@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -610,10 +611,10 @@ export function MeetingRequestDetail({
             )}
             {item.meetingUrl && (
               <Button size="sm" variant="outline" className="w-fit" asChild>
-                <a href={item.meetingUrl} target="_blank" rel="noopener noreferrer">
+                <Link href={`/meet/request/${item.id}`}>
                   <Video className="mr-1.5 h-3.5 w-3.5" />
                   Join Google Meet
-                </a>
+                </Link>
               </Button>
             )}
             <p className="text-sm text-muted-foreground">

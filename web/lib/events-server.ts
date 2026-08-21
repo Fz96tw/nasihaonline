@@ -28,10 +28,13 @@ import { formatEventDateTime } from "@/lib/format-date";
 import { buildRRule, buildRRuleString, describeRecurrence, expandOccurrences, type RecurrenceInput } from "@/lib/recurrence";
 import {
   deleteEventHeroImage,
+  deleteMeetingMessageImage,
   getEventHeroImageUrl,
+  getMeetingMessageImageUrl,
   getProfileAvatarUrl,
   RESTRICTED_EVENT_DEFAULT_HERO_KEY,
   uploadEventHeroImage,
+  uploadMeetingMessageImage,
   UploadValidationError,
 } from "@/lib/storage";
 
@@ -1850,4 +1853,126 @@ export async function getEventIcs(
       recurrenceAnchor: event.startsAt,
     }),
   };
+}
+
+// ===== In-app meeting waiting room (meeting-join-experience) =====
+
+/**
+ * Powers both the server-rendered /meet/event/[id] page and its ~5s client
+ * poll. Access mirrors getMemberEventById's exact existing rule so this
+ * introduces no new exposure: unauthenticated access only for an `open`
+ * event (same permissiveness as the plain, ungated meetingUrl already
+ * emailed to anonymous registrants via sendEventRegistrationConfirmationEmail);
+ * a signed-in non-host needs the same community/invitee visibility gate,
+ * then the same rsvped-or-host gate that already controls whether the join
+ * link appears anywhere else in the app.
+ */
+export async function getEventMeetingStatus(
+  eventId: string,
+  userId: string | null,
+): Promise<{
+  started: boolean;
+  startsAt: string;
+  meetingUrl: string | null;
+  organizerMessage: string | null;
+  organizerMessageImageUrl: string | null;
+  isOrganizer: boolean;
+  configured: boolean;
+}> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: {
+      hostId: true,
+      startsAt: true,
+      meetingUrl: true,
+      meetingStartedAt: true,
+      meetingOrganizerMessage: true,
+      meetingOrganizerMessageImageKey: true,
+      open: true,
+      visibility: true,
+      cancelledAt: true,
+    },
+  });
+  if (!event || event.cancelledAt) throw new EventError(404, "Event not found.");
+
+  const isHost = userId !== null && event.hostId === userId;
+
+  if (userId === null) {
+    if (!event.open) throw new EventError(403, "Sign in to view this meeting.");
+  } else if (!isHost) {
+    const visible =
+      event.visibility === EventVisibility.community ||
+      (await db.eventInvitee.findUnique({ where: { eventId_userId: { eventId, userId } } })) !== null;
+    if (!visible) throw new EventError(404, "Event not found.");
+
+    const rsvp = await db.rSVP.findUnique({
+      where: { eventId_userId: { eventId, userId } },
+      select: { status: true },
+    });
+    if (rsvp?.status !== RSVPStatus.going) {
+      throw new EventError(403, "RSVP to this event to see the joining details.");
+    }
+  }
+
+  return {
+    started: event.meetingStartedAt !== null,
+    startsAt: event.startsAt.toISOString(),
+    meetingUrl: event.meetingStartedAt ? event.meetingUrl : null,
+    organizerMessage: event.meetingOrganizerMessage,
+    organizerMessageImageUrl: getMeetingMessageImageUrl(event.meetingOrganizerMessageImageKey),
+    isOrganizer: isHost,
+    configured: event.meetingUrl !== null,
+  };
+}
+
+/** Host-only: sets/edits the optional waiting-room message + image shown to attendees before Start. */
+export async function updateEventMeetingMessage(
+  eventId: string,
+  actingUser: UserModel,
+  input: { message: string | null; image: File | null; removeImage: boolean },
+): Promise<void> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { hostId: true, meetingOrganizerMessageImageKey: true },
+  });
+  if (!event) throw new EventError(404, "Event not found.");
+  if (event.hostId !== actingUser.id) {
+    throw new EventError(403, "Only the event's host can edit this message.");
+  }
+
+  let imageKey = event.meetingOrganizerMessageImageKey;
+  if (input.image) {
+    try {
+      imageKey = await uploadMeetingMessageImage(input.image);
+    } catch (error) {
+      if (error instanceof UploadValidationError) throw new EventError(400, error.message);
+      throw error;
+    }
+  } else if (input.removeImage) {
+    imageKey = null;
+  }
+
+  await db.event.update({
+    where: { id: eventId },
+    data: { meetingOrganizerMessage: input.message, meetingOrganizerMessageImageKey: imageKey },
+  });
+
+  if (imageKey !== event.meetingOrganizerMessageImageKey && event.meetingOrganizerMessageImageKey) {
+    await deleteMeetingMessageImage(event.meetingOrganizerMessageImageKey);
+  }
+}
+
+/** Host-only: marks the meeting live, triggering waiting attendees' auto-redirect on their next poll. No-op if the event has no Meet link configured — mirrors google-calendar.ts's non-fatal philosophy. */
+export async function startEventMeeting(eventId: string, actingUser: UserModel): Promise<void> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { hostId: true, meetingUrl: true },
+  });
+  if (!event) throw new EventError(404, "Event not found.");
+  if (event.hostId !== actingUser.id) {
+    throw new EventError(403, "Only the event's host can start the meeting.");
+  }
+  if (!event.meetingUrl) return;
+
+  await db.event.update({ where: { id: eventId }, data: { meetingStartedAt: new Date() } });
 }

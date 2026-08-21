@@ -78,14 +78,12 @@ export function EventListItem({
             {hasMounted ? formatEventDateTime(event.startsAt) : null}
           </p>
           {(rsvped || isHost) && meetingUrl ? (
-            <a
-              href={meetingUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href={`/meet/event/${event.seriesId}`}
               className="mt-1 inline-block text-sm font-medium text-primary underline-offset-4 hover:underline"
             >
               Join session link
-            </a>
+            </Link>
           ) : null}
         </div>
       </div>

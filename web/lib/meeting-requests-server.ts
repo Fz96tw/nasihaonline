@@ -17,6 +17,12 @@ import {
 } from "@/lib/google-calendar";
 import { INBOX_TIERS } from "@/lib/members";
 import { createNotification } from "@/lib/notifications-server";
+import {
+  deleteMeetingMessageImage,
+  getMeetingMessageImageUrl,
+  uploadMeetingMessageImage,
+  UploadValidationError,
+} from "@/lib/storage";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
@@ -867,4 +873,116 @@ export async function getUpcomingMeetingsForUser(userId: string) {
   });
 
   return [...confirmedMeetings, ...pendingMeetings].sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+}
+
+// ===== In-app meeting waiting room (meeting-join-experience) =====
+
+const ACCEPTED_STATUSES: MeetingRequestStatus[] = [
+  MeetingRequestStatus.accepted,
+  MeetingRequestStatus.reschedule_by_sender,
+  MeetingRequestStatus.reschedule_by_recipient,
+];
+
+/**
+ * Powers both the server-rendered /meet/request/[id] page and its ~5s
+ * client poll. Sender-or-recipient only (both parties may join), always
+ * Clerk-authenticated — a MeetingRequest is a private 1:1, unlike a
+ * community Event, so there's no unauthenticated/`open` case here.
+ * Organizer = sender, matching every other sender-privileged action on
+ * this model (accept/decline/cancel turn logic above).
+ */
+export async function getMeetingRequestMeetingStatus(
+  meetingRequestId: string,
+  userId: string,
+): Promise<{
+  started: boolean;
+  startsAt: string;
+  meetingUrl: string | null;
+  organizerMessage: string | null;
+  organizerMessageImageUrl: string | null;
+  isOrganizer: boolean;
+  configured: boolean;
+}> {
+  const meetingRequest = await db.meetingRequest.findUnique({
+    where: { id: meetingRequestId },
+    select: {
+      senderId: true,
+      recipientId: true,
+      status: true,
+      scheduledAt: true,
+      meetingUrl: true,
+      meetingStartedAt: true,
+      meetingOrganizerMessage: true,
+      meetingOrganizerMessageImageKey: true,
+    },
+  });
+  if (!meetingRequest) throw new MeetingRequestError(404, "Meeting request not found.");
+  if (meetingRequest.senderId !== userId && meetingRequest.recipientId !== userId) {
+    throw new MeetingRequestError(403, "You're not part of this meeting.");
+  }
+  if (!ACCEPTED_STATUSES.includes(meetingRequest.status) || !meetingRequest.scheduledAt) {
+    throw new MeetingRequestError(404, "This meeting hasn't been scheduled.");
+  }
+
+  return {
+    started: meetingRequest.meetingStartedAt !== null,
+    startsAt: meetingRequest.scheduledAt.toISOString(),
+    meetingUrl: meetingRequest.meetingStartedAt ? meetingRequest.meetingUrl : null,
+    organizerMessage: meetingRequest.meetingOrganizerMessage,
+    organizerMessageImageUrl: getMeetingMessageImageUrl(meetingRequest.meetingOrganizerMessageImageKey),
+    isOrganizer: meetingRequest.senderId === userId,
+    configured: meetingRequest.meetingUrl !== null,
+  };
+}
+
+/** Sender-only: sets/edits the optional waiting-room message + image shown to the recipient before Start. */
+export async function updateMeetingRequestMeetingMessage(
+  meetingRequestId: string,
+  actingUserId: string,
+  input: { message: string | null; image: File | null; removeImage: boolean },
+): Promise<void> {
+  const meetingRequest = await db.meetingRequest.findUnique({
+    where: { id: meetingRequestId },
+    select: { senderId: true, meetingOrganizerMessageImageKey: true },
+  });
+  if (!meetingRequest) throw new MeetingRequestError(404, "Meeting request not found.");
+  if (meetingRequest.senderId !== actingUserId) {
+    throw new MeetingRequestError(403, "Only the meeting organizer can edit this message.");
+  }
+
+  let imageKey = meetingRequest.meetingOrganizerMessageImageKey;
+  if (input.image) {
+    try {
+      imageKey = await uploadMeetingMessageImage(input.image);
+    } catch (error) {
+      if (error instanceof UploadValidationError) throw new MeetingRequestError(400, error.message);
+      throw error;
+    }
+  } else if (input.removeImage) {
+    imageKey = null;
+  }
+
+  await db.meetingRequest.update({
+    where: { id: meetingRequestId },
+    data: { meetingOrganizerMessage: input.message, meetingOrganizerMessageImageKey: imageKey },
+  });
+
+  if (imageKey !== meetingRequest.meetingOrganizerMessageImageKey && meetingRequest.meetingOrganizerMessageImageKey) {
+    await deleteMeetingMessageImage(meetingRequest.meetingOrganizerMessageImageKey);
+  }
+}
+
+/** Sender-only: marks the meeting live, triggering the waiting recipient's auto-redirect on their next poll. No-op if there's no Meet link configured. */
+export async function startMeetingRequestMeeting(meetingRequestId: string, actingUserId: string): Promise<void> {
+  const meetingRequest = await db.meetingRequest.findUnique({
+    where: { id: meetingRequestId },
+    select: { senderId: true, meetingUrl: true },
+  });
+  if (!meetingRequest) throw new MeetingRequestError(404, "Meeting request not found.");
+  if (meetingRequest.senderId !== actingUserId) {
+    throw new MeetingRequestError(403, "Only the meeting organizer can start the meeting.");
+  }
+  if (!meetingRequest.meetingUrl) return;
+
+  await db.meetingRequest.update({ where: { id: meetingRequestId }, data: { meetingStartedAt: new Date() } });
 }

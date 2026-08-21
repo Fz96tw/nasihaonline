@@ -154,14 +154,12 @@ export function EventDetail({
       ) : null}
 
       {(event.rsvped || isHost) && event.meetingUrl ? (
-        <a
-          href={event.meetingUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+        <Link
+          href={`/meet/event/${event.seriesId}`}
           className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
         >
           Join session link
-        </a>
+        </Link>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3">

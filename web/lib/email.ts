@@ -134,7 +134,7 @@ export async function sendWelcomeEmail(
 export async function sendEventRegistrationConfirmationEmail(
   to: string,
   name: string,
-  event: { title: string; startsAt: Date; timezone: string | null; meetingUrl: string | null },
+  event: { id: string; title: string; startsAt: Date; timezone: string | null; meetingUrl: string | null },
 ) {
   if (!resend) {
     console.warn(`[email] RESEND_API_KEY not set — skipping event registration email to ${to}`);
@@ -143,8 +143,12 @@ export async function sendEventRegistrationConfirmationEmail(
 
   const when = formatEventDateTime(event.startsAt, event.timezone);
 
+  // Links to the in-app waiting-room page rather than the raw Meet link
+  // (meeting-join-experience) — same underlying access (open events stay
+  // unauthenticated-readable there), but now with a countdown/host-message
+  // instead of dropping straight into Meet's own lobby.
   const joinLine = event.meetingUrl
-    ? `Join with Google Meet: ${event.meetingUrl}`
+    ? `Join with Google Meet: ${APP_URL}/meet/event/${event.id}`
     : "We'll share the joining details closer to the event.";
 
   const membershipPitch =

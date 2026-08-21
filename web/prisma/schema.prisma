@@ -724,9 +724,15 @@ model MeetingRequest {
   // via the app-owned Gmail account (web/lib/google-calendar.ts). meetingUrl
   // stays null if that call fails or isn't configured — never blocks
   // acceptance itself.
-  scheduledAt   DateTime?
-  meetingUrl    String?
-  googleEventId String?
+  scheduledAt                     DateTime?
+  meetingUrl                      String?
+  googleEventId                   String?
+  // In-app waiting-room feature — same shape/semantics as Event's fields
+  // above. Organizer = sender for a MeetingRequest (matches every other
+  // sender-privileged action in this model).
+  meetingStartedAt                DateTime?
+  meetingOrganizerMessage         String?
+  meetingOrganizerMessageImageKey String?
 
   // Set on acceptance — the requester's auto-confirmed spend row. Null
   // until accepted (declined/rescheduled requests never get one).
@@ -944,14 +950,14 @@ enum AttendanceRole {
 // pattern as MembershipApplication's phase-conditional required fields),
 // since the rule depends on `type` and isn't expressible as a DB constraint.
 model Event {
-  id                        String          @id @default(cuid())
-  title                     String
-  description               String?
-  type                      EventType
-  hostId                    String
-  host                      User            @relation("EventHost", fields: [hostId], references: [id])
-  startsAt                  DateTime
-  endsAt                    DateTime?
+  id                              String          @id @default(cuid())
+  title                           String
+  description                     String?
+  type                            EventType
+  hostId                          String
+  host                            User            @relation("EventHost", fields: [hostId], references: [id])
+  startsAt                        DateTime
+  endsAt                          DateTime?
   // IANA zone (e.g. "America/New_York") captured from the submitting
   // member's browser at create/edit time — startsAt/endsAt are stored as
   // UTC instants, so this is the only record of which wall-clock time the
@@ -961,19 +967,25 @@ model Event {
   // timezone instead of the organizer's). Nullable so pre-existing rows
   // from before this field existed fall back to a fixed default at format
   // time rather than needing a backfill.
-  timezone                  String?
-  open                      Boolean         @default(false)
-  heroImageUrl              String?
-  meetingUrl                String?
+  timezone                        String?
+  open                            Boolean         @default(false)
+  heroImageUrl                    String?
+  meetingUrl                      String?
   // Set only when meetingUrl was auto-generated via createMeetingCalendarEvent
   // (google-calendar.ts) for an `invited`-visibility event — needed so a
   // later objective (invite-list edits, cancel/reschedule) can update or
   // delete the underlying Google Calendar event. Null for a manually-entered
   // meetingUrl or for community events, which never call Google.
-  googleEventId             String?
+  googleEventId                   String?
+  // In-app waiting-room feature: null until the host clicks "Start Meeting"
+  // on the /meet/event/[id] page — presence means "live", triggering
+  // waiting attendees' auto-redirect to the real Meet link.
+  meetingStartedAt                DateTime?
+  meetingOrganizerMessage         String?
+  meetingOrganizerMessageImageKey String?
   // Audience-Restricted Group Events, Objective 01 (§4.6 extension) —
   // `community` preserves every pre-existing event's behavior unchanged.
-  visibility                EventVisibility @default(community)
+  visibility                      EventVisibility @default(community)
   // Objective 03 — soft-delete-style one-way flag (mirrors
   // Announcement.retractedAt's existing convention) rather than a status
   // enum, since there's nothing to transition back from. Every
@@ -981,10 +993,10 @@ model Event {
   // "Cancel Event" action is only exposed in the UI for a restricted
   // event, so this never gets set on a community event today even though
   // the field/filtering is generic.
-  cancelledAt               DateTime?
-  deidentificationConfirmed Boolean         @default(false)
-  createdAt                 DateTime        @default(now())
-  updatedAt                 DateTime        @updatedAt
+  cancelledAt                     DateTime?
+  deidentificationConfirmed       Boolean         @default(false)
+  createdAt                       DateTime        @default(now())
+  updatedAt                       DateTime        @updatedAt
 
   recurrence    EventRecurrence?
   rsvps         RSVP[]

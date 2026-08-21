@@ -401,6 +401,39 @@ export async function deleteKnowledgeItemHeroImage(key: string | null): Promise<
 }
 
 /**
+ * Same validation/storage shape as uploadEventHeroImage, for an in-app
+ * meeting waiting room's optional organizer message image (Event and
+ * MeetingRequest both use this). Returns the object key to persist on
+ * *.meetingOrganizerMessageImageKey. Retrieval reuses getAttachmentObject
+ * below — no dedicated read helper needed, same bucket.
+ */
+export async function uploadMeetingMessageImage(file: File): Promise<string> {
+  const { buffer, ext, mime } = await validateImageUpload(file);
+
+  await ensureBucket(BUCKET_ATTACHMENTS);
+  const key = `meeting-message/${crypto.randomUUID()}.${ext}`;
+  const minio = getClient();
+  await minio.putObject(BUCKET_ATTACHMENTS, key, buffer, buffer.length, {
+    "Content-Type": mime,
+  });
+  return key;
+}
+
+/** Same shape/rationale as deleteEventHeroImage, for uploadMeetingMessageImage. */
+export async function deleteMeetingMessageImage(key: string | null): Promise<void> {
+  if (!key) return;
+  await ensureBucket(BUCKET_ATTACHMENTS);
+  const minio = getClient();
+  await minio.removeObject(BUCKET_ATTACHMENTS, key).catch(() => undefined);
+}
+
+/** Same shape/rationale as getEventHeroImageUrl, for uploadMeetingMessageImage. */
+export function getMeetingMessageImageUrl(key: string | null): string | null {
+  if (!key) return null;
+  return `/api/meet/message-image/${key}`;
+}
+
+/**
  * Fetches a stored blog hero image (attachments/ bucket) for streaming
  * through the /api/blog/hero proxy — same shape/rationale as
  * getAvatarObject, just the other bucket.

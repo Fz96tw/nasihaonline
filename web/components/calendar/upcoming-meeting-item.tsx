@@ -58,10 +58,10 @@ export function UpcomingMeetingItem({ meeting }: { meeting: UpcomingMeeting }) {
       </div>
       {meeting.meetingUrl && (
         <Button size="sm" variant="outline" className="flex-shrink-0" asChild>
-          <a href={meeting.meetingUrl} target="_blank" rel="noopener noreferrer">
+          <Link href={`/meet/request/${meeting.id}`}>
             <Video className="mr-1.5 h-3.5 w-3.5" />
             Join Google Meet
-          </a>
+          </Link>
         </Button>
       )}
     </li>
