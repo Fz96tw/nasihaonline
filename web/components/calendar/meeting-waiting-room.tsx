@@ -185,7 +185,7 @@ export function MeetingWaitingRoom({
 
       {status.organizerMessageImageUrl && (
         // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, same rationale as other attachment images
-        <img src={status.organizerMessageImageUrl} alt="" className="max-h-64 w-full rounded-lg object-cover" />
+        <img src={status.organizerMessageImageUrl} alt="" className="max-h-64 w-full rounded-lg object-contain" />
       )}
       {status.organizerMessage && <p className="whitespace-pre-wrap text-sm">{status.organizerMessage}</p>}
 
