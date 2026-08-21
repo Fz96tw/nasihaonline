@@ -65,6 +65,9 @@ export type MeetingRequestListItem = {
   scheduledAt: string | null;
   /** Set once accepted, if Google Calendar was configured and the call succeeded. */
   meetingUrl: string | null;
+  /** Waiting-room greeting shown to the recipient on /meet/request/[id] before Start (meeting-join-experience) — sender-editable via MeetingRequestDetail's inline editor. */
+  meetingOrganizerMessage: string | null;
+  meetingOrganizerMessageImageUrl: string | null;
 };
 
 export type InboxListItem = InboxMessageListItem | MeetingRequestListItem;

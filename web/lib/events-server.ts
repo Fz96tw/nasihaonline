@@ -920,6 +920,9 @@ export async function createEvent(
     visibility: EventVisibility;
     invitedUserIds: string[];
     meetLinkSource: "auto" | "manual";
+    /** Optional waiting-room greeting shown to attendees on /meet/event/[id] before Start (meeting-join-experience). */
+    meetingOrganizerMessage: string | null;
+    meetingOrganizerMessageImage: File | null;
     recurrence: {
       frequency: RecurrenceFrequency;
       interval: number;
@@ -1019,6 +1022,18 @@ export async function createEvent(
     heroImageUrl = RESTRICTED_EVENT_DEFAULT_HERO_KEY;
   }
 
+  let meetingOrganizerMessageImageKey: string | null = null;
+  if (input.meetingOrganizerMessageImage) {
+    try {
+      meetingOrganizerMessageImageKey = await uploadMeetingMessageImage(input.meetingOrganizerMessageImage);
+    } catch (error) {
+      if (error instanceof UploadValidationError) {
+        throw new EventError(400, error.message);
+      }
+      throw error;
+    }
+  }
+
   const host = await db.user.findUnique({ where: { id: hostId }, select: { email: true, name: true } });
   const hostName = host?.name ?? "A member";
 
@@ -1066,6 +1081,8 @@ export async function createEvent(
         googleEventId,
         visibility: input.visibility,
         deidentificationConfirmed: input.deidentificationConfirmed,
+        meetingOrganizerMessage: input.meetingOrganizerMessage,
+        meetingOrganizerMessageImageKey,
       },
       select: { id: true },
     });
@@ -1135,6 +1152,8 @@ export async function getEventForEdit(eventId: string) {
       deidentificationConfirmed: true,
       hostId: true,
       visibility: true,
+      meetingOrganizerMessage: true,
+      meetingOrganizerMessageImageKey: true,
       recurrence: { select: RECURRENCE_SELECT },
     },
   });
@@ -1153,6 +1172,8 @@ export async function getEventForEdit(eventId: string) {
     visibility: event.visibility,
     deidentificationConfirmed: event.deidentificationConfirmed,
     hostId: event.hostId,
+    meetingOrganizerMessage: event.meetingOrganizerMessage,
+    meetingOrganizerMessageImageUrl: getMeetingMessageImageUrl(event.meetingOrganizerMessageImageKey),
     recurrence: event.recurrence
       ? {
           frequency: event.recurrence.frequency,
@@ -1185,6 +1206,9 @@ export async function updateEvent(
     deidentificationConfirmed: boolean;
     timezone: string | null;
     heroImage: File | null;
+    /** Optional waiting-room greeting shown to attendees on /meet/event/[id] before Start (meeting-join-experience). */
+    meetingOrganizerMessage: string | null;
+    meetingOrganizerMessageImage: File | null;
     recurrence: {
       frequency: RecurrenceFrequency;
       interval: number;
@@ -1199,6 +1223,7 @@ export async function updateEvent(
       id: true,
       hostId: true,
       heroImageUrl: true,
+      meetingOrganizerMessageImageKey: true,
       startsAt: true,
       endsAt: true,
       visibility: true,
@@ -1275,6 +1300,18 @@ export async function updateEvent(
     }
   }
 
+  let meetingOrganizerMessageImageKey = event.meetingOrganizerMessageImageKey;
+  if (input.meetingOrganizerMessageImage) {
+    try {
+      meetingOrganizerMessageImageKey = await uploadMeetingMessageImage(input.meetingOrganizerMessageImage);
+    } catch (error) {
+      if (error instanceof UploadValidationError) {
+        throw new EventError(400, error.message);
+      }
+      throw error;
+    }
+  }
+
   const updated = await db.$transaction(async (tx) => {
     const result = await tx.event.update({
       where: { id: event.id },
@@ -1289,6 +1326,8 @@ export async function updateEvent(
         heroImageUrl,
         meetingUrl: input.meetingUrl,
         deidentificationConfirmed: input.deidentificationConfirmed,
+        meetingOrganizerMessage: input.meetingOrganizerMessage,
+        meetingOrganizerMessageImageKey,
       },
       select: { id: true },
     });
@@ -1326,6 +1365,9 @@ export async function updateEvent(
 
   if (input.heroImage && event.heroImageUrl) {
     await deleteEventHeroImage(event.heroImageUrl);
+  }
+  if (input.meetingOrganizerMessageImage && event.meetingOrganizerMessageImageKey) {
+    await deleteMeetingMessageImage(event.meetingOrganizerMessageImageKey);
   }
 
   // Compares against the pre-update values fetched above, not the input

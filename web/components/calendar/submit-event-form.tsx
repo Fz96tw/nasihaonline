@@ -100,6 +100,8 @@ type ExistingEvent = {
   heroImageUrl: string | null;
   deidentificationConfirmed: boolean;
   visibility: EventVisibility;
+  meetingOrganizerMessage: string | null;
+  meetingOrganizerMessageImageUrl: string | null;
   recurrence: {
     frequency: RecurrenceFrequency;
     interval: number;
@@ -139,6 +141,12 @@ export function SubmitEventForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [heroImage, setHeroImage] = useState<File | null>(null);
+  // Waiting-room greeting shown to attendees on /meet/event/[id] before
+  // Start (meeting-join-experience) — plain local state like heroImage
+  // above, not RHF-managed, since it's optional auxiliary content outside
+  // createEventSchema/updateEventSchema's validated fields.
+  const [meetingOrganizerMessage, setMeetingOrganizerMessage] = useState(existingEvent?.meetingOrganizerMessage ?? "");
+  const [meetingOrganizerMessageImage, setMeetingOrganizerMessageImage] = useState<File | null>(null);
 
   const form = useForm<CreateEventValues>({
     // Edit mode validates against updateEventSchema, not createEventSchema:
@@ -229,6 +237,8 @@ export function SubmitEventForm({
       }
       if (values.recurrence) formData.append("recurrence", JSON.stringify(values.recurrence));
       if (heroImage) formData.append("heroImage", heroImage);
+      if (meetingOrganizerMessage.trim()) formData.append("meetingOrganizerMessage", meetingOrganizerMessage.trim());
+      if (meetingOrganizerMessageImage) formData.append("meetingOrganizerMessageImage", meetingOrganizerMessageImage);
 
       const res = await fetch(existingEvent ? `/api/events/${existingEvent.id}` : "/api/events", {
         method: existingEvent ? "PATCH" : "POST",
@@ -635,6 +645,45 @@ export function SubmitEventForm({
             className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
           />
           {existingEvent?.heroImageUrl && (
+            <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label htmlFor="waiting-room-message" className="text-sm font-medium">
+            Waiting room message (optional)
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Shown to attendees who join before you start the meeting, on the in-app waiting room page.
+          </p>
+          <Textarea
+            id="waiting-room-message"
+            rows={3}
+            value={meetingOrganizerMessage}
+            onChange={(e) => setMeetingOrganizerMessage(e.target.value)}
+          />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label htmlFor="waiting-room-image" className="text-sm font-medium">
+            Waiting room image (optional)
+          </label>
+          {existingEvent?.meetingOrganizerMessageImageUrl && !meetingOrganizerMessageImage && (
+            // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
+            <img
+              src={existingEvent.meetingOrganizerMessageImageUrl}
+              alt="Current waiting room image"
+              className="h-32 w-full max-w-xs rounded-md object-cover"
+            />
+          )}
+          <input
+            id="waiting-room-image"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(e) => setMeetingOrganizerMessageImage(e.target.files?.[0] ?? null)}
+            className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
+          />
+          {existingEvent?.meetingOrganizerMessageImageUrl && (
             <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
           )}
         </div>

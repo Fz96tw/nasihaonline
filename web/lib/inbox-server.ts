@@ -6,7 +6,7 @@ import type { InboxListItem, InboxThread } from "@/lib/inbox";
 import { sendInboxMessageEmail } from "@/lib/email";
 import { INBOX_TIERS } from "@/lib/members";
 import { createNotification } from "@/lib/notifications-server";
-import { getProfileAvatarUrl } from "@/lib/storage";
+import { getMeetingMessageImageUrl, getProfileAvatarUrl } from "@/lib/storage";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
@@ -117,6 +117,8 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
       lastActivityAt: (latestMessage?.createdAt ?? meetingRequest.updatedAt).toISOString(),
       scheduledAt: meetingRequest.scheduledAt?.toISOString() ?? null,
       meetingUrl: meetingRequest.meetingUrl,
+      meetingOrganizerMessage: meetingRequest.meetingOrganizerMessage,
+      meetingOrganizerMessageImageUrl: getMeetingMessageImageUrl(meetingRequest.meetingOrganizerMessageImageKey),
     });
   }
 

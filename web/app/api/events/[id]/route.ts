@@ -52,8 +52,20 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const heroImageField = formData.get("heroImage");
   const heroImage = heroImageField instanceof File && heroImageField.size > 0 ? heroImageField : null;
 
+  const messageField = formData.get("meetingOrganizerMessage");
+  const meetingOrganizerMessage =
+    typeof messageField === "string" && messageField.trim().length > 0 ? messageField.trim() : null;
+  const messageImageField = formData.get("meetingOrganizerMessageImage");
+  const meetingOrganizerMessageImage =
+    messageImageField instanceof File && messageImageField.size > 0 ? messageImageField : null;
+
   try {
-    const event = await updateEvent(params.id, user, { ...parsed.data, heroImage });
+    const event = await updateEvent(params.id, user, {
+      ...parsed.data,
+      heroImage,
+      meetingOrganizerMessage,
+      meetingOrganizerMessageImage,
+    });
     return NextResponse.json({ id: event.id });
   } catch (error) {
     if (error instanceof EventError) {

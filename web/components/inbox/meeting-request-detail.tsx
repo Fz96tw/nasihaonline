@@ -88,6 +88,19 @@ function MessageTimeline({ messages, currentUserId }: { messages: MeetingRequest
   );
 }
 
+async function patchMeetingRequestMeetingMessage(id: string, formData: FormData) {
+  const csrfToken = await getCsrfToken();
+  const res = await fetch(`/api/inbox/meeting-requests/${id}/meeting/message`, {
+    method: "PATCH",
+    headers: { "x-csrf-token": csrfToken },
+    body: formData,
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new Error(typeof payload?.error === "string" ? payload.error : "Something went wrong.");
+  }
+}
+
 async function patchMeetingRequest(id: string, body: Record<string, unknown>) {
   const csrfToken = await getCsrfToken();
   const res = await fetch(`/api/inbox/meeting-requests/${id}`, {
@@ -435,6 +448,93 @@ function CommentComposer({ meetingRequestId, onSent }: { meetingRequestId: strin
 }
 
 /**
+ * Sender-only waiting-room message/image editor (meeting-join-experience),
+ * available once accepted — shown to the recipient on /meet/request/[id]
+ * before the sender clicks Start. Plain local state rather than
+ * react-hook-form, same shape as SubmitEventForm's hero-image field: it's
+ * optional auxiliary content, not part of any negotiation schema.
+ */
+function MeetingMessageForm({
+  meetingRequestId,
+  initialMessage,
+  initialImageUrl,
+  onDone,
+  onCancel,
+}: {
+  meetingRequestId: string;
+  initialMessage: string | null;
+  initialImageUrl: string | null;
+  onDone: () => Promise<unknown>;
+  onCancel: () => void;
+}) {
+  const [message, setMessage] = useState(initialMessage ?? "");
+  const [image, setImage] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      if (message.trim()) formData.append("message", message.trim());
+      if (image) formData.append("image", image);
+      await patchMeetingRequestMeetingMessage(meetingRequestId, formData);
+      await onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-md border p-3">
+      <div className="flex flex-col gap-2">
+        <label htmlFor="meeting-message" className="text-sm font-medium">
+          Waiting room message (optional)
+        </label>
+        <p className="text-xs text-muted-foreground">
+          Shown on the in-app waiting room page to whoever joins before you start the meeting.
+        </p>
+        <Textarea id="meeting-message" rows={3} value={message} onChange={(e) => setMessage(e.target.value)} />
+      </div>
+      <div className="flex flex-col gap-2">
+        <label htmlFor="meeting-message-image" className="text-sm font-medium">
+          Waiting room image (optional)
+        </label>
+        {initialImageUrl && !image && (
+          // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
+          <img
+            src={initialImageUrl}
+            alt="Current waiting room image"
+            className="h-24 w-40 rounded-md object-cover"
+          />
+        )}
+        <input
+          id="meeting-message-image"
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          onChange={(e) => setImage(e.target.files?.[0] ?? null)}
+          className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
+        />
+      </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={submitting}>
+          Cancel
+        </Button>
+        <Button type="button" size="sm" onClick={handleSave} disabled={submitting}>
+          {submitting ? "Saving…" : "Save"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Detail pane for a meeting-request inbox item (§4.7). Rendered directly
  * from the merged inbox list's inline data — there's no
  * GET /api/inbox/meeting-requests/:id per PRD's route list, so no fetch is
@@ -461,6 +561,7 @@ export function MeetingRequestDetail({
 }) {
   const [pendingAction, setPendingAction] = useState<"accept" | "decline" | "cancel" | null>(null);
   const [reschedulingOpen, setReschedulingOpen] = useState(false);
+  const [messageEditingOpen, setMessageEditingOpen] = useState(false);
   const [editingOpen, setEditingOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState(item.proposedTimes[0] ?? "");
@@ -616,6 +717,31 @@ export function MeetingRequestDetail({
                   Join Google Meet
                 </Link>
               </Button>
+            )}
+            {item.meetingUrl && item.direction === "sent" && !messageEditingOpen && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="w-fit"
+                onClick={() => setMessageEditingOpen(true)}
+                disabled={pendingAction !== null}
+              >
+                {item.meetingOrganizerMessage || item.meetingOrganizerMessageImageUrl
+                  ? "Edit waiting room message"
+                  : "Add a waiting room message"}
+              </Button>
+            )}
+            {item.meetingUrl && item.direction === "sent" && messageEditingOpen && (
+              <MeetingMessageForm
+                meetingRequestId={item.id}
+                initialMessage={item.meetingOrganizerMessage}
+                initialImageUrl={item.meetingOrganizerMessageImageUrl}
+                onCancel={() => setMessageEditingOpen(false)}
+                onDone={async () => {
+                  setMessageEditingOpen(false);
+                  await onUpdated();
+                }}
+              />
             )}
             <p className="text-sm text-muted-foreground">
               {item.direction === "sent"
