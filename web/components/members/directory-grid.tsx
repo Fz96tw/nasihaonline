@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MemberCard } from "@/components/members/member-card";
 import { type DirectoryMember } from "@/lib/members";
 import { useDirectoryFilters } from "@/lib/stores/directory-filters";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -14,18 +15,6 @@ async function fetchDirectoryMembers(query: string): Promise<DirectoryMember[]> 
   if (!response.ok) throw new Error("Failed to load the member directory");
   const data = (await response.json()) as { members: DirectoryMember[] };
   return data.members;
-}
-
-/** Debounces the store's live search value so keystrokes don't each trigger a Meilisearch round trip (§9). */
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value);
-
-  useEffect(() => {
-    const timeout = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(timeout);
-  }, [value, delayMs]);
-
-  return debounced;
 }
 
 export function DirectoryGrid({

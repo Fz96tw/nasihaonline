@@ -18,7 +18,7 @@ import {
   upsertReviewItemDocument,
 } from "@/lib/meilisearch";
 import { DIRECTORY_TIERS } from "@/lib/members";
-import { KnowledgeStatus, KnowledgeVisibility, SurveyStatus } from "@/lib/generated/prisma/enums";
+import { KnowledgeStatus, SurveyStatus } from "@/lib/generated/prisma/enums";
 
 /**
  * Re-derives directory eligibility from the DB rather than trusting the
@@ -58,12 +58,16 @@ export async function syncProfileToIndex(userId: string): Promise<void> {
 /**
  * Re-derives search eligibility from the DB rather than trusting the
  * caller, same "re-derive, don't trust" rule as syncProfileToIndex.
- * `published` and `flagged` are both eligible — flagged
- * items "stay visible" per the community-flagging model (§4.9), including
- * in search; `pending_review`/`rejected` are removed. Restricted-visibility
- * items are excluded from search entirely, mirroring restricted events
- * never appearing in public listings — visibility is immutable post-creation,
- * so there's no "already indexed, then flipped restricted" case to handle.
+ * `published` and `flagged` are both eligible — flagged items "stay
+ * visible" per the community-flagging model (§4.9), including in search;
+ * `pending_review`/`rejected` are removed. Restricted-visibility items ARE
+ * indexed (unlike the original per-domain search boxes' index-eligibility,
+ * this no longer excludes them for everyone) — global search's
+ * per-viewer authorization (lib/search-server.ts, mirroring
+ * getPublishedKnowledgeItems' own visibility OR-clause) decides at query
+ * time whether a given viewer gets to see a restricted hit, the same
+ * "authorize at query time, not index time" split every other domain in
+ * global search uses.
  */
 export async function syncKnowledgeItemToIndex(knowledgeItemId: string): Promise<void> {
   const item = await db.knowledgeItem.findUnique({
@@ -83,9 +87,7 @@ export async function syncKnowledgeItemToIndex(knowledgeItemId: string): Promise
   });
 
   const eligible =
-    item &&
-    (item.status === KnowledgeStatus.published || item.status === KnowledgeStatus.flagged) &&
-    item.visibility === KnowledgeVisibility.public;
+    item && (item.status === KnowledgeStatus.published || item.status === KnowledgeStatus.flagged);
   if (!eligible) {
     await deleteLibraryDocument(knowledgeItemId);
     return;
