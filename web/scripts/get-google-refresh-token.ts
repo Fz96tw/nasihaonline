@@ -4,7 +4,10 @@ import { google } from "googleapis";
 
 const PORT = 4321;
 const REDIRECT_URI = `http://localhost:${PORT}/oauth2callback`;
-const SCOPES = ["https://www.googleapis.com/auth/calendar.events"];
+const SCOPES = [
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/meetings.space.settings",
+];
 
 /**
  * One-time setup script (see plan doc / PRD §4.7 meeting-request Meet

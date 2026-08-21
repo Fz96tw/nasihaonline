@@ -112,8 +112,30 @@ export async function createMeetingCalendarEvent(input: {
       },
     });
 
+    const meetingUrl = response.data.hangoutLink ?? null;
+
+    // Separate try/catch from the block above: a failed accessType patch
+    // must not discard an otherwise-successful Calendar event/Meet link.
+    // The space's server-generated `meetingCode` (the last path segment of
+    // the hangout link, e.g. "abc-mnop-xyz") doubles as a valid alias for
+    // the space's resource name for API calls, per the Meet API docs.
+    if (meetingUrl) {
+      try {
+        const meetingCode = meetingUrl.split("/").pop();
+        const meet = google.meet({ version: "v2", auth });
+        await meet.spaces.patch({
+          name: `spaces/${meetingCode}`,
+          updateMask: "config.accessType",
+          requestBody: { config: { accessType: "OPEN" } },
+        });
+      } catch (error) {
+        console.error("[google-calendar] Failed to open Meet space lobby (accessType: OPEN)", error);
+        await notifyAdminsOfMeetLinkFailure(`${input.topic} (Meet lobby open)`, error);
+      }
+    }
+
     return {
-      meetingUrl: response.data.hangoutLink ?? null,
+      meetingUrl,
       googleEventId: response.data.id ?? null,
     };
   } catch (error) {
