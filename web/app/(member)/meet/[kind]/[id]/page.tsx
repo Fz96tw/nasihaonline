@@ -63,8 +63,12 @@ export default async function MeetPage({ params }: { params: Promise<{ kind: str
     );
   }
 
-  // Already live — skip the waiting room entirely.
-  if (status.started && status.meetingUrl) {
+  // Already live — skip straight to Meet, but only for a non-organizer.
+  // meetingStartedAt has no "ended" concept (no Meet API polling), so it
+  // stays true forever after the first Start click — the organizer must
+  // always be able to reach this page itself (to Join again after quitting,
+  // or to Reset), never bounced straight past it the way an attendee is.
+  if (status.started && status.meetingUrl && !status.isOrganizer) {
     redirect(status.meetingUrl);
   }
 
@@ -72,6 +76,8 @@ export default async function MeetPage({ params }: { params: Promise<{ kind: str
     kind === "event" ? `/api/events/${id}/meeting/status` : `/api/inbox/meeting-requests/${id}/meeting/status`;
   const startEndpoint =
     kind === "event" ? `/api/events/${id}/meeting/start` : `/api/inbox/meeting-requests/${id}/meeting/start`;
+  const resetEndpoint =
+    kind === "event" ? `/api/events/${id}/meeting/reset` : `/api/inbox/meeting-requests/${id}/meeting/reset`;
   const messageEndpoint =
     kind === "event" ? `/api/events/${id}/meeting/message` : `/api/inbox/meeting-requests/${id}/meeting/message`;
 
@@ -80,6 +86,7 @@ export default async function MeetPage({ params }: { params: Promise<{ kind: str
       initialStatus={status}
       statusEndpoint={statusEndpoint}
       startEndpoint={startEndpoint}
+      resetEndpoint={resetEndpoint}
       messageEndpoint={messageEndpoint}
     />
   );

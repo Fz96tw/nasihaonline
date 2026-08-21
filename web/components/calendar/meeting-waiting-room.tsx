@@ -40,11 +40,13 @@ export function MeetingWaitingRoom({
   initialStatus,
   statusEndpoint,
   startEndpoint,
+  resetEndpoint,
   messageEndpoint,
 }: {
   initialStatus: MeetingWaitingRoomStatus;
   statusEndpoint: string;
   startEndpoint: string;
+  resetEndpoint: string;
   messageEndpoint: string;
 }) {
   const [status, setStatus] = useState(initialStatus);
@@ -54,6 +56,7 @@ export function MeetingWaitingRoom({
   const [removeImage, setRemoveImage] = useState(false);
   const [savingMessage, setSavingMessage] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasMounted = useHasMounted();
   const abortRef = useRef<AbortController | null>(null);
@@ -83,10 +86,13 @@ export function MeetingWaitingRoom({
   }, [refresh]);
 
   useEffect(() => {
-    if (status.started && status.meetingUrl) {
+    // The organizer never auto-redirects — meetingStartedAt has no "ended"
+    // concept, so once true it stays true forever; the organizer needs to
+    // stay on this page to Join again (after quitting) or Reset it.
+    if (status.started && status.meetingUrl && !status.isOrganizer) {
       window.location.href = status.meetingUrl;
     }
-  }, [status.started, status.meetingUrl]);
+  }, [status.started, status.meetingUrl, status.isOrganizer]);
 
   async function handleStart() {
     setStarting(true);
@@ -103,6 +109,24 @@ export function MeetingWaitingRoom({
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setStarting(false);
+    }
+  }
+
+  async function handleReset() {
+    setResetting(true);
+    setError(null);
+    try {
+      const csrfToken = await getCsrfToken();
+      const res = await fetch(resetEndpoint, { method: "POST", headers: { "x-csrf-token": csrfToken } });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        throw new Error(typeof payload?.error === "string" ? payload.error : "Something went wrong.");
+      }
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -140,7 +164,7 @@ export function MeetingWaitingRoom({
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center gap-6 p-8 text-center">
       <h1 className="text-2xl font-bold tracking-tight">
-        {status.isOrganizer ? "Start your meeting" : "Waiting for the meeting to start"}
+        {status.isOrganizer ? (status.started ? "Meeting started" : "Start your meeting") : "Waiting for the meeting to start"}
       </h1>
 
       {!status.isOrganizer && (
@@ -201,9 +225,22 @@ export function MeetingWaitingRoom({
           <Button type="button" variant="outline" onClick={handleSaveMessage} disabled={savingMessage}>
             {savingMessage ? "Saving…" : "Save message"}
           </Button>
-          <Button type="button" onClick={handleStart} disabled={starting || status.started}>
-            {starting ? "Starting…" : status.started ? "Meeting started" : "Start Meeting"}
-          </Button>
+          {status.started && status.meetingUrl ? (
+            <>
+              <Button type="button" asChild>
+                <a href={status.meetingUrl} target="_blank" rel="noopener noreferrer">
+                  Join Meet
+                </a>
+              </Button>
+              <Button type="button" variant="ghost" onClick={handleReset} disabled={resetting}>
+                {resetting ? "Resetting…" : "Reset waiting room"}
+              </Button>
+            </>
+          ) : (
+            <Button type="button" onClick={handleStart} disabled={starting}>
+              {starting ? "Starting…" : "Start Meeting"}
+            </Button>
+          )}
         </div>
       )}
     </main>

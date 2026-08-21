@@ -986,3 +986,17 @@ export async function startMeetingRequestMeeting(meetingRequestId: string, actin
 
   await db.meetingRequest.update({ where: { id: meetingRequestId }, data: { meetingStartedAt: new Date() } });
 }
+
+/** Sender-only: un-starts the meeting — same rationale as resetEventMeeting in events-server.ts. */
+export async function resetMeetingRequestMeeting(meetingRequestId: string, actingUserId: string): Promise<void> {
+  const meetingRequest = await db.meetingRequest.findUnique({
+    where: { id: meetingRequestId },
+    select: { senderId: true },
+  });
+  if (!meetingRequest) throw new MeetingRequestError(404, "Meeting request not found.");
+  if (meetingRequest.senderId !== actingUserId) {
+    throw new MeetingRequestError(403, "Only the meeting organizer can reset the meeting.");
+  }
+
+  await db.meetingRequest.update({ where: { id: meetingRequestId }, data: { meetingStartedAt: null } });
+}

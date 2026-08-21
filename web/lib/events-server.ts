@@ -2018,3 +2018,20 @@ export async function startEventMeeting(eventId: string, actingUser: UserModel):
 
   await db.event.update({ where: { id: eventId }, data: { meetingStartedAt: new Date() } });
 }
+
+/**
+ * Host-only: un-starts the meeting — meetingStartedAt has no "ended"
+ * concept (no Meet API polling), so this is the only way to make the
+ * waiting room apply again after a Start click (e.g. started too early,
+ * or reusing the flow for a recurring series' next occurrence, which
+ * shares this same Event row).
+ */
+export async function resetEventMeeting(eventId: string, actingUser: UserModel): Promise<void> {
+  const event = await db.event.findUnique({ where: { id: eventId }, select: { hostId: true } });
+  if (!event) throw new EventError(404, "Event not found.");
+  if (event.hostId !== actingUser.id) {
+    throw new EventError(403, "Only the event's host can reset the meeting.");
+  }
+
+  await db.event.update({ where: { id: eventId }, data: { meetingStartedAt: null } });
+}
