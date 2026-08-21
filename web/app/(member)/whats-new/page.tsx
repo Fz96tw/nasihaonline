@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Rss, Search } from "lucide-react";
+import { Rss } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getFeedPage } from "@/lib/feed-server";
 import { FEED_TYPES, FEED_TYPE_LABELS, isFeedItemType } from "@/lib/feed";
 import { FeedList } from "@/components/feed/feed-list";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { FeedSearchForm } from "@/components/feed/feed-search-form";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -73,13 +72,7 @@ export default async function WhatsNewPage({
         ))}
       </div>
 
-      <form action="/whats-new" method="get" className="flex gap-2">
-        {activeType ? <input type="hidden" name="type" value={activeType} /> : null}
-        <Input type="search" name="q" defaultValue={q} placeholder="Search the feed…" className="max-w-sm" />
-        <Button type="submit" variant="outline" size="icon" aria-label="Search">
-          <Search className="h-4 w-4" />
-        </Button>
-      </form>
+      <FeedSearchForm activeType={activeType} q={q} />
 
       <div className="rounded-[10px] border">
         <FeedList
