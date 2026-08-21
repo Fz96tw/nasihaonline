@@ -895,6 +895,8 @@ export async function getMeetingRequestMeetingStatus(
   meetingRequestId: string,
   userId: string,
 ): Promise<{
+  title: string;
+  organizerName: string;
   started: boolean;
   startsAt: string;
   meetingUrl: string | null;
@@ -906,7 +908,9 @@ export async function getMeetingRequestMeetingStatus(
   const meetingRequest = await db.meetingRequest.findUnique({
     where: { id: meetingRequestId },
     select: {
+      topic: true,
       senderId: true,
+      sender: { select: { name: true } },
       recipientId: true,
       status: true,
       scheduledAt: true,
@@ -925,6 +929,8 @@ export async function getMeetingRequestMeetingStatus(
   }
 
   return {
+    title: meetingRequest.topic,
+    organizerName: meetingRequest.sender.name ?? "NASIHA Member",
     started: meetingRequest.meetingStartedAt !== null,
     startsAt: meetingRequest.scheduledAt.toISOString(),
     meetingUrl: meetingRequest.meetingStartedAt ? meetingRequest.meetingUrl : null,

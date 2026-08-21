@@ -9,6 +9,8 @@ import { useHasMounted } from "@/lib/use-has-mounted";
 const POLL_INTERVAL_MS = 5_000;
 
 export type MeetingWaitingRoomStatus = {
+  title: string;
+  organizerName: string;
   started: boolean;
   startsAt: string;
   meetingUrl: string | null;
@@ -26,6 +28,21 @@ function formatCountdown(msRemaining: number): string {
   const seconds = totalSeconds % 60;
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
+
+// Same weekday/month/day/hour/minute/timeZoneName shape as
+// meeting-request-detail.tsx's formatTimestamp — client-only (hasMounted-
+// gated by the caller) since the server process's own timezone isn't the
+// viewer's.
+function formatScheduledTime(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
 }
 
 /**
@@ -164,9 +181,19 @@ export function MeetingWaitingRoom({
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center gap-6 p-8 text-center">
-      <h1 className="text-2xl font-bold tracking-tight">
-        {status.isOrganizer ? (status.started ? "Meeting started" : "Start your meeting") : "Waiting for the meeting to start"}
-      </h1>
+      <div className="flex flex-col items-center gap-1">
+        <h1 className="text-2xl font-bold tracking-tight">{status.title}</h1>
+        <p className="text-sm text-muted-foreground">Hosted by {status.organizerName}</p>
+        {hasMounted && <p className="text-sm text-muted-foreground">{formatScheduledTime(status.startsAt)}</p>}
+      </div>
+
+      <p className="text-lg font-medium">
+        {status.isOrganizer
+          ? status.started
+            ? "Meeting started"
+            : "Start your meeting"
+          : "Waiting for the meeting to start"}
+      </p>
 
       {!status.isOrganizer && hasMounted && (
         <>

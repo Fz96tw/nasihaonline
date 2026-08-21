@@ -1913,6 +1913,8 @@ export async function getEventMeetingStatus(
   eventId: string,
   userId: string | null,
 ): Promise<{
+  title: string;
+  organizerName: string;
   started: boolean;
   startsAt: string;
   meetingUrl: string | null;
@@ -1924,7 +1926,9 @@ export async function getEventMeetingStatus(
   const event = await db.event.findUnique({
     where: { id: eventId },
     select: {
+      title: true,
       hostId: true,
+      host: { select: { name: true } },
       startsAt: true,
       meetingUrl: true,
       meetingStartedAt: true,
@@ -1957,6 +1961,8 @@ export async function getEventMeetingStatus(
   }
 
   return {
+    title: event.title,
+    organizerName: event.host.name ?? "NASIHA Member",
     started: event.meetingStartedAt !== null,
     startsAt: event.startsAt.toISOString(),
     meetingUrl: event.meetingStartedAt ? event.meetingUrl : null,
