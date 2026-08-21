@@ -122,7 +122,7 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
       </div>
 
       {item.contentType !== KnowledgeContentType.blog_post && (
-        <p className="mb-8 text-base leading-relaxed text-muted-foreground">{item.description}</p>
+        <p className="mb-8 whitespace-pre-wrap text-base leading-relaxed text-muted-foreground">{item.description}</p>
       )}
 
       <ResourcePreview

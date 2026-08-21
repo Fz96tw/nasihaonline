@@ -61,9 +61,20 @@ function UnsupportedFilePreview({ url, fileName }: { url: string; fileName: stri
   );
 }
 
-/** True for a .txt upload — plain text is rendered inline via TextPreview rather than attempted through PDF.js. */
+/**
+ * True for a .txt upload — plain text is rendered inline via TextPreview
+ * rather than attempted through PDF.js. Markup types (text/html and
+ * similar) are excluded even though they start with "text/": TextPreview
+ * fetches and displays the raw source, which for HTML just dumps visible
+ * tag soup on screen instead of the "can't preview this" fallback every
+ * other unsupported format gets from PdfPreview's error state.
+ */
 function isPlainTextFile(mimeType: string, fileName: string): boolean {
-  return mimeType.startsWith("text/") || fileName.toLowerCase().endsWith(".txt");
+  const lowerName = fileName.toLowerCase();
+  if (mimeType === "text/html" || lowerName.endsWith(".html") || lowerName.endsWith(".htm")) {
+    return false;
+  }
+  return mimeType.startsWith("text/") || lowerName.endsWith(".txt");
 }
 
 /** True for an image upload (e.g. a scanned page) — rendered inline via ImagePreview rather than attempted through PDF.js. */
