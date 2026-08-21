@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Rss } from "lucide-react";
+import { Rss, Search } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getFeedPage } from "@/lib/feed-server";
 import { FEED_TYPES, FEED_TYPE_LABELS, isFeedItemType } from "@/lib/feed";
@@ -40,6 +40,17 @@ export default async function WhatsNewPage({
         : "border-input text-muted-foreground hover:bg-accent/50 hover:text-foreground",
     );
 
+  // Preserves the active search query across a type-pill click (and vice
+  // versa) — the pills and the search form filter the same feed together,
+  // not as two separate, mutually-clearing views.
+  const filterHref = (type?: string) => {
+    const params = new URLSearchParams();
+    if (type) params.set("type", type);
+    if (q) params.set("q", q);
+    const qs = params.toString();
+    return qs ? `/whats-new?${qs}` : "/whats-new";
+  };
+
   return (
     <main className="mx-auto flex max-w-[720px] flex-col gap-6 px-[2px] py-8 sm:px-8">
       <div>
@@ -51,11 +62,11 @@ export default async function WhatsNewPage({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Link href="/whats-new" className={filterLinkClasses(activeType === undefined)}>
+        <Link href={filterHref()} className={filterLinkClasses(activeType === undefined)}>
           All
         </Link>
         {FEED_TYPES.map((type) => (
-          <Link key={type} href={`/whats-new?type=${type}`} className={filterLinkClasses(activeType === type)}>
+          <Link key={type} href={filterHref(type)} className={filterLinkClasses(activeType === type)}>
             {FEED_TYPE_LABELS[type]}
           </Link>
         ))}
@@ -64,8 +75,8 @@ export default async function WhatsNewPage({
       <form action="/whats-new" method="get" className="flex gap-2">
         {activeType ? <input type="hidden" name="type" value={activeType} /> : null}
         <Input type="search" name="q" defaultValue={q} placeholder="Search the feed…" className="max-w-sm" />
-        <Button type="submit" variant="outline">
-          Search
+        <Button type="submit" variant="outline" size="icon" aria-label="Search">
+          <Search className="h-4 w-4" />
         </Button>
       </form>
 
