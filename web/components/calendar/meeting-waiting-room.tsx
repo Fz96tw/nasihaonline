@@ -220,7 +220,7 @@ export function MeetingWaitingRoom({
             <input
               id="waiting-room-image"
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/jpeg,image/png,image/webp,image/gif"
               onChange={(e) => {
                 setImage(e.target.files?.[0] ?? null);
                 setRemoveImage(false);

@@ -679,7 +679,7 @@ export function SubmitEventForm({
           <input
             id="waiting-room-image"
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept="image/jpeg,image/png,image/webp,image/gif"
             onChange={(e) => setMeetingOrganizerMessageImage(e.target.files?.[0] ?? null)}
             className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
           />
