@@ -904,6 +904,8 @@ export async function getMeetingRequestMeetingStatus(
   organizerMessageImageUrl: string | null;
   isOrganizer: boolean;
   configured: boolean;
+  /** Always false — a MeetingRequest is a private 2-party 1:1, never reachable by an unvetted anonymous visitor, unlike an `open` Event. */
+  requiresCodeOfConductAgreement: boolean;
 }> {
   const meetingRequest = await db.meetingRequest.findUnique({
     where: { id: meetingRequestId },
@@ -938,6 +940,7 @@ export async function getMeetingRequestMeetingStatus(
     organizerMessageImageUrl: getMeetingMessageImageUrl(meetingRequest.meetingOrganizerMessageImageKey),
     isOrganizer: meetingRequest.senderId === userId,
     configured: meetingRequest.meetingUrl !== null,
+    requiresCodeOfConductAgreement: false,
   };
 }
 

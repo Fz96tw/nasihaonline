@@ -4,6 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { getCsrfToken } from "@/lib/csrf-client";
+import {
+  PUBLIC_MEETING_CLOSING_NOTE,
+  PUBLIC_MEETING_CODE_OF_CONDUCT,
+  PUBLIC_MEETING_DISCLAIMER_SECTIONS,
+} from "@/lib/legal";
 import { useHasMounted } from "@/lib/use-has-mounted";
 
 const POLL_INTERVAL_MS = 5_000;
@@ -18,6 +23,7 @@ export type MeetingWaitingRoomStatus = {
   organizerMessageImageUrl: string | null;
   isOrganizer: boolean;
   configured: boolean;
+  requiresCodeOfConductAgreement: boolean;
 };
 
 /** Always hours:minutes:seconds, zero-padded — a fixed-width format reads better at large sizes than one that reflows as hours drop off. */
@@ -76,6 +82,10 @@ export function MeetingWaitingRoom({
   const [starting, setStarting] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Click-through only, never persisted — re-shown on every join, per the
+  // "every time" decision for this gate (no account for an anonymous
+  // visitor to remember it against anyway).
+  const [agreedToDisclaimer, setAgreedToDisclaimer] = useState(false);
   const hasMounted = useHasMounted();
   const abortRef = useRef<AbortController | null>(null);
 
@@ -106,11 +116,18 @@ export function MeetingWaitingRoom({
   useEffect(() => {
     // The organizer never auto-redirects — meetingStartedAt has no "ended"
     // concept, so once true it stays true forever; the organizer needs to
-    // stay on this page to Join again (after quitting) or Reset it.
-    if (status.started && status.meetingUrl && !status.isOrganizer) {
+    // stay on this page to Join again (after quitting) or Reset it. An
+    // open event's attendee also holds here until they click through the
+    // Code of Conduct disclaimer below.
+    if (
+      status.started &&
+      status.meetingUrl &&
+      !status.isOrganizer &&
+      (!status.requiresCodeOfConductAgreement || agreedToDisclaimer)
+    ) {
       window.location.href = status.meetingUrl;
     }
-  }, [status.started, status.meetingUrl, status.isOrganizer]);
+  }, [status.started, status.meetingUrl, status.isOrganizer, status.requiresCodeOfConductAgreement, agreedToDisclaimer]);
 
   async function handleStart() {
     setStarting(true);
@@ -178,6 +195,8 @@ export function MeetingWaitingRoom({
 
   const msRemaining = new Date(status.startsAt).getTime() - now;
   const isBeforeStart = msRemaining > 0;
+  const needsDisclaimerGate =
+    !status.isOrganizer && status.started && status.meetingUrl !== null && status.requiresCodeOfConductAgreement && !agreedToDisclaimer;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center gap-6 p-8 text-center">
@@ -192,12 +211,39 @@ export function MeetingWaitingRoom({
           ? status.started
             ? "Meeting started"
             : "Start your meeting"
-          : "Waiting for the meeting to start"}
+          : needsDisclaimerGate
+            ? "The meeting has started"
+            : "Waiting for the meeting to start"}
       </p>
 
       {!status.isOrganizer && hasMounted && (
         <>
-          {isBeforeStart ? (
+          {needsDisclaimerGate ? (
+            <div className="flex w-full flex-col gap-3 rounded-lg border p-4 text-left">
+              <p className="text-sm font-medium">Before you join</p>
+              <p className="text-xs text-muted-foreground">
+                This is a NASIHA community meeting, open to the public. By joining, you agree to the following:
+              </p>
+              {PUBLIC_MEETING_DISCLAIMER_SECTIONS.map((section) => (
+                <div key={section.heading}>
+                  <p className="text-xs font-semibold">{section.heading}</p>
+                  <p className="text-xs text-muted-foreground">{section.body}</p>
+                </div>
+              ))}
+              <div>
+                <p className="text-xs font-semibold">Code of Conduct</p>
+                <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                  {PUBLIC_MEETING_CODE_OF_CONDUCT.map((principle) => (
+                    <li key={principle}>{principle}</li>
+                  ))}
+                </ul>
+              </div>
+              <p className="text-xs text-muted-foreground">{PUBLIC_MEETING_CLOSING_NOTE}</p>
+              <Button type="button" onClick={() => setAgreedToDisclaimer(true)}>
+                I Agree — Join Meeting
+              </Button>
+            </div>
+          ) : isBeforeStart ? (
             <div className="flex flex-col items-center gap-1">
               <p className="text-sm text-muted-foreground">Starts in</p>
               <p className="font-mono text-7xl font-bold tabular-nums tracking-tight">

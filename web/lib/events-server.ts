@@ -1922,6 +1922,8 @@ export async function getEventMeetingStatus(
   organizerMessageImageUrl: string | null;
   isOrganizer: boolean;
   configured: boolean;
+  /** Open events are reachable by never-vetted anonymous registrants (no membership application, so no prior Code of Conduct agreement) — gates the actual Meet redirect on a click-through agreement. Community/invited events skip this: every attendee there is already a member who agreed once at /join. */
+  requiresCodeOfConductAgreement: boolean;
 }> {
   const event = await db.event.findUnique({
     where: { id: eventId },
@@ -1970,6 +1972,7 @@ export async function getEventMeetingStatus(
     organizerMessageImageUrl: getMeetingMessageImageUrl(event.meetingOrganizerMessageImageKey),
     isOrganizer: isHost,
     configured: event.meetingUrl !== null,
+    requiresCodeOfConductAgreement: event.open,
   };
 }
 

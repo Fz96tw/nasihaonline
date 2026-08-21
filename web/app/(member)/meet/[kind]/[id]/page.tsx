@@ -63,12 +63,15 @@ export default async function MeetPage({ params }: { params: Promise<{ kind: str
     );
   }
 
-  // Already live — skip straight to Meet, but only for a non-organizer.
+  // Already live — skip straight to Meet, but only for a non-organizer who
+  // doesn't need to click through the Code of Conduct gate first.
   // meetingStartedAt has no "ended" concept (no Meet API polling), so it
   // stays true forever after the first Start click — the organizer must
   // always be able to reach this page itself (to Join again after quitting,
   // or to Reset), never bounced straight past it the way an attendee is.
-  if (status.started && status.meetingUrl && !status.isOrganizer) {
+  // An open event's anonymous/first-time attendee instead renders the page
+  // so MeetingWaitingRoom can show the click-through disclaimer.
+  if (status.started && status.meetingUrl && !status.isOrganizer && !status.requiresCodeOfConductAgreement) {
     redirect(status.meetingUrl);
   }
 

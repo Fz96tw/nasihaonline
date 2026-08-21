@@ -1,6 +1,37 @@
 export const EDUCATIONAL_DISCLAIMER =
   "NASIHA is an educational knowledge-sharing community. Content shared by members — including lectures, case discussions, consultations, and forum posts — is intended for professional learning purposes only and does not constitute medical advice. Members are responsible for exercising independent clinical judgment in their own practice. NASIHA and its members accept no liability for clinical decisions made based on content shared within the community.";
 
+// Shown on /meet/event/[id]'s click-through gate (meeting-join-experience)
+// before an attendee is redirected into an `open` event's Meet call — only
+// events open to non-members, since a signed-in member already agreed to
+// CODE_OF_CONDUCT_PRINCIPLES once at /join. Distinct from that array: this
+// is meeting-specific (recording, redistribution, host removal), not the
+// general community membership agreement.
+export const PUBLIC_MEETING_DISCLAIMER_SECTIONS: { heading: string; body: string }[] = [
+  {
+    heading: "Recording",
+    body: "This meeting may be recorded or transcribed. By joining, you consent to being recorded and to that recording being used by NASIHA for community and educational purposes.",
+  },
+  {
+    heading: "No unauthorized sharing",
+    body: "The meeting link, and any recording, are for your own use. Please don't republish, redistribute, or share them outside this meeting without NASIHA's permission.",
+  },
+  {
+    heading: "Not professional advice",
+    body: "NASIHA is an educational knowledge-sharing community. Content shared here — including lectures, case discussions, and Q&A — is for professional learning only and does not constitute medical advice. NASIHA and its members accept no liability for decisions made based on content shared in this meeting.",
+  },
+];
+
+export const PUBLIC_MEETING_CODE_OF_CONDUCT = [
+  "Share honestly. Only teach within your areas of competence. Be clear about the limits of your knowledge.",
+  "Engage respectfully. Disagree with ideas, not people. Critique work constructively and with kindness.",
+  "Protect privacy. Never share patient information or personal data of others.",
+  "Uphold the mission. Do not use this meeting for commercial gain, self-promotion, or any purpose at odds with free knowledge sharing.",
+];
+
+export const PUBLIC_MEETING_CLOSING_NOTE =
+  "The host reserves the right to remove any participant for disruptive or inappropriate behavior. This meeting is hosted on Google Meet; your use of it is also subject to Google's own Terms of Service.";
+
 // Source of truth: docs/Nasiha_Charter.md § Code of Conduct.
 export const CODE_OF_CONDUCT_PRINCIPLES = [
   "Share honestly. Only teach within your areas of competence. Be clear about the limits of your knowledge.",
