@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     cursor,
     types: isFeedItemType(type) ? [type] : undefined,
     viewerId: user.id,
+    viewerRole: user.role,
     q,
   });
   return NextResponse.json(page);

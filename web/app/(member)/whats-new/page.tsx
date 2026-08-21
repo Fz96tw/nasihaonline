@@ -29,6 +29,7 @@ export default async function WhatsNewPage({
     cursor: null,
     types: activeType ? [activeType] : undefined,
     viewerId: user.id,
+    viewerRole: user.role,
     q,
   });
 

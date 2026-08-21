@@ -6,6 +6,7 @@ import {
   KnowledgeStatus,
   KnowledgeVisibility,
   ReviewItemStatus,
+  Role,
   RSVPStatus,
   SurveyStatus,
   type Tier,
@@ -88,26 +89,35 @@ export async function getFeedPage(params: {
   /** Restrict to these feed types; omit/undefined for the full merged feed. */
   types?: FeedItem["type"][];
   /**
-   * The signed-in viewer, for the events branch's audience-restriction
-   * filter (Audience-Restricted Group Events, Objective 01) — an `invited`
-   * event only ever appears in an invited member's feed, never its own
-   * organizer's (confirmed with user: the host already knows they created
-   * it, so it isn't "new" activity for them the way it is for an invitee).
-   * Every non-event domain is unaffected by this param; pass null only
-   * when there is genuinely no session (there's no signed-out caller of
-   * this function today, but the type stays honest).
+   * The signed-in viewer, for every domain's audience-restriction filter
+   * (Audience-Restricted Group Events, Objective 01, and its analogues for
+   * Library/Forum/ReviewItem) — an `invited`/`restricted` item appears in
+   * an invited member's feed, and (per a later revision of this design) in
+   * its own creator's feed too. Pass null only when there is genuinely no
+   * session (there's no signed-out caller of this function today, but the
+   * type stays honest).
    */
   viewerId: string | null;
+  /** Needed only to grant admin/moderator the same "can view anything" bypass search already gave them via the old header search — see `isPrivileged` below. Ignored when `q` is absent. */
+  viewerRole?: Role;
   /**
    * Free-text search (What's New feed's own inline search box, just below
    * the type filter pills — not a separate search UI). When present, each
    * domain's Meilisearch index (lib/meilisearch.ts) is queried first for
    * relevance-ranked hit ids, then that domain's existing Prisma query below
-   * is additionally constrained to `id: { in: hitIds }` — layered on top of,
-   * never replacing, the same per-viewer visibility where-clause every
-   * domain already applies. This is why search results never need a
-   * separate authorization pass the way a general cross-app search would:
-   * getFeedPage's own queries were already the authorization boundary.
+   * is additionally constrained to `id: { in: hitIds }` — layered on top of
+   * the same per-viewer visibility where-clause every domain already
+   * applies for the ordinary (unsearched) feed, *plus* an extra "you can
+   * view this at all" bypass (owner/contributor/host/author, or
+   * admin/moderator) that only activates in search mode. Without that
+   * bypass, search would inherit the ordinary feed's narrower "is this new
+   * activity for you" semantics — which deliberately excludes an item from
+   * its own restricted-visibility creator's feed (see the events/library
+   * branches' comments below) — and a member searching for their own
+   * restricted content, or an admin searching for anything, would get
+   * nothing back even though they're fully authorized to view it. This
+   * bypass is genuinely search-only: it must never loosen the ordinary
+   * feed's browse behavior, which is why it's gated on `query` being set.
    */
   q?: string;
 }): Promise<{ items: FeedItem[]; nextCursor: FeedCursor | null; hasMore: boolean }> {
@@ -116,6 +126,18 @@ export async function getFeedPage(params: {
   const wants = (type: FeedItem["type"]) => !params.types || params.types.includes(type);
   const viewerId = params.viewerId;
   const query = params.q?.trim() || null;
+  const isPrivileged = params.viewerRole === Role.admin || params.viewerRole === Role.moderator;
+  // A restricted-visibility item's own creator now sees it in their own
+  // feed too (confirmed with user — reverses the earlier "not new to them"
+  // design), so this bypass applies unconditionally, browse or search.
+  const ownerBypass = (ownerClause: Record<string, unknown> | null) => (ownerClause ? [ownerClause] : []);
+  // Admin/moderator "can view anything" bypass, search-mode only —
+  // unconditional `{}` matches every row (Prisma's empty-object filter is
+  // "no constraint"), same trick used for the id-filter shortcut above.
+  // Deliberately NOT extended to ordinary browsing: an admin's feed should
+  // still only show their own new/relevant activity, not every restricted
+  // item in the app.
+  const adminBypass = () => (query && isPrivileged ? [{}] : []);
 
   // null = search inactive, no id filter applied to that domain; [] = search
   // active but zero Meilisearch hits, so the domain's query below should
@@ -152,6 +174,8 @@ export async function getFeedPage(params: {
         OR: [
           { visibility: EventVisibility.community },
           ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
+          ...ownerBypass(viewerId ? { hostId: viewerId } : null),
+          ...adminBypass(),
         ],
       },
       select: {
@@ -182,17 +206,24 @@ export async function getFeedPage(params: {
     }),
     !wants("library") || libraryHitIds?.length === 0 ? Promise.resolve([]) : db.knowledgeItem.findMany({
       where: {
-        status: KnowledgeStatus.published,
+        // Ordinary browse only ever shows `published` — a `flagged` item
+        // shouldn't read as "fresh" activity while under moderation review
+        // even though it's still reachable via its own existing links. In
+        // search mode, widen to match syncKnowledgeItemToIndex's own
+        // index-eligibility (published or flagged) — the old header search
+        // found flagged items too, and this is a deliberate "find anything
+        // you can view" tool, not a "what's new" one.
+        status: query ? { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] } : KnowledgeStatus.published,
         ...(before ? { createdAt: { lt: before } } : {}),
         ...(libraryHitIds ? { id: { in: libraryHitIds } } : {}),
         // Same restricted-audience shape as the events branch above
         // (Objective 04's read-path filter, mirrored here): a restricted
-        // item only ever reaches an invited member's feed, never its own
-        // contributor's — the contributor already knows they submitted it,
-        // same "not new activity for them" rationale as restricted events.
+        // item reaches an invited member's feed, and its own contributor's.
         OR: [
           { visibility: KnowledgeVisibility.public },
           ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
+          ...ownerBypass(viewerId ? { contributorId: viewerId } : null),
+          ...adminBypass(),
         ],
       },
       select: {
@@ -236,6 +267,8 @@ export async function getFeedPage(params: {
         OR: [
           { visibility: ForumThreadVisibility.community },
           ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
+          ...ownerBypass(viewerId ? { authorId: viewerId } : null),
+          ...adminBypass(),
         ],
       },
       select: {
@@ -280,7 +313,13 @@ export async function getFeedPage(params: {
     // admin is masked behind BOARD_SENDER on this member-facing surface.
     !wants("survey") || surveyHitIds?.length === 0 ? Promise.resolve([]) : db.survey.findMany({
       where: {
-        status: SurveyStatus.open,
+        // Ordinary browse only shows `open` — nothing actionable about a
+        // closed survey on the "what's new" feed. In search mode, widen to
+        // match syncSurveyToIndex's own index-eligibility (open or closed —
+        // no per-member visibility gate exists for Survey either way, see
+        // that function's comment) — the old header search could find a
+        // closed survey too.
+        status: query ? { in: [SurveyStatus.open, SurveyStatus.closed] } : SurveyStatus.open,
         audienceMembers: true,
         ...(before ? { openedAt: { lt: before } } : {}),
         ...(surveyHitIds ? { id: { in: surveyHitIds } } : {}),
@@ -300,13 +339,6 @@ export async function getFeedPage(params: {
     // the dashboard's "Members Seeking Reviewers" tab.
     !wants("peer_review") || reviewHitIds?.length === 0 ? Promise.resolve([]) : db.reviewItem.findMany({
       where: {
-        status: ReviewItemStatus.open,
-        OR: [
-          { seekingReviewers: true },
-          ...(viewerId
-            ? [{ submitterId: viewerId }, { invitees: { some: { userId: viewerId } } }]
-            : []),
-        ],
         // lastActivityAt (bumped by toggleSeekingReviewers whenever the
         // audience changes, see review-server.ts) is the sort/cursor field
         // here rather than createdAt, so an item whose audience was just
@@ -314,6 +346,28 @@ export async function getFeedPage(params: {
         // forumThreads branch above keying off its own lastActivityAt.
         ...(before ? { lastActivityAt: { lt: before } } : {}),
         ...(reviewHitIds ? { id: { in: reviewHitIds } } : {}),
+        OR: [
+          // Ordinary browse eligibility, unchanged: open-call items are
+          // public to every member; invite-only items only ever reach the
+          // submitter or an invited reviewer's own feed, never a bystander's.
+          {
+            status: ReviewItemStatus.open,
+            OR: [
+              { seekingReviewers: true },
+              ...(viewerId
+                ? [{ submitterId: viewerId }, { invitees: { some: { userId: viewerId } } }]
+                : []),
+            ],
+          },
+          // Search-mode-only: the submitter/invitee/admin "can view this at
+          // all" bypass canViewReviewItem already grants elsewhere, extended
+          // to a closed item too — the old header search could find a
+          // closed submission for its owner, this restores that.
+          ...(query && viewerId
+            ? [{ submitterId: viewerId }, { invitees: { some: { userId: viewerId } } }]
+            : []),
+          ...adminBypass(),
+        ],
       },
       select: {
         id: true,
