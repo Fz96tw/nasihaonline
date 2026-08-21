@@ -8,7 +8,11 @@ export const SEARCH_INDEX_QUEUE_NAME = "search-index-sync";
 export type SearchIndexSyncJob =
   | { type: "profile"; userId: string }
   | { type: "knowledge"; knowledgeItemId: string }
-  | { type: "forum"; threadId: string };
+  | { type: "forum"; threadId: string }
+  | { type: "event"; eventId: string }
+  | { type: "announcement"; announcementId: string }
+  | { type: "survey"; surveyId: string }
+  | { type: "reviewItem"; reviewItemId: string };
 
 const globalForSearchIndexQueue = globalThis as unknown as {
   searchIndexQueue: Queue<SearchIndexSyncJob> | undefined;
@@ -68,6 +72,61 @@ export async function enqueueForumThreadIndexSync(threadId: string): Promise<voi
   await getSearchIndexQueue().add(
     "forum-sync",
     { type: "forum", threadId },
+    { removeOnComplete: true, removeOnFail: 50 },
+  );
+}
+
+/**
+ * Called from POST /api/events, PATCH /api/events/:id, and POST
+ * /api/events/:id/cancel — same DB-write → BullMQ → index-sync pattern as
+ * enqueueForumThreadIndexSync. Not called from invitee-list routes: the
+ * search index document carries no visibility/invitee data (per-viewer
+ * authorization happens at query time, lib/search-server.ts), so an
+ * invitee-list change never affects what's indexed.
+ */
+export async function enqueueEventIndexSync(eventId: string): Promise<void> {
+  await getSearchIndexQueue().add(
+    "event-sync",
+    { type: "event", eventId },
+    { removeOnComplete: true, removeOnFail: 50 },
+  );
+}
+
+/**
+ * Called from POST /api/admin/announcements and POST
+ * /api/admin/announcements/:id/retract.
+ */
+export async function enqueueAnnouncementIndexSync(announcementId: string): Promise<void> {
+  await getSearchIndexQueue().add(
+    "announcement-sync",
+    { type: "announcement", announcementId },
+    { removeOnComplete: true, removeOnFail: 50 },
+  );
+}
+
+/**
+ * Called from lib/surveys-lifecycle.ts's openSurveyNow/autoCloseSurveyIfDue
+ * (covers immediate-send, scheduled-open, and auto-close) and
+ * lib/surveys-server.ts's closeSurvey/reopenSurvey (manual admin actions).
+ */
+export async function enqueueSurveyIndexSync(surveyId: string): Promise<void> {
+  await getSearchIndexQueue().add(
+    "survey-sync",
+    { type: "survey", surveyId },
+    { removeOnComplete: true, removeOnFail: 50 },
+  );
+}
+
+/**
+ * Called from every ReviewItem write path that can change its searchable
+ * text or query-time eligibility (create/update/delete/close/reopen/
+ * toggle-seeking) — not the invitees route, same "index carries no
+ * invitee data" rationale as enqueueEventIndexSync.
+ */
+export async function enqueueReviewItemIndexSync(reviewItemId: string): Promise<void> {
+  await getSearchIndexQueue().add(
+    "review-item-sync",
+    { type: "reviewItem", reviewItemId },
     { removeOnComplete: true, removeOnFail: 50 },
   );
 }

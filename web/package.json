@@ -11,6 +11,11 @@
     "worker": "tsx scripts/worker.ts",
     "reindex:profiles": "tsx scripts/reindex-profiles.ts",
     "reindex:library": "tsx scripts/reindex-library.ts",
+    "reindex:forum-threads": "tsx scripts/reindex-forum-threads.ts",
+    "reindex:events": "tsx scripts/reindex-events.ts",
+    "reindex:announcements": "tsx scripts/reindex-announcements.ts",
+    "reindex:surveys": "tsx scripts/reindex-surveys.ts",
+    "reindex:review-items": "tsx scripts/reindex-review-items.ts",
     "get:google-refresh-token": "tsx scripts/get-google-refresh-token.ts"
   },
   "dependencies": {

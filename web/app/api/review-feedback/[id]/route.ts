@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { ReviewItemError, deleteReviewItem, updateReviewItem } from "@/lib/review-server";
 import { updateReviewItemSchema } from "@/lib/validation/review";
+import { enqueueReviewItemIndexSync } from "@/lib/queues/search-index-queue";
 
 /**
  * PATCH /api/review-feedback/:id — editing a submission (title/description/
@@ -44,6 +45,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   try {
     const item = await updateReviewItem(id, user, { ...parsed.data, file, heroImage });
+    await enqueueReviewItemIndexSync(item.id);
     return NextResponse.json(item);
   } catch (error) {
     if (error instanceof ReviewItemError) {
@@ -66,6 +68,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params;
   try {
     await deleteReviewItem(id, user);
+    await enqueueReviewItemIndexSync(id);
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof ReviewItemError) {

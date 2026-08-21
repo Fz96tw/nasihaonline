@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { Role, SurveyStatus, NotificationType } from "@/lib/generated/prisma/enums";
 import { sendSurveyInviteEmail } from "@/lib/email";
 import { enqueueAutoClose } from "@/lib/queues/survey-queue";
+import { enqueueSurveyIndexSync } from "@/lib/queues/search-index-queue";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
@@ -117,6 +118,7 @@ export async function openSurveyNow(surveyId: string): Promise<void> {
     where: { id: surveyId },
     data: { status: SurveyStatus.open, openedAt: new Date(), generation },
   });
+  await enqueueSurveyIndexSync(surveyId);
 
   const invitations = await db.surveyInvitation.findMany({
     where: { surveyId },
@@ -169,8 +171,11 @@ export async function openSurveyNow(surveyId: string): Promise<void> {
  * survey the admin just reopened.
  */
 export async function autoCloseSurveyIfDue(surveyId: string, generation: number): Promise<void> {
-  await db.survey.updateMany({
+  const result = await db.survey.updateMany({
     where: { id: surveyId, status: SurveyStatus.open, generation },
     data: { status: SurveyStatus.closed, closedAt: new Date() },
   });
+  if (result.count > 0) {
+    await enqueueSurveyIndexSync(surveyId);
+  }
 }

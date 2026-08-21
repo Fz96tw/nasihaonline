@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { ReviewItemError, createReviewItem } from "@/lib/review-server";
 import { createReviewItemSchema } from "@/lib/validation/review";
+import { enqueueReviewItemIndexSync } from "@/lib/queues/search-index-queue";
 
 /**
  * POST /api/review-feedback — "Submit an Item" for peer review. Multipart,
@@ -69,6 +70,7 @@ export async function POST(request: Request) {
       file,
       heroImage,
     });
+    await enqueueReviewItemIndexSync(item.id);
     return NextResponse.json({ id: item.id }, { status: 201 });
   } catch (error) {
     if (error instanceof ReviewItemError) {

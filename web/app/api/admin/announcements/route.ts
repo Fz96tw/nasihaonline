@@ -4,6 +4,7 @@ import { Role } from "@/lib/generated/prisma/enums";
 import { createAnnouncementSchema } from "@/lib/validation/announcement";
 import { createAndSendAnnouncement, getAnnouncementTemplate } from "@/lib/announcements-server";
 import { UploadValidationError } from "@/lib/storage";
+import { enqueueAnnouncementIndexSync } from "@/lib/queues/search-index-queue";
 
 /**
  * POST /api/admin/announcements — "Send Announcement" (§4.10), admin-only.
@@ -53,6 +54,7 @@ export async function POST(request: Request) {
       heroImage,
       templateHeroImageUrl,
     });
+    await enqueueAnnouncementIndexSync(announcement.id);
     return NextResponse.json({ id: announcement.id }, { status: 201 });
   } catch (error) {
     if (error instanceof UploadValidationError) {

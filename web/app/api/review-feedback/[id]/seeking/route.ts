@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { ReviewItemError, toggleSeekingReviewers } from "@/lib/review-server";
+import { enqueueReviewItemIndexSync } from "@/lib/queues/search-index-queue";
 
 const toggleSchema = z.object({ value: z.boolean() });
 
@@ -30,6 +31,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   try {
     const result = await toggleSeekingReviewers(id, user, parsed.data.value);
+    await enqueueReviewItemIndexSync(id);
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof ReviewItemError) {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { EventError, updateEvent } from "@/lib/events-server";
 import { updateEventSchema } from "@/lib/validation/event";
+import { enqueueEventIndexSync } from "@/lib/queues/search-index-queue";
 
 /**
  * PATCH /api/events/:id — editing an event (§4.6), host or admin only
@@ -66,6 +67,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       meetingOrganizerMessage,
       meetingOrganizerMessageImage,
     });
+    await enqueueEventIndexSync(event.id);
     return NextResponse.json({ id: event.id });
   } catch (error) {
     if (error instanceof EventError) {

@@ -7,11 +7,19 @@ import {
   ensureLibraryIndexConfigured,
   ensureProfilesIndexConfigured,
   ensureForumsIndexConfigured,
+  ensureEventsIndexConfigured,
+  ensureAnnouncementsIndexConfigured,
+  ensureSurveysIndexConfigured,
+  ensureReviewItemsIndexConfigured,
 } from "@/lib/meilisearch";
 import {
   syncKnowledgeItemToIndex,
   syncProfileToIndex,
   syncForumThreadToIndex,
+  syncEventToIndex,
+  syncAnnouncementToIndex,
+  syncSurveyToIndex,
+  syncReviewItemToIndex,
 } from "@/lib/search-index-sync";
 import { openSurveyNow, autoCloseSurveyIfDue } from "@/lib/surveys-lifecycle";
 
@@ -25,6 +33,10 @@ async function main() {
   await ensureProfilesIndexConfigured();
   await ensureLibraryIndexConfigured();
   await ensureForumsIndexConfigured();
+  await ensureEventsIndexConfigured();
+  await ensureAnnouncementsIndexConfigured();
+  await ensureSurveysIndexConfigured();
+  await ensureReviewItemsIndexConfigured();
 
   const worker = new Worker<SearchIndexSyncJob>(
     SEARCH_INDEX_QUEUE_NAME,
@@ -35,18 +47,31 @@ async function main() {
         await syncKnowledgeItemToIndex(job.data.knowledgeItemId);
       } else if (job.data.type === "forum") {
         await syncForumThreadToIndex(job.data.threadId);
+      } else if (job.data.type === "event") {
+        await syncEventToIndex(job.data.eventId);
+      } else if (job.data.type === "announcement") {
+        await syncAnnouncementToIndex(job.data.announcementId);
+      } else if (job.data.type === "survey") {
+        await syncSurveyToIndex(job.data.surveyId);
+      } else if (job.data.type === "reviewItem") {
+        await syncReviewItemToIndex(job.data.reviewItemId);
       }
     },
     { connection: queueConnection },
   );
 
+  const SEARCH_INDEX_JOB_ID: Record<SearchIndexSyncJob["type"], (job: SearchIndexSyncJob) => string> = {
+    profile: (job) => (job as { type: "profile"; userId: string }).userId,
+    knowledge: (job) => (job as { type: "knowledge"; knowledgeItemId: string }).knowledgeItemId,
+    forum: (job) => (job as { type: "forum"; threadId: string }).threadId,
+    event: (job) => (job as { type: "event"; eventId: string }).eventId,
+    announcement: (job) => (job as { type: "announcement"; announcementId: string }).announcementId,
+    survey: (job) => (job as { type: "survey"; surveyId: string }).surveyId,
+    reviewItem: (job) => (job as { type: "reviewItem"; reviewItemId: string }).reviewItemId,
+  };
+
   worker.on("completed", (job) => {
-    const id =
-      job.data.type === "profile"
-        ? job.data.userId
-        : job.data.type === "knowledge"
-          ? job.data.knowledgeItemId
-          : job.data.threadId;
+    const id = SEARCH_INDEX_JOB_ID[job.data.type](job.data);
     console.log(`[search-index-worker] synced ${job.data.type} ${id}`);
   });
   worker.on("failed", (job, error) => {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { EventError, cancelEvent } from "@/lib/events-server";
+import { enqueueEventIndexSync } from "@/lib/queues/search-index-queue";
 
 /**
  * POST /api/events/:id/cancel — cancels an event (host or admin only,
@@ -21,6 +22,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     await cancelEvent(id, user);
+    await enqueueEventIndexSync(id);
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof EventError) {

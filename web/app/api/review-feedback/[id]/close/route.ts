@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { ReviewItemError, closeReviewItem, reopenReviewItem } from "@/lib/review-server";
+import { enqueueReviewItemIndexSync } from "@/lib/queues/search-index-queue";
 
 /** POST /api/review-feedback/:id/close — submitter-only "Close Review" action. */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -15,6 +16,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   try {
     const result = await closeReviewItem(id, user);
+    await enqueueReviewItemIndexSync(id);
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof ReviewItemError) {
@@ -37,6 +39,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params;
   try {
     const result = await reopenReviewItem(id, user);
+    await enqueueReviewItemIndexSync(id);
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof ReviewItemError) {

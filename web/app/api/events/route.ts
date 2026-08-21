@@ -3,6 +3,7 @@ import { AuthError, authErrorResponse, requireTier } from "@/lib/auth";
 import { EventError, createEvent, getPublicUpcomingEvents } from "@/lib/events-server";
 import { EVENT_SUBMISSION_TIERS } from "@/lib/events";
 import { createEventSchema } from "@/lib/validation/event";
+import { enqueueEventIndexSync } from "@/lib/queues/search-index-queue";
 
 // Public, unauthenticated route (§4.6) — not listed in middleware's
 // isProtectedApiRoute, and getPublicUpcomingEvents() never selects
@@ -97,6 +98,7 @@ export async function POST(request: Request) {
       meetingOrganizerMessage,
       meetingOrganizerMessageImage,
     });
+    await enqueueEventIndexSync(event.id);
     return NextResponse.json({ id: event.id }, { status: 201 });
   } catch (error) {
     if (error instanceof EventError) {

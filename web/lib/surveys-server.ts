@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { SurveyStatus, type SurveyQuestionType } from "@/lib/generated/prisma/enums";
 import { openSurveyNow } from "@/lib/surveys-lifecycle";
 import { enqueueOpenSurvey, enqueueAutoClose } from "@/lib/queues/survey-queue";
+import { enqueueSurveyIndexSync } from "@/lib/queues/search-index-queue";
 import { uploadSurveyHeroImage, getSurveyHeroImageUrl, DEFAULT_SURVEY_HERO_KEY } from "@/lib/storage";
 
 export class SurveyError extends Error {
@@ -188,6 +189,7 @@ export async function closeSurvey(surveyId: string, closedById: string): Promise
     where: { id: surveyId },
     data: { status: SurveyStatus.closed, closedAt: new Date(), closedById },
   });
+  await enqueueSurveyIndexSync(surveyId);
 }
 
 /**
@@ -221,6 +223,7 @@ export async function reopenSurvey(surveyId: string, durationDays: number | null
   if (durationDays) {
     await enqueueAutoClose(surveyId, generation, new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000));
   }
+  await enqueueSurveyIndexSync(surveyId);
 }
 
 export type SurveyDetail = {
