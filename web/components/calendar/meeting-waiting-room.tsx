@@ -18,13 +18,14 @@ export type MeetingWaitingRoomStatus = {
   configured: boolean;
 };
 
+/** Always hours:minutes:seconds, zero-padded — a fixed-width format reads better at large sizes than one that reflows as hours drop off. */
 function formatCountdown(msRemaining: number): string {
   const totalSeconds = Math.max(0, Math.floor(msRemaining / 1000));
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   const pad = (n: number) => String(n).padStart(2, "0");
-  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 }
 
 /**
@@ -167,14 +168,19 @@ export function MeetingWaitingRoom({
         {status.isOrganizer ? (status.started ? "Meeting started" : "Start your meeting") : "Waiting for the meeting to start"}
       </h1>
 
-      {!status.isOrganizer && (
-        <p className="text-muted-foreground">
-          {hasMounted
-            ? isBeforeStart
-              ? `Starts in ${formatCountdown(msRemaining)}`
-              : "Waiting for the host to start the meeting…"
-            : null}
-        </p>
+      {!status.isOrganizer && hasMounted && (
+        <>
+          {isBeforeStart ? (
+            <div className="flex flex-col items-center gap-1">
+              <p className="text-sm text-muted-foreground">Starts in</p>
+              <p className="font-mono text-7xl font-bold tabular-nums tracking-tight">
+                {formatCountdown(msRemaining)}
+              </p>
+            </div>
+          ) : (
+            <p className="text-muted-foreground">Waiting for the host to start the meeting…</p>
+          )}
+        </>
       )}
 
       {status.organizerMessageImageUrl && (
