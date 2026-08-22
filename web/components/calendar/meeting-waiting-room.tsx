@@ -145,7 +145,12 @@ export function MeetingWaitingRoom({
     // after the start request round-trips. Collapses Start + Join into one
     // click for the organizer, who otherwise had to click Start, wait for
     // the status poll/refresh, then click a second Join Meet button.
-    const meetingWindow = window.open("", "_blank", "noopener,noreferrer");
+    // Can't pass the "noopener" feature here — browsers return null from
+    // window.open when it's set, and we need the handle to navigate this
+    // tab later. Clearing .opener by hand gets the same reverse-tabnabbing
+    // protection without losing the reference.
+    const meetingWindow = window.open("", "_blank");
+    if (meetingWindow) meetingWindow.opener = null;
     try {
       const csrfToken = await getCsrfToken();
       const res = await fetch(startEndpoint, { method: "POST", headers: { "x-csrf-token": csrfToken } });
