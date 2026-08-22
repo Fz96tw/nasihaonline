@@ -237,7 +237,15 @@ export function MeetingWaitingRoom({
 
       {status.isOrganizer ? (
         status.started ? (
-          <p className="text-lg font-medium">Meeting started</p>
+          status.meetingUrl ? (
+            <Button type="button" size="lg" asChild>
+              <a href={status.meetingUrl} target="_blank" rel="noopener noreferrer">
+                Join Meet
+              </a>
+            </Button>
+          ) : (
+            <p className="text-lg font-medium">Meeting started</p>
+          )
         ) : (
           <Button type="button" size="lg" onClick={handleStart} disabled={starting}>
             {starting ? "Starting…" : "Start Meeting"}
@@ -337,17 +345,10 @@ export function MeetingWaitingRoom({
           <Button type="button" variant="outline" onClick={handleSaveMessage} disabled={savingMessage}>
             {savingMessage ? "Saving…" : "Save message"}
           </Button>
-          {status.started && status.meetingUrl && (
-            <>
-              <Button type="button" asChild>
-                <a href={status.meetingUrl} target="_blank" rel="noopener noreferrer">
-                  Join Meet
-                </a>
-              </Button>
-              <Button type="button" variant="ghost" onClick={handleReset} disabled={resetting}>
-                {resetting ? "Resetting…" : "Reset waiting room"}
-              </Button>
-            </>
+          {status.started && (
+            <Button type="button" variant="ghost" onClick={handleReset} disabled={resetting}>
+              {resetting ? "Resetting…" : "Reset waiting room"}
+            </Button>
           )}
         </div>
       )}
