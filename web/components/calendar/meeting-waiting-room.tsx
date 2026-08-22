@@ -92,17 +92,19 @@ export function MeetingWaitingRoom({
   const hasMounted = useHasMounted();
   const abortRef = useRef<AbortController | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<MeetingWaitingRoomStatus | undefined> => {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     try {
       const res = await fetch(statusEndpoint, { signal: controller.signal });
-      if (!res.ok) return;
+      if (!res.ok) return undefined;
       const data: MeetingWaitingRoomStatus = await res.json();
       setStatus(data);
+      return data;
     } catch {
       // Transient poll failure (including our own abort) — next tick retries.
+      return undefined;
     }
   }, [statusEndpoint]);
 
@@ -135,12 +137,15 @@ export function MeetingWaitingRoom({
   async function handleStart() {
     setStarting(true);
     setError(null);
-    // Opened synchronously, before the first await, so browsers still treat
-    // it as a direct response to the click rather than an untrusted
-    // script-triggered popup — collapses Start + Join into one click for
-    // the organizer, who otherwise had to click Start, wait for the status
-    // poll/refresh, then click a second Join Meet button.
-    const meetingWindow = status.meetingUrl ? window.open(status.meetingUrl, "_blank", "noopener,noreferrer") : null;
+    // Opened blank synchronously, before the first await, so browsers still
+    // treat it as a direct response to the click rather than an untrusted
+    // script-triggered popup, then navigated once we know the real URL —
+    // getEventMeetingStatus/getMeetingRequestMeetingStatus withhold
+    // meetingUrl until meetingStartedAt is set, so it isn't known until
+    // after the start request round-trips. Collapses Start + Join into one
+    // click for the organizer, who otherwise had to click Start, wait for
+    // the status poll/refresh, then click a second Join Meet button.
+    const meetingWindow = window.open("", "_blank", "noopener,noreferrer");
     try {
       const csrfToken = await getCsrfToken();
       const res = await fetch(startEndpoint, { method: "POST", headers: { "x-csrf-token": csrfToken } });
@@ -149,7 +154,12 @@ export function MeetingWaitingRoom({
         const payload = await res.json().catch(() => null);
         throw new Error(typeof payload?.error === "string" ? payload.error : "Something went wrong.");
       }
-      await refresh();
+      const updated = await refresh();
+      if (updated?.meetingUrl && meetingWindow) {
+        meetingWindow.location.href = updated.meetingUrl;
+      } else {
+        meetingWindow?.close();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
