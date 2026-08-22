@@ -91,6 +91,7 @@ export function MeetingWaitingRoom({
   const [agreedToDisclaimer, setAgreedToDisclaimer] = useState(false);
   const hasMounted = useHasMounted();
   const abortRef = useRef<AbortController | null>(null);
+  const hasAutoOpenedRef = useRef(false);
 
   const refresh = useCallback(async (): Promise<MeetingWaitingRoomStatus | undefined> => {
     abortRef.current?.abort();
@@ -119,18 +120,32 @@ export function MeetingWaitingRoom({
   }, [refresh]);
 
   useEffect(() => {
-    // The organizer never auto-redirects — meetingStartedAt has no "ended"
+    // Reset so a subsequent Start (after the organizer Resets) can
+    // auto-open again — meetingStartedAt has no "ended" concept, so
+    // `started` can go true → false → true within one page load.
+    if (!status.started) hasAutoOpenedRef.current = false;
+  }, [status.started]);
+
+  useEffect(() => {
+    // The organizer never auto-opens — meetingStartedAt has no "ended"
     // concept, so once true it stays true forever; the organizer needs to
     // stay on this page to Join again (after quitting) or Reset it. An
     // open event's attendee also holds here until they click through the
-    // Code of Conduct disclaimer below.
+    // Code of Conduct disclaimer below. Opens a new tab (rather than
+    // navigating this one away) so the member keeps the app open; only
+    // tried once per Start, since this fires from a status poll rather
+    // than a direct click, so most browsers may block it as a popup — the
+    // Join Meet button rendered below is the fallback if so.
     if (
       status.started &&
       status.meetingUrl &&
       !status.isOrganizer &&
-      (!status.requiresCodeOfConductAgreement || agreedToDisclaimer)
+      (!status.requiresCodeOfConductAgreement || agreedToDisclaimer) &&
+      !hasAutoOpenedRef.current
     ) {
-      window.location.href = status.meetingUrl;
+      hasAutoOpenedRef.current = true;
+      const meetingWindow = window.open(status.meetingUrl, "_blank");
+      if (meetingWindow) meetingWindow.opener = null;
     }
   }, [status.started, status.meetingUrl, status.isOrganizer, status.requiresCodeOfConductAgreement, agreedToDisclaimer]);
 
@@ -253,7 +268,7 @@ export function MeetingWaitingRoom({
         )
       ) : (
         <p className="text-lg font-medium">
-          {needsDisclaimerGate ? "The meeting has started" : "Waiting for the meeting to start"}
+          {status.started ? "The meeting has started" : "Waiting for the meeting to start"}
         </p>
       )}
 
@@ -284,6 +299,16 @@ export function MeetingWaitingRoom({
                 I Agree — Join Meeting
               </Button>
             </div>
+          ) : status.started ? (
+            // The effect above already tried opening this in a new tab; this
+            // is the fallback for when the browser blocked that (it fires
+            // from a status poll, not a direct click, so most browsers may
+            // treat it as an unrequested popup) or the member closed that tab.
+            <Button type="button" size="lg" asChild>
+              <a href={status.meetingUrl ?? undefined} target="_blank" rel="noopener noreferrer">
+                Join Meet
+              </a>
+            </Button>
           ) : isBeforeStart ? (
             <div className="flex flex-col items-center gap-1">
               <p className="text-sm text-muted-foreground">Starts in</p>
