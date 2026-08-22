@@ -13,7 +13,7 @@ const SCHEDULE_LIMIT = 6;
  */
 export async function ScheduleWidget({ userId }: { userId: string }) {
   const [events, meetings] = await Promise.all([
-    getDashboardUpcomingEvents(userId),
+    getDashboardUpcomingEvents(userId, SCHEDULE_LIMIT),
     getUpcomingMeetingsForUser(userId),
   ]);
 
