@@ -93,6 +93,7 @@ export function SubmitResourceForm({
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [sourceMode, setSourceMode] = useState<"file" | "link">(existingItem?.externalUrl ? "link" : "file");
   const [heroImage, setHeroImage] = useState<File | null>(null);
@@ -409,7 +410,11 @@ export function SubmitResourceForm({
               <FormItem>
                 <FormLabel>Post</FormLabel>
                 <FormControl>
-                  <TiptapEditor content={field.value ?? ""} onChange={field.onChange} />
+                  <TiptapEditor
+                    content={field.value ?? ""}
+                    onChange={field.onChange}
+                    onImageUploadStateChange={setImageUploading}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -561,7 +566,7 @@ export function SubmitResourceForm({
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <div>
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" disabled={submitting || imageUploading}>
             {submitting ? "Saving…" : existingItem ? "Save Changes" : "Submit for Review"}
           </Button>
         </div>

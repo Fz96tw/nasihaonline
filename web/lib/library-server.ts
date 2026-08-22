@@ -22,12 +22,14 @@ import {
   ContributionSource,
   LedgerStatus,
   LedgerTransactionType,
+  PastedImageOwnerType,
 } from "@/lib/generated/prisma/enums";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { DIRECTORY_TIERS } from "@/lib/members";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import { createNotification } from "@/lib/notifications-server";
 import { recordAdminAction } from "@/lib/audit-server";
+import { countPastedImageReferences, linkPastedImages, MAX_PASTED_IMAGES_PER_BODY } from "@/lib/pasted-images-server";
 import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import { sendLibraryInviteEmail, sendLibraryLifecycleEmail } from "@/lib/email";
 import {
@@ -53,10 +55,12 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 // TiptapEditor's toolbar/schema is a UI affordance, not a trust boundary,
 // since createKnowledgeItem/updateKnowledgeItem are ordinary API routes any
 // client can call directly with an arbitrary `body` string. Strips every tag
-// except the ones StarterKit's schema can actually produce (bold/italic/
-// strike/code marks, headings, lists, blockquote, hr, code block) and every
-// attribute (StarterKit never emits one), which also eliminates on*=
-// handlers and javascript: URLs without needing a URL/attribute allowlist.
+// except the ones StarterKit's schema (plus the Image extension) can
+// actually produce (bold/italic/strike/code marks, headings, lists,
+// blockquote, hr, code block, img) and every attribute except img's src/alt
+// (StarterKit itself never emits an attribute), which also eliminates
+// on*= handlers and javascript: URLs without needing a general URL/
+// attribute allowlist.
 const BLOG_POST_ALLOWED_TAGS = [
   "p",
   "br",
@@ -79,10 +83,24 @@ const BLOG_POST_ALLOWED_TAGS = [
   "li",
   "blockquote",
   "hr",
+  "img",
 ];
 
-function sanitizeBlogPostBody(html: string): string {
-  return sanitizeHtml(html, { allowedTags: BLOG_POST_ALLOWED_TAGS, allowedAttributes: {} });
+// The only src an <img> in a blog_post body is ever allowed to keep —
+// same-origin proxy path returned by uploadLibraryBodyImage's
+// getLibraryBodyImageUrl (lib/storage.ts). This is the real trust boundary
+// against a direct API call: the editor's Image extension only ever
+// inserts a src from our own upload endpoint, but the API itself has to
+// enforce that independently since it accepts arbitrary HTML.
+const LIBRARY_BODY_IMAGE_SRC_PREFIX = "/api/library/body-image/";
+
+export function sanitizeBlogPostBody(html: string): string {
+  return sanitizeHtml(html, {
+    allowedTags: BLOG_POST_ALLOWED_TAGS,
+    allowedAttributes: { img: ["src", "alt"] },
+    exclusiveFilter: (frame) =>
+      frame.tag === "img" && !frame.attribs.src?.startsWith(LIBRARY_BODY_IMAGE_SRC_PREFIX),
+  });
 }
 
 const LIBRARY_CARD_SELECT = {
@@ -276,6 +294,12 @@ export async function createKnowledgeItem(
   if (isBlogPost && !sanitizedBody?.trim()) {
     throw new KnowledgeItemError(400, "Write your post before submitting.");
   }
+  if (
+    isBlogPost &&
+    countPastedImageReferences(sanitizedBody ?? "", PastedImageOwnerType.library_item) > MAX_PASTED_IMAGES_PER_BODY
+  ) {
+    throw new KnowledgeItemError(400, `A post can reference at most ${MAX_PASTED_IMAGES_PER_BODY} pasted images.`);
+  }
 
   const isRestricted = input.visibility === KnowledgeVisibility.restricted;
   const invitedUsers = isRestricted
@@ -363,6 +387,15 @@ export async function createKnowledgeItem(
     },
     select: { id: true },
   });
+
+  if (isBlogPost) {
+    await linkPastedImages({
+      ownerType: PastedImageOwnerType.library_item,
+      ownerId: item.id,
+      uploaderId: contributorId,
+      body: sanitizedBody ?? "",
+    });
+  }
 
   return item;
 }
@@ -475,6 +508,12 @@ export async function updateKnowledgeItem(
   if (isBlogPost && !sanitizedBody?.trim()) {
     throw new KnowledgeItemError(400, "Write your post before submitting.");
   }
+  if (
+    isBlogPost &&
+    countPastedImageReferences(sanitizedBody ?? "", PastedImageOwnerType.library_item) > MAX_PASTED_IMAGES_PER_BODY
+  ) {
+    throw new KnowledgeItemError(400, `A post can reference at most ${MAX_PASTED_IMAGES_PER_BODY} pasted images.`);
+  }
 
   const categories = await db.knowledgeCategory.findMany({
     where: { id: { in: input.categoryIds } },
@@ -574,6 +613,15 @@ export async function updateKnowledgeItem(
 
   if (dropsExistingAttachment) {
     await deleteKnowledgeDocument(existingAttachment!.objectKey);
+  }
+
+  if (isBlogPost) {
+    await linkPastedImages({
+      ownerType: PastedImageOwnerType.library_item,
+      ownerId: updated.id,
+      uploaderId: actingUser.id,
+      body: sanitizedBody ?? "",
+    });
   }
 
   return updated;
