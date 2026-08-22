@@ -1,4 +1,18 @@
 services:
+  nginxproxymanager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nginx_proxy_manager
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "81:81"
+    volumes:
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+    networks:
+      - appnet
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -139,7 +153,10 @@ volumes:
   postgres_data:
   minio_data:
   meilisearch_data:
+  npm_data:
+  npm_letsencrypt:
 
 networks:
   appnet:
-    external: true
+    name: appnet
+    driver: bridge
