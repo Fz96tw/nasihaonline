@@ -135,10 +135,17 @@ export function MeetingWaitingRoom({
   async function handleStart() {
     setStarting(true);
     setError(null);
+    // Opened synchronously, before the first await, so browsers still treat
+    // it as a direct response to the click rather than an untrusted
+    // script-triggered popup — collapses Start + Join into one click for
+    // the organizer, who otherwise had to click Start, wait for the status
+    // poll/refresh, then click a second Join Meet button.
+    const meetingWindow = status.meetingUrl ? window.open(status.meetingUrl, "_blank", "noopener,noreferrer") : null;
     try {
       const csrfToken = await getCsrfToken();
       const res = await fetch(startEndpoint, { method: "POST", headers: { "x-csrf-token": csrfToken } });
       if (!res.ok) {
+        meetingWindow?.close();
         const payload = await res.json().catch(() => null);
         throw new Error(typeof payload?.error === "string" ? payload.error : "Something went wrong.");
       }
