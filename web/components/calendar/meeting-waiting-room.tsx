@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { BackLink } from "@/components/back-link";
 import { getCsrfToken } from "@/lib/csrf-client";
 import {
   PUBLIC_MEETING_CLOSING_NOTE,
@@ -66,12 +67,14 @@ export function MeetingWaitingRoom({
   startEndpoint,
   resetEndpoint,
   messageEndpoint,
+  backHref,
 }: {
   initialStatus: MeetingWaitingRoomStatus;
   statusEndpoint: string;
   startEndpoint: string;
   resetEndpoint: string;
   messageEndpoint: string;
+  backHref: string;
 }) {
   const [status, setStatus] = useState(initialStatus);
   const [now, setNow] = useState(() => Date.now());
@@ -200,6 +203,10 @@ export function MeetingWaitingRoom({
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center gap-6 p-8 text-center">
+      <BackLink
+        fallbackHref={backHref}
+        className="inline-flex items-center gap-1 self-start text-sm text-muted-foreground hover:underline"
+      />
       <div className="flex flex-col items-center gap-1">
         <h1 className="text-2xl font-bold tracking-tight">{status.title}</h1>
         <p className="text-sm text-muted-foreground">Hosted by {status.organizerName}</p>
