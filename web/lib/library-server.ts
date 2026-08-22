@@ -955,7 +955,7 @@ export async function getKnowledgeItemViewCount(knowledgeItemId: string): Promis
  * re-checks independently" convention rsvpToEvent/startEventDiscussion
  * already follow for restricted events.
  */
-function canViewKnowledgeItem(
+export function canViewKnowledgeItem(
   item: { visibility: KnowledgeVisibility; contributorId: string; invitees: { userId: string }[] },
   actingUser: UserModel,
 ): boolean {

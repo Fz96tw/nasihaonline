@@ -434,6 +434,108 @@ export function getMeetingMessageImageUrl(key: string | null): string | null {
   return `/api/meet/message-image/${key}`;
 }
 
+// Pasted-image downscaling shared by uploadForumPostImage/
+// uploadInboxMessageImage/uploadLibraryBodyImage below — these are content
+// images (screenshots, diagrams), so cropping like uploadProfileAvatar does
+// would be wrong, but a raw clipboard screenshot can be several MB at
+// resolutions far larger than what these ever render at (max-h-80 in the
+// composer/thread view). Resizes only if larger than the cap (no
+// upscaling, aspect ratio preserved) and re-encodes to WebP for a further
+// size win, mirroring uploadProfileAvatar's re-encode step. GIF is passed
+// through untouched so animation isn't collapsed to a single frame.
+const PASTED_IMAGE_MAX_DIMENSION_PX = 1600;
+
+async function downscalePastedImage(
+  buffer: Buffer,
+  mime: string,
+): Promise<{ buffer: Buffer; mime: string; ext: string }> {
+  if (mime === "image/gif") return { buffer, mime, ext: "gif" };
+
+  const resized = await sharp(buffer)
+    .rotate() // apply EXIF orientation before resizing, same as uploadProfileAvatar
+    .resize({
+      width: PASTED_IMAGE_MAX_DIMENSION_PX,
+      height: PASTED_IMAGE_MAX_DIMENSION_PX,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .webp({ quality: 85 })
+    .toBuffer();
+  return { buffer: resized, mime: "image/webp", ext: "webp" };
+}
+
+/**
+ * Validates and stores a pasted image for a Forum post/reply body
+ * (clipboard paste-to-upload, not a deliberate file-picker flow — §4.13).
+ * Returns the object key to persist via PastedImage.key
+ * (lib/pasted-images-server.ts) — not a browser-facing URL, see
+ * getForumPostImageUrl.
+ */
+export async function uploadForumPostImage(file: File): Promise<string> {
+  const validated = await validateImageUpload(file);
+  const { buffer, mime, ext } = await downscalePastedImage(validated.buffer, validated.mime);
+
+  await ensureBucket(BUCKET_ATTACHMENTS);
+  const key = `forum-post-image/${crypto.randomUUID()}.${ext}`;
+  const minio = getClient();
+  await minio.putObject(BUCKET_ATTACHMENTS, key, buffer, buffer.length, {
+    "Content-Type": mime,
+  });
+  return key;
+}
+
+export function getForumPostImageUrl(key: string): string {
+  return `/api/forums/post-image/${key}`;
+}
+
+/** Same validation/storage shape as uploadForumPostImage, for an Inbox message body (§4.7). */
+export async function uploadInboxMessageImage(file: File): Promise<string> {
+  const validated = await validateImageUpload(file);
+  const { buffer, mime, ext } = await downscalePastedImage(validated.buffer, validated.mime);
+
+  await ensureBucket(BUCKET_ATTACHMENTS);
+  const key = `inbox-message-image/${crypto.randomUUID()}.${ext}`;
+  const minio = getClient();
+  await minio.putObject(BUCKET_ATTACHMENTS, key, buffer, buffer.length, {
+    "Content-Type": mime,
+  });
+  return key;
+}
+
+export function getInboxMessageImageUrl(key: string): string {
+  return `/api/inbox/message-image/${key}`;
+}
+
+/** Same validation/storage shape as uploadForumPostImage, for a Library blog_post body (§4.9). */
+export async function uploadLibraryBodyImage(file: File): Promise<string> {
+  const validated = await validateImageUpload(file);
+  const { buffer, mime, ext } = await downscalePastedImage(validated.buffer, validated.mime);
+
+  await ensureBucket(BUCKET_ATTACHMENTS);
+  const key = `library-body-image/${crypto.randomUUID()}.${ext}`;
+  const minio = getClient();
+  await minio.putObject(BUCKET_ATTACHMENTS, key, buffer, buffer.length, {
+    "Content-Type": mime,
+  });
+  return key;
+}
+
+export function getLibraryBodyImageUrl(key: string): string {
+  return `/api/library/body-image/${key}`;
+}
+
+/**
+ * Removes a pasted image's object from storage — called when an edit drops
+ * a previously-linked image, or when its owning post/message/item is
+ * deleted (lib/pasted-images-server.ts). Same bucket as the hero-image
+ * deletes above; PastedImage rows are cleaned up separately in the DB.
+ */
+export async function deletePastedImageObject(key: string): Promise<void> {
+  await ensureBucket(BUCKET_ATTACHMENTS);
+  const minio = getClient();
+  await minio.removeObject(BUCKET_ATTACHMENTS, key).catch(() => undefined);
+}
+
 /**
  * Fetches a stored blog hero image (attachments/ bucket) for streaming
  * through the /api/blog/hero proxy — same shape/rationale as

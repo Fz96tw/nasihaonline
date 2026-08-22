@@ -130,6 +130,10 @@ model User {
   tierHistoryEntries TierHistory[] @relation("TierHistorySubject")
   tierChangesMade    TierHistory[] @relation("TierHistoryActor")
 
+  // Paste-image uploads for Forum posts, Inbox messages, and Library blog
+  // bodies — see PastedImage.
+  pastedImagesUploaded PastedImage[] @relation("PastedImageUploader")
+
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   // Last authenticated request, stamped (throttled) in getSessionUser() —
@@ -772,6 +776,9 @@ model InboxMessage {
   readAt    DateTime?
   createdAt DateTime  @default(now())
 
+  // Images pasted into this message's body — see PastedImage.
+  pastedImages PastedImage[]
+
   @@index([recipientId, readAt])
   @@index([senderId])
   @@index([parentId])
@@ -1306,6 +1313,8 @@ model KnowledgeItem {
   // The other direction of LegacyBlogSlug.knowledgeItem — populated only
   // for blog_post items created by the Blog-to-Library migration script.
   legacyBlogSlugs         LegacyBlogSlug[]
+  // Images pasted into this item's blog_post body — see PastedImage.
+  pastedImages            PastedImage[]
 
   @@index([contributorId])
   @@index([status])
@@ -1757,6 +1766,9 @@ model ForumPost {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Images pasted into this post's body — see PastedImage.
+  pastedImages PastedImage[]
+
   @@index([threadId])
   @@index([authorId])
   @@index([parentPostId])
@@ -2066,4 +2078,49 @@ model SurveyAnswer {
 
   @@unique([responseId, questionId])
   @@map("survey_answers")
+}
+
+// Which content type a pasted image belongs to — dispatches
+// canViewPastedImage (lib/pasted-images-server.ts) to the matching
+// visibility check (forum thread visibility, Inbox sender/recipient,
+// KnowledgeItem visibility) since a pasted image must be exactly as
+// private as the content it's embedded in.
+enum PastedImageOwnerType {
+  forum_post
+  inbox_message
+  library_item
+}
+
+// Tracks every clipboard-pasted image uploaded into a Forum post, Inbox
+// message, or Library blog_post body (lib/pasted-images-server.ts). A row
+// starts unlinked (all owner FKs null, visible only to its uploader) right
+// after upload, then gets linked to the saved post/message/item once its
+// `![](url)`/`<img src>` reference is confirmed present in the saved body —
+// letting an abandoned draft's upload stay orphaned rather than silently
+// attached to unrelated content. onDelete: Cascade cleans up the DB row
+// when the owning post/message/item is deleted, but the MinIO object still
+// needs an explicit deletePastedImageObject call since cascade can't reach
+// object storage.
+model PastedImage {
+  id         String               @id @default(cuid())
+  key        String               @unique
+  uploaderId String
+  uploader   User                 @relation("PastedImageUploader", fields: [uploaderId], references: [id])
+  ownerType  PastedImageOwnerType
+
+  forumPostId String?
+  forumPost   ForumPost? @relation(fields: [forumPostId], references: [id], onDelete: Cascade)
+
+  inboxMessageId String?
+  inboxMessage   InboxMessage? @relation(fields: [inboxMessageId], references: [id], onDelete: Cascade)
+
+  knowledgeItemId String?
+  knowledgeItem   KnowledgeItem? @relation(fields: [knowledgeItemId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([forumPostId])
+  @@index([inboxMessageId])
+  @@index([knowledgeItemId])
+  @@map("pasted_images")
 }
