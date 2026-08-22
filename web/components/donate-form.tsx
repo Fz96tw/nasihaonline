@@ -163,7 +163,7 @@ export function DonateForm({
                   ref={field.ref}
                   onBlur={field.onBlur}
                   value={field.value}
-                  onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
+                  onChange={(e) => field.onChange(e.target.valueAsNumber)}
                 />
               </FormControl>
               <FormMessage />
