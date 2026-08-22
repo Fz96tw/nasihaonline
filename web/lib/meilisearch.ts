@@ -120,6 +120,9 @@ export type ReviewItemSearchDocument = {
   tagNames: string[];
   submitterName: string | null;
   volunteerNote: string | null;
+  // Concatenates every comment's body (mirrors ForumSearchDocument.body) so
+  // a search matching only a comment's text still surfaces the item.
+  commentsBody: string;
 };
 
 const globalForMeilisearch = globalThis as unknown as {
@@ -350,6 +353,7 @@ export async function ensureReviewItemsIndexConfigured(): Promise<void> {
     "categoryNames",
     "tagNames",
     "volunteerNote",
+    "commentsBody",
   ]);
   await index.updateFilterableAttributes(["contentType", "level"]);
 }

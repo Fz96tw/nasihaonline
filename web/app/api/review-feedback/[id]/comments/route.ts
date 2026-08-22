@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { ReviewItemError, postReviewComment } from "@/lib/review-server";
 import { reviewCommentSchema } from "@/lib/validation/review";
+import { enqueueReviewItemIndexSync } from "@/lib/queues/search-index-queue";
 
 /** POST /api/review-feedback/:id/comments — access-gated inside postReviewComment (submitter/invitee/moderator/admin). */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -22,6 +23,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     const comment = await postReviewComment(id, user.id, parsed.data);
+    await enqueueReviewItemIndexSync(id);
     return NextResponse.json(comment, { status: 201 });
   } catch (error) {
     if (error instanceof ReviewItemError) {

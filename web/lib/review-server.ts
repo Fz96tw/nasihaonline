@@ -953,10 +953,14 @@ export async function postReviewComment(
 }
 
 /** Author or moderator/admin — edits an existing comment's body. Mirrors updateForumPost's authorization shape; a removed comment can't be edited. */
-export async function updateReviewComment(commentId: string, actingUser: UserModel, body: string): Promise<{ id: string }> {
+export async function updateReviewComment(
+  commentId: string,
+  actingUser: UserModel,
+  body: string,
+): Promise<{ id: string; reviewItemId: string }> {
   const comment = await db.reviewComment.findUnique({
     where: { id: commentId },
-    select: { id: true, authorId: true, removed: true },
+    select: { id: true, authorId: true, removed: true, reviewItemId: true },
   });
   if (!comment) throw new ReviewItemError(404, "Comment not found.");
   const isPrivileged = actingUser.role === Role.admin || actingUser.role === Role.moderator;
@@ -966,7 +970,7 @@ export async function updateReviewComment(commentId: string, actingUser: UserMod
   if (comment.removed) throw new ReviewItemError(400, "This comment has been removed.");
 
   await db.reviewComment.update({ where: { id: commentId }, data: { body, editedAt: new Date() } });
-  return { id: commentId };
+  return { id: commentId, reviewItemId: comment.reviewItemId };
 }
 
 /** Detail page's comment thread — tree-assembled, same two-pass algorithm as getForumThreadDetail. */

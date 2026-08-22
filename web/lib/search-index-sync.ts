@@ -265,6 +265,7 @@ export async function syncReviewItemToIndex(reviewItemId: string): Promise<void>
       submitter: { select: { name: true } },
       categories: { select: { category: { select: { name: true } } } },
       tags: { select: { tag: { select: { name: true } } } },
+      comments: { select: { body: true }, orderBy: { createdAt: "asc" } },
     },
   });
 
@@ -283,5 +284,6 @@ export async function syncReviewItemToIndex(reviewItemId: string): Promise<void>
     tagNames: item.tags.map(({ tag }) => tag.name),
     submitterName: item.submitter.name,
     volunteerNote: item.volunteerNote,
+    commentsBody: item.comments.map((comment) => comment.body).join("\n\n"),
   });
 }

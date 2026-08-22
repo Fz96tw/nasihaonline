@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { ReviewItemError, updateReviewComment } from "@/lib/review-server";
+import { enqueueReviewItemIndexSync } from "@/lib/queues/search-index-queue";
 
 const editSchema = z.object({ body: z.string().trim().min(1, "Comment can't be empty").max(4000) });
 
@@ -24,6 +25,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ co
 
   try {
     const result = await updateReviewComment(commentId, user, parsed.data.body);
+    await enqueueReviewItemIndexSync(result.reviewItemId);
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof ReviewItemError) {
