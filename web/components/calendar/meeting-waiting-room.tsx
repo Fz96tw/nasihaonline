@@ -220,15 +220,19 @@ export function MeetingWaitingRoom({
         {hasMounted && <p className="text-sm text-muted-foreground">{formatScheduledTime(status.startsAt)}</p>}
       </div>
 
-      <p className="text-lg font-medium">
-        {status.isOrganizer
-          ? status.started
-            ? "Meeting started"
-            : "Start your meeting"
-          : needsDisclaimerGate
-            ? "The meeting has started"
-            : "Waiting for the meeting to start"}
-      </p>
+      {status.isOrganizer ? (
+        status.started ? (
+          <p className="text-lg font-medium">Meeting started</p>
+        ) : (
+          <Button type="button" size="lg" onClick={handleStart} disabled={starting}>
+            {starting ? "Starting…" : "Start Meeting"}
+          </Button>
+        )
+      ) : (
+        <p className="text-lg font-medium">
+          {needsDisclaimerGate ? "The meeting has started" : "Waiting for the meeting to start"}
+        </p>
+      )}
 
       {!status.isOrganizer && hasMounted && (
         <>
@@ -318,7 +322,7 @@ export function MeetingWaitingRoom({
           <Button type="button" variant="outline" onClick={handleSaveMessage} disabled={savingMessage}>
             {savingMessage ? "Saving…" : "Save message"}
           </Button>
-          {status.started && status.meetingUrl ? (
+          {status.started && status.meetingUrl && (
             <>
               <Button type="button" asChild>
                 <a href={status.meetingUrl} target="_blank" rel="noopener noreferrer">
@@ -329,10 +333,6 @@ export function MeetingWaitingRoom({
                 {resetting ? "Resetting…" : "Reset waiting room"}
               </Button>
             </>
-          ) : (
-            <Button type="button" onClick={handleStart} disabled={starting}>
-              {starting ? "Starting…" : "Start Meeting"}
-            </Button>
           )}
         </div>
       )}
