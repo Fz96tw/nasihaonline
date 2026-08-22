@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,6 +10,7 @@ import { type InboxThread } from "@/lib/inbox";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { linkifyText } from "@/lib/linkify";
 import { cn } from "@/lib/utils";
+import { usePasteImageUpload } from "@/lib/use-paste-image-upload";
 
 function formatTimestamp(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -34,6 +35,20 @@ export function InboxDetail({
   const [body, setBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const insertAtCaret = useCallback((markdown: string) => {
+    setBody((current) => {
+      const caret = textareaRef.current?.selectionStart ?? current.length;
+      return `${current.slice(0, caret)}${markdown}${current.slice(caret)}`;
+    });
+  }, []);
+
+  const pasteImage = usePasteImageUpload({
+    uploadUrl: "/api/inbox/message-image",
+    value: body,
+    onInserted: insertAtCaret,
+  });
 
   if (isLoading) {
     return (
@@ -114,9 +129,17 @@ export function InboxDetail({
           placeholder="Write a reply…"
           value={body}
           onChange={(event) => setBody(event.target.value)}
+          onPaste={pasteImage.onPaste}
+          ref={textareaRef}
         />
+        {pasteImage.uploading && <p className="text-xs text-muted-foreground">Uploading image…</p>}
+        {pasteImage.error && <p className="text-sm text-destructive">{pasteImage.error}</p>}
         {error && <p className="text-sm text-destructive">{error}</p>}
-        <Button className="self-end" disabled={submitting || !body.trim()} onClick={handleReply}>
+        <Button
+          className="self-end"
+          disabled={submitting || pasteImage.uploading || !body.trim()}
+          onClick={handleReply}
+        >
           {submitting ? "Sending…" : "Reply"}
         </Button>
       </div>

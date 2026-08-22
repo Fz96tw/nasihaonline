@@ -1,12 +1,13 @@
 import "server-only";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
-import { NotificationType } from "@/lib/generated/prisma/enums";
+import { NotificationType, PastedImageOwnerType } from "@/lib/generated/prisma/enums";
 import type { InboxListItem, InboxThread } from "@/lib/inbox";
 import { sendInboxMessageEmail } from "@/lib/email";
 import { INBOX_TIERS } from "@/lib/members";
 import { createNotification } from "@/lib/notifications-server";
 import { getMeetingMessageImageUrl, getProfileAvatarUrl } from "@/lib/storage";
+import { countPastedImageReferences, linkPastedImages, MAX_PASTED_IMAGES_PER_BODY } from "@/lib/pasted-images-server";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
@@ -290,6 +291,10 @@ export async function sendMessage(
   senderId: string,
   input: { recipientId: string | null; subject: string | null; body: string; parentId: string | null },
 ): Promise<{ id: string; threadId: string }> {
+  if (countPastedImageReferences(input.body, PastedImageOwnerType.inbox_message) > MAX_PASTED_IMAGES_PER_BODY) {
+    throw new SendMessageError(400, `A message can reference at most ${MAX_PASTED_IMAGES_PER_BODY} pasted images.`);
+  }
+
   const sender = await db.user.findUnique({ where: { id: senderId }, select: { name: true } });
   const senderName = sender?.name ?? "A member";
 
@@ -305,6 +310,12 @@ export async function sendMessage(
 
     const message = await db.inboxMessage.create({
       data: { senderId, recipientId, subject: input.subject, body: input.body, parentId: null },
+    });
+    await linkPastedImages({
+      ownerType: PastedImageOwnerType.inbox_message,
+      ownerId: message.id,
+      uploaderId: senderId,
+      body: input.body,
     });
     const link = `/inbox?item=${message.id}`;
     await createNotification({
@@ -336,6 +347,12 @@ export async function sendMessage(
 
   const message = await db.inboxMessage.create({
     data: { senderId, recipientId, subject: null, body: input.body, parentId: rootId },
+  });
+  await linkPastedImages({
+    ownerType: PastedImageOwnerType.inbox_message,
+    ownerId: message.id,
+    uploaderId: senderId,
+    body: input.body,
   });
   const link = `/inbox?item=${rootId}`;
   await createNotification({

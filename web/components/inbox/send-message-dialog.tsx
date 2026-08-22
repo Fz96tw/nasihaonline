@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useForm, type ControllerRenderProps } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import {
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { sendMessageSchema, type SendMessageValues } from "@/lib/validation/inbox";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { usePasteImageUpload } from "@/lib/use-paste-image-upload";
 
 const DEFAULT_VALUES: SendMessageValues = {
   recipientId: null,
@@ -24,6 +25,58 @@ const DEFAULT_VALUES: SendMessageValues = {
   body: "",
   parentId: null,
 };
+
+/**
+ * The "Message" body Textarea, split out so usePasteImageUpload (a hook) is
+ * called at a real component's top level rather than inside FormField's
+ * render-prop callback — same shape as new-thread-form.tsx's ThreadBodyField.
+ */
+function MessageBodyField({
+  field,
+  onImageUploadStateChange,
+}: {
+  field: ControllerRenderProps<SendMessageValues, "body">;
+  onImageUploadStateChange: (uploading: boolean) => void;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const insertAtCaret = useCallback(
+    (markdown: string) => {
+      const caret = textareaRef.current?.selectionStart ?? field.value.length;
+      field.onChange(`${field.value.slice(0, caret)}${markdown}${field.value.slice(caret)}`);
+    },
+    [field],
+  );
+
+  const pasteImage = usePasteImageUpload({
+    uploadUrl: "/api/inbox/message-image",
+    value: field.value,
+    onInserted: insertAtCaret,
+  });
+
+  useEffect(() => {
+    onImageUploadStateChange(pasteImage.uploading);
+  }, [pasteImage.uploading, onImageUploadStateChange]);
+
+  return (
+    <>
+      <Textarea
+        rows={5}
+        name={field.name}
+        value={field.value}
+        onChange={(event) => field.onChange(event.target.value)}
+        onBlur={field.onBlur}
+        onPaste={pasteImage.onPaste}
+        ref={(el) => {
+          textareaRef.current = el;
+          field.ref(el);
+        }}
+      />
+      {pasteImage.uploading && <p className="mt-1 text-xs text-muted-foreground">Uploading image…</p>}
+      {pasteImage.error && <p className="mt-1 text-xs text-destructive">{pasteImage.error}</p>}
+    </>
+  );
+}
 
 /**
  * Compose UI opened from a Directory card's "Send Message" action (§4.7).
@@ -44,6 +97,7 @@ export function SendMessageDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
 
   const form = useForm<SendMessageValues>({
     resolver: zodResolver(sendMessageSchema),
@@ -134,7 +188,7 @@ export function SendMessageDialog({
                   <FormItem>
                     <FormLabel>Message</FormLabel>
                     <FormControl>
-                      <Textarea rows={5} {...field} />
+                      <MessageBodyField field={field} onImageUploadStateChange={setImageUploading} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -144,7 +198,7 @@ export function SendMessageDialog({
               {error && <p className="text-sm text-destructive">{error}</p>}
 
               <DialogFooter>
-                <Button type="submit" disabled={submitting}>
+                <Button type="submit" disabled={submitting || imageUploading}>
                   {submitting ? "Sending…" : "Send"}
                 </Button>
               </DialogFooter>
