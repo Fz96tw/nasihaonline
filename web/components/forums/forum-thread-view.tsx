@@ -38,6 +38,7 @@ function ReplyForm({
   const [confirmed, setConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
 
   async function handleSubmit() {
     if (!body.trim()) return;
@@ -78,6 +79,8 @@ function ReplyForm({
         onChange={setBody}
         allowedMemberIds={allowedMemberIds}
         autoFocus={autoFocus}
+        pasteImageUploadUrl="/api/forums/post-image"
+        onImageUploadStateChange={setImageUploading}
       />
       {requireDeidentification && (
         <label className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
@@ -92,7 +95,7 @@ function ReplyForm({
             Cancel
           </Button>
         )}
-        <Button type="button" size="sm" disabled={submitting || !body.trim()} onClick={handleSubmit}>
+        <Button type="button" size="sm" disabled={submitting || imageUploading || !body.trim()} onClick={handleSubmit}>
           {submitting ? "Posting…" : parentId ? "Reply" : "Post"}
         </Button>
       </div>
@@ -129,6 +132,7 @@ function PostNode({
   const [editBody, setEditBody] = useState(post.body);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [editImageUploading, setEditImageUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const authorName = post.authorName ?? "NASIHA Member";
@@ -240,13 +244,20 @@ function PostNode({
               onChange={setEditBody}
               allowedMemberIds={allowedMemberIds}
               autoFocus
+              pasteImageUploadUrl="/api/forums/post-image"
+              onImageUploadStateChange={setEditImageUploading}
             />
             {editError && <p className="text-xs text-destructive">{editError}</p>}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
                 Cancel
               </Button>
-              <Button type="button" size="sm" disabled={editSubmitting || !editBody.trim()} onClick={handleSaveEdit}>
+              <Button
+                type="button"
+                size="sm"
+                disabled={editSubmitting || editImageUploading || !editBody.trim()}
+                onClick={handleSaveEdit}
+              >
                 {editSubmitting ? "Saving…" : "Save"}
               </Button>
             </div>

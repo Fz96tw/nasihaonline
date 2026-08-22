@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Textarea, type TextareaProps } from "@/components/ui/textarea";
 import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import type { DirectoryMember } from "@/lib/members";
+import { usePasteImageUpload } from "@/lib/use-paste-image-upload";
 
 const SUGGESTION_LIMIT = 5;
 
@@ -28,17 +29,41 @@ export function MentionTextarea({
   value,
   onChange,
   allowedMemberIds,
+  pasteImageUploadUrl,
+  onImageUploadStateChange,
   ...textareaProps
 }: Omit<TextareaProps, "value" | "onChange"> & {
   value: string;
   onChange: (value: string) => void;
   /** Member-Initiated Restricted Forum Threads (§4.13/§11.16) — when set, narrows suggestions to this id set so a restricted thread's composer can't autocomplete-suggest (and thus can't silently notify) a non-invitee. Omit for the unrestricted default. */
   allowedMemberIds?: string[];
+  /** When set, pasting a clipboard image uploads it to this endpoint and inserts a `![](url)` token at the caret (§4.13 paste-to-upload). Omit to leave paste behavior untouched (e.g. Peer Review's comment thread, which doesn't support this yet). */
+  pasteImageUploadUrl?: string;
+  /** Notified whenever the paste-image upload's in-flight state changes, so the parent form can disable its submit button meanwhile. */
+  onImageUploadStateChange?: (uploading: boolean) => void;
 }) {
   const [query, setQuery] = useState<{ start: number; query: string } | null>(null);
   const [suggestions, setSuggestions] = useState<DirectoryMember[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const insertAtCaret = useCallback(
+    (markdown: string) => {
+      const caret = textareaRef.current?.selectionStart ?? value.length;
+      onChange(`${value.slice(0, caret)}${markdown}${value.slice(caret)}`);
+    },
+    [value, onChange],
+  );
+
+  const pasteImage = usePasteImageUpload({
+    uploadUrl: pasteImageUploadUrl ?? "",
+    value,
+    onInserted: insertAtCaret,
+  });
+
+  useEffect(() => {
+    onImageUploadStateChange?.(pasteImage.uploading);
+  }, [pasteImage.uploading, onImageUploadStateChange]);
 
   useEffect(() => {
     if (!query || query.query.length === 0) {
@@ -114,7 +139,12 @@ export function MentionTextarea({
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         onBlur={() => setTimeout(() => setSuggestions([]), 150)}
+        onPaste={pasteImageUploadUrl ? pasteImage.onPaste : textareaProps.onPaste}
       />
+      {pasteImageUploadUrl && pasteImage.uploading && (
+        <p className="mt-1 text-xs text-muted-foreground">Uploading image…</p>
+      )}
+      {pasteImageUploadUrl && pasteImage.error && <p className="mt-1 text-xs text-destructive">{pasteImage.error}</p>}
       {suggestions.length > 0 && (
         <div className="absolute left-0 top-full z-10 mt-1 w-full max-w-xs rounded-md border bg-popover shadow-md">
           {suggestions.map((member, index) => (

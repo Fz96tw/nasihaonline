@@ -1,6 +1,12 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { EventVisibility, ForumThreadVisibility, KnowledgeVisibility, NotificationType } from "@/lib/generated/prisma/enums";
+import {
+  EventVisibility,
+  ForumThreadVisibility,
+  KnowledgeVisibility,
+  NotificationType,
+  PastedImageOwnerType,
+} from "@/lib/generated/prisma/enums";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { createNotification } from "@/lib/notifications-server";
 import { recordAdminAction } from "@/lib/audit-server";
@@ -10,6 +16,7 @@ import { getProfileAvatarUrl } from "@/lib/storage";
 import { findMentionedMembers } from "@/lib/mentions";
 import { DIRECTORY_TIERS } from "@/lib/members";
 import { CLINICAL_DISCUSSIONS_SLUG, EVENTS_FORUM_SLUG, LIBRARY_FORUM_SLUG } from "@/lib/forums";
+import { countPastedImageReferences, linkPastedImages, MAX_PASTED_IMAGES_PER_BODY } from "@/lib/pasted-images-server";
 import type {
   ForumCategory,
   ForumThreadListItem,
@@ -556,6 +563,10 @@ export async function createForumThread(
     throw new ForumError(400, "You must confirm all patient information has been de-identified.");
   }
 
+  if (countPastedImageReferences(input.body, PastedImageOwnerType.forum_post) > MAX_PASTED_IMAGES_PER_BODY) {
+    throw new ForumError(400, `A post can reference at most ${MAX_PASTED_IMAGES_PER_BODY} pasted images.`);
+  }
+
   const isRestricted = input.visibility === ForumThreadVisibility.invited;
   const invitees =
     isRestricted && input.invitedUserIds.length > 0
@@ -590,7 +601,7 @@ export async function createForumThread(
         },
         ...(invitees.length > 0 ? { invitees: { create: invitees.map((user) => ({ userId: user.id })) } } : {}),
       },
-      select: { id: true, title: true },
+      select: { id: true, title: true, posts: { select: { id: true } } },
     });
 
     if (invitees.length > 0) {
@@ -604,6 +615,13 @@ export async function createForumThread(
     }
 
     return created;
+  });
+
+  await linkPastedImages({
+    ownerType: PastedImageOwnerType.forum_post,
+    ownerId: thread.posts[0].id,
+    uploaderId: authorId,
+    body: input.body,
   });
 
   return { id: thread.id };
@@ -767,6 +785,10 @@ export async function createForumPost(
     throw new ForumError(400, "You must confirm all patient information has been de-identified.");
   }
 
+  if (countPastedImageReferences(input.body, PastedImageOwnerType.forum_post) > MAX_PASTED_IMAGES_PER_BODY) {
+    throw new ForumError(400, `A post can reference at most ${MAX_PASTED_IMAGES_PER_BODY} pasted images.`);
+  }
+
   const author = await db.user.findUnique({ where: { id: authorId }, select: { name: true } });
 
   const post = await db.forumPost.create({
@@ -777,6 +799,12 @@ export async function createForumPost(
       parentPostId: input.parentId,
       deidentificationConfirmed: isClinicalDiscussions && input.deidentificationConfirmed,
     },
+  });
+  await linkPastedImages({
+    ownerType: PastedImageOwnerType.forum_post,
+    ownerId: post.id,
+    uploaderId: authorId,
+    body: input.body,
   });
   // Bump the thread's What's New feed position (lib/feed-server.ts's
   // forum_thread branch sorts on this) so fresh replies resurface it
@@ -889,10 +917,23 @@ export async function updateForumPost(
     throw new ForumError(403, "Only the post's author or a moderator/admin can edit it.");
   }
 
+  if (countPastedImageReferences(input.body, PastedImageOwnerType.forum_post) > MAX_PASTED_IMAGES_PER_BODY) {
+    throw new ForumError(400, `A post can reference at most ${MAX_PASTED_IMAGES_PER_BODY} pasted images.`);
+  }
+
   const updated = await db.forumPost.update({
     where: { id: postId },
     data: { body: input.body, editedAt: new Date() },
     select: { id: true, threadId: true, editedAt: true },
+  });
+  // The uploader for linking purposes is whoever is editing right now (they
+  // pasted it), not necessarily the post's original author — matches who
+  // actually just called uploadForumPostImage via the paste handler.
+  await linkPastedImages({
+    ownerType: PastedImageOwnerType.forum_post,
+    ownerId: updated.id,
+    uploaderId: actingUserId,
+    body: input.body,
   });
 
   return { id: updated.id, threadId: updated.threadId, editedAt: updated.editedAt!.toISOString() };

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, type ControllerRenderProps } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import { createForumThreadSchema, type CreateForumThreadValues } from "@/lib/val
 import { getCsrfToken } from "@/lib/csrf-client";
 import { InviteePicker } from "@/components/members/invitee-picker";
 import { ForumThreadVisibility } from "@/lib/generated/prisma/enums";
+import { usePasteImageUpload } from "@/lib/use-paste-image-upload";
 
 const DEFAULT_VALUES: CreateForumThreadValues = {
   title: "",
@@ -22,6 +23,58 @@ const DEFAULT_VALUES: CreateForumThreadValues = {
   visibility: ForumThreadVisibility.community,
   invitedUserIds: [],
 };
+
+/**
+ * The "Post" body Textarea, split out so usePasteImageUpload (a hook) is
+ * called at a real component's top level rather than inside FormField's
+ * render-prop callback.
+ */
+function ThreadBodyField({
+  field,
+  onImageUploadStateChange,
+}: {
+  field: ControllerRenderProps<CreateForumThreadValues, "body">;
+  onImageUploadStateChange: (uploading: boolean) => void;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const insertAtCaret = useCallback(
+    (markdown: string) => {
+      const caret = textareaRef.current?.selectionStart ?? field.value.length;
+      field.onChange(`${field.value.slice(0, caret)}${markdown}${field.value.slice(caret)}`);
+    },
+    [field],
+  );
+
+  const pasteImage = usePasteImageUpload({
+    uploadUrl: "/api/forums/post-image",
+    value: field.value,
+    onInserted: insertAtCaret,
+  });
+
+  useEffect(() => {
+    onImageUploadStateChange(pasteImage.uploading);
+  }, [pasteImage.uploading, onImageUploadStateChange]);
+
+  return (
+    <>
+      <Textarea
+        rows={6}
+        name={field.name}
+        value={field.value}
+        onChange={(event) => field.onChange(event.target.value)}
+        onBlur={field.onBlur}
+        onPaste={pasteImage.onPaste}
+        ref={(el) => {
+          textareaRef.current = el;
+          field.ref(el);
+        }}
+      />
+      {pasteImage.uploading && <p className="mt-1 text-xs text-muted-foreground">Uploading image…</p>}
+      {pasteImage.error && <p className="mt-1 text-xs text-destructive">{pasteImage.error}</p>}
+    </>
+  );
+}
 
 /**
  * "New Thread" form (§4.13), posted from /forums/[category]/new. The
@@ -49,6 +102,7 @@ export function NewThreadForm({
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
 
   const form = useForm<CreateForumThreadValues>({
     resolver: zodResolver(createForumThreadSchema),
@@ -163,7 +217,7 @@ export function NewThreadForm({
             <FormItem>
               <FormLabel>Post</FormLabel>
               <FormControl>
-                <Textarea rows={6} {...field} />
+                <ThreadBodyField field={field} onImageUploadStateChange={setImageUploading} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -191,7 +245,7 @@ export function NewThreadForm({
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <div>
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" disabled={submitting || imageUploading}>
             {submitting ? "Posting…" : "Start Thread"}
           </Button>
         </div>
