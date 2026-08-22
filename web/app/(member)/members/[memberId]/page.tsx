@@ -9,6 +9,7 @@ import { MemberProfileView } from "@/components/members/member-profile-view";
 import { MemberHostedEvents } from "@/components/members/member-hosted-events";
 import { MemberLibraryItems } from "@/components/members/member-library-items";
 import { MemberForumThreads } from "@/components/members/member-forum-threads";
+import { MemberContributionsTabs } from "@/components/members/member-contributions-tabs";
 import { BackLink } from "@/components/back-link";
 import { Role } from "@/lib/generated/prisma/enums";
 
@@ -51,9 +52,14 @@ export default async function MemberProfilePage({ params }: { params: { memberId
 
       <MemberProfileView member={member} currentUserId={user.id} />
 
-      <MemberHostedEvents events={events} />
-      <MemberLibraryItems items={libraryItems} canEdit={canEditLibraryItems} />
-      <MemberForumThreads threads={forumThreads} />
+      <MemberContributionsTabs
+        eventsCount={events.length}
+        libraryCount={libraryItems.length}
+        forumCount={forumThreads.length}
+        eventsContent={<MemberHostedEvents events={events} />}
+        libraryContent={<MemberLibraryItems items={libraryItems} canEdit={canEditLibraryItems} />}
+        forumContent={<MemberForumThreads threads={forumThreads} />}
+      />
     </main>
   );
 }
