@@ -28,6 +28,11 @@ import {
   searchSurveyDocuments,
   searchReviewItemDocuments,
 } from "@/lib/meilisearch";
+import {
+  isThreadVisible,
+  EVENT_THREAD_ACCESS_SELECT,
+  KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
+} from "@/lib/forums-server";
 
 const DEFAULT_PAGE_SIZE = 20;
 const EXCERPT_LENGTH = 180;
@@ -245,19 +250,25 @@ export async function getFeedPage(params: {
       take: pageSize,
     }),
     !wants("forum_thread") || forumHitIds?.length === 0 ? Promise.resolve([]) : db.forumThread.findMany({
-      // eventId: null excludes the Events forum's auto-created threads —
-      // those already surface as their parent Event's own feed row (with
-      // forumReplyCount above), so listing them again here would be a
-      // duplicate, bodiless-looking "Forum" row for the same activity.
-      // knowledgeItemId: null excludes the Library's on-demand discussion
-      // threads for the same reason. Beyond de-duplication, the OR below is
-      // Member-Initiated Restricted Forum Threads' (§4.13/§11.16) own
-      // per-viewer visibility filter — same shape as the events/library
-      // branches above — since a standalone thread can now independently
-      // carry `visibility: invited`.
+      // eventId: null/knowledgeItemId: null excludes the Events forum's
+      // auto-created threads and the Library's on-demand discussion threads
+      // during ordinary browse — those already surface as their parent
+      // Event/KnowledgeItem's own feed row (with forumReplyCount above), so
+      // listing them again here would be a duplicate, bodiless-looking
+      // "Forum" row for the same activity. In search mode this exclusion is
+      // dropped: a Meilisearch hit here means the query matched this
+      // thread's actual text (root post or a reply), which the parent
+      // Event/KnowledgeItem's own indexed document doesn't carry — hiding it
+      // would silently throw away a real match. The isThreadVisible filter
+      // below (after the query resolves) then re-applies the inherited
+      // event/library visibility gate that the eventId/knowledgeItemId
+      // exclusion made unnecessary here before. Beyond de-duplication, the
+      // OR below is Member-Initiated Restricted Forum Threads' (§4.13/
+      // §11.16) own per-viewer visibility filter — same shape as the
+      // events/library branches above — since a standalone thread can now
+      // independently carry `visibility: invited`.
       where: {
-        eventId: null,
-        knowledgeItemId: null,
+        ...(query ? {} : { eventId: null, knowledgeItemId: null }),
         // lastActivityAt (bumped by every new reply, see createForumPost) is
         // the sort/cursor field here rather than createdAt, so a thread with
         // fresh activity resurfaces near the top instead of only ever
@@ -289,10 +300,16 @@ export async function getFeedPage(params: {
         // posts includes the thread's own opening post, so replyCount below
         // subtracts one — same convention as toThreadListItem in forums-server.ts.
         _count: { select: { posts: true, views: true } },
+        // Only needed for the isThreadVisible filter below — never rendered.
+        visibility: true,
+        authorId: true,
+        invitees: { select: { userId: true } },
+        event: EVENT_THREAD_ACCESS_SELECT,
+        knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
       },
       orderBy: { lastActivityAt: "desc" },
       take: pageSize,
-    }),
+    }).then((threads) => threads.filter((thread) => isThreadVisible(thread, viewerId ?? undefined, isPrivileged))),
     !wants("announcement") || announcementHitIds?.length === 0 ? Promise.resolve([]) : db.announcement.findMany({
       where: {
         sentAt: { not: null },

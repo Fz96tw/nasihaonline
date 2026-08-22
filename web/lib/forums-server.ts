@@ -92,13 +92,13 @@ export async function getForumCategories(): Promise<ForumCategory[]> {
 // A thread with no linked event (every non-Events forum, plus an Events
 // forum thread started standalone rather than from event creation) is
 // always visible — only an `invited`-visibility event's thread is gated.
-type EventThreadAccess = {
+export type EventThreadAccess = {
   visibility: EventVisibility;
   hostId: string;
   invitees: { userId: string }[];
 } | null;
 
-const EVENT_THREAD_ACCESS_SELECT = {
+export const EVENT_THREAD_ACCESS_SELECT = {
   select: { visibility: true, hostId: true, invitees: { select: { userId: true } } },
 } as const;
 
@@ -120,13 +120,13 @@ function isEventThreadVisible(event: EventThreadAccess, viewerId: string | undef
 // removed invitee loses access exactly when they lose it on the item's own
 // detail page — Steward/admin retain theirs regardless, same blanket
 // moderation visibility as every other Library read path.
-type KnowledgeItemThreadAccess = {
+export type KnowledgeItemThreadAccess = {
   visibility: KnowledgeVisibility;
   contributorId: string;
   invitees: { userId: string }[];
 } | null;
 
-const KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT = {
+export const KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT = {
   select: { visibility: true, contributorId: true, invitees: { select: { userId: true } } },
 } as const;
 
@@ -149,13 +149,13 @@ function isKnowledgeItemThreadVisible(
 // updateForumThreadInvitees never let a thread carry both inherited and
 // member-initiated restriction at once — visibility stays `community` on
 // every such thread.
-type OwnThreadAccess = {
+export type OwnThreadAccess = {
   visibility: ForumThreadVisibility;
   authorId: string;
   invitees: { userId: string }[];
 };
 
-const OWN_THREAD_ACCESS_SELECT = {
+export const OWN_THREAD_ACCESS_SELECT = {
   visibility: true,
   authorId: true,
   invitees: { select: { userId: true } },
@@ -168,7 +168,7 @@ function isOwnThreadVisible(thread: OwnThreadAccess, viewerId: string | undefine
   return thread.authorId === viewerId || thread.invitees.some((invitee) => invitee.userId === viewerId);
 }
 
-function isThreadVisible(
+export function isThreadVisible(
   thread: { event: EventThreadAccess; knowledgeItem: KnowledgeItemThreadAccess } & OwnThreadAccess,
   viewerId: string | undefined,
   isPrivileged: boolean,
