@@ -34,8 +34,8 @@ const FILTER_OPTIONS: { value: InboxFilter; label: string }[] = [
 function matchesSearch(item: InboxListItem, query: string): boolean {
   const haystack =
     item.kind === "message"
-      ? [item.otherPartyName, item.subject, item.snippet]
-      : [item.otherPartyName, item.topic];
+      ? [item.otherPartyName, item.subject, item.searchText]
+      : [item.otherPartyName, item.topic, item.searchText];
   return haystack.some((value) => value?.toLowerCase().includes(query));
 }
 

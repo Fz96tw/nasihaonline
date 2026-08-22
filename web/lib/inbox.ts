@@ -14,6 +14,8 @@ export type InboxMessageListItem = {
   subject: string | null;
   /** The most recent message's body, truncated. */
   snippet: string;
+  /** Every message's body in the thread, concatenated — powers full-thread search (see matchesSearch), not shown in the UI. */
+  searchText: string;
   /** True if the current user has an unread message anywhere in this thread. */
   unread: boolean;
   /** Timestamp of the thread's most recent message, for "most recent activity" sort. */
@@ -54,6 +56,8 @@ export type MeetingRequestListItem = {
   topic: string;
   /** Full negotiation timeline, chronological — see MeetingRequestMessageItem. */
   messages: MeetingRequestMessageItem[];
+  /** Every negotiation step's free-text body, concatenated — powers full-thread search (see matchesSearch), not shown in the UI. */
+  searchText: string;
   /** ISO timestamps — the current outstanding proposal. */
   proposedTimes: string[];
   status: MeetingRequestStatus;

@@ -81,6 +81,7 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
       otherPartyAvatarUrl: getProfileAvatarUrl(otherParty.profile?.avatarUrl ?? null),
       subject: root.subject,
       snippet: truncate(latest.body),
+      searchText: group.map((message) => message.body).join("\n\n"),
       unread,
       lastActivityAt: latest.createdAt.toISOString(),
     });
@@ -111,6 +112,10 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
         proposedTimes: message.proposedTimes.map((time) => time.toISOString()),
         createdAt: message.createdAt.toISOString(),
       })),
+      searchText: meetingRequest.messages
+        .map((message) => message.body)
+        .filter((body): body is string => body !== null)
+        .join("\n\n"),
       proposedTimes: meetingRequest.proposedTimes.map((time) => time.toISOString()),
       status: meetingRequest.status,
       unread,
