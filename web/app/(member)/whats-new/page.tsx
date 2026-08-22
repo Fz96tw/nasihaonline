@@ -51,6 +51,13 @@ export default async function WhatsNewPage({
     return qs ? `/whats-new?${qs}` : "/whats-new";
   };
 
+  // The Inbox pill only makes sense while a search is active (getFeedPage's
+  // inbox branch never returns anything without a query) — hidden outside
+  // search mode rather than left clickable into a dead, unexplained "0
+  // results" state. FEED_TYPES itself stays canonical/unfiltered everywhere
+  // else (feed-server.ts, the API route) — this only changes what renders here.
+  const visiblePillTypes = q ? FEED_TYPES : FEED_TYPES.filter((type) => type !== "inbox");
+
   return (
     <main className="mx-auto flex max-w-[720px] flex-col gap-6 px-[2px] py-8 sm:px-8">
       <div>
@@ -58,21 +65,19 @@ export default async function WhatsNewPage({
           <Rss className="h-7 w-7" aria-hidden="true" />
           What&apos;s New
         </h1>
-        <p className="text-muted-foreground">Recent activity across events, blog posts, the library, forums, and announcements.</p>
+        <FeedSearchForm activeType={activeType} q={q} />
       </div>
 
       <div className="flex flex-wrap gap-2">
         <Link href={filterHref()} className={filterLinkClasses(activeType === undefined)}>
           All
         </Link>
-        {FEED_TYPES.map((type) => (
+        {visiblePillTypes.map((type) => (
           <Link key={type} href={filterHref(type)} className={filterLinkClasses(activeType === type)}>
             {FEED_TYPE_LABELS[type]}
           </Link>
         ))}
       </div>
-
-      <FeedSearchForm activeType={activeType} q={q} />
 
       <div className="rounded-[10px] border">
         <FeedList

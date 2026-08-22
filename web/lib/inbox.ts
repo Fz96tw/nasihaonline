@@ -96,3 +96,17 @@ export type InboxThread = {
   otherPartyAvatarUrl: string | null;
   messages: InboxThreadMessage[];
 };
+
+/**
+ * Free-text match over an inbox item — same fields InboxPanel's search box
+ * matches against (name/subject-or-topic/full thread text), reused by the
+ * What's New feed's server-side search (getFeedPage, lib/feed-server.ts) so
+ * the two never drift. `query` must already be lowercased/trimmed by the caller.
+ */
+export function matchesInboxSearch(item: InboxListItem, query: string): boolean {
+  const haystack =
+    item.kind === "message"
+      ? [item.otherPartyName, item.subject, item.searchText]
+      : [item.otherPartyName, item.topic, item.searchText];
+  return haystack.some((value) => value?.toLowerCase().includes(query));
+}

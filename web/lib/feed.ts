@@ -5,7 +5,7 @@
 
 import type { ReviewVolunteerStatus, Tier } from "@/lib/generated/prisma/enums";
 
-export type FeedItemType = "event" | "library" | "forum_thread" | "announcement" | "survey" | "peer_review";
+export type FeedItemType = "event" | "library" | "forum_thread" | "announcement" | "survey" | "peer_review" | "inbox";
 
 export const FEED_TYPE_LABELS: Record<FeedItemType, string> = {
   event: "Event",
@@ -14,6 +14,7 @@ export const FEED_TYPE_LABELS: Record<FeedItemType, string> = {
   announcement: "Announcement",
   survey: "Survey",
   peer_review: "Peer Review",
+  inbox: "Inbox",
 };
 
 export const FEED_TYPES = Object.keys(FEED_TYPE_LABELS) as FeedItemType[];

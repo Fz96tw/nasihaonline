@@ -19,7 +19,7 @@ import { InboxList } from "@/components/inbox/inbox-list";
 import { InboxDetail } from "@/components/inbox/inbox-detail";
 import { MeetingRequestDetail } from "@/components/inbox/meeting-request-detail";
 import { NewConversationActions } from "@/components/inbox/new-conversation-actions";
-import { type InboxListItem, type InboxThread } from "@/lib/inbox";
+import { matchesInboxSearch, type InboxListItem, type InboxThread } from "@/lib/inbox";
 import { cn } from "@/lib/utils";
 
 type InboxFilter = "all" | "unread" | "message" | "meeting_request";
@@ -30,14 +30,6 @@ const FILTER_OPTIONS: { value: InboxFilter; label: string }[] = [
   { value: "message", label: "Messages" },
   { value: "meeting_request", label: "Meeting Requests" },
 ];
-
-function matchesSearch(item: InboxListItem, query: string): boolean {
-  const haystack =
-    item.kind === "message"
-      ? [item.otherPartyName, item.subject, item.searchText]
-      : [item.otherPartyName, item.topic, item.searchText];
-  return haystack.some((value) => value?.toLowerCase().includes(query));
-}
 
 type Person = { id: string; name: string };
 
@@ -175,7 +167,7 @@ export function InboxPanel({
       if (filter === "message" && item.kind !== "message") return false;
       if (filter === "meeting_request" && item.kind !== "meeting_request") return false;
       if (personFilter && item.otherPartyId !== personFilter) return false;
-      if (query && !matchesSearch(item, query)) return false;
+      if (query && !matchesInboxSearch(item, query)) return false;
       return true;
     });
   }, [items, search, filter, personFilter]);

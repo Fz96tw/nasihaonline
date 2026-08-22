@@ -23,6 +23,16 @@ export function FeedSearchForm({ activeType, q }: { activeType?: string; q?: str
   const [value, setValue] = useState(q ?? "");
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const typeInputRef = useRef<HTMLInputElement>(null);
+
+  // type=inbox with no q is always a dead state (getFeedPage's inbox branch
+  // only ever returns results with an active search, and the Inbox pill
+  // itself is hidden without one — see whats-new/page.tsx's visiblePillTypes)
+  // — every other type is a legitimate "browse this category" state when
+  // search is cleared, so only inbox needs this special-case.
+  function clearTypeIfInbox() {
+    if (activeType === "inbox" && typeInputRef.current) typeInputRef.current.value = "";
+  }
 
   function clear() {
     // Mutate the actual DOM input directly before submitting — setValue()
@@ -31,12 +41,13 @@ export function FeedSearchForm({ activeType, q }: { activeType?: string; q?: str
     // the form would otherwise still submit the old value.
     if (inputRef.current) inputRef.current.value = "";
     setValue("");
+    clearTypeIfInbox();
     formRef.current?.requestSubmit();
   }
 
   return (
-    <form ref={formRef} action="/whats-new" method="get" className="flex gap-2">
-      {activeType ? <input type="hidden" name="type" value={activeType} /> : null}
+    <form ref={formRef} action="/whats-new" method="get" className="mt-2 flex gap-2">
+      {activeType ? <input ref={typeInputRef} type="hidden" name="type" value={activeType} /> : null}
       <div className="relative max-w-sm flex-1">
         <Input
           ref={inputRef}
@@ -49,6 +60,7 @@ export function FeedSearchForm({ activeType, q }: { activeType?: string; q?: str
             const next = event.currentTarget.value;
             setValue(next);
             if (next === "") {
+              clearTypeIfInbox();
               event.currentTarget.form?.requestSubmit();
             }
           }}

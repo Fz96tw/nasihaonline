@@ -33,6 +33,8 @@ import {
   EVENT_THREAD_ACCESS_SELECT,
   KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
 } from "@/lib/forums-server";
+import { getInboxList } from "@/lib/inbox-server";
+import { matchesInboxSearch } from "@/lib/inbox";
 
 const DEFAULT_PAGE_SIZE = 20;
 const EXCERPT_LENGTH = 180;
@@ -170,7 +172,7 @@ export async function getFeedPage(params: {
           : Promise.resolve([]),
       ]);
 
-  const [events, libraryItems, forumThreads, announcements, surveys, seekingReviewItems] = await Promise.all([
+  const [events, libraryItems, forumThreads, announcements, surveys, seekingReviewItems, inboxRaw] = await Promise.all([
     !wants("event") || eventHitIds?.length === 0 ? Promise.resolve([]) : db.event.findMany({
       where: {
         ...(before ? { createdAt: { lt: before } } : {}),
@@ -404,7 +406,55 @@ export async function getFeedPage(params: {
       orderBy: { lastActivityAt: "desc" },
       take: pageSize,
     }),
+    // Inbox (private 1:1 messages + meeting requests) — deliberately NOT
+    // Meilisearch-backed, unlike every other domain above: this is private
+    // DM content, never community-visible, so it must never be synced to a
+    // shared search index. Also deliberately search-only: it contributes
+    // to a query'd feed page but never ordinary chronological browsing (a
+    // member's own messages aren't "what's new" activity for the feed's
+    // normal sense). It is also NEVER exposed to isPrivileged/adminBypass()
+    // — every other domain's search-mode bypass is intentionally skipped
+    // here; getInboxList(viewerId) is already hard-scoped to the viewer's
+    // own mailbox, and this branch must stay that way regardless of role.
+    !wants("inbox") || !query || !viewerId ? Promise.resolve([]) : getInboxList(viewerId),
   ]);
+
+  // getInboxList has no cursor/take support (it's a full, already-sorted
+  // fetch of one member's own mailbox), so search-match, `before`-cursor
+  // filtering, and the pageSize bound every other domain gets from Prisma
+  // are all applied here in JS instead. No re-sort needed — getInboxList
+  // already returns items sorted desc by lastActivityAt, and filtering
+  // preserves that order.
+  const inboxItems: FeedItem[] = !query
+    ? []
+    : inboxRaw
+        .filter((item) => matchesInboxSearch(item, query.toLowerCase()))
+        .filter((item) => !before || new Date(item.lastActivityAt) < before)
+        .slice(0, pageSize)
+        .map((item): FeedItem => {
+          const base = {
+            type: "inbox" as const,
+            id: item.id,
+            href: `/inbox?item=${item.id}`,
+            timestamp: item.lastActivityAt,
+            author: {
+              name: item.otherPartyName,
+              avatarUrl: item.otherPartyAvatarUrl,
+              titleSpecialty: null,
+              countryRegion: null,
+            },
+            imageUrl: null,
+          };
+          if (item.kind === "message") {
+            return { ...base, title: item.subject ?? `Message from ${item.otherPartyName}`, excerpt: item.snippet };
+          }
+          const latestBody = [...item.messages].reverse().find((message) => message.body)?.body ?? null;
+          return {
+            ...base,
+            title: `Meeting request: ${item.topic}`,
+            excerpt: latestBody ? truncate(latestBody) : "View this meeting request.",
+          };
+        });
 
   const merged: FeedItem[] = [
     ...events.map((event): FeedItem => ({
@@ -531,6 +581,7 @@ export async function getFeedPage(params: {
         volunteerNote: item.volunteerNote,
       };
     }),
+    ...inboxItems,
   ].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
   const hasMore = merged.length > pageSize;
