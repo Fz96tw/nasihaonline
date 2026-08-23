@@ -36,20 +36,41 @@ trap 'rm -f "$OUT_FILE"' EXIT
 
 cd "$COMPOSE_DIR"
 
-echo "==> [1/3] Dumping users + profiles..."
+echo "==> [1/4] Dumping users..."
 {
   echo "BEGIN;"
   docker compose exec -T postgres pg_dump -U "$PG_USER" -d "$PG_DB" \
     --data-only --inserts --on-conflict-do-nothing \
-    --table=users --table=profiles
+    --table=users
 } >> "$OUT_FILE"
 
-echo "==> [2/3] Exporting skill tags (re-linked by skill name, not id)..."
+# Users use plain ON CONFLICT DO NOTHING and skip cleanly on the target's own
+# pre-existing rows (e.g. a member who signed up directly there). But that
+# means a skipped user's *source*-side id doesn't exist on the target at all
+# — so profiles (and, further down, profile_skills) can't just be copied by
+# id; each has to be staged and only inserted where its parent actually
+# landed on the target.
+echo "==> [2/4] Staging profiles (only inserted where the owning user exists on the target)..."
 {
-  # pg_dump's own section above sets search_path to '' for its duration —
-  # that setting persists in this same psql session, so restore it before
-  # referencing profile_skills/skills unqualified below.
+  # pg_dump's own section above set search_path to '' for its duration —
+  # that persists in this same psql session, so restore it before referencing
+  # `profiles` unqualified below.
   echo "SET search_path = public;"
+  echo "CREATE TEMP TABLE _profile_transfer (LIKE profiles INCLUDING ALL);"
+  docker compose exec -T postgres pg_dump -U "$PG_USER" -d "$PG_DB" \
+    --data-only --table=profiles \
+    | sed 's/^COPY public\.profiles /COPY _profile_transfer /'
+  # pg_dump's own preamble above reset search_path to '' again.
+  echo "SET search_path = public;"
+  echo "INSERT INTO profiles"
+  echo "SELECT t.* FROM _profile_transfer t"
+  echo "WHERE EXISTS (SELECT 1 FROM users u WHERE u.id = t.\"userId\")"
+  echo "ON CONFLICT DO NOTHING;"
+  echo "DROP TABLE _profile_transfer;"
+} >> "$OUT_FILE"
+
+echo "==> [3/4] Staging skill tags (re-linked by skill name, only where the owning profile exists on the target)..."
+{
   echo "CREATE TEMP TABLE _skill_transfer (profile_id text, skill_name text, created_at timestamptz);"
   echo "COPY _skill_transfer (profile_id, skill_name, created_at) FROM stdin;"
   docker compose exec -T postgres psql -U "$PG_USER" -d "$PG_DB" -c \
@@ -59,12 +80,13 @@ echo "==> [2/3] Exporting skill tags (re-linked by skill name, not id)..."
   echo "SELECT t.profile_id, sk.id, t.created_at"
   echo "FROM _skill_transfer t"
   echo "JOIN skills sk ON sk.name = t.skill_name"
+  echo "WHERE EXISTS (SELECT 1 FROM profiles p WHERE p.id = t.profile_id)"
   echo "ON CONFLICT DO NOTHING;"
   echo "DROP TABLE _skill_transfer;"
   echo "COMMIT;"
 } >> "$OUT_FILE"
 
-echo "==> [3/3] Copying to $TARGET:$REMOTE_PATH..."
+echo "==> [4/4] Copying to $TARGET:$REMOTE_PATH..."
 scp "$OUT_FILE" "$TARGET:$REMOTE_PATH"
 
 cat <<EOF
