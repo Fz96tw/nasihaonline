@@ -19,7 +19,7 @@ export type ProfileCompletenessFields = {
 export function getMissingRequiredProfileFields(profile: ProfileCompletenessFields): string[] {
   const missing: string[] = [];
   if (!profile.countryRegion?.trim()) missing.push("Country / Region");
-  if (!profile.titleSpecialty?.trim()) missing.push("Title / Specialty");
+  if (!profile.titleSpecialty?.trim()) missing.push("Title / Occupation");
   if (!profile.careerStage) missing.push("Career Stage");
   if (profile.availability.length === 0) missing.push("Availability");
   if (profile.expertiseAreas.length === 0 && profile.skills.length === 0) {

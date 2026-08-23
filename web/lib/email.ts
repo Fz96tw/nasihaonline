@@ -20,7 +20,7 @@ function formatApplicationSummary(application: MembershipApplicationModel): stri
   const lines: Array<[string, string]> = [
     ["Name", `${application.firstName} ${application.lastName}`],
     ["Email", application.email],
-    ["Professional title / specialty", application.professionalTitle || "—"],
+    ["Professional title / occupation", application.professionalTitle || "—"],
     ["LinkedIn", application.linkedinUrl || "—"],
     ["Requested tier", application.requestedTier ? TIER_LABELS[application.requestedTier] : "—"],
     ["Country / region", application.countryRegion],
@@ -129,12 +129,24 @@ export async function sendWelcomeEmail(
  * that point serves no purpose. meetingUrl can still be null (a manually
  * entered event without one), hence the fallback line below. Also pitches
  * membership per PRD §4.6's stated purpose for EventRegistration: building
- * a list of engaged non-members for membership-campaign outreach.
+ * a list of engaged non-members for membership-campaign outreach. Carries
+ * a `.ics` attachment (built by the caller via buildEventIcs), same
+ * calendar-invite treatment as sendRsvpConfirmationEmail's member-facing
+ * counterpart — a registered guest gets the event on their own calendar
+ * too, not just the in-app link.
  */
 export async function sendEventRegistrationConfirmationEmail(
   to: string,
   name: string,
-  event: { id: string; title: string; startsAt: Date; timezone: string | null; meetingUrl: string | null },
+  event: {
+    id: string;
+    title: string;
+    startsAt: Date;
+    timezone: string | null;
+    meetingUrl: string | null;
+    icsContent: string;
+    icsFilename: string;
+  },
 ) {
   if (!resend) {
     console.warn(`[email] RESEND_API_KEY not set — skipping event registration email to ${to}`);
@@ -160,7 +172,14 @@ export async function sendEventRegistrationConfirmationEmail(
       from: FROM_EMAIL,
       to,
       subject: `You're registered: ${event.title}`,
-      text: `Hi ${name},\n\nYou're registered for "${event.title}" on ${when}.\n\n${joinLine}\n\n${membershipPitch}\n\n— The NASIHA Team`,
+      text: `Hi ${name},\n\nYou're registered for "${event.title}" on ${when}. We've attached a calendar invite so it's on your calendar.\n\n${joinLine}\n\n${membershipPitch}\n\n— The NASIHA Team`,
+      attachments: [
+        {
+          filename: event.icsFilename,
+          content: Buffer.from(event.icsContent, "utf-8"),
+          contentType: "text/calendar",
+        },
+      ],
     });
   } catch (error) {
     console.error("[email] Failed to send event registration confirmation email", error);
@@ -357,6 +376,58 @@ export async function sendEventInviteEmail(
     });
   } catch (error) {
     console.error("[email] Failed to send event invite email", error);
+  }
+}
+
+/**
+ * Sent to a member right after they RSVP `going` to an event (§4.6) —
+ * the calendar-invite counterpart to sendEventRegistrationConfirmationEmail's
+ * anonymous-visitor flow. Carries a `.ics` attachment (built by the caller
+ * via buildEventIcs, same hand-rolled generator the /api/events/:id/ics
+ * download route uses) so the event lands on the member's own calendar
+ * app, not just NASIHA's. Only fired on `going`, never on cancelling back
+ * out of an RSVP — see rsvpToEvent. Best-effort, same rationale as every
+ * other function here: the RSVP row already exists by the time this runs.
+ */
+export async function sendRsvpConfirmationEmail(
+  to: string,
+  name: string,
+  event: {
+    title: string;
+    startsAt: Date;
+    timezone: string | null;
+    meetingUrl: string | null;
+    link: string;
+    icsContent: string;
+    icsFilename: string;
+  },
+) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping RSVP confirmation email to ${to}`);
+    return;
+  }
+
+  const when = formatEventDateTime(event.startsAt, event.timezone);
+  const joinLine = event.meetingUrl
+    ? `Join with Google Meet: ${event.meetingUrl}`
+    : "We'll share the joining details closer to the event.";
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: `You're going: ${event.title}`,
+      text: `Hi ${name},\n\nYou're confirmed for "${event.title}" on ${when}. We've attached a calendar invite so it's on your calendar.\n\n${joinLine}\n\nView details here:\n${event.link}\n\n— The NASIHA Team`,
+      attachments: [
+        {
+          filename: event.icsFilename,
+          content: Buffer.from(event.icsContent, "utf-8"),
+          contentType: "text/calendar",
+        },
+      ],
+    });
+  } catch (error) {
+    console.error("[email] Failed to send RSVP confirmation email", error);
   }
 }
 

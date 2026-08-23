@@ -72,7 +72,7 @@ export default async function AdminApplicationDetailPage({
         <CardContent>
           <dl className="grid gap-4 sm:grid-cols-2">
             <Field label="Email" value={application.email} />
-            <Field label="Professional title / Specialty" value={application.professionalTitle} />
+            <Field label="Professional title / Occupation" value={application.professionalTitle} />
             <Field
               label={application.linkedinUrl ? getProfileLinkLabel(application.linkedinUrl) : "LinkedIn / Website"}
               value={

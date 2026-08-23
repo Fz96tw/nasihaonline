@@ -1,5 +1,5 @@
 export const EDUCATIONAL_DISCLAIMER =
-  "NASIHA is an educational knowledge-sharing community. Content shared by members — including lectures, case discussions, consultations, and forum posts — is intended for professional learning purposes only and does not constitute medical advice. Members are responsible for exercising independent clinical judgment in their own practice. NASIHA and its members accept no liability for clinical decisions made based on content shared within the community.";
+  "DISCLAIMER: NASIHA is for informational and educational purposes only. Our website is not intended to be a substitute for professional advice. NASIHA and its members accept no liability for decisions made based on content shared within the community.";
 
 // Shown on /meet/event/[id]'s click-through gate (meeting-join-experience)
 // before an attendee is redirected into an `open` event's Meet call — only
@@ -18,7 +18,7 @@ export const PUBLIC_MEETING_DISCLAIMER_SECTIONS: { heading: string; body: string
   },
   {
     heading: "Not professional advice",
-    body: "NASIHA is an educational knowledge-sharing community. Content shared here — including lectures, case discussions, and Q&A — is for professional learning only and does not constitute medical advice. NASIHA and its members accept no liability for decisions made based on content shared in this meeting.",
+    body: "NASIHA is for informational and educational purposes only. Content shared in this meeting is not intended to be a substitute for professional advice. NASIHA and its members accept no liability for decisions made based on content shared in this meeting.",
   },
 ];
 

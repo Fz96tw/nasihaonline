@@ -200,7 +200,7 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
           name="professionalTitle"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Professional title / Specialty</FormLabel>
+              <FormLabel>Professional title / Occupation</FormLabel>
               <FormControl>
                 <Input
                   placeholder="e.g. Cardiologist, Medical Student, Public Health Researcher"

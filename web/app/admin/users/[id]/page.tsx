@@ -59,7 +59,7 @@ export default async function AdminUserDetailPage({ params }: { params: { id: st
         <CardContent>
           <dl className="grid gap-4 sm:grid-cols-2">
             <Field label="Email" value={user.email} />
-            <Field label="Title / Specialty" value={user.profile?.titleSpecialty} />
+            <Field label="Title / Occupation" value={user.profile?.titleSpecialty} />
             <Field label="Country / Region" value={user.profile?.countryRegion} />
             <Field label="Career stage" value={user.profile?.careerStage} />
             <Field label="Joined" value={user.createdAt.toLocaleString()} />

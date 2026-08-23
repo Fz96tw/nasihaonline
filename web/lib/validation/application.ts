@@ -37,7 +37,7 @@ const baseApplicationSchema = z.object({
   firstName: z.string().trim().min(1, "First name is required"),
   lastName: z.string().trim().min(1, "Last name is required"),
   email: z.string().trim().email("Enter a valid email address"),
-  professionalTitle: z.string().trim().min(1, "Professional title / specialty is required"),
+  professionalTitle: z.string().trim().min(1, "Professional title / occupation is required"),
   // The only optional field on this form — the applicant can add this to
   // their Profile later if they skip it here.
   linkedinUrl: z.string().trim(),

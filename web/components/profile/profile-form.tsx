@@ -191,7 +191,7 @@ export function ProfileForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>
-                    Title / Specialty <span className="text-destructive">*</span>
+                    Title / Occupation <span className="text-destructive">*</span>
                     <span className="sr-only"> (required)</span>
                   </FormLabel>
                   <FormControl>
@@ -376,9 +376,9 @@ export function ProfileForm({
             render={({ field }) => (
               <FormItem className="flex flex-row items-center justify-between gap-4">
                 <div>
-                  <FormLabel>Show my specialty and location</FormLabel>
+                  <FormLabel>Show my occupation and location</FormLabel>
                   <FormDescription>
-                    When off, your title/specialty and country/region are hidden from your
+                    When off, your title/occupation and country/region are hidden from your
                     Directory card.
                   </FormDescription>
                 </div>
