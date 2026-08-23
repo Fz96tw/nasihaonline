@@ -6,6 +6,13 @@ import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
 // lib/linkify.tsx's linkifyText only turns absolute http(s) URLs into links.
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
+// Demo/example content (sample events, knowledge items, forum threads) vs.
+// the managed taxonomy (skills, contribution rules, categories, forum
+// categories) that the app needs populated regardless of environment.
+// Default on for local/dev convenience; set to "false" in prod so a fresh
+// deployment doesn't launch with placeholder content in front of real members.
+const SEED_SAMPLE_DATA = process.env.SEED_SAMPLE_DATA !== "false";
+
 // Tagged expertise across Nasiha's membership (Profile.skillIds, §4.3/§7.3)
 // — grouped here by the InterestArea domain (lib/interest-areas.ts) it's
 // most associated with, so the list stays proportioned across the platform's
@@ -238,6 +245,11 @@ const SAMPLE_EVENTS: {
 ];
 
 async function seedEvents() {
+  if (!SEED_SAMPLE_DATA) {
+    console.log("SEED_SAMPLE_DATA=false — skipping sample events.");
+    return;
+  }
+
   const hosts = await db.user.findMany({
     where: { role: { in: ["member", "moderator", "admin"] } },
     orderBy: { createdAt: "asc" },
@@ -417,6 +429,11 @@ async function seedKnowledgeLibrary() {
   }
   console.log(`Seeded ${KNOWLEDGE_TAGS.length} knowledge tags.`);
 
+  if (!SEED_SAMPLE_DATA) {
+    console.log("SEED_SAMPLE_DATA=false — skipping sample knowledge items.");
+    return;
+  }
+
   const contributors = await db.user.findMany({
     where: { role: { in: ["member", "moderator", "admin"] } },
     orderBy: { createdAt: "asc" },
@@ -479,6 +496,11 @@ async function seedForums() {
     forumsByName.set(sample.name, forum);
   }
   console.log(`Seeded ${FORUMS.length} forums.`);
+
+  if (!SEED_SAMPLE_DATA) {
+    console.log("SEED_SAMPLE_DATA=false — skipping sample forum threads.");
+    return;
+  }
 
   const members = await db.user.findMany({
     where: { role: { in: ["member", "moderator", "admin"] } },
