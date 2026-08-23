@@ -64,6 +64,10 @@ async function touchLastActive(user: UserModel): Promise<void> {
  */
 async function maybeSendWelcomeAnnouncement(user: UserModel): Promise<void> {
   if (user.welcomeAnnouncementSentAt) return;
+  // Name is set at invite time if the application had one, otherwise only
+  // once the member saves it via PATCH /api/profile — wait rather than
+  // locking in the generic fallback on whichever request happens first.
+  if (!user.name?.trim()) return;
   try {
     const { count } = await db.user.updateMany({
       where: { id: user.id, welcomeAnnouncementSentAt: null },
