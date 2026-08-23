@@ -12,6 +12,7 @@ export const ADMIN_ACTION_LABELS: Record<string, string> = {
   "ledger.confirmed": "Confirmed knowledge hours",
   "ledger.rejected": "Rejected knowledge hours",
   "ledger.adjusted": "Adjusted a member's ledger balance",
+  "user.deleted": "Deleted a user account",
 };
 
 export function formatAdminAction(action: string): string {

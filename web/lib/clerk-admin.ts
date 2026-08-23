@@ -95,3 +95,20 @@ export async function syncUserRoleTierToClerk(clerkUserId: string, role: Role, t
     publicMetadata: tier ? { role, tier } : { role, tier: null },
   });
 }
+
+/**
+ * Clerk-first deletion, same convention as syncUserRoleTierToClerk: Clerk is
+ * the source of truth for the account, so it goes first. This also fires
+ * Clerk's own user.deleted webhook (app/api/webhooks/clerk/route.ts), which
+ * best-effort deletes the local User row too — harmless double-delete since
+ * the admin route deletes the row itself rather than waiting on that async
+ * webhook. Tolerates the account already being gone from Clerk.
+ */
+export async function deleteClerkUser(clerkUserId: string) {
+  try {
+    await clerk.users.deleteUser(clerkUserId);
+  } catch (error) {
+    const status = (error as { status?: number })?.status;
+    if (status !== 404) throw error;
+  }
+}

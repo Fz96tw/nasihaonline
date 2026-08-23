@@ -29,7 +29,7 @@ export function UserDetailActions({
   const [role, setRole] = useState<Role>(initialRole);
   const [tier, setTier] = useState<Tier | typeof NO_TIER>(initialTier ?? NO_TIER);
   const [reason, setReason] = useState("");
-  const [pending, setPending] = useState<"save" | "suspend" | "reinstate" | null>(null);
+  const [pending, setPending] = useState<"save" | "suspend" | "reinstate" | "delete" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tierWillChange = tier !== (initialTier ?? NO_TIER);
 
@@ -75,6 +75,34 @@ export function UserDetailActions({
 
   function reinstate() {
     void submit({ action: "reinstate" }, "reinstate");
+  }
+
+  async function deleteUser() {
+    if (
+      !window.confirm(
+        "Permanently delete this user? This removes their sign-in and cannot be undone. If they have contributions, hosted events, or authored content, those records are retained and the account is suspended instead.",
+      )
+    ) {
+      return;
+    }
+    setPending("delete");
+    setError(null);
+    try {
+      const csrfToken = await getCsrfToken();
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: "DELETE",
+        headers: { "x-csrf-token": csrfToken },
+      });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : "Request failed");
+      }
+      router.push("/admin/users");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      setPending(null);
+    }
   }
 
   return (
@@ -141,6 +169,23 @@ export function UserDetailActions({
             {pending === "suspend" ? "Suspending…" : "Suspend"}
           </Button>
         )}
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-[10px] border border-destructive/40 p-4 sm:col-span-2">
+        <h3 className="text-sm font-semibold text-destructive">Danger zone</h3>
+        <p className="text-sm text-muted-foreground">
+          Permanently deletes this account and its sign-in. Contributions, hosted events, and authored
+          content are never deleted here — if any exist, the account is suspended instead of removed.
+        </p>
+        <Button
+          variant="destructive"
+          className="self-start"
+          disabled={pending !== null || isSelf}
+          title={isSelf ? "You cannot delete your own account" : undefined}
+          onClick={() => void deleteUser()}
+        >
+          {pending === "delete" ? "Deleting…" : "Delete user"}
+        </Button>
       </div>
 
       {error && <p className="text-sm text-destructive sm:col-span-2">{error}</p>}

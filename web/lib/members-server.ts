@@ -55,7 +55,7 @@ export async function getDirectoryMembers(): Promise<DirectoryMember[]> {
   const profiles = await db.profile.findMany({
     where: {
       listInDirectory: true,
-      user: { tier: { in: DIRECTORY_TIERS } },
+      user: { tier: { in: DIRECTORY_TIERS }, suspended: false },
     },
     include: PROFILE_INCLUDE,
     orderBy: { user: { name: "asc" } },
@@ -76,7 +76,7 @@ export async function getDirectoryMembersByIds(userIds: string[]): Promise<Map<s
     where: {
       userId: { in: userIds },
       listInDirectory: true,
-      user: { tier: { in: DIRECTORY_TIERS } },
+      user: { tier: { in: DIRECTORY_TIERS }, suspended: false },
     },
     include: PROFILE_INCLUDE,
   });
@@ -96,7 +96,7 @@ export async function getDirectoryMemberById(userId: string): Promise<DirectoryM
     where: {
       userId,
       listInDirectory: true,
-      user: { tier: { in: DIRECTORY_TIERS } },
+      user: { tier: { in: DIRECTORY_TIERS }, suspended: false },
     },
     include: PROFILE_INCLUDE,
   });
@@ -114,7 +114,7 @@ export async function getMentionableMembers(): Promise<{ id: string; name: strin
   const profiles = await db.profile.findMany({
     where: {
       listInDirectory: true,
-      user: { tier: { in: DIRECTORY_TIERS }, name: { not: null } },
+      user: { tier: { in: DIRECTORY_TIERS }, name: { not: null }, suspended: false },
     },
     select: { userId: true, user: { select: { name: true } } },
   });
@@ -138,7 +138,7 @@ export async function searchDirectoryMembers(query: string): Promise<DirectoryMe
     where: {
       userId: { in: hits.map((hit) => hit.id) },
       listInDirectory: true,
-      user: { tier: { in: DIRECTORY_TIERS } },
+      user: { tier: { in: DIRECTORY_TIERS }, suspended: false },
     },
     include: PROFILE_INCLUDE,
   });

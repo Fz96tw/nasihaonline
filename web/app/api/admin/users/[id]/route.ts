@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireRole } from "@/lib/auth";
 import { Role } from "@/lib/generated/prisma/enums";
 import { db } from "@/lib/db";
-import { syncUserRoleTierToClerk } from "@/lib/clerk-admin";
+import { deleteClerkUser, syncUserRoleTierToClerk } from "@/lib/clerk-admin";
+import { recordAdminAction } from "@/lib/audit-server";
+import { enqueueProfileIndexSync } from "@/lib/queues/search-index-queue";
 import { userAdminActionSchema } from "@/lib/validation/user-admin";
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
@@ -37,6 +39,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       where: { id: target.id },
       data: { suspended: true, suspendedAt: new Date() },
     });
+    // A suspended member must drop out of the Directory (search included)
+    // immediately rather than waiting on their next profile edit.
+    await enqueueProfileIndexSync(target.id);
     return NextResponse.json({ user: updated });
   }
 
@@ -45,6 +50,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       where: { id: target.id },
       data: { suspended: false, suspendedAt: null },
     });
+    await enqueueProfileIndexSync(target.id);
     return NextResponse.json({ user: updated });
   }
 
@@ -78,4 +84,80 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return user;
   });
   return NextResponse.json({ user: updated });
+}
+
+/**
+ * Hard-deletes a user: Clerk-first (same convention as PATCH's role/tier
+ * sync — Clerk is the source of truth and also fires the user.deleted
+ * webhook as a backstop), then the local row directly rather than waiting
+ * on that async webhook. Several relations to User are intentionally
+ * un-cascaded (ContributionLedger, hosted Events, authored
+ * KnowledgeItem/ForumThread/ForumPost, TierHistory, etc. — see
+ * schema.prisma) so their history survives even if an account is removed;
+ * for any user with such history this delete fails with a Postgres FK
+ * violation (P2003), which we surface as a 409 rather than a crash. The
+ * account is still gone from Clerk at that point (locked out of sign-in),
+ * matching how a fulfilled §4.15 deletion request is handled today —
+ * actually erasing that retained history remains a manual, offline step.
+ */
+export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
+  let admin;
+  try {
+    admin = await requireRole([Role.admin]);
+  } catch (error) {
+    if (error instanceof AuthError) return authErrorResponse(error);
+    throw error;
+  }
+
+  const target = await db.user.findUnique({ where: { id: params.id } });
+  if (!target) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  if (target.id === admin.id) {
+    return NextResponse.json({ error: "You cannot delete your own account" }, { status: 400 });
+  }
+
+  await deleteClerkUser(target.clerkUserId);
+
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.user.delete({ where: { id: target.id } });
+      await recordAdminAction(
+        {
+          actorId: admin.id,
+          action: "user.deleted",
+          entityType: "User",
+          entityId: target.id,
+          metadata: { email: target.email, name: target.name },
+        },
+        tx,
+      );
+    });
+  } catch (error) {
+    const code = (error as { code?: string })?.code;
+    if (code === "P2003") {
+      // Sign-in is already gone (Clerk account deleted above); reflect that
+      // lockout locally too so the admin UI doesn't show a stale "Active".
+      await db.user.update({
+        where: { id: target.id },
+        data: { suspended: true, suspendedAt: new Date() },
+      });
+      await enqueueProfileIndexSync(target.id);
+      return NextResponse.json(
+        {
+          error:
+            "This account's sign-in was removed, but it can't be fully deleted: it still has associated records (contributions, hosted events, authored content, etc.) that must be retained. Removing those first would require a manual, offline data-retention review.",
+        },
+        { status: 409 },
+      );
+    }
+    throw error;
+  }
+
+  // Row (and its Profile, cascaded) is gone — this removes the now-stale
+  // Meilisearch document rather than leaving it to be found as a dangling hit.
+  await enqueueProfileIndexSync(target.id);
+
+  return NextResponse.json({ deleted: true });
 }

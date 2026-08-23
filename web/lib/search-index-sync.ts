@@ -31,13 +31,16 @@ export async function syncProfileToIndex(userId: string): Promise<void> {
   const profile = await db.profile.findUnique({
     where: { userId },
     include: {
-      user: { select: { name: true, tier: true } },
+      user: { select: { name: true, tier: true, suspended: true } },
       skills: { select: { skill: { select: { name: true } } } },
     },
   });
 
   const eligible =
-    profile?.listInDirectory && profile.user.tier !== null && DIRECTORY_TIERS.includes(profile.user.tier);
+    profile?.listInDirectory &&
+    profile.user.tier !== null &&
+    DIRECTORY_TIERS.includes(profile.user.tier) &&
+    !profile.user.suspended;
 
   if (!eligible) {
     await deleteProfileDocument(userId);
