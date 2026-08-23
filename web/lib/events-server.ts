@@ -18,12 +18,13 @@ import { DIRECTORY_TIERS } from "@/lib/members";
 import {
   cancelMeetingCalendarEvent,
   createMeetingCalendarEvent,
+  deleteMeetingRecording,
   updateMeetingCalendarEventAttendees,
   updateMeetingCalendarEventRecurrence,
   updateMeetingCalendarEventTime,
 } from "@/lib/google-calendar";
 import { createNotification } from "@/lib/notifications-server";
-import { sendEventInviteEmail, sendEventLifecycleEmail } from "@/lib/email";
+import { sendEventInviteEmail, sendEventLifecycleEmail, sendRsvpConfirmationEmail } from "@/lib/email";
 import { formatEventDateTime } from "@/lib/format-date";
 import { buildRRule, buildRRuleString, describeRecurrence, expandOccurrences, type RecurrenceInput } from "@/lib/recurrence";
 import {
@@ -362,6 +363,10 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
         // to their own event, so gating this on `rsvped` alone would hide it
         // from the one person who definitely needs it.
         meetingUrl: rsvped || event.hostId === userId ? event.meetingUrl : null,
+        // Not surfaced on the list view, only the single-event detail page
+        // (getMemberEventById below) — a recording is a post-meeting artifact
+        // a member would look for on the event itself, not while browsing.
+        recordingUrl: null,
         attendeeCount: event._count.rsvps + event._count.registrations,
         forumThreadId: event.forumThread?.id ?? null,
         forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
@@ -409,6 +414,7 @@ export async function getMemberEventById(
       host: { select: { name: true } },
       rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
       recurrence: { select: RECURRENCE_SELECT },
+      recordings: { select: { occurrenceDate: true, recordingUrl: true } },
       _count: {
         select: {
           rsvps: { where: { status: RSVPStatus.going } },
@@ -439,6 +445,10 @@ export async function getMemberEventById(
     occurrenceEnd = durationMs !== null ? new Date(resolved.getTime() + durationMs) : null;
   }
 
+  const recordingForOccurrence = event.recordings.find(
+    (recording) => recording.occurrenceDate.getTime() === occurrenceStart.getTime(),
+  );
+
   const rsvped = event.rsvps.length > 0;
   return {
     id: event.recurrence ? `${event.id}::${occurrenceStart.toISOString()}` : event.id,
@@ -455,6 +465,7 @@ export async function getMemberEventById(
     cancelled: event.cancelledAt !== null,
     // Same host exception as getMemberEvents above.
     meetingUrl: rsvped || event.hostId === userId ? event.meetingUrl : null,
+    recordingUrl: (rsvped || event.hostId === userId) ? (recordingForOccurrence?.recordingUrl ?? null) : null,
     attendeeCount: event._count.rsvps + event._count.registrations,
     forumThreadId: event.forumThread?.id ?? null,
     forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
@@ -768,6 +779,10 @@ export async function getDashboardUpcomingEvents(
     .slice(0, limit)
     .map((event) => {
       const rsvped = event.rsvps.length > 0;
+      // A same-day event stays on the dashboard past its start time (see the
+      // start-of-day cutoff above), but its join link shouldn't — once this
+      // occurrence has actually ended there's nothing left to join.
+      const occurrenceIsPast = (event.occurrenceEnd ?? event.occurrenceStart) < new Date();
       return {
         id: event.occurrenceId,
         title: event.title,
@@ -776,7 +791,7 @@ export async function getDashboardUpcomingEvents(
         rsvped,
         // Same gate as getMemberEvents: the host can always join their own
         // meeting even though they never auto-RSVP to their own event.
-        meetingUrl: rsvped || event.hostId === userId ? event.meetingUrl : null,
+        meetingUrl: !occurrenceIsPast && (rsvped || event.hostId === userId) ? event.meetingUrl : null,
         seriesId: event.id,
         isRecurring: event.isRecurring,
       };
@@ -834,7 +849,7 @@ export async function getEventEngagementForAdmin() {
 
 export class EventError extends Error {
   constructor(
-    public readonly status: 400 | 403 | 404 | 409,
+    public readonly status: 400 | 403 | 404 | 409 | 502,
     message: string,
   ) {
     super(message);
@@ -1654,6 +1669,40 @@ export async function cancelEvent(eventId: string, actingUser: UserModel): Promi
 }
 
 /**
+ * Deletes one occurrence's recording (host or admin only) — removes the
+ * actual Drive file via the dedicated account, and only drops the
+ * EventRecording row once that succeeds, so a failed Drive delete never
+ * leaves an orphaned file with no DB record pointing back to it.
+ */
+export async function deleteEventRecording(
+  eventId: string,
+  occurrenceDate: Date,
+  actingUser: UserModel,
+): Promise<void> {
+  const event = await db.event.findUnique({ where: { id: eventId }, select: { hostId: true } });
+  if (!event) throw new EventError(404, "Event not found.");
+
+  const isAdmin = actingUser.role === Role.admin;
+  const isHost = actingUser.id === event.hostId;
+  if (!isAdmin && !isHost) {
+    throw new EventError(403, "Only the event's host or an admin can delete its recording.");
+  }
+
+  const recording = await db.eventRecording.findUnique({
+    where: { eventId_occurrenceDate: { eventId, occurrenceDate } },
+    select: { id: true, driveFileId: true },
+  });
+  if (!recording) throw new EventError(404, "Recording not found.");
+
+  const deleted = await deleteMeetingRecording(recording.driveFileId);
+  if (!deleted) {
+    throw new EventError(502, "Couldn't delete the recording — please try again.");
+  }
+
+  await db.eventRecording.delete({ where: { id: recording.id } });
+}
+
+/**
  * Toggles the current member's RSVP for an event (§4.6's `POST
  * /api/events/:id/rsvp`): first RSVP creates a `going` row, a second call
  * flips it to `cancelled` and back, rather than deleting/recreating —
@@ -1668,7 +1717,16 @@ export async function rsvpToEvent(
   const userId = actingUser.id;
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { title: true, meetingUrl: true, hostId: true, visibility: true },
+    select: {
+      title: true,
+      description: true,
+      startsAt: true,
+      endsAt: true,
+      timezone: true,
+      meetingUrl: true,
+      hostId: true,
+      visibility: true,
+    },
   });
   if (!event) throw new EventError(404, "Event not found.");
 
@@ -1710,12 +1768,37 @@ export async function rsvpToEvent(
     });
   }
 
+  const rsvped = nextStatus === RSVPStatus.going;
+
+  // Calendar-invite email — only on confirming `going`, not on cancelling
+  // back out. Best-effort like every sendXEmail call in this file: the RSVP
+  // row above already committed, so a failed/unconfigured send must not
+  // fail the RSVP action itself.
+  if (rsvped) {
+    const icsFilename = `${event.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "event"}.ics`;
+    await sendRsvpConfirmationEmail(actingUser.email, actingUser.name ?? "there", {
+      title: event.title,
+      startsAt: event.startsAt,
+      timezone: event.timezone,
+      meetingUrl: event.meetingUrl,
+      link: `${APP_URL}/calendar/${eventId}`,
+      icsContent: buildEventIcs({
+        id: eventId,
+        title: event.title,
+        description: event.description,
+        startsAt: event.startsAt,
+        endsAt: event.endsAt,
+        meetingUrl: event.meetingUrl,
+      }),
+      icsFilename,
+    });
+  }
+
   const [goingCount, registrationCount] = await Promise.all([
     db.rSVP.count({ where: { eventId, status: RSVPStatus.going } }),
     db.eventRegistration.count({ where: { eventId } }),
   ]);
 
-  const rsvped = nextStatus === RSVPStatus.going;
   return {
     rsvped,
     // Same host exception as getMemberEvents/getMemberEventById.
@@ -1738,10 +1821,28 @@ export async function rsvpToEvent(
 export async function registerForEvent(
   eventId: string,
   input: { email: string; name: string },
-): Promise<{ id: string; title: string; startsAt: Date; timezone: string | null; meetingUrl: string | null }> {
+): Promise<{
+  id: string;
+  title: string;
+  startsAt: Date;
+  timezone: string | null;
+  meetingUrl: string | null;
+  icsContent: string;
+  icsFilename: string;
+}> {
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { id: true, title: true, startsAt: true, timezone: true, open: true, visibility: true, meetingUrl: true },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      startsAt: true,
+      endsAt: true,
+      timezone: true,
+      open: true,
+      visibility: true,
+      meetingUrl: true,
+    },
   });
   if (!event) throw new EventError(404, "Event not found.");
   // The real enforcement point: even if `open` were ever true on a
@@ -1764,6 +1865,15 @@ export async function registerForEvent(
     startsAt: event.startsAt,
     timezone: event.timezone,
     meetingUrl: event.meetingUrl,
+    icsContent: buildEventIcs({
+      id: event.id,
+      title: event.title,
+      description: event.description,
+      startsAt: event.startsAt,
+      endsAt: event.endsAt,
+      meetingUrl: event.meetingUrl,
+    }),
+    icsFilename: `${event.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "event"}.ics`,
   };
 }
 

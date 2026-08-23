@@ -731,6 +731,15 @@ model MeetingRequest {
   scheduledAt                     DateTime?
   meetingUrl                      String?
   googleEventId                   String?
+  // Set by lib/meeting-recordings-sync.ts once Google finishes processing
+  // the recording (§ recording-by-default) — a MeetingRequest is always a
+  // one-off meeting, so unlike Event's EventRecording[] a single column is
+  // enough (no per-occurrence disambiguation needed).
+  recordingUrl                    String?
+  // The recording's Drive fileId, alongside recordingUrl — see
+  // EventRecording.driveFileId's comment for why this is needed separately
+  // from the playback link.
+  driveFileId                     String?
   // In-app waiting-room feature — same shape/semantics as Event's fields
   // above. Organizer = sender for a MeetingRequest (matches every other
   // sender-privileged action in this model).
@@ -1022,9 +1031,37 @@ model Event {
   // ThreadView) — events are member-only like forums, so this dedupes on
   // real userId rather than an opaque viewer key like PostView does.
   views         EventView[]
+  // Every meeting held over an auto-generated Meet link is recorded by
+  // default (lib/google-calendar.ts) — one row per occurrence, since a
+  // recurring event reuses the same Meet space/link across every session.
+  recordings    EventRecording[]
 
   @@index([startsAt])
   @@map("events")
+}
+
+// A finished recording for one occurrence of an Event's Meet-hosted
+// meeting, discovered after the fact by lib/meeting-recordings-sync.ts
+// polling the Meet API's conferenceRecords/recordings resources (Google
+// processes a recording asynchronously after the call ends — there's no
+// way to get the link at creation time). `occurrenceDate` mirrors
+// Attendance's own field for the same reason: a recurring event needs one
+// recording per session, not a single column that gets overwritten weekly.
+model EventRecording {
+  id             String   @id @default(cuid())
+  eventId        String
+  event          Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  occurrenceDate DateTime
+  recordingUrl   String
+  // The recording's Drive fileId (Recording.driveDestination.file, distinct
+  // from recordingUrl's playback link) — needed to actually delete the file
+  // via the Drive API when the host removes a recording, not just unlink it.
+  driveFileId    String
+  createdAt      DateTime @default(now())
+
+  @@unique([eventId, occurrenceDate])
+  @@index([eventId])
+  @@map("event_recordings")
 }
 
 // One row per unique member visit to an Event's detail page, for the

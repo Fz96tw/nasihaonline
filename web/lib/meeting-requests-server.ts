@@ -13,6 +13,7 @@ import { sendMeetingRequestEmail } from "@/lib/email";
 import {
   cancelMeetingCalendarEvent,
   createMeetingCalendarEvent,
+  deleteMeetingRecording,
   updateMeetingCalendarEventTime,
 } from "@/lib/google-calendar";
 import { INBOX_TIERS } from "@/lib/members";
@@ -33,7 +34,7 @@ const KNOWLEDGE_DISCUSSION_ACTIVITY_KEY = "knowledge_discussion";
 
 export class MeetingRequestError extends Error {
   constructor(
-    public readonly status: 400 | 403 | 404 | 409,
+    public readonly status: 400 | 403 | 404 | 409 | 502,
     message: string,
   ) {
     super(message);
@@ -1008,4 +1009,35 @@ export async function resetMeetingRequestMeeting(meetingRequestId: string, actin
   }
 
   await db.meetingRequest.update({ where: { id: meetingRequestId }, data: { meetingStartedAt: null } });
+}
+
+/**
+ * Deletes the meeting's recording (sender/organizer-only, same convention as
+ * start/resetMeetingRequestMeeting above). Removes the actual Drive file via
+ * the dedicated account first, and only clears recordingUrl/driveFileId once
+ * that succeeds — a failed Drive delete must not leave an orphaned file with
+ * no DB record pointing back to it.
+ */
+export async function deleteMeetingRequestRecording(meetingRequestId: string, actingUserId: string): Promise<void> {
+  const meetingRequest = await db.meetingRequest.findUnique({
+    where: { id: meetingRequestId },
+    select: { senderId: true, recordingUrl: true, driveFileId: true },
+  });
+  if (!meetingRequest) throw new MeetingRequestError(404, "Meeting request not found.");
+  if (meetingRequest.senderId !== actingUserId) {
+    throw new MeetingRequestError(403, "Only the meeting organizer can delete its recording.");
+  }
+  if (!meetingRequest.recordingUrl || !meetingRequest.driveFileId) {
+    throw new MeetingRequestError(404, "Recording not found.");
+  }
+
+  const deleted = await deleteMeetingRecording(meetingRequest.driveFileId);
+  if (!deleted) {
+    throw new MeetingRequestError(502, "Couldn't delete the recording — please try again.");
+  }
+
+  await db.meetingRequest.update({
+    where: { id: meetingRequestId },
+    data: { recordingUrl: null, driveFileId: null },
+  });
 }

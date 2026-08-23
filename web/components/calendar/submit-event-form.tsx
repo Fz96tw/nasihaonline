@@ -565,8 +565,9 @@ export function SubmitEventForm({
                   <div>
                     <FormLabel>Auto-generate a Google Meet link</FormLabel>
                     <FormDescription>
-                      On by default — creates a Google Meet link automatically. Turn off to paste your own
-                      instead.
+                      On by default — creates a Google Meet link automatically, and the session is recorded.
+                      A link to the recording is added to this event once it&apos;s ready after the meeting ends.
+                      Turn off to paste your own link instead (no recording).
                     </FormDescription>
                   </div>
                   <FormControl>

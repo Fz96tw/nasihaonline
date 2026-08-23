@@ -197,6 +197,11 @@ export function RequestMeetingDialog({
                 )}
               </div>
 
+              <p className="text-xs text-muted-foreground">
+                If accepted, this meeting is recorded automatically — a link to the recording will be added to
+                the request once it&apos;s ready after the call ends.
+              </p>
+
               <FormField
                 control={form.control}
                 name="message"

@@ -132,6 +132,26 @@ export async function createMeetingCalendarEvent(input: {
         console.error("[google-calendar] Failed to open Meet space lobby (accessType: OPEN)", error);
         await notifyAdminsOfMeetLinkFailure(`${input.topic} (Meet lobby open)`, error);
       }
+
+      // Every meeting is recorded by default (no per-event opt-out) — this
+      // is a space-level property, so it auto-starts the recording
+      // regardless of who's actually present, sidestepping the fact that
+      // Meet only ever lets the host/co-host/same-org attendees manually
+      // start one. Own try/catch, same rationale as the accessType patch
+      // above: a licensing/eligibility failure here must not regress the
+      // (already relied-upon) lobby-open patch, and vice versa.
+      try {
+        const meetingCode = meetingUrl.split("/").pop();
+        const meet = google.meet({ version: "v2", auth });
+        await meet.spaces.patch({
+          name: `spaces/${meetingCode}`,
+          updateMask: "config.artifactConfig.recordingConfig.autoRecordingGeneration",
+          requestBody: { config: { artifactConfig: { recordingConfig: { autoRecordingGeneration: "ON" } } } },
+        });
+      } catch (error) {
+        console.error("[google-calendar] Failed to enable Meet space auto-recording", error);
+        await notifyAdminsOfMeetLinkFailure(`${input.topic} (Meet auto-recording)`, error);
+      }
     }
 
     return {
@@ -284,5 +304,40 @@ export async function cancelMeetingCalendarEvent(googleEventId: string): Promise
     await calendar.events.delete({ calendarId: CALENDAR_ID, eventId: googleEventId, sendUpdates: "all" });
   } catch (error) {
     console.error("[google-calendar] Failed to cancel meeting calendar event", error);
+  }
+}
+
+/**
+ * Deletes a meeting recording's underlying Drive file (the organizer/sender
+ * "Delete recording" action) — unlike every other function in this file,
+ * this is the primary action the caller asked for, not a best-effort
+ * side-channel sync, so it reports success/failure instead of always
+ * swallowing errors: the caller must not delete the EventRecording/
+ * MeetingRequest.recordingUrl row on a failure here, or the DB record
+ * disappears while the actual file keeps sitting in the dedicated account's
+ * Drive, now unreferenced and undiscoverable. A 404 (already gone — e.g.
+ * deleted manually from Drive) still counts as success, since the end
+ * state the caller wants (no file) is already true.
+ */
+export async function deleteMeetingRecording(driveFileId: string): Promise<boolean> {
+  const auth = getOAuthClient();
+  if (!auth) {
+    console.warn("[google-calendar] Google Calendar isn't configured — skipping recording deletion");
+    return false;
+  }
+
+  try {
+    const drive = google.drive({ version: "v3", auth });
+    await drive.files.delete({ fileId: driveFileId });
+    return true;
+  } catch (error) {
+    // GaxiosError surfaces the HTTP status as either `.code` (AIP-193) or
+    // `.response.status` depending on the failure path — check both rather
+    // than assuming one.
+    const gaxiosError = error as { code?: number | string; response?: { status?: number } };
+    const status = gaxiosError?.response?.status ?? gaxiosError?.code;
+    if (status === 404) return true;
+    console.error("[google-calendar] Failed to delete meeting recording", error);
+    return false;
   }
 }

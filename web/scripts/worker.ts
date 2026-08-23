@@ -4,6 +4,11 @@ import { queueConnection } from "@/lib/queues/connection";
 import { SEARCH_INDEX_QUEUE_NAME, type SearchIndexSyncJob } from "@/lib/queues/search-index-queue";
 import { SURVEY_QUEUE_NAME, type SurveyJob } from "@/lib/queues/survey-queue";
 import {
+  MEETING_RECORDING_SYNC_QUEUE_NAME,
+  type MeetingRecordingSyncJob,
+  enqueueRepeatingMeetingRecordingsSync,
+} from "@/lib/queues/meeting-recording-sync-queue";
+import {
   ensureLibraryIndexConfigured,
   ensureProfilesIndexConfigured,
   ensureForumsIndexConfigured,
@@ -22,6 +27,7 @@ import {
   syncReviewItemToIndex,
 } from "@/lib/search-index-sync";
 import { openSurveyNow, autoCloseSurveyIfDue } from "@/lib/surveys-lifecycle";
+import { syncMeetingRecordings } from "@/lib/meeting-recordings-sync";
 
 /**
  * Standalone process (`npm run worker`, docker-compose "worker" service) —
@@ -104,6 +110,32 @@ async function main() {
   });
 
   console.log("[survey-worker] listening for jobs on", SURVEY_QUEUE_NAME);
+
+  // Meeting recordings (recording-by-default) — polls the Meet API for
+  // finished recordings on recently-past Events/MeetingRequests and attaches
+  // the Drive link once Google's made one available. Same standalone-process
+  // rationale as the workers above; registered as a repeating job rather
+  // than delayed per-meeting since a recurring Event's Meet space is shared
+  // across every occurrence, so there's no single fixed delay to schedule at
+  // creation time — a periodic sweep re-evaluates what's recently ended.
+  await enqueueRepeatingMeetingRecordingsSync();
+
+  const meetingRecordingSyncWorker = new Worker<MeetingRecordingSyncJob>(
+    MEETING_RECORDING_SYNC_QUEUE_NAME,
+    async () => {
+      await syncMeetingRecordings();
+    },
+    { connection: queueConnection },
+  );
+
+  meetingRecordingSyncWorker.on("completed", () => {
+    console.log("[meeting-recording-sync-worker] sweep completed");
+  });
+  meetingRecordingSyncWorker.on("failed", (job, error) => {
+    console.error(`[meeting-recording-sync-worker] failed job ${job?.id}:`, error);
+  });
+
+  console.log("[meeting-recording-sync-worker] listening for jobs on", MEETING_RECORDING_SYNC_QUEUE_NAME);
 }
 
 main().catch((error) => {

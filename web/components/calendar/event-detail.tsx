@@ -11,6 +11,7 @@ import { AddToCalendarButton } from "@/components/calendar/add-to-calendar-butto
 import { EventViewCounter } from "@/components/calendar/event-view-counter";
 import { ManageInvitees } from "@/components/calendar/manage-invitees";
 import { CancelEventButton } from "@/components/calendar/cancel-event-button";
+import { DeleteRecordingButton } from "@/components/calendar/delete-recording-button";
 import { AttendanceChecklist } from "@/components/calendar/attendance-checklist";
 import {
   EVENT_TYPE_LABELS,
@@ -149,11 +150,30 @@ export function EventDetail({
         </div>
       ) : null}
 
+      {isPast && event.recordingUrl ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href={event.recordingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Watch recording
+          </Link>
+          {canEdit && (
+            <DeleteRecordingButton
+              deleteUrl={`/api/events/${event.seriesId}/recording?occurrence=${encodeURIComponent(event.startsAt)}`}
+              onDeleted={() => setEvent((prev) => ({ ...prev, recordingUrl: null }))}
+            />
+          )}
+        </div>
+      ) : null}
+
       {event.description ? (
         <p className="whitespace-pre-line text-sm leading-relaxed">{event.description}</p>
       ) : null}
 
-      {(event.rsvped || isHost) && event.meetingUrl ? (
+      {!isPast && (event.rsvped || isHost) && event.meetingUrl ? (
         <Link
           href={`/meet/event/${event.seriesId}`}
           className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"

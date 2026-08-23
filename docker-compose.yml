@@ -134,6 +134,12 @@ services:
       NODE_ENV: production
       MEILI_HOST: http://meilisearch:7700
       MEILI_MASTER_KEY: nasiha-dev-master-key
+      # Needed by lib/meeting-recordings-sync.ts's repeating sweep — without
+      # these the worker's OAuth client is unconfigured and the sweep is a
+      # permanent no-op, same fallback as the app service's own Google calls.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_CALENDAR_REFRESH_TOKEN: ${GOOGLE_CALENDAR_REFRESH_TOKEN}
     depends_on:
       postgres:
         condition: service_healthy

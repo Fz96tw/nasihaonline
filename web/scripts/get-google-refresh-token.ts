@@ -7,6 +7,14 @@ const REDIRECT_URI = `http://localhost:${PORT}/oauth2callback`;
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/meetings.space.settings",
+  // Reading conferenceRecords/recordings for the post-meeting recording
+  // sync (lib/meeting-recordings-sync.ts).
+  "https://www.googleapis.com/auth/meetings.space.readonly",
+  // Deleting a recording's underlying Drive file (lib/google-calendar.ts's
+  // deleteMeetingRecording) — the narrower drive.file scope only covers
+  // files created through this app's own OAuth client, which a
+  // Meet-generated recording isn't, so this needs the broader grant.
+  "https://www.googleapis.com/auth/drive",
 ];
 
 /**

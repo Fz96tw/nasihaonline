@@ -61,6 +61,8 @@ export type EventWithRsvp = PublicEvent & {
 // exposed, and only when `rsvped` is true for this viewer.
 export type MemberEvent = EventWithRsvp & {
   meetingUrl: string | null;
+  /** Drive playback link once Google's finished processing the occurrence's recording — same rsvped/host gating as meetingUrl, null until then (or forever, for a manually-pasted meetingUrl). getMemberEventById is the only MemberEvent query that ever sets this. */
+  recordingUrl: string | null;
   /** True once the organizer has cancelled this event (getMemberEventById is the only MemberEvent query that ever sets this — listing queries filter cancelled events out entirely). */
   cancelled: boolean;
   /** Going RSVPs (members) plus EventRegistrations (non-members) — same merge as getEventEngagementForAdmin. */

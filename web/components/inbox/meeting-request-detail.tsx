@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ArrowLeft, Plus, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DeleteRecordingButton } from "@/components/calendar/delete-recording-button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -574,6 +575,7 @@ export function MeetingRequestDetail({
   // table — so anything gated on "has this meeting been accepted" (the
   // scheduled-time/Meet-link display, cancel eligibility) needs both.
   const hasBeenAccepted = item.status === "accepted" || isRenegotiatingAccepted;
+  const isPast = hasMounted && item.scheduledAt !== null && new Date(item.scheduledAt) < new Date();
   // Either party may kick off a reschedule of a *settled* accepted meeting
   // at any time — not turn-gated, since there's no outstanding proposal yet
   // to hold a turn on (contrast canRespond below, for when one already is).
@@ -696,7 +698,8 @@ export function MeetingRequestDetail({
           <p className="text-xs text-muted-foreground">
             If accepted, this will be a Google Meet video call — a link will be created automatically and sent
             to both of you. It&apos;ll also appear on your Calendar page&apos;s Upcoming List, visible only to
-            the two of you, not the rest of the community.
+            the two of you, not the rest of the community. The meeting is recorded automatically, and a link
+            to the recording will be added here once it&apos;s ready after the call ends.
           </p>
         )}
 
@@ -717,6 +720,22 @@ export function MeetingRequestDetail({
                   Join Google Meet
                 </Link>
               </Button>
+            )}
+            {isPast && item.recordingUrl && (
+              <Link
+                href={item.recordingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
+              >
+                Watch recording
+              </Link>
+            )}
+            {isPast && item.recordingUrl && item.direction === "sent" && (
+              <DeleteRecordingButton
+                deleteUrl={`/api/inbox/meeting-requests/${item.id}/recording`}
+                onDeleted={onUpdated}
+              />
             )}
             {item.meetingUrl && item.direction === "sent" && !messageEditingOpen && (
               <Button
