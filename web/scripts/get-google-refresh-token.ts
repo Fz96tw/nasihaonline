@@ -14,6 +14,15 @@ const SCOPES = [
   // deleteMeetingRecording) — the narrower drive.file scope only covers
   // files created through this app's own OAuth client, which a
   // Meet-generated recording isn't, so this needs the broader grant.
+  //
+  // meetings.space.settings PATCH calls (spaces.patch, both accessType and
+  // recording config) currently 403 "Permission denied on resource Space"
+  // regardless of which of these scopes are present — tested every
+  // combination, including the bare 2-scope set above alone, and also with
+  // meetings.space.created added (documented for spaces created directly
+  // via spaces.create, not our Calendar-created case, but tested anyway —
+  // didn't help, so not requested here). Not a client-side scope problem;
+  // escalated to Google Workspace support.
   "https://www.googleapis.com/auth/drive",
 ];
 
