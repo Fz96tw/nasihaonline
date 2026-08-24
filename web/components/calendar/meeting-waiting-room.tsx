@@ -268,6 +268,7 @@ export function MeetingWaitingRoom({
         title={status.title}
         organizerName={status.organizerName}
         showDisclaimerReminder={status.requiresCodeOfConductAgreement}
+        backHref={backHref}
       />
     );
   }
