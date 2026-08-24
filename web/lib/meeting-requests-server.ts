@@ -1017,17 +1017,20 @@ export async function updateMeetingRequestMeetingMessage(
   }
 }
 
-/** Sender-only: marks the meeting live, triggering the waiting recipient's auto-redirect on their next poll. No-op if there's no Meet link configured. */
+/** Sender-only: marks the meeting live, triggering the waiting recipient's auto-redirect on their next poll. No-op if there's no meeting link/room configured (neither Meet nor LiveKit). */
 export async function startMeetingRequestMeeting(meetingRequestId: string, actingUserId: string): Promise<void> {
   const meetingRequest = await db.meetingRequest.findUnique({
     where: { id: meetingRequestId },
-    select: { senderId: true, meetingUrl: true },
+    select: { senderId: true, meetingUrl: true, livekitRoomName: true },
   });
   if (!meetingRequest) throw new MeetingRequestError(404, "Meeting request not found.");
   if (meetingRequest.senderId !== actingUserId) {
     throw new MeetingRequestError(403, "Only the meeting organizer can start the meeting.");
   }
-  if (!meetingRequest.meetingUrl) return;
+  // Bug fixed 2026-08-24: this only checked meetingUrl, so clicking "Start
+  // Meeting" silently no-op'd for every LiveKit-backed meeting request —
+  // meetingUrl is always null there, livekitRoomName is used instead.
+  if (!meetingRequest.meetingUrl && !meetingRequest.livekitRoomName) return;
 
   await db.meetingRequest.update({ where: { id: meetingRequestId }, data: { meetingStartedAt: new Date() } });
 }

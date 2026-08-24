@@ -2157,17 +2157,20 @@ export async function updateEventMeetingMessage(
   }
 }
 
-/** Host-only: marks the meeting live, triggering waiting attendees' auto-redirect on their next poll. No-op if the event has no Meet link configured — mirrors google-calendar.ts's non-fatal philosophy. */
+/** Host-only: marks the meeting live, triggering waiting attendees' auto-redirect on their next poll. No-op if the event has no meeting link/room configured (neither Meet nor LiveKit) — mirrors google-calendar.ts's non-fatal philosophy. */
 export async function startEventMeeting(eventId: string, actingUser: UserModel): Promise<void> {
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { hostId: true, meetingUrl: true },
+    select: { hostId: true, meetingUrl: true, livekitRoomName: true },
   });
   if (!event) throw new EventError(404, "Event not found.");
   if (event.hostId !== actingUser.id) {
     throw new EventError(403, "Only the event's host can start the meeting.");
   }
-  if (!event.meetingUrl) return;
+  // Bug fixed 2026-08-24: this only checked meetingUrl, so clicking "Start
+  // Meeting" silently no-op'd for every LiveKit-backed event — meetingUrl
+  // is always null there, livekitRoomName is used instead.
+  if (!event.meetingUrl && !event.livekitRoomName) return;
 
   await db.event.update({ where: { id: eventId }, data: { meetingStartedAt: new Date() } });
 }
