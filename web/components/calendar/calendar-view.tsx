@@ -25,7 +25,7 @@ function monthLabel(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-type RsvpState = { rsvped: boolean; meetingUrl: string | null; attendeeCount?: number };
+type RsvpState = { rsvped: boolean; meetingUrl: string | null; livekitRoomName: string | null; attendeeCount?: number };
 
 // Remembers the last tab the member picked so it survives navigating away
 // from /calendar and back (Tabs' own defaultValue only survives re-renders,

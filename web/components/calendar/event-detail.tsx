@@ -81,7 +81,12 @@ export function EventDetail({
   const hostName = event.hostName ?? "NASIHA Member";
   const audienceBadge = getEventAudienceBadge(event);
 
-  function handleRsvpToggled(result: { rsvped: boolean; meetingUrl: string | null; attendeeCount?: number }) {
+  function handleRsvpToggled(result: {
+    rsvped: boolean;
+    meetingUrl: string | null;
+    livekitRoomName: string | null;
+    attendeeCount?: number;
+  }) {
     setEvent((prev) => ({ ...prev, ...result }));
   }
 
@@ -173,7 +178,7 @@ export function EventDetail({
         <p className="whitespace-pre-line text-sm leading-relaxed">{event.description}</p>
       ) : null}
 
-      {!isPast && (event.rsvped || isHost) && event.meetingUrl ? (
+      {!isPast && (event.rsvped || isHost) && (event.meetingUrl || event.livekitRoomName) ? (
         <Link
           href={`/meet/event/${event.seriesId}`}
           className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"

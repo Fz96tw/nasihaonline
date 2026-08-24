@@ -69,6 +69,8 @@ export type MeetingRequestListItem = {
   scheduledAt: string | null;
   /** Set once accepted, if Google Calendar was configured and the call succeeded. */
   meetingUrl: string | null;
+  /** Set instead of meetingUrl when the sender chose LiveKit — see MeetingRequest.livekitRoomName's schema comment. */
+  livekitRoomName: string | null;
   /** Drive playback link once Google's finished processing the meeting's recording (lib/meeting-recordings-sync.ts) — null until then. */
   recordingUrl: string | null;
   /** Waiting-room greeting shown to the recipient on /meet/request/[id] before Start (meeting-join-experience) — sender-editable via MeetingRequestDetail's inline editor. */

@@ -56,11 +56,11 @@ export function UpcomingMeetingItem({ meeting }: { meeting: UpcomingMeeting }) {
           </p>
         </div>
       </div>
-      {meeting.meetingUrl && (
+      {(meeting.meetingUrl || meeting.livekitRoomName) && (
         <Button size="sm" variant="outline" className="flex-shrink-0" asChild>
           <Link href={`/meet/request/${meeting.id}`}>
             <Video className="mr-1.5 h-3.5 w-3.5" />
-            Join Google Meet
+            Join meeting
           </Link>
         </Button>
       )}

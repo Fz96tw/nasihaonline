@@ -324,6 +324,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
       open: true,
       heroImageUrl: true,
       meetingUrl: true,
+      livekitRoomName: true,
       visibility: true,
       forumThread: { select: { id: true, _count: { select: { posts: true } } } },
       hostId: true,
@@ -366,6 +367,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
         // to their own event, so gating this on `rsvped` alone would hide it
         // from the one person who definitely needs it.
         meetingUrl: rsvped || event.hostId === userId ? event.meetingUrl : null,
+        livekitRoomName: rsvped || event.hostId === userId ? event.livekitRoomName : null,
         // Not surfaced on the list view, only the single-event detail page
         // (getMemberEventById below) — a recording is a post-meeting artifact
         // a member would look for on the event itself, not while browsing.
@@ -410,6 +412,7 @@ export async function getMemberEventById(
       open: true,
       heroImageUrl: true,
       meetingUrl: true,
+      livekitRoomName: true,
       visibility: true,
       cancelledAt: true,
       forumThread: { select: { id: true, _count: { select: { posts: true } } } },
@@ -468,6 +471,7 @@ export async function getMemberEventById(
     cancelled: event.cancelledAt !== null,
     // Same host exception as getMemberEvents above.
     meetingUrl: rsvped || event.hostId === userId ? event.meetingUrl : null,
+    livekitRoomName: rsvped || event.hostId === userId ? event.livekitRoomName : null,
     recordingUrl: (rsvped || event.hostId === userId) ? (recordingForOccurrence?.recordingUrl ?? null) : null,
     attendeeCount: event._count.rsvps + event._count.registrations,
     forumThreadId: event.forumThread?.id ?? null,
@@ -770,6 +774,7 @@ export async function getDashboardUpcomingEvents(
       endsAt: true,
       hostId: true,
       meetingUrl: true,
+      livekitRoomName: true,
       rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
       recurrence: { select: RECURRENCE_SELECT },
     },
@@ -786,6 +791,7 @@ export async function getDashboardUpcomingEvents(
       // start-of-day cutoff above), but its join link shouldn't — once this
       // occurrence has actually ended there's nothing left to join.
       const occurrenceIsPast = (event.occurrenceEnd ?? event.occurrenceStart) < new Date();
+      const canJoin = !occurrenceIsPast && (rsvped || event.hostId === userId);
       return {
         id: event.occurrenceId,
         title: event.title,
@@ -794,7 +800,8 @@ export async function getDashboardUpcomingEvents(
         rsvped,
         // Same gate as getMemberEvents: the host can always join their own
         // meeting even though they never auto-RSVP to their own event.
-        meetingUrl: !occurrenceIsPast && (rsvped || event.hostId === userId) ? event.meetingUrl : null,
+        meetingUrl: canJoin ? event.meetingUrl : null,
+        livekitRoomName: canJoin ? event.livekitRoomName : null,
         seriesId: event.id,
         isRecurring: event.isRecurring,
       };
@@ -1743,7 +1750,7 @@ export async function deleteEventRecording(
 export async function rsvpToEvent(
   actingUser: UserModel,
   eventId: string,
-): Promise<{ rsvped: boolean; meetingUrl: string | null; attendeeCount: number }> {
+): Promise<{ rsvped: boolean; meetingUrl: string | null; livekitRoomName: string | null; attendeeCount: number }> {
   const userId = actingUser.id;
   const event = await db.event.findUnique({
     where: { id: eventId },
@@ -1835,6 +1842,7 @@ export async function rsvpToEvent(
     rsvped,
     // Same host exception as getMemberEvents/getMemberEventById.
     meetingUrl: rsvped || userId === event.hostId ? event.meetingUrl : null,
+    livekitRoomName: rsvped || userId === event.hostId ? event.livekitRoomName : null,
     attendeeCount: goingCount + registrationCount,
   };
 }

@@ -851,6 +851,7 @@ export async function getUpcomingMeetingsForUser(userId: string) {
         topic: true,
         scheduledAt: true,
         meetingUrl: true,
+        livekitRoomName: true,
         senderId: true,
         recipientId: true,
         sender: { select: { name: true } },
@@ -879,6 +880,7 @@ export async function getUpcomingMeetingsForUser(userId: string) {
     topic: meeting.topic,
     scheduledAt: (meeting.scheduledAt as Date).toISOString(),
     meetingUrl: meeting.meetingUrl,
+    livekitRoomName: meeting.livekitRoomName,
     isPending: false,
     isOrganizer: meeting.senderId === userId,
     otherPartyName:
@@ -896,6 +898,7 @@ export async function getUpcomingMeetingsForUser(userId: string) {
         topic: meeting.topic,
         scheduledAt: nextProposedTime.toISOString(),
         meetingUrl: null,
+        livekitRoomName: null,
         isPending: true,
         isOrganizer: meeting.senderId === userId,
         otherPartyName:

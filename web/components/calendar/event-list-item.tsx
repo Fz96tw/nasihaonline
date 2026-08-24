@@ -36,9 +36,14 @@ export function EventListItem({
   event: MemberEvent;
   /** True when this viewer hosts the event — hides the RSVP button (a host never RSVPs to their own event) and shows the join link regardless of RSVP status. */
   isHost: boolean;
-  onRsvpToggled: (result: { rsvped: boolean; meetingUrl: string | null; attendeeCount?: number }) => void;
+  onRsvpToggled: (result: {
+    rsvped: boolean;
+    meetingUrl: string | null;
+    livekitRoomName: string | null;
+    attendeeCount?: number;
+  }) => void;
 }) {
-  const { rsvped, meetingUrl, attendeeCount } = event;
+  const { rsvped, meetingUrl, livekitRoomName, attendeeCount } = event;
   const hasMounted = useHasMounted();
   const isPast = hasMounted && new Date(event.endsAt ?? event.startsAt) < new Date();
   const audienceBadge = getEventAudienceBadge(event);
@@ -78,7 +83,7 @@ export function EventListItem({
           <p className="text-sm text-muted-foreground">
             {hasMounted ? formatEventDateTime(event.startsAt) : null}
           </p>
-          {!isPast && (rsvped || isHost) && meetingUrl ? (
+          {!isPast && (rsvped || isHost) && (meetingUrl || livekitRoomName) ? (
             <Link
               href={`/meet/event/${event.seriesId}`}
               className="mt-1 inline-block text-sm font-medium text-primary underline-offset-4 hover:underline"

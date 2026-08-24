@@ -713,11 +713,11 @@ export function MeetingRequestDetail({
                 <p className="text-sm">{hasMounted ? formatTimestamp(item.scheduledAt) : null}</p>
               </div>
             )}
-            {item.meetingUrl && (
+            {(item.meetingUrl || item.livekitRoomName) && (
               <Button size="sm" variant="outline" className="w-fit" asChild>
                 <Link href={`/meet/request/${item.id}`}>
                   <Video className="mr-1.5 h-3.5 w-3.5" />
-                  Join Google Meet
+                  Join meeting
                 </Link>
               </Button>
             )}
@@ -737,7 +737,7 @@ export function MeetingRequestDetail({
                 onDeleted={onUpdated}
               />
             )}
-            {item.meetingUrl && item.direction === "sent" && !messageEditingOpen && (
+            {(item.meetingUrl || item.livekitRoomName) && item.direction === "sent" && !messageEditingOpen && (
               <Button
                 size="sm"
                 variant="ghost"
@@ -750,7 +750,7 @@ export function MeetingRequestDetail({
                   : "Add a waiting room message"}
               </Button>
             )}
-            {item.meetingUrl && item.direction === "sent" && messageEditingOpen && (
+            {(item.meetingUrl || item.livekitRoomName) && item.direction === "sent" && messageEditingOpen && (
               <MeetingMessageForm
                 meetingRequestId={item.id}
                 initialMessage={item.meetingOrganizerMessage}

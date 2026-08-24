@@ -38,6 +38,8 @@ export type UpcomingMeeting = {
    */
   scheduledAt: string;
   meetingUrl: string | null;
+  /** Set instead of meetingUrl when the sender chose LiveKit — see MeetingRequest.livekitRoomName's schema comment. */
+  livekitRoomName: string | null;
   /** True for pending/rescheduled requests — not yet accepted, so `scheduledAt` is a proposed time, not a confirmed one. */
   isPending: boolean;
   /** True if the viewer sent this request (the organizer); false if they received it. */

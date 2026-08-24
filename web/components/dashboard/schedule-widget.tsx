@@ -26,7 +26,7 @@ export async function ScheduleWidget({ userId }: { userId: string }) {
         ? `/calendar/${event.seriesId}?occurrence=${encodeURIComponent(event.startsAt)}`
         : `/calendar/${event.seriesId}`,
       badge: event.rsvped ? ({ label: "Going", variant: "success" } as const) : null,
-      joinUrl: event.meetingUrl ? `/meet/event/${event.seriesId}` : null,
+      joinUrl: event.meetingUrl || event.livekitRoomName ? `/meet/event/${event.seriesId}` : null,
       joinLabel: "Join the session",
     })),
     ...meetings.map((meeting) => ({
@@ -40,7 +40,7 @@ export async function ScheduleWidget({ userId }: { userId: string }) {
       badge: meeting.isPending
         ? ({ label: "Meeting request", variant: "warning" } as const)
         : ({ label: "Meeting", variant: "info" } as const),
-      joinUrl: meeting.meetingUrl ? `/meet/request/${meeting.id}` : null,
+      joinUrl: meeting.meetingUrl || meeting.livekitRoomName ? `/meet/request/${meeting.id}` : null,
       joinLabel: "Join the meeting",
     })),
   ]
