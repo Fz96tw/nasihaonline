@@ -1,5 +1,5 @@
 import "server-only";
-import { RoomServiceClient } from "livekit-server-sdk";
+import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
 import { db } from "@/lib/db";
 import { Role } from "@/lib/generated/prisma/enums";
 import { sendCalendarIntegrationAlertEmail } from "@/lib/email";
@@ -63,6 +63,44 @@ export async function createLiveKitRoom(roomName: string, topic: string): Promis
   } catch (error) {
     console.error("[livekit] Failed to create room", error);
     await notifyAdminsOfLiveKitFailure(topic, error);
+    return null;
+  }
+}
+
+export type LiveKitJoinCredentials = { token: string; serverUrl: string };
+
+/**
+ * Mints a join token for one participant — the organizer gets `roomAdmin`
+ * (real host powers: mute/remove others via the server-side
+ * RoomServiceClient, the only place those operations actually live — see
+ * createLiveKitRoom's comment; the client SDK has no such capability
+ * regardless of what a token grants), everyone else gets plain
+ * join/publish/subscribe. Never called from the client — the API secret
+ * that signs this JWT must stay server-side.
+ */
+export async function mintLiveKitToken(
+  roomName: string,
+  identity: string,
+  name: string,
+  isOrganizer: boolean,
+): Promise<LiveKitJoinCredentials | null> {
+  if (!LIVEKIT_URL || !LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
+    console.warn("[livekit] LiveKit isn't configured — skipping token mint");
+    return null;
+  }
+
+  try {
+    const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, { identity, name, ttl: "4h" });
+    token.addGrant({
+      room: roomName,
+      roomJoin: true,
+      canPublish: true,
+      canSubscribe: true,
+      ...(isOrganizer ? { roomAdmin: true } : {}),
+    });
+    return { token: await token.toJwt(), serverUrl: LIVEKIT_URL };
+  } catch (error) {
+    console.error("[livekit] Failed to mint join token", error);
     return null;
   }
 }

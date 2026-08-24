@@ -932,6 +932,8 @@ export async function getMeetingRequestMeetingStatus(
   started: boolean;
   startsAt: string;
   meetingUrl: string | null;
+  /** Unlike meetingUrl, exposed regardless of `started` — see Event's getEventMeetingStatus for the same field/rationale. */
+  livekitRoomName: string | null;
   organizerMessage: string | null;
   organizerMessageImageUrl: string | null;
   isOrganizer: boolean;
@@ -949,6 +951,7 @@ export async function getMeetingRequestMeetingStatus(
       status: true,
       scheduledAt: true,
       meetingUrl: true,
+      livekitRoomName: true,
       meetingStartedAt: true,
       meetingOrganizerMessage: true,
       meetingOrganizerMessageImageKey: true,
@@ -968,10 +971,11 @@ export async function getMeetingRequestMeetingStatus(
     started: meetingRequest.meetingStartedAt !== null,
     startsAt: meetingRequest.scheduledAt.toISOString(),
     meetingUrl: meetingRequest.meetingStartedAt ? meetingRequest.meetingUrl : null,
+    livekitRoomName: meetingRequest.livekitRoomName,
     organizerMessage: meetingRequest.meetingOrganizerMessage,
     organizerMessageImageUrl: getMeetingMessageImageUrl(meetingRequest.meetingOrganizerMessageImageKey),
     isOrganizer: meetingRequest.senderId === userId,
-    configured: meetingRequest.meetingUrl !== null,
+    configured: meetingRequest.meetingUrl !== null || meetingRequest.livekitRoomName !== null,
     requiresCodeOfConductAgreement: false,
   };
 }

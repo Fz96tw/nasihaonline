@@ -11,6 +11,7 @@ import {
   PUBLIC_MEETING_DISCLAIMER_SECTIONS,
 } from "@/lib/legal";
 import { useHasMounted } from "@/lib/use-has-mounted";
+import { LiveKitMeetingScreen } from "@/components/calendar/livekit-meeting-screen";
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -20,6 +21,7 @@ export type MeetingWaitingRoomStatus = {
   started: boolean;
   startsAt: string;
   meetingUrl: string | null;
+  livekitRoomName: string | null;
   organizerMessage: string | null;
   organizerMessageImageUrl: string | null;
   isOrganizer: boolean;
@@ -67,6 +69,7 @@ export function MeetingWaitingRoom({
   startEndpoint,
   resetEndpoint,
   messageEndpoint,
+  tokenEndpoint,
   backHref,
 }: {
   initialStatus: MeetingWaitingRoomStatus;
@@ -74,6 +77,7 @@ export function MeetingWaitingRoom({
   startEndpoint: string;
   resetEndpoint: string;
   messageEndpoint: string;
+  tokenEndpoint: string;
   backHref: string;
 }) {
   const [status, setStatus] = useState(initialStatus);
@@ -152,19 +156,23 @@ export function MeetingWaitingRoom({
   async function handleStart() {
     setStarting(true);
     setError(null);
-    // Opened blank synchronously, before the first await, so browsers still
-    // treat it as a direct response to the click rather than an untrusted
-    // script-triggered popup, then navigated once we know the real URL —
-    // getEventMeetingStatus/getMeetingRequestMeetingStatus withhold
-    // meetingUrl until meetingStartedAt is set, so it isn't known until
-    // after the start request round-trips. Collapses Start + Join into one
-    // click for the organizer, who otherwise had to click Start, wait for
-    // the status poll/refresh, then click a second Join Meet button.
-    // Can't pass the "noopener" feature here — browsers return null from
-    // window.open when it's set, and we need the handle to navigate this
-    // tab later. Clearing .opener by hand gets the same reverse-tabnabbing
-    // protection without losing the reference.
-    const meetingWindow = window.open("", "_blank");
+    // LiveKit renders in-place (LiveKitMeetingScreen takes over this same
+    // page once `started` flips), so skip the new-tab dance entirely —
+    // status.livekitRoomName is known before Start (unlike meetingUrl, see
+    // its schema comment), so this can branch upfront rather than after
+    // the round-trip. Meet keeps the existing blank-then-navigate trick:
+    // opened synchronously, before the first await, so browsers still treat
+    // it as a direct response to the click rather than an untrusted
+    // script-triggered popup, then navigated once the real URL is known
+    // (meetingUrl stays withheld until meetingStartedAt is set). Collapses
+    // Start + Join into one click for the organizer, who otherwise had to
+    // click Start, wait for the status poll/refresh, then click a second
+    // Join Meet button. Can't pass the "noopener" feature here — browsers
+    // return null from window.open when it's set, and we need the handle
+    // to navigate this tab later. Clearing .opener by hand gets the same
+    // reverse-tabnabbing protection without losing the reference.
+    const isLiveKit = status.livekitRoomName !== null;
+    const meetingWindow = isLiveKit ? null : window.open("", "_blank");
     if (meetingWindow) meetingWindow.opener = null;
     try {
       const csrfToken = await getCsrfToken();
@@ -237,6 +245,18 @@ export function MeetingWaitingRoom({
   const isBeforeStart = msRemaining > 0;
   const needsDisclaimerGate =
     !status.isOrganizer && status.started && status.meetingUrl !== null && status.requiresCodeOfConductAgreement && !agreedToDisclaimer;
+
+  // LiveKit takes over the whole page in place of the waiting-room card
+  // below, for both the organizer and every attendee, once the organizer
+  // has clicked Start — no Code of Conduct gate here (unlike Meet's
+  // needsDisclaimerGate above), since a LiveKit-backed meeting isn't
+  // reachable by an unvetted anonymous visitor in the first place: an
+  // open Event's anonymous registrant only ever gets a Meet link
+  // (meetLinkSource offers LiveKit only to the signed-in host choosing it
+  // at creation time, same as the manual-URL option today).
+  if (status.started && status.livekitRoomName) {
+    return <LiveKitMeetingScreen tokenEndpoint={tokenEndpoint} title={status.title} organizerName={status.organizerName} />;
+  }
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center gap-6 p-8 text-center">

@@ -2058,6 +2058,8 @@ export async function getEventMeetingStatus(
   started: boolean;
   startsAt: string;
   meetingUrl: string | null;
+  /** Unlike meetingUrl, exposed regardless of `started` — a bare room name can't be used to join (the token-mint endpoint independently requires started), and the client needs to know the platform before Start to skip Meet's new-tab dance (LiveKit Meeting Infrastructure initiative). */
+  livekitRoomName: string | null;
   organizerMessage: string | null;
   organizerMessageImageUrl: string | null;
   isOrganizer: boolean;
@@ -2073,6 +2075,7 @@ export async function getEventMeetingStatus(
       host: { select: { name: true } },
       startsAt: true,
       meetingUrl: true,
+      livekitRoomName: true,
       meetingStartedAt: true,
       meetingOrganizerMessage: true,
       meetingOrganizerMessageImageKey: true,
@@ -2108,10 +2111,11 @@ export async function getEventMeetingStatus(
     started: event.meetingStartedAt !== null,
     startsAt: event.startsAt.toISOString(),
     meetingUrl: event.meetingStartedAt ? event.meetingUrl : null,
+    livekitRoomName: event.livekitRoomName,
     organizerMessage: event.meetingOrganizerMessage,
     organizerMessageImageUrl: getMeetingMessageImageUrl(event.meetingOrganizerMessageImageKey),
     isOrganizer: isHost,
-    configured: event.meetingUrl !== null,
+    configured: event.meetingUrl !== null || event.livekitRoomName !== null,
     requiresCodeOfConductAgreement: event.open,
   };
 }
