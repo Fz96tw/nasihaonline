@@ -76,16 +76,28 @@ async function createSpace(auth: InstanceType<typeof google.auth.OAuth2>) {
 
 async function addCohost(auth: InstanceType<typeof google.auth.OAuth2>, spaceName: string, email: string) {
   console.log(`\n=== Step 2: v2beta spaces.members (COHOST, raw HTTPS — no SDK support in v2) ===`);
+  const membersUrl = `https://meet.googleapis.com/v2beta/${spaceName}/members`;
   try {
-    const res = await auth.request({
-      url: `https://meet.googleapis.com/v2beta/${spaceName}/members`,
-      method: "POST",
-      data: { email, role: "COHOST" },
-    });
+    const res = await auth.request({ url: membersUrl, method: "POST", data: { email, role: "COHOST" } });
     console.log("OK — member added:", JSON.stringify(res.data, null, 2));
     return res.data;
   } catch (error) {
     console.error("FAILED — v2beta spaces.members.create:", error instanceof Error ? error.message : error);
+    // Disambiguate "the collection doesn't exist" (404 "Method not found" —
+    // Google's API gateway recognized v2beta but has no matching route) from
+    // "it exists but this write is blocked" (403 "Permission denied", the
+    // same error shape the Calendar-first accessType patch hits) by trying
+    // a GET on the same collection.
+    try {
+      await auth.request({ url: membersUrl, method: "GET" });
+      console.log("(Diagnostic: GET on the same members collection succeeded — so POST specifically is blocked.)");
+    } catch (getError) {
+      console.log(
+        "(Diagnostic: GET on the same members collection also failed:",
+        getError instanceof Error ? getError.message : getError,
+        "— if this is also '404 Method not found', the members resource likely doesn't exist in the public v2beta API at all, not just a permission gap.)",
+      );
+    }
     throw error;
   }
 }
