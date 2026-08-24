@@ -1754,6 +1754,7 @@ export async function rsvpToEvent(
       endsAt: true,
       timezone: true,
       meetingUrl: true,
+      livekitRoomName: true,
       hostId: true,
       visibility: true,
     },
@@ -1819,6 +1820,7 @@ export async function rsvpToEvent(
         startsAt: event.startsAt,
         endsAt: event.endsAt,
         meetingUrl: event.meetingUrl,
+        livekitRoomName: event.livekitRoomName,
       }),
       icsFilename,
     });
@@ -1872,6 +1874,7 @@ export async function registerForEvent(
       open: true,
       visibility: true,
       meetingUrl: true,
+      livekitRoomName: true,
     },
   });
   if (!event) throw new EventError(404, "Event not found.");
@@ -1902,6 +1905,7 @@ export async function registerForEvent(
       startsAt: event.startsAt,
       endsAt: event.endsAt,
       meetingUrl: event.meetingUrl,
+      livekitRoomName: event.livekitRoomName,
     }),
     icsFilename: `${event.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "event"}.ics`,
   };
@@ -1933,13 +1937,16 @@ export function buildEventIcs(event: {
   startsAt: Date;
   endsAt: Date | null;
   meetingUrl: string | null;
+  /** When meetingUrl is null and this is set, the event is LiveKit-backed — the join link is this event's own in-app meeting page instead of an external URL (LiveKit Meeting Infrastructure initiative). */
+  livekitRoomName?: string | null;
   /** Series' repeat rule, if any — anchored at the master Event's own startsAt, per RFC 5545. */
   recurrence?: RecurrenceInput | null;
   recurrenceAnchor?: Date;
 }): string {
   const start = formatIcsDate(event.startsAt);
   const end = formatIcsDate(event.endsAt ?? new Date(event.startsAt.getTime() + 60 * 60 * 1000));
-  const descriptionParts = [event.description, event.meetingUrl ? `Join: ${event.meetingUrl}` : null].filter(
+  const joinUrl = event.meetingUrl ?? (event.livekitRoomName ? `${APP_URL}/meet/event/${event.id}` : null);
+  const descriptionParts = [event.description, joinUrl ? `Join: ${joinUrl}` : null].filter(
     (part): part is string => Boolean(part),
   );
 
@@ -1962,8 +1969,8 @@ export function buildEventIcs(event: {
   if (descriptionParts.length > 0) {
     lines.push(`DESCRIPTION:${escapeIcsText(descriptionParts.join("\n\n"))}`);
   }
-  if (event.meetingUrl) {
-    lines.push(`LOCATION:${escapeIcsText(event.meetingUrl)}`);
+  if (joinUrl) {
+    lines.push(`LOCATION:${escapeIcsText(joinUrl)}`);
   }
   if (event.recurrence) {
     lines.push(buildRRuleString(event.recurrence, event.recurrenceAnchor ?? event.startsAt));
@@ -1993,6 +2000,7 @@ export async function getEventIcs(
       startsAt: true,
       endsAt: true,
       meetingUrl: true,
+      livekitRoomName: true,
       hostId: true,
       recurrence: { select: RECURRENCE_SELECT },
     },
@@ -2031,6 +2039,7 @@ export async function getEventIcs(
       startsAt,
       endsAt,
       meetingUrl: canSeeMeetingUrl ? event.meetingUrl : null,
+      livekitRoomName: canSeeMeetingUrl ? event.livekitRoomName : null,
       recurrence: event.recurrence ? toRecurrenceInput(event.recurrence) : null,
       recurrenceAnchor: event.startsAt,
     }),
