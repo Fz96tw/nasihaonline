@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { authorizeHeader } from "livekit-server-sdk";
 import { resetMeetingOnRoomEmpty, verifyLiveKitWebhook } from "@/lib/livekit";
 
 /**
@@ -17,11 +16,15 @@ import { resetMeetingOnRoomEmpty, verifyLiveKitWebhook } from "@/lib/livekit";
  */
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
-  // LiveKit sends its signature in a header literally named "Authorize"
-  // (per the SDK's own authorizeHeader export) — not the standard
-  // "Authorization" header used by every other webhook provider in this
-  // codebase. Easy to get wrong; confirmed by reading the SDK source.
-  const authHeader = request.headers.get(authorizeHeader);
+  // livekit-server-sdk exports authorizeHeader === "Authorize" and its own
+  // WebhookReceiver JSDoc calls it the "Authorization" header — the two
+  // disagree with each other. Empirically (live testing, 2026-08-24: 400s
+  // on every real delivery, confirmed via nginx + app logs) LiveKit Cloud
+  // actually signs and sends the JWT in the standard `Authorization`
+  // header, not `Authorize`. Reading the SDK's own constant here silently
+  // returns null and every webhook 400s forever with no log line (see
+  // verifyLiveKitWebhook's early return) — read the real header instead.
+  const authHeader = request.headers.get("authorization");
 
   const event = await verifyLiveKitWebhook(rawBody, authHeader);
   if (!event) {
@@ -30,6 +33,7 @@ export async function POST(request: NextRequest) {
 
   if (event.event === "room_finished" && event.room?.name) {
     await resetMeetingOnRoomEmpty(event.room.name);
+    console.log(`[livekit] room_finished received, reset meeting for room ${event.room.name}`);
   }
 
   return NextResponse.json({ received: true });
