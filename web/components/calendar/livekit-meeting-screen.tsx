@@ -10,15 +10,15 @@ import { getCsrfToken } from "@/lib/csrf-client";
 import { getPublicMeetingClosingNote } from "@/lib/legal";
 
 /**
- * Private, per-viewer reminder of the disclaimer already agreed to at the
- * pre-join gate (user request, 2026-08-24) — local React state only, never
- * broadcast via LiveKit, so only the person who just joined sees it.
- * Centered and click-to-dismiss (user request, 2026-08-25) rather than
- * auto-fading, so it doesn't disappear before someone's actually read it.
- * Only rendered for a meeting that required the click-through gate in the
- * first place (open events); a private/invited meeting's attendees already
- * agreed to the community-wide Code of Conduct once at /join, so this would
- * be redundant there.
+ * Per-viewer reminder of the meeting's conduct/platform disclaimer — local
+ * React state only, never broadcast via LiveKit, so only the person who
+ * just joined sees it. Centered and click-to-dismiss (user request,
+ * 2026-08-25) rather than auto-fading, so it doesn't disappear before
+ * someone's actually read it. Shown for every LiveKit meeting (user
+ * request, 2026-08-25) — originally gated to open events only, on the
+ * theory that a private/invited meeting's attendees already agreed to the
+ * community-wide Code of Conduct once at /join, but that made it
+ * inconsistently absent depending on the event's visibility.
  *
  * Deliberately NOT rendered inside <LiveKitRoom> (doesn't need
  * useRoomContext()) — reported not visible at all when it was: an
@@ -86,7 +86,7 @@ function ParticipantActivityToasts({ toasts }: { toasts: Toast[] }) {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="pointer-events-none absolute right-4 top-16 z-50 flex flex-col gap-2">
+    <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center gap-2">
       {toasts.map((toast) => (
         <div key={toast.id} className="rounded-md bg-foreground/90 px-3 py-2 text-sm text-background shadow-lg">
           {toast.message}
@@ -123,14 +123,11 @@ export function LiveKitMeetingScreen({
   tokenEndpoint,
   title,
   organizerName,
-  showDisclaimerReminder,
   backHref,
 }: {
   tokenEndpoint: string;
   title: string;
   organizerName: string;
-  /** True for an open Event's attendee (whoever passed the pre-join Code of Conduct gate) — see DisclaimerReminderFlash. */
-  showDisclaimerReminder: boolean;
   /** Where to navigate once the participant leaves the call (VideoConference's built-in Leave button, or a connection drop) — same destination the page's own BackLink uses. */
   backHref: string;
 }) {
@@ -197,7 +194,7 @@ export function LiveKitMeetingScreen({
           <p className="text-xs text-muted-foreground">Hosted by {organizerName}</p>
         </div>
       </div>
-      {showDisclaimerReminder && <DisclaimerReminderFlash />}
+      <DisclaimerReminderFlash />
       <ParticipantActivityToasts toasts={toasts} />
       <LiveKitRoom
         token={credentials.token}

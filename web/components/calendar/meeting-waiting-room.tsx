@@ -267,7 +267,6 @@ export function MeetingWaitingRoom({
         tokenEndpoint={tokenEndpoint}
         title={status.title}
         organizerName={status.organizerName}
-        showDisclaimerReminder={status.requiresCodeOfConductAgreement}
         backHref={backHref}
       />
     );
