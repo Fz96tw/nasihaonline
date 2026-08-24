@@ -205,7 +205,11 @@ export function LiveKitMeetingScreen({
         connect
         data-lk-theme="default"
         style={{ height: "100%" }}
-        onDisconnected={() => router.push(backHref)}
+        // replace, not push — the meeting page (this same URL) is already
+        // the current history entry; pushing on top of it left it reachable
+        // via the browser Back button, which would land back on a still-
+        // `started` meeting and immediately reconnect (reported 2026-08-25).
+        onDisconnected={() => router.replace(backHref)}
       >
         <ParticipantActivityListener onEvent={pushToast} />
         <VideoConference />
