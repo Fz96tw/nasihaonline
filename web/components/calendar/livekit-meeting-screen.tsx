@@ -2,23 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X } from "lucide-react";
+import Image from "next/image";
 import { RoomEvent, type RemoteParticipant } from "livekit-client";
 import { LiveKitRoom, VideoConference, useRoomContext } from "@livekit/components-react";
 import "@livekit/components-styles";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { getPublicMeetingClosingNote } from "@/lib/legal";
 
-const DISCLAIMER_FLASH_DURATION_MS = 10_000;
-
 /**
  * Private, per-viewer reminder of the disclaimer already agreed to at the
  * pre-join gate (user request, 2026-08-24) — local React state only, never
  * broadcast via LiveKit, so only the person who just joined sees it.
- * Auto-dismisses, or can be closed early. Only rendered for a meeting that
- * required the click-through gate in the first place (open events); a
- * private/invited meeting's attendees already agreed to the community-wide
- * Code of Conduct once at /join, so this would be redundant there.
+ * Centered and click-to-dismiss (user request, 2026-08-25) rather than
+ * auto-fading, so it doesn't disappear before someone's actually read it.
+ * Only rendered for a meeting that required the click-through gate in the
+ * first place (open events); a private/invited meeting's attendees already
+ * agreed to the community-wide Code of Conduct once at /join, so this would
+ * be redundant there.
  *
  * Deliberately NOT rendered inside <LiveKitRoom> (doesn't need
  * useRoomContext()) — reported not visible at all when it was: an
@@ -30,26 +30,18 @@ const DISCLAIMER_FLASH_DURATION_MS = 10_000;
 function DisclaimerReminderFlash() {
   const [visible, setVisible] = useState(true);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setVisible(false), DISCLAIMER_FLASH_DURATION_MS);
-    return () => clearTimeout(timer);
-  }, []);
-
   if (!visible) return null;
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-16 z-50 flex justify-center p-2">
-      <div className="pointer-events-auto flex w-full max-w-sm items-start justify-between gap-2 rounded-lg border bg-background p-3 text-left shadow-lg">
-        <p className="text-xs text-muted-foreground">{getPublicMeetingClosingNote("livekit")}</p>
-        <button
-          type="button"
-          onClick={() => setVisible(false)}
-          aria-label="Dismiss reminder"
-          className="shrink-0 text-muted-foreground hover:text-foreground"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
+    <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center p-4">
+      <button
+        type="button"
+        onClick={() => setVisible(false)}
+        className="pointer-events-auto w-full max-w-sm cursor-pointer rounded-lg border bg-background p-4 text-left shadow-lg"
+      >
+        <p className="text-sm text-muted-foreground">{getPublicMeetingClosingNote("livekit")}</p>
+        <p className="mt-2 text-xs font-medium text-muted-foreground">Tap to dismiss</p>
+      </button>
     </div>
   );
 }
@@ -195,6 +187,12 @@ export function LiveKitMeetingScreen({
     <div className="fixed inset-0 z-[60] bg-background">
       <div className="pointer-events-none absolute inset-x-0 top-0 z-50 flex justify-center p-2">
         <div className="pointer-events-auto rounded-md border bg-background/95 px-4 py-2 text-center shadow-sm backdrop-blur">
+          <div className="mb-1 flex items-center justify-center gap-1.5">
+            <Image src="/images/nasihalogo-cropped.png" alt="NASIHA" width={296} height={334} className="h-3.5 w-auto" />
+            <span className="text-[.6rem] font-black uppercase leading-none tracking-[.1em] text-logo">
+              nasihaforyou.org
+            </span>
+          </div>
           <p className="font-semibold">{title}</p>
           <p className="text-xs text-muted-foreground">Hosted by {organizerName}</p>
         </div>
