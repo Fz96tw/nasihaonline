@@ -113,10 +113,19 @@ function ParticipantActivityToasts({ toasts }: { toasts: Toast[] }) {
  *
  * The banner, disclaimer flash, and toast stack are all rendered as
  * absolutely-positioned overlays *outside* <LiveKitRoom>'s own children,
- * layered on top of it via the shared `fixed inset-0` wrapper below —
- * not nested inside LiveKitRoom's DOM tree, which was found (2026-08-24
- * live testing) to make them invisible regardless of z-index, likely due
- * to @livekit/components-styles' internal layout/stacking context.
+ * layered on top of it via the shared `fixed inset-0` wrapper below.
+ *
+ * The wrapper's z-index must clear `components/scroll-header.tsx`'s
+ * persistent site header (`sticky top-0 z-50`) — confirmed via live
+ * Playwright testing (2026-08-24) that a `z-40` wrapper here renders
+ * genuinely visible-per-computed-style content that is nonetheless
+ * painted *underneath* the header, since the header establishes its own
+ * stacking context and 50 > 40 there; this page is rendered inside the
+ * normal `(member)` layout, so the header is always present in the DOM
+ * above it. (@livekit/components-styles itself has only one z-index rule
+ * in the entire package, `.lk-device-menu` at z-index:5 — it is not the
+ * competing layer.) Kept comfortably above 50 (`z-[60]`) rather than
+ * exactly 51, so a future header bump doesn't silently reopen this.
  */
 export function LiveKitMeetingScreen({
   tokenEndpoint,
@@ -168,7 +177,7 @@ export function LiveKitMeetingScreen({
 
   if (error) {
     return (
-      <div className="fixed inset-0 z-40 flex items-center justify-center bg-background p-8 text-center">
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background p-8 text-center">
         <p className="text-destructive">{error}</p>
       </div>
     );
@@ -176,14 +185,14 @@ export function LiveKitMeetingScreen({
 
   if (!credentials) {
     return (
-      <div className="fixed inset-0 z-40 flex items-center justify-center bg-background p-8 text-center">
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background p-8 text-center">
         <p className="text-muted-foreground">Connecting…</p>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-40 bg-background">
+    <div className="fixed inset-0 z-[60] bg-background">
       <div className="pointer-events-none absolute inset-x-0 top-0 z-50 flex justify-center p-2">
         <div className="pointer-events-auto rounded-md border bg-background/95 px-4 py-2 text-center shadow-sm backdrop-blur">
           <p className="font-semibold">{title}</p>
