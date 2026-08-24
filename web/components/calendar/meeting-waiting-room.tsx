@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { BackLink } from "@/components/back-link";
 import { getCsrfToken } from "@/lib/csrf-client";
 import {
-  PUBLIC_MEETING_CLOSING_NOTE,
+  getPublicMeetingClosingNote,
   PUBLIC_MEETING_CODE_OF_CONDUCT,
   PUBLIC_MEETING_DISCLAIMER_SECTIONS,
 } from "@/lib/legal";
@@ -243,19 +243,33 @@ export function MeetingWaitingRoom({
 
   const msRemaining = new Date(status.startsAt).getTime() - now;
   const isBeforeStart = msRemaining > 0;
+  // Fixed 2026-08-24: meetLinkSource (the host's platform choice) is
+  // independent of an Event's `open`/anonymous-attendance policy — an open
+  // event can be LiveKit-backed and still be joined by an unvetted
+  // anonymous visitor, so this must gate LiveKit exactly like Meet, not
+  // skip it. Previously checked `meetingUrl !== null` only, which is never
+  // true for a LiveKit meeting, silently bypassing the gate entirely.
   const needsDisclaimerGate =
-    !status.isOrganizer && status.started && status.meetingUrl !== null && status.requiresCodeOfConductAgreement && !agreedToDisclaimer;
+    !status.isOrganizer &&
+    status.started &&
+    (status.meetingUrl !== null || status.livekitRoomName !== null) &&
+    status.requiresCodeOfConductAgreement &&
+    !agreedToDisclaimer;
 
   // LiveKit takes over the whole page in place of the waiting-room card
   // below, for both the organizer and every attendee, once the organizer
-  // has clicked Start — no Code of Conduct gate here (unlike Meet's
-  // needsDisclaimerGate above), since a LiveKit-backed meeting isn't
-  // reachable by an unvetted anonymous visitor in the first place: an
-  // open Event's anonymous registrant only ever gets a Meet link
-  // (meetLinkSource offers LiveKit only to the signed-in host choosing it
-  // at creation time, same as the manual-URL option today).
-  if (status.started && status.livekitRoomName) {
-    return <LiveKitMeetingScreen tokenEndpoint={tokenEndpoint} title={status.title} organizerName={status.organizerName} />;
+  // has clicked Start — but only once needsDisclaimerGate (if applicable)
+  // has been satisfied, so an open event's anonymous visitor still sees
+  // the click-through gate below before ever reaching the embedded call.
+  if (status.started && status.livekitRoomName && !needsDisclaimerGate) {
+    return (
+      <LiveKitMeetingScreen
+        tokenEndpoint={tokenEndpoint}
+        title={status.title}
+        organizerName={status.organizerName}
+        showDisclaimerReminder={status.requiresCodeOfConductAgreement}
+      />
+    );
   }
 
   return (
@@ -319,7 +333,9 @@ export function MeetingWaitingRoom({
                   ))}
                 </ul>
               </div>
-              <p className="text-xs text-muted-foreground">{PUBLIC_MEETING_CLOSING_NOTE}</p>
+              <p className="text-xs text-muted-foreground">
+                {getPublicMeetingClosingNote(status.livekitRoomName ? "livekit" : "google_meet")}
+              </p>
               <Button type="button" onClick={() => setAgreedToDisclaimer(true)}>
                 I Agree — Join Meeting
               </Button>

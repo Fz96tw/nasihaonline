@@ -29,8 +29,14 @@ export const PUBLIC_MEETING_CODE_OF_CONDUCT = [
   "Uphold the mission. Do not use this meeting for commercial gain, self-promotion, or any purpose at odds with free knowledge sharing.",
 ];
 
-export const PUBLIC_MEETING_CLOSING_NOTE =
-  "The host reserves the right to remove any participant for disruptive or inappropriate behavior. This meeting is hosted on Google Meet; your use of it is also subject to Google's own Terms of Service.";
+/** Platform-specific — the host may have chosen Google Meet or LiveKit at creation time (LiveKit Meeting Infrastructure initiative). */
+export function getPublicMeetingClosingNote(platform: "google_meet" | "livekit"): string {
+  const platformNote =
+    platform === "livekit"
+      ? "This meeting is hosted on LiveKit; your use of it is also subject to LiveKit's own Terms of Service."
+      : "This meeting is hosted on Google Meet; your use of it is also subject to Google's own Terms of Service.";
+  return `The host reserves the right to remove any participant for disruptive or inappropriate behavior. ${platformNote}`;
+}
 
 // Source of truth: docs/Nasiha_Charter.md § Code of Conduct.
 export const CODE_OF_CONDUCT_PRINCIPLES = [

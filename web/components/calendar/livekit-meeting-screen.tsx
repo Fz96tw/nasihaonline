@@ -1,10 +1,50 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import { RoomEvent, type RemoteParticipant } from "livekit-client";
 import { LiveKitRoom, VideoConference, useRoomContext } from "@livekit/components-react";
 import "@livekit/components-styles";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { getPublicMeetingClosingNote } from "@/lib/legal";
+
+const DISCLAIMER_FLASH_DURATION_MS = 10_000;
+
+/**
+ * Private, per-viewer reminder of the disclaimer already agreed to at the
+ * pre-join gate (user request, 2026-08-24) — local React state only, never
+ * broadcast via LiveKit, so only the person who just joined sees it.
+ * Auto-dismisses, or can be closed early. Only rendered for a meeting that
+ * required the click-through gate in the first place (open events); a
+ * private/invited meeting's attendees already agreed to the community-wide
+ * Code of Conduct once at /join, so this would be redundant there.
+ */
+function DisclaimerReminderFlash() {
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(false), DISCLAIMER_FLASH_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <div className="pointer-events-auto fixed left-1/2 top-20 z-50 w-full max-w-sm -translate-x-1/2 rounded-lg border bg-background p-3 text-left shadow-lg">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs text-muted-foreground">{getPublicMeetingClosingNote("livekit")}</p>
+        <button
+          type="button"
+          onClick={() => setVisible(false)}
+          aria-label="Dismiss reminder"
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 const TOAST_DURATION_MS = 5_000;
 
@@ -67,10 +107,13 @@ export function LiveKitMeetingScreen({
   tokenEndpoint,
   title,
   organizerName,
+  showDisclaimerReminder,
 }: {
   tokenEndpoint: string;
   title: string;
   organizerName: string;
+  /** True for an open Event's attendee (whoever passed the pre-join Code of Conduct gate) — see DisclaimerReminderFlash. */
+  showDisclaimerReminder: boolean;
 }) {
   const [credentials, setCredentials] = useState<{ token: string; serverUrl: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +171,7 @@ export function LiveKitMeetingScreen({
           style={{ height: "100%" }}
         >
           <ParticipantActivityToasts />
+          {showDisclaimerReminder && <DisclaimerReminderFlash />}
           <VideoConference />
         </LiveKitRoom>
       </div>
