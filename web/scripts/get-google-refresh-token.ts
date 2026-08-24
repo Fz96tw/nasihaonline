@@ -21,9 +21,17 @@ const SCOPES = [
   // combination, including the bare 2-scope set above alone, and also with
   // meetings.space.created added (documented for spaces created directly
   // via spaces.create, not our Calendar-created case, but tested anyway —
-  // didn't help, so not requested here). Not a client-side scope problem;
-  // escalated to Google Workspace support.
+  // didn't help against that specific Calendar-created-space write). Not a
+  // client-side scope problem; escalated to Google Workspace support (see
+  // google-support-ticket.md).
   "https://www.googleapis.com/auth/drive",
+  // Required by spaces.create itself (per Google's own sample code) and by
+  // the v2beta spaces.members write this scope is also documented to cover
+  // for app-created spaces — needed for the 0c41063c spaces.create-first
+  // co-host spike (scripts/spike-meet-cohost.ts), which sidesteps the
+  // Calendar-created-space write block above by never patching a
+  // Calendar-created space in the first place.
+  "https://www.googleapis.com/auth/meetings.space.created",
 ];
 
 /**
