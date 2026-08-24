@@ -29,13 +29,22 @@ export const PUBLIC_MEETING_CODE_OF_CONDUCT = [
   "Uphold the mission. Do not use this meeting for commercial gain, self-promotion, or any purpose at odds with free knowledge sharing.",
 ];
 
-/** Platform-specific — the host may have chosen Google Meet or LiveKit at creation time (LiveKit Meeting Infrastructure initiative). */
+/**
+ * Platform-specific — the host may have chosen Google Meet or LiveKit at
+ * creation time (LiveKit Meeting Infrastructure initiative). The recording
+ * line applies to both: Google Meet auto-records today (autoRecordingGeneration:
+ * "ON", see google-calendar.ts); LiveKit's own recording (egress-to-storage)
+ * is still deferred (see livekit.ts's createLiveKitRoom doc comment) but the
+ * user directed this notice be shown for LiveKit now regardless, ahead of
+ * that work landing (2026-08-25) — keep this comment in sync once egress
+ * ships so it stops describing a stated intent as already-built.
+ */
 export function getPublicMeetingClosingNote(platform: "google_meet" | "livekit"): string {
   const platformNote =
     platform === "livekit"
-      ? "This meeting is hosted on LiveKit; your use of it is also subject to LiveKit's own Terms of Service."
+      ? "This meeting is hosted on a third-party video platform; your use of it is also subject to that platform's own Terms of Service."
       : "This meeting is hosted on Google Meet; your use of it is also subject to Google's own Terms of Service.";
-  return `The host reserves the right to remove any participant for disruptive or inappropriate behavior. ${platformNote}`;
+  return `The host reserves the right to remove any participant for disruptive or inappropriate behavior. Please be respectful and abide by NASIHA's Terms of Service. This meeting will be recorded, and the recording will be made available in the event's details after the meeting has ended. ${platformNote}`;
 }
 
 // Source of truth: docs/Nasiha_Charter.md § Code of Conduct.
