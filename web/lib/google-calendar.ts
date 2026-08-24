@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { google } from "googleapis";
+import { google, type calendar_v3 } from "googleapis";
 import { db } from "@/lib/db";
 import { Role } from "@/lib/generated/prisma/enums";
 import { sendCalendarIntegrationAlertEmail } from "@/lib/email";
@@ -50,11 +50,21 @@ async function notifyAdminsOfMeetLinkFailure(topic: string, error: unknown): Pro
 export type CreatedMeetingEvent = { meetingUrl: string | null; googleEventId: string | null };
 
 /**
- * Creates a Calendar event with an auto-generated Google Meet link
- * (conferenceDataVersion: 1) and both parties as attendees. sendUpdates:
- * "all" makes Google email each attendee a normal calendar invite (Accept/
- * Decline, add-to-calendar) directly from their own inbox — no separate
- * .ics handling needed for that.
+ * Creates a Calendar event with a Google Meet link (conferenceDataVersion:
+ * 1) and both parties as attendees. sendUpdates: "all" makes Google email
+ * each attendee a normal calendar invite (Accept/Decline, add-to-calendar)
+ * directly from their own inbox — no separate .ics handling needed for that.
+ *
+ * The Meet space is created directly via spaces.create — with accessType
+ * (no knock lobby) and auto-recording set inline in that same call — rather
+ * than letting Calendar auto-generate one via conferenceData.createRequest
+ * and patching it afterward. spaces.patch on a Calendar-created space 403s
+ * "Permission denied on resource Space" unconditionally, confirmed across
+ * every scope/consent combination and escalated to Google Workspace support
+ * (see ../../google-support-ticket.md) — setting the same config fields at
+ * spaces.create time isn't affected by that block. Falls back to the old
+ * Calendar-first flow (no accessType/recording guarantees, but still a
+ * working Meet link) if spaces.create itself fails.
  *
  * Best-effort, same non-fatal philosophy as every send*Email function in
  * lib/email.ts: unconfigured or failing Google credentials must never block
@@ -90,6 +100,32 @@ export async function createMeetingCalendarEvent(input: {
   const endsAt = new Date(input.startsAt.getTime() + durationMinutes * 60_000);
   const timeZone = input.timeZone ?? undefined;
 
+  // Own try/catch, separate from the event-insert block below: a failed
+  // spaces.create must not block event creation — it just means the
+  // fallback conferenceData.createRequest path is used instead, same as
+  // before this space-first rewrite, with no accessType/recording
+  // guarantees for this one meeting.
+  let conferenceData: calendar_v3.Schema$ConferenceData;
+  let meetingUrlFromSpace: string | null = null;
+  try {
+    const meet = google.meet({ version: "v2", auth });
+    const space = await meet.spaces.create({
+      requestBody: {
+        config: {
+          accessType: "OPEN",
+          artifactConfig: { recordingConfig: { autoRecordingGeneration: "ON" } },
+        },
+      },
+    });
+    if (!space.data.meetingCode) throw new Error("spaces.create returned no meetingCode");
+    conferenceData = { conferenceId: space.data.meetingCode, conferenceSolution: { key: { type: "hangoutsMeet" } } };
+    meetingUrlFromSpace = space.data.meetingUri ?? null;
+  } catch (error) {
+    console.error("[google-calendar] Failed to create Meet space directly — falling back to Calendar auto-generation (no accessType/auto-recording for this meeting)", error);
+    await notifyAdminsOfMeetLinkFailure(`${input.topic} (Meet space create)`, error);
+    conferenceData = { createRequest: { requestId: randomUUID(), conferenceSolutionKey: { type: "hangoutsMeet" } } };
+  }
+
   try {
     const calendar = google.calendar({ version: "v3", auth });
     const response = await calendar.events.insert({
@@ -102,57 +138,16 @@ export async function createMeetingCalendarEvent(input: {
         start: { dateTime: input.startsAt.toISOString(), timeZone },
         end: { dateTime: endsAt.toISOString(), timeZone },
         attendees: input.attendees.map((attendee) => ({ email: attendee.email, displayName: attendee.name })),
-        conferenceData: {
-          createRequest: {
-            requestId: randomUUID(),
-            conferenceSolutionKey: { type: "hangoutsMeet" },
-          },
-        },
+        conferenceData,
         ...(input.recurrenceRule ? { recurrence: [input.recurrenceRule] } : {}),
       },
     });
 
-    const meetingUrl = response.data.hangoutLink ?? null;
-
-    // Separate try/catch from the block above: a failed accessType patch
-    // must not discard an otherwise-successful Calendar event/Meet link.
-    // The space's server-generated `meetingCode` (the last path segment of
-    // the hangout link, e.g. "abc-mnop-xyz") doubles as a valid alias for
-    // the space's resource name for API calls, per the Meet API docs.
-    if (meetingUrl) {
-      try {
-        const meetingCode = meetingUrl.split("/").pop();
-        const meet = google.meet({ version: "v2", auth });
-        await meet.spaces.patch({
-          name: `spaces/${meetingCode}`,
-          updateMask: "config.accessType",
-          requestBody: { config: { accessType: "OPEN" } },
-        });
-      } catch (error) {
-        console.error("[google-calendar] Failed to open Meet space lobby (accessType: OPEN)", error);
-        await notifyAdminsOfMeetLinkFailure(`${input.topic} (Meet lobby open)`, error);
-      }
-
-      // Every meeting is recorded by default (no per-event opt-out) — this
-      // is a space-level property, so it auto-starts the recording
-      // regardless of who's actually present, sidestepping the fact that
-      // Meet only ever lets the host/co-host/same-org attendees manually
-      // start one. Own try/catch, same rationale as the accessType patch
-      // above: a licensing/eligibility failure here must not regress the
-      // (already relied-upon) lobby-open patch, and vice versa.
-      try {
-        const meetingCode = meetingUrl.split("/").pop();
-        const meet = google.meet({ version: "v2", auth });
-        await meet.spaces.patch({
-          name: `spaces/${meetingCode}`,
-          updateMask: "config.artifactConfig.recordingConfig.autoRecordingGeneration",
-          requestBody: { config: { artifactConfig: { recordingConfig: { autoRecordingGeneration: "ON" } } } },
-        });
-      } catch (error) {
-        console.error("[google-calendar] Failed to enable Meet space auto-recording", error);
-        await notifyAdminsOfMeetLinkFailure(`${input.topic} (Meet auto-recording)`, error);
-      }
-    }
+    // meetingUrlFromSpace (the space's own meetingUri) is preferred over
+    // response.data.hangoutLink — confirmed empirically that hangoutLink
+    // comes back empty when conferenceData links to a pre-created space via
+    // conferenceId rather than requesting Calendar generate one itself.
+    const meetingUrl = meetingUrlFromSpace ?? response.data.hangoutLink ?? null;
 
     return {
       meetingUrl,
