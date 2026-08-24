@@ -1,5 +1,5 @@
 import "server-only";
-import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
+import { AccessToken, RoomServiceClient, WebhookReceiver } from "livekit-server-sdk";
 import { db } from "@/lib/db";
 import { Role } from "@/lib/generated/prisma/enums";
 import { sendCalendarIntegrationAlertEmail } from "@/lib/email";
@@ -103,4 +103,43 @@ export async function mintLiveKitToken(
     console.error("[livekit] Failed to mint join token", error);
     return null;
   }
+}
+
+/**
+ * Verifies and parses an incoming LiveKit webhook POST — same signature-
+ * verification shape as the Stripe/Clerk webhook routes, but reuses the
+ * existing API key/secret rather than a separate webhook signing secret
+ * (LiveKit signs webhook payloads with the project's own API credentials).
+ * Returns null on any verification/config failure — the caller responds
+ * 400 rather than throwing, since a webhook endpoint must never 500 on a
+ * malformed/replayed/unverifiable payload.
+ */
+export async function verifyLiveKitWebhook(rawBody: string, authHeader: string | null) {
+  if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET || !authHeader) return null;
+  try {
+    const receiver = new WebhookReceiver(LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
+    return await receiver.receive(rawBody, authHeader);
+  } catch (error) {
+    console.error("[livekit] Failed to verify webhook payload", error);
+    return null;
+  }
+}
+
+/**
+ * Auto-reset (LiveKit Meeting Infrastructure initiative, reported live
+ * 2026-08-24): once a room's `room_finished` webhook fires — meaning
+ * everyone has actually left, not just the organizer, since LiveKit only
+ * sends this after the room's emptyTimeout elapses with zero participants
+ * — clear whichever Event/MeetingRequest owns that room name back to the
+ * un-started state, same end-state the organizer's own manual "Reset"
+ * button already produces. `livekitRoomName` is effectively unique (an
+ * Event's pre-generated id or an existing MeetingRequest's id, per
+ * createLiveKitRoom's own doc comment), so at most one of these two
+ * updates ever actually matches a row.
+ */
+export async function resetMeetingOnRoomEmpty(roomName: string): Promise<void> {
+  await Promise.all([
+    db.event.updateMany({ where: { livekitRoomName: roomName }, data: { meetingStartedAt: null } }),
+    db.meetingRequest.updateMany({ where: { livekitRoomName: roomName }, data: { meetingStartedAt: null } }),
+  ]);
 }
