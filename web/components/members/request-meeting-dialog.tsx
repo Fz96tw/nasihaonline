@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { getLocalTimeZoneAbbreviation } from "@/lib/timezone";
 import { useHasMounted } from "@/lib/use-has-mounted";
@@ -33,6 +34,7 @@ const formSchema = z.object({
     .min(1)
     .max(MAX_PROPOSED_TIMES),
   message: z.string().trim().max(1000).nullable(),
+  meetingPlatform: z.enum(["google_meet", "livekit"]),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -41,6 +43,7 @@ const DEFAULT_VALUES: FormValues = {
   topic: "",
   proposedTimes: [{ value: "" }],
   message: null,
+  meetingPlatform: "google_meet",
 };
 
 /**
@@ -85,6 +88,7 @@ export function RequestMeetingDialog({
           topic: values.topic,
           proposedTimes: values.proposedTimes.map((time) => new Date(time.value).toISOString()),
           message: values.message?.trim() ? values.message.trim() : null,
+          meetingPlatform: values.meetingPlatform,
         }),
       });
       if (!res.ok) {
@@ -197,10 +201,29 @@ export function RequestMeetingDialog({
                 )}
               </div>
 
-              <p className="text-xs text-muted-foreground">
-                If accepted, this meeting is recorded automatically — a link to the recording will be added to
-                the request once it&apos;s ready after the call ends.
-              </p>
+              <FormField
+                control={form.control}
+                name="meetingPlatform"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Meeting link</FormLabel>
+                    <FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="google_meet">Google Meet (recorded automatically)</SelectItem>
+                          <SelectItem value="livekit">LiveKit (real host controls)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      If accepted, the link is created once you&apos;ve settled on a time.
+                    </p>
+                  </FormItem>
+                )}
+              />
 
               <FormField
                 control={form.control}

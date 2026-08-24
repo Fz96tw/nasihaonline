@@ -561,20 +561,24 @@ export function SubmitEventForm({
               control={form.control}
               name="meetLinkSource"
               render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 rounded-md border p-4">
-                  <div>
-                    <FormLabel>Auto-generate a Google Meet link</FormLabel>
-                    <FormDescription>
-                      On by default — creates a Google Meet link automatically, and the session is recorded.
-                      A link to the recording is added to this event once it&apos;s ready after the meeting ends.
-                      Turn off to paste your own link instead (no recording).
-                    </FormDescription>
-                  </div>
+                <FormItem className="rounded-md border p-4">
+                  <FormLabel>Meeting link</FormLabel>
+                  <FormDescription>
+                    Google Meet auto-generates a link and records the session (a link to the recording is added
+                    once it&apos;s ready after the meeting ends). LiveKit gives you real in-meeting host controls —
+                    admit, mute, or remove participants — with recording coming soon. Or paste your own link.
+                  </FormDescription>
                   <FormControl>
-                    <Switch
-                      checked={field.value === "auto"}
-                      onCheckedChange={(checked) => field.onChange(checked ? "auto" : "manual")}
-                    />
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">Google Meet (auto-generated, recorded)</SelectItem>
+                        <SelectItem value="livekit">LiveKit (real host controls)</SelectItem>
+                        <SelectItem value="manual">Paste my own link</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </FormControl>
                 </FormItem>
               )}

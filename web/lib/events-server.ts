@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import { EventType, EventVisibility, NotificationType, RecurrenceFrequency, Role, RSVPStatus } from "@/lib/generated/prisma/enums";
 import type { Prisma } from "@/lib/generated/prisma/client";
@@ -17,12 +18,14 @@ import { EVENTS_FORUM_SLUG } from "@/lib/forums";
 import { DIRECTORY_TIERS } from "@/lib/members";
 import {
   cancelMeetingCalendarEvent,
+  createLiveKitMeetingCalendarEvent,
   createMeetingCalendarEvent,
   deleteMeetingRecording,
   updateMeetingCalendarEventAttendees,
   updateMeetingCalendarEventRecurrence,
   updateMeetingCalendarEventTime,
 } from "@/lib/google-calendar";
+import { createLiveKitRoom } from "@/lib/livekit";
 import { createNotification } from "@/lib/notifications-server";
 import { sendEventInviteEmail, sendEventLifecycleEmail, sendRsvpConfirmationEmail } from "@/lib/email";
 import { formatEventDateTime } from "@/lib/format-date";
@@ -934,7 +937,7 @@ export async function createEvent(
     heroImage: File | null;
     visibility: EventVisibility;
     invitedUserIds: string[];
-    meetLinkSource: "auto" | "manual";
+    meetLinkSource: "auto" | "manual" | "livekit";
     /** Optional waiting-room greeting shown to attendees on /meet/event/[id] before Start (meeting-join-experience). */
     meetingOrganizerMessage: string | null;
     meetingOrganizerMessageImage: File | null;
@@ -1062,6 +1065,14 @@ export async function createEvent(
   // event's real audience is discovered later via RSVP, not known upfront.
   let meetingUrl = input.meetingUrl;
   let googleEventId: string | null = null;
+  let livekitRoomName: string | null = null;
+  // Pre-generated only for the livekit path: the Calendar invite needs to
+  // link to this event's own in-app meeting page, but that call happens
+  // before the Event row (and its DB-generated id) exists below. Reused as
+  // both the Event's id and the LiveKit room name — no reason for them to
+  // differ, and it saves a second random value.
+  const preGeneratedEventId = input.meetLinkSource === "livekit" ? randomUUID() : null;
+
   if (input.meetLinkSource === "auto" && host) {
     const attendees = [
       { email: host.email, name: hostName },
@@ -1078,11 +1089,29 @@ export async function createEvent(
     });
     meetingUrl = created.meetingUrl;
     googleEventId = created.googleEventId;
+  } else if (input.meetLinkSource === "livekit" && host && preGeneratedEventId) {
+    livekitRoomName = await createLiveKitRoom(preGeneratedEventId, input.title);
+    const attendees = [
+      { email: host.email, name: hostName },
+      ...invitedUsers.map((user) => ({ email: user.email, name: user.name ?? "Member" })),
+    ];
+    const created = await createLiveKitMeetingCalendarEvent({
+      topic: input.title,
+      startsAt,
+      durationMinutes: endsAt ? Math.round((endsAt.getTime() - startsAt.getTime()) / 60_000) : undefined,
+      attendees,
+      description: input.description ?? undefined,
+      recurrenceRule: recurrenceRuleString ?? undefined,
+      timeZone: input.timezone,
+      meetingPageUrl: `${APP_URL}/meet/event/${preGeneratedEventId}`,
+    });
+    googleEventId = created.googleEventId;
   }
 
   const event = await db.$transaction(async (tx) => {
     const created = await tx.event.create({
       data: {
+        ...(preGeneratedEventId ? { id: preGeneratedEventId } : {}),
         title: input.title,
         description: input.description,
         type: input.type,
@@ -1094,6 +1123,7 @@ export async function createEvent(
         heroImageUrl,
         meetingUrl,
         googleEventId,
+        livekitRoomName,
         visibility: input.visibility,
         deidentificationConfirmed: input.deidentificationConfirmed,
         meetingOrganizerMessage: input.meetingOrganizerMessage,

@@ -161,6 +161,62 @@ export async function createMeetingCalendarEvent(input: {
 }
 
 /**
+ * Creates a plain Calendar event (attendees, sendUpdates: "all", recurrence,
+ * timeZone — identical invite/visibility behavior to createMeetingCalendarEvent)
+ * for a LiveKit-backed meeting: no conferenceData/Meet integration at all,
+ * since the actual meeting lives at `meetingPageUrl` (our own in-app page),
+ * not a meet.google.com link. Same non-fatal philosophy as the rest of this
+ * file — a failed/unconfigured Google call must never block event/meeting
+ * creation, since the Event/MeetingRequest row plus its LiveKit room are the
+ * source of truth for the meeting itself.
+ */
+export async function createLiveKitMeetingCalendarEvent(input: {
+  topic: string;
+  startsAt: Date;
+  durationMinutes?: number;
+  attendees: { email: string; name: string }[];
+  description?: string;
+  recurrenceRule?: string;
+  timeZone?: string | null;
+  meetingPageUrl: string;
+}): Promise<{ googleEventId: string | null }> {
+  const auth = getOAuthClient();
+  if (!auth) {
+    console.warn("[google-calendar] Google Calendar isn't configured — skipping calendar invite creation");
+    return { googleEventId: null };
+  }
+
+  const durationMinutes = input.durationMinutes ?? DEFAULT_MEETING_DURATION_MINUTES;
+  const endsAt = new Date(input.startsAt.getTime() + durationMinutes * 60_000);
+  const timeZone = input.timeZone ?? undefined;
+
+  try {
+    const calendar = google.calendar({ version: "v3", auth });
+    const response = await calendar.events.insert({
+      calendarId: CALENDAR_ID,
+      sendUpdates: "all",
+      requestBody: {
+        summary: input.topic,
+        description: input.description
+          ? `${input.description}\n\nJoin: ${input.meetingPageUrl}`
+          : `Join: ${input.meetingPageUrl}`,
+        location: input.meetingPageUrl,
+        start: { dateTime: input.startsAt.toISOString(), timeZone },
+        end: { dateTime: endsAt.toISOString(), timeZone },
+        attendees: input.attendees.map((attendee) => ({ email: attendee.email, displayName: attendee.name })),
+        ...(input.recurrenceRule ? { recurrence: [input.recurrenceRule] } : {}),
+      },
+    });
+
+    return { googleEventId: response.data.id ?? null };
+  } catch (error) {
+    console.error("[google-calendar] Failed to create LiveKit meeting calendar event", error);
+    await notifyAdminsOfMeetLinkFailure(input.topic, error);
+    return { googleEventId: null };
+  }
+}
+
+/**
  * Replaces the attendee list on a Calendar event created by
  * createMeetingCalendarEvent() — used when a restricted Event's invited
  * list is edited after creation (Audience-Restricted Group Events,

@@ -4,6 +4,7 @@ import {
   ContributionSource,
   LedgerStatus,
   LedgerTransactionType,
+  MeetingPlatform,
   MeetingRequestMessageAction,
   MeetingRequestStatus,
   NotificationType,
@@ -12,10 +13,12 @@ import type { MeetingRequestModel } from "@/lib/generated/prisma/models/MeetingR
 import { sendMeetingRequestEmail } from "@/lib/email";
 import {
   cancelMeetingCalendarEvent,
+  createLiveKitMeetingCalendarEvent,
   createMeetingCalendarEvent,
   deleteMeetingRecording,
   updateMeetingCalendarEventTime,
 } from "@/lib/google-calendar";
+import { createLiveKitRoom } from "@/lib/livekit";
 import { INBOX_TIERS } from "@/lib/members";
 import { createNotification } from "@/lib/notifications-server";
 import {
@@ -56,7 +59,13 @@ function parseProposedTimes(values: string[]): Date[] {
  */
 export async function createMeetingRequest(
   senderId: string,
-  input: { recipientId: string; topic: string; proposedTimes: string[]; message: string | null },
+  input: {
+    recipientId: string;
+    topic: string;
+    proposedTimes: string[];
+    message: string | null;
+    meetingPlatform: MeetingPlatform;
+  },
 ): Promise<MeetingRequestModel> {
   if (input.recipientId === senderId) {
     throw new MeetingRequestError(400, "You can't request a meeting with yourself.");
@@ -79,6 +88,7 @@ export async function createMeetingRequest(
         recipientId: input.recipientId,
         topic: input.topic,
         proposedTimes,
+        meetingPlatform: input.meetingPlatform,
       },
     });
     await tx.meetingRequestMessage.create({
@@ -635,21 +645,41 @@ export async function resolveMeetingRequest(
   const recipientUser = actingUserId === meetingRequest.recipientId ? actor : otherParty;
 
   // External network call — kept outside the DB transaction below, and
-  // best-effort (see google-calendar.ts): a failed/unconfigured Google call
-  // must never block acceptance, since the ledger rows are the source of
-  // truth for the meeting having happened.
-  const { meetingUrl, googleEventId } =
-    senderUser && recipientUser
-      ? await createMeetingCalendarEvent({
-          topic: meetingRequest.topic,
-          startsAt: scheduledAt,
-          attendees: [
-            { email: senderUser.email, name: senderUser.name ?? "there" },
-            { email: recipientUser.email, name: recipientUser.name ?? "there" },
-          ],
-          description: createdMessage?.body ?? undefined,
-        })
-      : { meetingUrl: null, googleEventId: null };
+  // best-effort (see google-calendar.ts): a failed/unconfigured Google/
+  // LiveKit call must never block acceptance, since the ledger rows are the
+  // source of truth for the meeting having happened. Platform was chosen by
+  // the sender at request-creation time (createMeetingRequest), not here —
+  // the id already exists by this point, unlike Event's createEvent flow,
+  // so no pre-generated id is needed for the LiveKit meeting-page link.
+  let meetingUrl: string | null = null;
+  let googleEventId: string | null = null;
+  let livekitRoomName: string | null = null;
+  if (senderUser && recipientUser && meetingRequest.meetingPlatform === MeetingPlatform.livekit) {
+    livekitRoomName = await createLiveKitRoom(meetingRequest.id, meetingRequest.topic);
+    const created = await createLiveKitMeetingCalendarEvent({
+      topic: meetingRequest.topic,
+      startsAt: scheduledAt,
+      attendees: [
+        { email: senderUser.email, name: senderUser.name ?? "there" },
+        { email: recipientUser.email, name: recipientUser.name ?? "there" },
+      ],
+      description: createdMessage?.body ?? undefined,
+      meetingPageUrl: `${APP_URL}/meet/request/${meetingRequest.id}`,
+    });
+    googleEventId = created.googleEventId;
+  } else if (senderUser && recipientUser) {
+    const created = await createMeetingCalendarEvent({
+      topic: meetingRequest.topic,
+      startsAt: scheduledAt,
+      attendees: [
+        { email: senderUser.email, name: senderUser.name ?? "there" },
+        { email: recipientUser.email, name: recipientUser.name ?? "there" },
+      ],
+      description: createdMessage?.body ?? undefined,
+    });
+    meetingUrl = created.meetingUrl;
+    googleEventId = created.googleEventId;
+  }
 
   const updated = await db.$transaction(async (tx) => {
     const spendEvent = await tx.contributionEvent.create({
@@ -704,6 +734,7 @@ export async function resolveMeetingRequest(
         scheduledAt,
         meetingUrl,
         googleEventId,
+        livekitRoomName,
       },
     });
 

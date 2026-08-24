@@ -54,7 +54,7 @@ function requireRestrictedEventInvariants(
   data: {
     visibility: EventVisibility;
     invitedUserIds: string[];
-    meetLinkSource: "auto" | "manual";
+    meetLinkSource: "auto" | "manual" | "livekit";
     meetingUrl: string | null;
     open: boolean;
   },
@@ -140,7 +140,7 @@ export const createEventSchema = eventFieldsSchema
   .extend({
     visibility: z.nativeEnum(EventVisibility),
     invitedUserIds: z.array(z.string()),
-    meetLinkSource: z.enum(["auto", "manual"]),
+    meetLinkSource: z.enum(["auto", "manual", "livekit"]),
     recurrence: recurrenceInputSchema,
   })
   .superRefine(requireDeidentificationForCaseDiscussion)
