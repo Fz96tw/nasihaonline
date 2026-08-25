@@ -3,11 +3,48 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { X } from "lucide-react";
 import { RoomEvent, type RemoteParticipant } from "livekit-client";
 import { LiveKitRoom, VideoConference, useRoomContext } from "@livekit/components-react";
 import "@livekit/components-styles";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { getPublicMeetingClosingNote } from "@/lib/legal";
+
+/**
+ * Title/host banner pinned to the top of the call — per-viewer local state
+ * only (same as DisclaimerReminderFlash below), dismissible so it doesn't
+ * permanently take up screen space once someone's confirmed which meeting
+ * they're in (user request, 2026-08-25). Re-appears on a fresh page load/
+ * rejoin — nothing about the dismissal is persisted.
+ */
+function MeetingBanner({ title, organizerName }: { title: string; organizerName: string }) {
+  const [visible, setVisible] = useState(true);
+
+  if (!visible) return null;
+
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-0 z-50 flex justify-center p-2">
+      <div className="pointer-events-auto relative rounded-md border bg-background/95 px-4 py-2 pr-8 text-center shadow-sm backdrop-blur">
+        <button
+          type="button"
+          onClick={() => setVisible(false)}
+          aria-label="Dismiss"
+          className="absolute right-1.5 top-1.5 rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+        <div className="mb-1 flex items-center justify-center gap-1.5">
+          <Image src="/images/nasihalogo-cropped.png" alt="NASIHA" width={296} height={334} className="h-3.5 w-auto" />
+          <span className="text-[.6rem] font-black uppercase leading-none tracking-[.1em] text-logo">
+            nasihaforyou.org
+          </span>
+        </div>
+        <p className="font-semibold">{title}</p>
+        <p className="text-xs text-muted-foreground">Hosted by {organizerName}</p>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Per-viewer reminder of the meeting's conduct/platform disclaimer — local
@@ -299,18 +336,7 @@ export function LiveKitMeetingScreen({
 
   return (
     <div className="fixed inset-0 z-[60] bg-background">
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-50 flex justify-center p-2">
-        <div className="pointer-events-auto rounded-md border bg-background/95 px-4 py-2 text-center shadow-sm backdrop-blur">
-          <div className="mb-1 flex items-center justify-center gap-1.5">
-            <Image src="/images/nasihalogo-cropped.png" alt="NASIHA" width={296} height={334} className="h-3.5 w-auto" />
-            <span className="text-[.6rem] font-black uppercase leading-none tracking-[.1em] text-logo">
-              nasihaforyou.org
-            </span>
-          </div>
-          <p className="font-semibold">{title}</p>
-          <p className="text-xs text-muted-foreground">Hosted by {organizerName}</p>
-        </div>
-      </div>
+      <MeetingBanner title={title} organizerName={organizerName} />
       <DisclaimerReminderFlash />
       <ParticipantActivityToasts toasts={toasts} />
       <RecordingControl
