@@ -43,7 +43,7 @@ const DEFAULT_VALUES: FormValues = {
   topic: "",
   proposedTimes: [{ value: "" }],
   message: null,
-  meetingPlatform: "google_meet",
+  meetingPlatform: "livekit",
 };
 
 /**
@@ -213,8 +213,8 @@ export function RequestMeetingDialog({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="google_meet">Google Meet (recorded automatically)</SelectItem>
-                          <SelectItem value="livekit">LiveKit (real host controls)</SelectItem>
+                          <SelectItem value="livekit">Nasiha Conference</SelectItem>
+                          <SelectItem value="google_meet">Google Meet</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormControl>

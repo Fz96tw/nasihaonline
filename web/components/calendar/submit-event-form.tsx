@@ -44,7 +44,7 @@ const DEFAULT_VALUES: CreateEventValues = {
   timezone: null,
   visibility: EventVisibility.community,
   invitedUserIds: [],
-  meetLinkSource: "auto",
+  meetLinkSource: "livekit",
   recurrence: null,
 };
 
@@ -564,9 +564,10 @@ export function SubmitEventForm({
                 <FormItem className="rounded-md border p-4">
                   <FormLabel>Meeting link</FormLabel>
                   <FormDescription>
-                    Google Meet auto-generates a link and records the session (a link to the recording is added
-                    once it&apos;s ready after the meeting ends). LiveKit gives you real in-meeting host controls —
-                    admit, mute, or remove participants — with recording coming soon. Or paste your own link.
+                    Nasiha Conference gives you real in-meeting host controls — admit, mute, or remove participants
+                    — plus manual recording. Google Meet auto-generates a link and records the session
+                    automatically (a link to the recording is added once it&apos;s ready after the meeting ends).
+                    Or paste your own link.
                   </FormDescription>
                   <FormControl>
                     <Select value={field.value} onValueChange={field.onChange}>
@@ -574,8 +575,8 @@ export function SubmitEventForm({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="auto">Google Meet (auto-generated, recorded)</SelectItem>
-                        <SelectItem value="livekit">LiveKit (real host controls)</SelectItem>
+                        <SelectItem value="livekit">Nasiha Conference</SelectItem>
+                        <SelectItem value="auto">Google Meet</SelectItem>
                         <SelectItem value="manual">Paste my own link</SelectItem>
                       </SelectContent>
                     </Select>
