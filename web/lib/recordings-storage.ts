@@ -18,13 +18,22 @@ const PRESIGN_EXPIRY_SECONDS = 5 * 60;
 
 let client: MinioClient | undefined;
 
+// Deliberately MINIO_PUBLIC_* (s3.nasihaforyou.org), not MINIO_ENDPOINT/
+// MINIO_PORT/MINIO_USE_SSL — those point at the Docker-internal "minio"
+// hostname, which is correct for lib/storage.ts's app-server-to-MinIO
+// traffic but unreachable by the two external parties these functions
+// actually serve: LiveKit Cloud's remote egress workers (getRecordingsS3Config)
+// and a member's own browser, redirected to a presigned URL minted by
+// getRecordingPresignedUrl below. See the nginx-proxy-manager setup in
+// scripts/setup-minio-recordings.sh's comment header.
 function getRecordingsClient(): MinioClient | null {
   if (!process.env.MINIO_RECORDINGS_ACCESS_KEY || !process.env.MINIO_RECORDINGS_SECRET_KEY) return null;
+  if (!process.env.MINIO_PUBLIC_ENDPOINT) return null;
   if (!client) {
     client = new MinioClient({
-      endPoint: process.env.MINIO_ENDPOINT || "localhost",
-      port: Number(process.env.MINIO_PORT || 9000),
-      useSSL: process.env.MINIO_USE_SSL === "true",
+      endPoint: process.env.MINIO_PUBLIC_ENDPOINT,
+      port: Number(process.env.MINIO_PUBLIC_PORT || 443),
+      useSSL: process.env.MINIO_PUBLIC_USE_SSL !== "false",
       accessKey: process.env.MINIO_RECORDINGS_ACCESS_KEY,
       secretKey: process.env.MINIO_RECORDINGS_SECRET_KEY,
     });
@@ -42,9 +51,10 @@ export function getRecordingsS3Config(): {
 } | null {
   const accessKey = process.env.MINIO_RECORDINGS_ACCESS_KEY;
   const secret = process.env.MINIO_RECORDINGS_SECRET_KEY;
-  if (!accessKey || !secret) return null;
-  const useSSL = process.env.MINIO_USE_SSL === "true";
-  const endpoint = `${useSSL ? "https" : "http"}://${process.env.MINIO_ENDPOINT || "localhost"}:${process.env.MINIO_PORT || 9000}`;
+  const publicEndpoint = process.env.MINIO_PUBLIC_ENDPOINT;
+  if (!accessKey || !secret || !publicEndpoint) return null;
+  const useSSL = process.env.MINIO_PUBLIC_USE_SSL !== "false";
+  const endpoint = `${useSSL ? "https" : "http"}://${publicEndpoint}:${process.env.MINIO_PUBLIC_PORT || 443}`;
   return { accessKey, secret, bucket: BUCKET_RECORDINGS, endpoint, forcePathStyle: true };
 }
 
