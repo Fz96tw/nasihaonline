@@ -1,0 +1,6 @@
+api_key: <SAME_API_KEY_AS_LIVEKIT_YAML>
+api_secret: <SAME_API_SECRET_AS_LIVEKIT_YAML>
+ws_url: ws://livekit:7880
+insecure: true
+redis:
+  address: redis:6379

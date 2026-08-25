@@ -1,3 +1,5 @@
 .env
+livekit.yaml
+egress.yaml
 .claude/settings.local.json
 *Zone.Identifier
