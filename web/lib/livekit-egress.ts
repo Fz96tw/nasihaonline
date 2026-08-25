@@ -59,6 +59,7 @@ export async function startEgress(roomName: string): Promise<StartEgressResult> 
         bucket: s3.bucket,
         endpoint: s3.endpoint,
         forcePathStyle: s3.forcePathStyle,
+        region: s3.region,
       }),
     },
   });

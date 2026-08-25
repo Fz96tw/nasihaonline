@@ -36,6 +36,14 @@ function getRecordingsClient(): MinioClient | null {
       useSSL: process.env.MINIO_PUBLIC_USE_SSL !== "false",
       accessKey: process.env.MINIO_RECORDINGS_ACCESS_KEY,
       secretKey: process.env.MINIO_RECORDINGS_SECRET_KEY,
+      // Without this, the SDK auto-discovers the bucket's region via a live
+      // call on first use (the region is part of the SigV4 signing string,
+      // needed even just to presign) — that call goes to the public
+      // endpoint above, which this app server can't reach (same host as
+      // the reverse proxy fronting it, hairpin NAT). Setting it explicitly
+      // makes presigning purely local, no network round-trip at all.
+      // MinIO's server-side default, unchanged by this deploy's config.
+      region: "us-east-1",
     });
   }
   return client;
@@ -48,6 +56,7 @@ export function getRecordingsS3Config(): {
   bucket: string;
   endpoint: string;
   forcePathStyle: boolean;
+  region: string;
 } | null {
   const accessKey = process.env.MINIO_RECORDINGS_ACCESS_KEY;
   const secret = process.env.MINIO_RECORDINGS_SECRET_KEY;
@@ -55,7 +64,10 @@ export function getRecordingsS3Config(): {
   if (!accessKey || !secret || !publicEndpoint) return null;
   const useSSL = process.env.MINIO_PUBLIC_USE_SSL !== "false";
   const endpoint = `${useSSL ? "https" : "http"}://${publicEndpoint}:${process.env.MINIO_PUBLIC_PORT || 443}`;
-  return { accessKey, secret, bucket: BUCKET_RECORDINGS, endpoint, forcePathStyle: true };
+  // Same region-ambiguity root cause as getRecordingsClient() above —
+  // LiveKit Cloud's egress workers are genuinely external so this hasn't
+  // been observed to fail, but there's no reason to leave it unset.
+  return { accessKey, secret, bucket: BUCKET_RECORDINGS, endpoint, forcePathStyle: true, region: "us-east-1" };
 }
 
 /**
