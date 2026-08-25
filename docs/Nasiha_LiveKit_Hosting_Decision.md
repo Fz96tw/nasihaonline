@@ -40,3 +40,7 @@ nginxproxymanager:
 ## Verified end-to-end (2026-08-25)
 
 Created a real room over the public `wss://` endpoint, joined a publishing participant (media flowed through the TURN relay range, confirmed in `livekit-server` logs), started room-composite egress, and confirmed a real MP4 landed in the `livekit-recordings` MinIO bucket via the public HTTPS endpoint. Test artifacts cleaned up afterward.
+
+## Live site repointed (2026-08-25)
+
+The above was verified against the VPS's own app instance, but the actual live site (`nasihaforyou.org`, still served from the AT&T homelab box at this point in the migration — see `CLAUDE.md`) was still pointing `LIVEKIT_URL` at a LiveKit Cloud project, unaffected by this decision. Repointed `homelab/.env`'s `LIVEKIT_URL`/`LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET` and `MINIO_PUBLIC_ENDPOINT`/`MINIO_RECORDINGS_ACCESS_KEY`/`MINIO_RECORDINGS_SECRET_KEY` at the same self-hosted VPS instance (rather than standing up a second LiveKit deployment), restarted the `app` container, and confirmed room creation succeeds using the homelab app's actual configured credentials. The self-hosting decision is now in effect for real production traffic, not just the VPS's own copy.
