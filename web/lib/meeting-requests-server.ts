@@ -18,6 +18,7 @@ import {
   deleteMeetingRecording,
   updateMeetingCalendarEventTime,
 } from "@/lib/google-calendar";
+import { formatEventTime } from "@/lib/format-date";
 import { createLiveKitRoom } from "@/lib/livekit";
 import { INBOX_TIERS } from "@/lib/members";
 import { createNotification } from "@/lib/notifications-server";
@@ -1020,6 +1021,57 @@ export async function markLiveKitMeetingRequestRecordingSegmentFailed(egressId: 
     data: { failedAt: new Date() },
   });
   return result.count > 0;
+}
+
+/**
+ * MeetingRequest counterpart to finalizeEventChatTranscript
+ * (lib/events-server.ts) — called from the room_finished webhook handler
+ * alongside it (not in a fallback chain — a room can't belong to both, and
+ * this mirrors resetMeetingOnRoomEmpty's own "try both, let the WHERE
+ * clause match zero or one" convention right next to it). No-ops silently
+ * when there's no matching MeetingRequest or no staged messages.
+ *
+ * Simpler than the Event version: no occurrence resolution (a
+ * MeetingRequest's room is used exactly once) and no ForumPost — the
+ * compiled transcript is inserted directly as a MeetingRequestMessage
+ * (action: chat_transcript), which MessageTimeline
+ * (meeting-request-detail.tsx) already renders generically. No heading
+ * line in the body either, unlike the ForumPost version — the timeline's
+ * own row header already shows the sender, the "posted the chat
+ * transcript" action label, and the timestamp for every message type.
+ * Posted as the meeting's own sender ("Organizer = sender for a
+ * MeetingRequest", per MeetingRequest.meetingStartedAt's schema comment),
+ * not an unrelated admin account.
+ */
+export async function finalizeMeetingRequestChatTranscript(roomName: string): Promise<void> {
+  const meetingRequest = await db.meetingRequest.findFirst({
+    where: { livekitRoomName: roomName },
+    select: { id: true, senderId: true },
+  });
+  if (!meetingRequest) return;
+
+  const messages = await db.meetingRequestChatMessage.findMany({
+    where: { meetingRequestId: meetingRequest.id },
+    orderBy: { sentAt: "asc" },
+  });
+  if (messages.length === 0) return;
+
+  const entries = messages.map((message) => {
+    const authorLabel =
+      message.authorUserId === meetingRequest.senderId ? `${message.authorName} (Organizer)` : message.authorName;
+    return `${authorLabel} — ${formatEventTime(message.sentAt, null)}\n${message.body}`;
+  });
+  const body = entries.join("\n\n");
+
+  await db.meetingRequestMessage.create({
+    data: {
+      meetingRequestId: meetingRequest.id,
+      senderId: meetingRequest.senderId,
+      action: MeetingRequestMessageAction.chat_transcript,
+      body,
+    },
+  });
+  await db.meetingRequestChatMessage.deleteMany({ where: { meetingRequestId: meetingRequest.id } });
 }
 
 /**

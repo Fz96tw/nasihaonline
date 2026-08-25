@@ -110,10 +110,11 @@ export default async function MeetPage({ params }: { params: Promise<{ kind: str
     kind === "event"
       ? `/api/events/${id}/meeting/recording/stop`
       : `/api/inbox/meeting-requests/${id}/meeting/recording/stop`;
-  // MeetingRequests have no discussion thread to archive chat into (only
-  // Events do), so this stays null for kind === "request" rather than
-  // pointing at a route that doesn't exist.
-  const chatEndpoint = kind === "event" ? `/api/events/${id}/meeting/chat` : null;
+  // A MeetingRequest has no discussion thread — its chat compiles into a
+  // MeetingRequestMessage on the Inbox timeline instead of a ForumPost
+  // (finalizeMeetingRequestChatTranscript, meeting-requests-server.ts).
+  const chatEndpoint =
+    kind === "event" ? `/api/events/${id}/meeting/chat` : `/api/inbox/meeting-requests/${id}/meeting/chat`;
 
   return (
     <MeetingWaitingRoom

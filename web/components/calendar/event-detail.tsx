@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Pencil, Users } from "lucide-react";
+import { Pencil, Users, Video } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -104,6 +104,10 @@ export function EventDetail({
     .filter(({ segment }) => segment.ready || segment.failed || isRecordingAvailable);
   const hostName = event.hostName ?? "NASIHA Member";
   const audienceBadge = getEventAudienceBadge(event);
+  const showJoinLink = !isPast && (event.rsvped || isHost) && (event.meetingUrl || event.livekitRoomName);
+  const showRecordingUrl = isRecordingAvailable && event.recordingUrl;
+  const hasMeetingSection =
+    showJoinLink || showRecordingUrl || visibleLiveKitSegments.length > 0 || event.chatTranscriptPostId;
 
   function handleRsvpToggled(result: {
     rsvped: boolean;
@@ -179,76 +183,80 @@ export function EventDetail({
         </div>
       ) : null}
 
-      {isRecordingAvailable && event.recordingUrl ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            href={event.recordingUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
-          >
-            Watch recording
-          </Link>
-          {canEdit && (
-            <DeleteRecordingButton
-              deleteUrl={`/api/events/${event.seriesId}/recording?occurrence=${encodeURIComponent(event.startsAt)}`}
-              onDeleted={() => setEvent((prev) => ({ ...prev, recordingUrl: null }))}
-            />
-          )}
-        </div>
-      ) : null}
+      {hasMeetingSection ? (
+        <div className="flex flex-col gap-3 border-t pt-6">
+          <h2 className="text-sm font-semibold">Meeting</h2>
 
-      {visibleLiveKitSegments.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm font-medium text-muted-foreground">Recording:</span>
-          {visibleLiveKitSegments.map(({ segment, label }) =>
-            segment.ready ? (
-              <span key={segment.id} className="flex items-baseline gap-1.5">
-                <Link
-                  href={`/api/events/${event.seriesId}/recording/${segment.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
-                >
-                  {label}
-                </Link>
-                <span className="text-xs text-muted-foreground">
-                  (
-                  {segment.durationSeconds !== null ? `${formatDurationMinutes(segment.durationSeconds)} · ` : ""}
-                  {formatTimestamp(segment.startedAt)})
-                </span>
-              </span>
-            ) : (
-              <span key={segment.id} className="w-fit text-sm text-muted-foreground">
-                {label} — {segment.failed ? "recording failed" : "processing…"}
-              </span>
-            ),
-          )}
-        </div>
-      ) : null}
+          {showJoinLink ? (
+            <Button size="sm" asChild className="w-fit">
+              <Link href={`/meet/event/${event.seriesId}`}>
+                <Video className="mr-1.5 h-4 w-4" />
+                Join session link
+              </Link>
+            </Button>
+          ) : null}
 
-      {event.chatTranscriptPostId ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            href={`#post-${event.chatTranscriptPostId}`}
-            className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
-          >
-            View chat transcript
-          </Link>
+          {showRecordingUrl ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href={event.recordingUrl!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
+              >
+                Watch recording
+              </Link>
+              {canEdit && (
+                <DeleteRecordingButton
+                  deleteUrl={`/api/events/${event.seriesId}/recording?occurrence=${encodeURIComponent(event.startsAt)}`}
+                  onDeleted={() => setEvent((prev) => ({ ...prev, recordingUrl: null }))}
+                />
+              )}
+            </div>
+          ) : null}
+
+          {visibleLiveKitSegments.length > 0 ? (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-muted-foreground">Recording</span>
+              {visibleLiveKitSegments.map(({ segment, label }) =>
+                segment.ready ? (
+                  <div key={segment.id} className="flex flex-wrap items-baseline gap-1.5">
+                    <Link
+                      href={`/api/events/${event.seriesId}/recording/${segment.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
+                    >
+                      {label}
+                    </Link>
+                    <span className="text-xs text-muted-foreground">
+                      (
+                      {segment.durationSeconds !== null ? `${formatDurationMinutes(segment.durationSeconds)} · ` : ""}
+                      {formatTimestamp(segment.startedAt)})
+                    </span>
+                  </div>
+                ) : (
+                  <span key={segment.id} className="w-fit text-sm text-muted-foreground">
+                    {label} — {segment.failed ? "recording failed" : "processing…"}
+                  </span>
+                ),
+              )}
+            </div>
+          ) : null}
+
+          {event.chatTranscriptPostId ? (
+            <Link
+              href={`#post-${event.chatTranscriptPostId}`}
+              className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
+            >
+              View chat transcript
+            </Link>
+          ) : null}
         </div>
       ) : null}
 
       {event.description ? (
         <p className="whitespace-pre-line text-sm leading-relaxed">{event.description}</p>
-      ) : null}
-
-      {!isPast && (event.rsvped || isHost) && (event.meetingUrl || event.livekitRoomName) ? (
-        <Link
-          href={`/meet/event/${event.seriesId}`}
-          className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
-        >
-          Join session link
-        </Link>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3">

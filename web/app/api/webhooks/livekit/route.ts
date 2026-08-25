@@ -8,6 +8,7 @@ import {
 } from "@/lib/events-server";
 import {
   attachLiveKitMeetingRequestRecordingSegment,
+  finalizeMeetingRequestChatTranscript,
   markLiveKitMeetingRequestRecordingSegmentFailed,
 } from "@/lib/meeting-requests-server";
 
@@ -20,11 +21,12 @@ import {
  * matches any /api/webhooks/* path).
  *
  * Handles `room_finished` (see resetMeetingOnRoomEmpty's doc comment — also
- * triggers finalizeEventChatTranscript, which compiles any captured chat
- * into the event's discussion thread and is itself a silent no-op on
- * failure, never blocking this route's response) and, as of objective 4,
- * `egress_ended` — a finished recording segment gets attached to whichever
- * Event/MeetingRequest owns the room. A
+ * triggers finalizeEventChatTranscript and finalizeMeetingRequestChatTranscript,
+ * which compile any captured chat into the event's discussion thread or the
+ * meeting request's Inbox timeline respectively; both are silent no-ops on
+ * failure or on a room that isn't theirs, never blocking this route's
+ * response) and, as of objective 4, `egress_ended` — a finished recording
+ * segment gets attached to whichever Event/MeetingRequest owns the room. A
  * malformed/incomplete egress_ended payload (missing roomName, no
  * successful file result, an owning row that's since vanished) is logged
  * and skipped rather than thrown — this route must never 500 on a webhook
@@ -52,6 +54,9 @@ export async function POST(request: NextRequest) {
     await resetMeetingOnRoomEmpty(event.room.name);
     await finalizeEventChatTranscript(event.room.name).catch((error) => {
       console.error("[livekit] Failed to finalize chat transcript", error);
+    });
+    await finalizeMeetingRequestChatTranscript(event.room.name).catch((error) => {
+      console.error("[livekit] Failed to finalize meeting request chat transcript", error);
     });
     console.log(`[livekit] room_finished received, reset meeting for room ${event.room.name}`);
   }

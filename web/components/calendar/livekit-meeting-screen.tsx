@@ -204,18 +204,37 @@ function ChatCaptureListener({ chatEndpoint }: { chatEndpoint: string | null | u
   useEffect(() => {
     if (!chatEndpoint) return;
     const myIdentity = room.localParticipant.identity;
-    for (const msg of chatMessages) {
-      if (msg.from?.identity !== myIdentity || sentIds.current.has(msg.id)) continue;
-      sentIds.current.add(msg.id);
-      fetch(chatEndpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: msg.id, message: msg.message, timestamp: msg.timestamp }),
-        keepalive: true,
-      }).catch(() => {
-        sentIds.current.delete(msg.id);
-      });
+    const pending = chatMessages.filter(
+      (msg) => msg.from?.identity === myIdentity && !sentIds.current.has(msg.id),
+    );
+    if (pending.length === 0) return;
+    for (const msg of pending) sentIds.current.add(msg.id);
+
+    async function archive() {
+      // Every mutating /api route requires this (middleware.ts's double-
+      // submit CSRF check) — a fetch missing it 403s, but fetch() only
+      // rejects on a network failure, not a non-2xx status, so skipping
+      // this silently "succeeded" (marked sent, never retried, nothing
+      // logged) with zero rows ever actually written. Same header every
+      // other mutating call in this file already sends (fetchToken,
+      // RecordingControl.toggle).
+      const csrfToken = await getCsrfToken();
+      for (const msg of pending) {
+        try {
+          const res = await fetch(chatEndpoint!, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+            body: JSON.stringify({ id: msg.id, message: msg.message, timestamp: msg.timestamp }),
+            keepalive: true,
+          });
+          if (!res.ok) throw new Error(`chat archive POST failed: ${res.status}`);
+        } catch (error) {
+          console.error("[chat-archive] failed to archive message", error);
+          sentIds.current.delete(msg.id);
+        }
+      }
     }
+    archive();
   }, [chatMessages, chatEndpoint, room]);
 
   return null;

@@ -688,6 +688,13 @@ enum MeetingRequestMessageAction {
   // available at any status/turn (unlike the negotiation actions above,
   // which are turn-gated). See resolveMeetingRequest's "message" branch.
   commented
+  // System-authored (posted as the meeting's own sender, not a real typed
+  // comment) — the compiled LiveKit chat log, inserted once by
+  // finalizeMeetingRequestChatTranscript when the room_finished webhook
+  // fires. `body` carries the whole stacked "Name — time\nmessage" log;
+  // no separate transcript-link model is needed since this row itself is
+  // the display unit (see MeetingRequestChatMessage's doc comment).
+  chat_transcript
 }
 
 model MeetingRequestMessage {
@@ -767,6 +774,13 @@ model MeetingRequest {
   // doc comment for why these live in a separate child table instead of
   // recordingUrl/driveFileId above.
   recordings                      MeetingRequestRecording[]
+  // LiveKit in-meeting chat archival — staged messages captured while the
+  // meeting is live, compiled by finalizeMeetingRequestChatTranscript into
+  // a single MeetingRequestMessage (action: chat_transcript) in `messages`
+  // above once the room ends. No occurrence linking needed here, unlike
+  // Event's EventChatTranscript — a MeetingRequest's room is used exactly
+  // once, same reasoning recordingUrl's own comment already gives.
+  chatMessages                    MeetingRequestChatMessage[]
   // In-app waiting-room feature — same shape/semantics as Event's fields
   // above. Organizer = sender for a MeetingRequest (matches every other
   // sender-privileged action in this model).
@@ -1253,6 +1267,27 @@ model MeetingRequestRecording {
 
   @@index([meetingRequestId])
   @@map("meeting_request_recordings")
+}
+
+// Short-lived staging row for one LiveKit in-meeting chat message on a
+// MeetingRequest's 1:1 call — exact mirror of EventChatMessage, keyed on
+// meetingRequestId instead of eventId. Deleted by
+// finalizeMeetingRequestChatTranscript once compiled into a single
+// MeetingRequestMessage when the room_finished webhook fires.
+model MeetingRequestChatMessage {
+  id               String         @id @default(cuid())
+  meetingRequestId String
+  meetingRequest   MeetingRequest @relation(fields: [meetingRequestId], references: [id], onDelete: Cascade)
+  livekitMessageId String
+  authorName       String
+  authorUserId     String?
+  body             String
+  sentAt           DateTime
+  createdAt        DateTime       @default(now())
+
+  @@unique([meetingRequestId, livekitMessageId])
+  @@index([meetingRequestId])
+  @@map("meeting_request_chat_messages")
 }
 
 enum RecordingOrigin {

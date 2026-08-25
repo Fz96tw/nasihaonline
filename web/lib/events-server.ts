@@ -2671,8 +2671,11 @@ export async function markLiveKitEventRecordingSegmentFailed(egressId: string): 
  * from the room_finished webhook handler right after
  * resetMeetingOnRoomEmpty. No-ops silently — never throws, matching every
  * other LiveKit webhook side-effect's best-effort philosophy — when there's
- * no matching Event, no discussion thread to post into, no staged messages,
- * or no admin account to author the post as.
+ * no matching Event, no discussion thread to post into, or no staged
+ * messages. Posted as the event's own host (not a system/admin account —
+ * there's no dedicated one in this app, and posting under an unrelated
+ * admin's name read as confusing/misleading in practice), same as every
+ * other post that host could make in their own event's thread.
  *
  * occurrenceDate resolution mirrors attachLiveKitEventRecordingSegment's
  * "closest scheduled occurrence at or before X" logic, anchored to the
@@ -2685,6 +2688,7 @@ export async function finalizeEventChatTranscript(roomName: string): Promise<voi
     where: { livekitRoomName: roomName },
     select: {
       id: true,
+      hostId: true,
       forumThread: { select: { id: true } },
       timezone: true,
       startsAt: true,
@@ -2700,13 +2704,6 @@ export async function finalizeEventChatTranscript(roomName: string): Promise<voi
   });
   if (messages.length === 0) return;
 
-  const admin = await db.user.findFirst({
-    where: { role: Role.admin },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  if (!admin) return;
-
   const endedAt = new Date();
   let occurrenceDate = event.startsAt;
   if (event.recurrence) {
@@ -2714,15 +2711,23 @@ export async function finalizeEventChatTranscript(roomName: string): Promise<voi
     occurrenceDate = rule.before(endedAt, true) ?? event.startsAt;
   }
 
-  const heading = `Chat transcript from meeting adjourned on ${formatEventDateTime(endedAt, event.timezone)}`;
-  const lines = messages.map(
-    (message) => `**${message.authorName}** · ${formatEventTime(message.sentAt, event.timezone)}: ${message.body}`,
-  );
-  const body = [heading, "", ...lines].join("\n");
+  // ForumPost bodies render as plain text (forum-thread-view.tsx's single
+  // whitespace-pre-wrap <p>, not Markdown) — Markdown emphasis here would
+  // show up as literal asterisks, and single-\n-separated lines read as one
+  // dense block. Each entry gets its own "Name — time" header line plus a
+  // blank line before the next entry, so plain-text wrapping still reads
+  // like a chat log instead of a wall of text.
+  const heading = `Chat transcript — meeting adjourned ${formatEventDateTime(endedAt, event.timezone)}`;
+  const entries = messages.map((message) => {
+    const authorLabel =
+      message.authorUserId === event.hostId ? `${message.authorName} (Organizer)` : message.authorName;
+    return `${authorLabel} — ${formatEventTime(message.sentAt, event.timezone)}\n${message.body}`;
+  });
+  const body = [heading, ...entries].join("\n\n");
 
   const post = await createForumPost(
     threadId,
-    admin.id,
+    event.hostId,
     { body, parentId: null, deidentificationConfirmed: false },
     true,
   );

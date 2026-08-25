@@ -32,6 +32,7 @@ const MESSAGE_ACTION_LABELS: Record<MeetingRequestMessageItem["action"], string>
   declined: "declined",
   cancelled: "cancelled the request",
   commented: "",
+  chat_transcript: "posted the chat transcript",
 };
 
 // timeZoneName makes explicit which zone a bare time means (see lib/timezone.ts)
