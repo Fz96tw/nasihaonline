@@ -564,10 +564,10 @@ export function SubmitEventForm({
                 <FormItem className="rounded-md border p-4">
                   <FormLabel>Meeting link</FormLabel>
                   <FormDescription>
-                    Nasiha Conference gives you real in-meeting host controls — admit, mute, or remove participants
-                    — plus manual recording. Google Meet auto-generates a link and records the session
-                    automatically (a link to the recording is added once it&apos;s ready after the meeting ends).
-                    Or paste your own link.
+                    Nasiha Conference and Google Meet both auto-generate their own meeting link — or paste your own
+                    below. Nasiha Conference gives you real in-meeting host controls (admit, mute, or remove
+                    participants) and lets any attendee manually start or stop recording. Google Meet does not
+                    record these meetings.
                   </FormDescription>
                   <FormControl>
                     <Select value={field.value} onValueChange={field.onChange}>
