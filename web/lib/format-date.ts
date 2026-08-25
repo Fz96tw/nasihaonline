@@ -39,6 +39,12 @@ export function formatEventDateTime(date: Date, timeZone?: string | null): strin
   });
 }
 
+/** "12 min" for a segment of 60s or more, "<1 min" for a shorter clip (never "0 min"). */
+export function formatDurationMinutes(seconds: number): string {
+  const minutes = Math.round(seconds / 60);
+  return minutes < 1 ? "<1 min" : `${minutes} min`;
+}
+
 /** "Just now" / "Xm ago" / "Xh ago" / "Xd ago", falling back to a short date past a week out. */
 export function formatRelativeTime(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();

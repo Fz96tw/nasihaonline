@@ -34,7 +34,7 @@ const MEETING_REQUEST_INCLUDE = {
   },
   recordings: {
     orderBy: { startedAt: "asc" as const },
-    select: { id: true, startedAt: true, objectKey: true, failedAt: true },
+    select: { id: true, startedAt: true, objectKey: true, failedAt: true, durationSeconds: true },
   },
 } as const;
 
@@ -134,6 +134,7 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
         startedAt: r.startedAt.toISOString(),
         ready: r.objectKey !== null,
         failed: r.failedAt !== null,
+        durationSeconds: r.durationSeconds,
       })),
       meetingEndedAt: meetingRequest.meetingEndedAt?.toISOString() ?? null,
       meetingOrganizerMessage: meetingRequest.meetingOrganizerMessage,

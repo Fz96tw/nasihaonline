@@ -1132,6 +1132,10 @@ model EventRecording {
   // (objectKey null, failedAt null) from "genuinely failed" (failedAt
   // set), so the UI never shows a permanently-stuck processing indicator.
   failedAt       DateTime?
+  // From the egress_ended webhook's FileInfo.duration (nanoseconds on the
+  // wire, converted to seconds). Null until the webhook lands, same as
+  // objectKey — a pending/failed segment has no duration yet.
+  durationSeconds Int?
   createdAt      DateTime        @default(now())
 
   @@index([eventId, occurrenceDate])
@@ -1156,6 +1160,8 @@ model MeetingRequestRecording {
   startedAt        DateTime
   // Same semantics as EventRecording.failedAt — see its comment.
   failedAt         DateTime?
+  // Same semantics as EventRecording.durationSeconds — see its comment.
+  durationSeconds  Int?
   createdAt        DateTime       @default(now())
 
   @@index([meetingRequestId])

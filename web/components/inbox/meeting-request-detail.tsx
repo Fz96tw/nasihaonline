@@ -18,6 +18,7 @@ import { getCsrfToken } from "@/lib/csrf-client";
 import { linkifyText } from "@/lib/linkify";
 import { getLocalTimeZoneAbbreviation } from "@/lib/timezone";
 import { useHasMounted } from "@/lib/use-has-mounted";
+import { formatDurationMinutes } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
 
 const MAX_PROPOSED_TIMES = 5;
@@ -753,15 +754,23 @@ export function MeetingRequestDetail({
             )}
             {visibleLiveKitSegments.map(({ segment, label }) =>
               segment.ready ? (
-                <Link
-                  key={segment.id}
-                  href={`/api/inbox/meeting-requests/${item.id}/recording/${segment.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
-                >
-                  {label}
-                </Link>
+                <span key={segment.id} className="flex items-baseline gap-1.5">
+                  <Link
+                    href={`/api/inbox/meeting-requests/${item.id}/recording/${segment.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    {label}
+                  </Link>
+                  {hasMounted && (
+                    <span className="text-xs text-muted-foreground">
+                      (
+                      {segment.durationSeconds !== null ? `${formatDurationMinutes(segment.durationSeconds)} · ` : ""}
+                      {formatTimestamp(segment.startedAt)})
+                    </span>
+                  )}
+                </span>
               ) : (
                 <span key={segment.id} className="w-fit text-sm text-muted-foreground">
                   {label} — {segment.failed ? "recording failed" : "processing…"}

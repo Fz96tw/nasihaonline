@@ -440,6 +440,7 @@ export async function getMemberEventById(
           startedAt: true,
           objectKey: true,
           failedAt: true,
+          durationSeconds: true,
         },
       },
       _count: {
@@ -506,6 +507,7 @@ export async function getMemberEventById(
             startedAt: s.startedAt!.toISOString(),
             ready: s.objectKey !== null,
             failed: s.failedAt !== null,
+            durationSeconds: s.durationSeconds,
           }))
         : [],
     attendeeCount: event._count.rsvps + event._count.registrations,
@@ -2194,7 +2196,7 @@ export async function getEventMeetingStatus(
  */
 export async function attachLiveKitEventRecordingSegment(
   roomName: string,
-  segment: { egressId: string; objectKey: string | null; startedAt: Date },
+  segment: { egressId: string; objectKey: string | null; startedAt: Date; durationSeconds?: number },
 ): Promise<boolean> {
   const event = await db.event.findFirst({
     where: { livekitRoomName: roomName },
@@ -2217,6 +2219,7 @@ export async function attachLiveKitEventRecordingSegment(
       objectKey: segment.objectKey,
       egressId: segment.egressId,
       startedAt: segment.startedAt,
+      durationSeconds: segment.durationSeconds,
     },
     // Called twice per segment: once at Record-click time with objectKey
     // null (creates the pending row), once from the egress_ended webhook
@@ -2224,7 +2227,9 @@ export async function attachLiveKitEventRecordingSegment(
     // a real value is given, so the second call can't clobber an
     // already-resolved row back to null on a stray redelivery/race.
     update:
-      segment.objectKey !== null ? { objectKey: segment.objectKey, startedAt: segment.startedAt } : {},
+      segment.objectKey !== null
+        ? { objectKey: segment.objectKey, startedAt: segment.startedAt, durationSeconds: segment.durationSeconds }
+        : {},
   });
   return true;
 }

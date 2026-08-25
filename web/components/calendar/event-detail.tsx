@@ -26,6 +26,7 @@ import {
 } from "@/lib/events";
 import type { DirectoryMember } from "@/lib/members";
 import { useHasMounted } from "@/lib/use-has-mounted";
+import { formatDurationMinutes, formatTimestamp } from "@/lib/format-date";
 import { FEED_TYPE_LABELS } from "@/lib/feed";
 
 function formatEventDateRange(startsAt: string, endsAt: string | null) {
@@ -196,15 +197,21 @@ export function EventDetail({
           <span className="text-sm font-medium text-muted-foreground">Recording:</span>
           {visibleLiveKitSegments.map(({ segment, label }) =>
             segment.ready ? (
-              <Link
-                key={segment.id}
-                href={`/api/events/${event.seriesId}/recording/${segment.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
-              >
-                {label}
-              </Link>
+              <span key={segment.id} className="flex items-baseline gap-1.5">
+                <Link
+                  href={`/api/events/${event.seriesId}/recording/${segment.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  {label}
+                </Link>
+                <span className="text-xs text-muted-foreground">
+                  (
+                  {segment.durationSeconds !== null ? `${formatDurationMinutes(segment.durationSeconds)} · ` : ""}
+                  {formatTimestamp(segment.startedAt)})
+                </span>
+              </span>
             ) : (
               <span key={segment.id} className="w-fit text-sm text-muted-foreground">
                 {label} — {segment.failed ? "recording failed" : "processing…"}
