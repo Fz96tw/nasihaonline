@@ -131,16 +131,29 @@ export async function verifyLiveKitWebhook(rawBody: string, authHeader: string |
  * everyone has actually left, not just the organizer, since LiveKit only
  * sends this after the room's emptyTimeout elapses with zero participants
  * — clear whichever Event/MeetingRequest owns that room name back to the
- * un-started state, same end-state the organizer's own manual "Reset"
- * button already produces. `livekitRoomName` is effectively unique (an
- * Event's pre-generated id or an existing MeetingRequest's id, per
- * createLiveKitRoom's own doc comment), so at most one of these two
- * updates ever actually matches a row.
+ * un-started state, same waiting-room end-state the organizer's own
+ * manual "Reset" button already produces. `livekitRoomName` is
+ * effectively unique (an Event's pre-generated id or an existing
+ * MeetingRequest's id, per createLiveKitRoom's own doc comment), so at
+ * most one of these two updates ever actually matches a row.
+ *
+ * Also stamps `meetingEndedAt` (2026-08-25 follow-on) — this is the only
+ * server-side signal available that a LiveKit meeting genuinely ended
+ * (vs. Google Meet, which has none), so the recording-link visibility
+ * gate on the event/meeting-request detail pages reads this instead of
+ * the scheduled end time for LiveKit-backed items.
  */
 export async function resetMeetingOnRoomEmpty(roomName: string): Promise<void> {
+  const endedAt = new Date();
   await Promise.all([
-    db.event.updateMany({ where: { livekitRoomName: roomName }, data: { meetingStartedAt: null } }),
-    db.meetingRequest.updateMany({ where: { livekitRoomName: roomName }, data: { meetingStartedAt: null } }),
+    db.event.updateMany({
+      where: { livekitRoomName: roomName },
+      data: { meetingStartedAt: null, meetingEndedAt: endedAt },
+    }),
+    db.meetingRequest.updateMany({
+      where: { livekitRoomName: roomName },
+      data: { meetingStartedAt: null, meetingEndedAt: endedAt },
+    }),
   ]);
 }
 

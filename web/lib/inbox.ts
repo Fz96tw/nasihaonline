@@ -75,6 +75,8 @@ export type MeetingRequestListItem = {
   recordingUrl: string | null;
   /** LiveKit recording segments (objective 4) — see MemberEvent.liveKitRecordingSegments for the shared rationale. Each links through /api/inbox/meeting-requests/:id/recording/:recordingId. */
   liveKitRecordingSegments: { id: string; startedAt: string }[];
+  /** Set once resetMeetingOnRoomEmpty's room_finished handler fires (LiveKit only — Meet has no equivalent signal) — the detail page gates recording-link visibility on this for LiveKit-backed meeting requests instead of the scheduled time. */
+  meetingEndedAt: string | null;
   /** Waiting-room greeting shown to the recipient on /meet/request/[id] before Start (meeting-join-experience) — sender-editable via MeetingRequestDetail's inline editor. */
   meetingOrganizerMessage: string | null;
   meetingOrganizerMessageImageUrl: string | null;

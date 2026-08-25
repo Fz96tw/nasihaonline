@@ -1089,7 +1089,10 @@ export async function startMeetingRequestMeeting(meetingRequestId: string, actin
   // meetingUrl is always null there, livekitRoomName is used instead.
   if (!meetingRequest.meetingUrl && !meetingRequest.livekitRoomName) return;
 
-  await db.meetingRequest.update({ where: { id: meetingRequestId }, data: { meetingStartedAt: new Date() } });
+  await db.meetingRequest.update({
+    where: { id: meetingRequestId },
+    data: { meetingStartedAt: new Date(), meetingEndedAt: null },
+  });
 }
 
 /** Sender-only: un-starts the meeting — same rationale as resetEventMeeting in events-server.ts. */

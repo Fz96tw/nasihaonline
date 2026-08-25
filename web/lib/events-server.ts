@@ -381,6 +381,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
         // a member would look for on the event itself, not while browsing.
         recordingUrl: null,
         liveKitRecordingSegments: [],
+        meetingEndedAt: null,
         attendeeCount: event._count.rsvps + event._count.registrations,
         forumThreadId: event.forumThread?.id ?? null,
         forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
@@ -422,6 +423,7 @@ export async function getMemberEventById(
       heroImageUrl: true,
       meetingUrl: true,
       livekitRoomName: true,
+      meetingEndedAt: true,
       visibility: true,
       cancelledAt: true,
       forumThread: { select: { id: true, _count: { select: { posts: true } } } },
@@ -487,6 +489,7 @@ export async function getMemberEventById(
     // Same host exception as getMemberEvents above.
     meetingUrl: rsvped || event.hostId === userId ? event.meetingUrl : null,
     livekitRoomName: rsvped || event.hostId === userId ? event.livekitRoomName : null,
+    meetingEndedAt: (rsvped || event.hostId === userId) ? (event.meetingEndedAt?.toISOString() ?? null) : null,
     recordingUrl: (rsvped || event.hostId === userId) ? (recordingForOccurrence?.recordingUrl ?? null) : null,
     liveKitRecordingSegments:
       rsvped || event.hostId === userId
@@ -2300,7 +2303,10 @@ export async function startEventMeeting(eventId: string, actingUser: UserModel):
   // is always null there, livekitRoomName is used instead.
   if (!event.meetingUrl && !event.livekitRoomName) return;
 
-  await db.event.update({ where: { id: eventId }, data: { meetingStartedAt: new Date() } });
+  await db.event.update({
+    where: { id: eventId },
+    data: { meetingStartedAt: new Date(), meetingEndedAt: null },
+  });
 }
 
 /**

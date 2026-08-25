@@ -127,6 +127,7 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
       livekitRoomName: meetingRequest.livekitRoomName,
       recordingUrl: meetingRequest.recordingUrl,
       liveKitRecordingSegments: meetingRequest.recordings.map((r) => ({ id: r.id, startedAt: r.startedAt.toISOString() })),
+      meetingEndedAt: meetingRequest.meetingEndedAt?.toISOString() ?? null,
       meetingOrganizerMessage: meetingRequest.meetingOrganizerMessage,
       meetingOrganizerMessageImageUrl: getMeetingMessageImageUrl(meetingRequest.meetingOrganizerMessageImageKey),
     });

@@ -576,6 +576,10 @@ export function MeetingRequestDetail({
   // scheduled-time/Meet-link display, cancel eligibility) needs both.
   const hasBeenAccepted = item.status === "accepted" || isRenegotiatingAccepted;
   const isPast = hasMounted && item.scheduledAt !== null && new Date(item.scheduledAt) < new Date();
+  // LiveKit gives a real "meeting genuinely ended" signal (room_finished,
+  // stamped as meetingEndedAt); Meet has no equivalent, so its recording
+  // link keeps gating on the scheduled isPast time above.
+  const isRecordingAvailable = item.livekitRoomName ? item.meetingEndedAt !== null : isPast;
   // Either party may kick off a reschedule of a *settled* accepted meeting
   // at any time — not turn-gated, since there's no outstanding proposal yet
   // to hold a turn on (contrast canRespond below, for when one already is).
@@ -721,7 +725,7 @@ export function MeetingRequestDetail({
                 </Link>
               </Button>
             )}
-            {isPast && item.recordingUrl && (
+            {isRecordingAvailable && item.recordingUrl && (
               <Link
                 href={item.recordingUrl}
                 target="_blank"
@@ -731,13 +735,13 @@ export function MeetingRequestDetail({
                 Watch recording
               </Link>
             )}
-            {isPast && item.recordingUrl && item.direction === "sent" && (
+            {isRecordingAvailable && item.recordingUrl && item.direction === "sent" && (
               <DeleteRecordingButton
                 deleteUrl={`/api/inbox/meeting-requests/${item.id}/recording`}
                 onDeleted={onUpdated}
               />
             )}
-            {isPast &&
+            {isRecordingAvailable &&
               item.liveKitRecordingSegments.map((segment, index) => (
                 <Link
                   key={segment.id}

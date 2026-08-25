@@ -78,6 +78,10 @@ export function EventDetail({
   const [event, setEvent] = useState(initialEvent);
   const hasMounted = useHasMounted();
   const isPast = hasMounted && new Date(event.endsAt ?? event.startsAt) < new Date();
+  // LiveKit gives a real "meeting genuinely ended" signal (room_finished,
+  // stamped as meetingEndedAt); Meet has no equivalent, so its recording
+  // link keeps gating on the scheduled isPast time above.
+  const isRecordingAvailable = event.livekitRoomName ? event.meetingEndedAt !== null : isPast;
   const hostName = event.hostName ?? "NASIHA Member";
   const audienceBadge = getEventAudienceBadge(event);
 
@@ -155,7 +159,7 @@ export function EventDetail({
         </div>
       ) : null}
 
-      {isPast && event.recordingUrl ? (
+      {isRecordingAvailable && event.recordingUrl ? (
         <div className="flex flex-wrap items-center gap-3">
           <Link
             href={event.recordingUrl}
@@ -174,7 +178,7 @@ export function EventDetail({
         </div>
       ) : null}
 
-      {isPast && event.liveKitRecordingSegments.length > 0 ? (
+      {isRecordingAvailable && event.liveKitRecordingSegments.length > 0 ? (
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm font-medium text-muted-foreground">Recording:</span>
           {event.liveKitRecordingSegments.map((segment, index) => (

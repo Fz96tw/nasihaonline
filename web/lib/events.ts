@@ -76,6 +76,8 @@ export type MemberEvent = EventWithRsvp & {
    * than a stored URL.
    */
   liveKitRecordingSegments: { id: string; startedAt: string }[];
+  /** Set once resetMeetingOnRoomEmpty's room_finished handler fires (LiveKit only — Meet has no equivalent signal) — the detail page gates recording-link visibility on this for LiveKit-backed events instead of the scheduled endsAt/startsAt time. */
+  meetingEndedAt: string | null;
   /** True once the organizer has cancelled this event (getMemberEventById is the only MemberEvent query that ever sets this — listing queries filter cancelled events out entirely). */
   cancelled: boolean;
   /** Going RSVPs (members) plus EventRegistrations (non-members) — same merge as getEventEngagementForAdmin. */

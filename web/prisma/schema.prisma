@@ -746,7 +746,7 @@ model MeetingRequest {
   // initiative) — consulted by resolveMeetingRequest() on acceptance to
   // decide which platform to create the room/link on. Defaults to
   // google_meet, preserving today's only behavior for existing rows.
-  meetingPlatform                 MeetingPlatform @default(google_meet)
+  meetingPlatform                 MeetingPlatform           @default(google_meet)
   // Set instead of meetingUrl/googleEventId when meetingPlatform is
   // livekit — non-null is the authoritative signal that this meeting is
   // LiveKit-backed, read by the in-app meeting page and recording webhook.
@@ -768,6 +768,8 @@ model MeetingRequest {
   // above. Organizer = sender for a MeetingRequest (matches every other
   // sender-privileged action in this model).
   meetingStartedAt                DateTime?
+  // Same semantics as Event.meetingEndedAt — see its comment.
+  meetingEndedAt                  DateTime?
   meetingOrganizerMessage         String?
   meetingOrganizerMessageImageKey String?
 
@@ -1027,6 +1029,15 @@ model Event {
   // on the /meet/event/[id] page — presence means "live", triggering
   // waiting attendees' auto-redirect to the real Meet link.
   meetingStartedAt                DateTime?
+  // Set by resetMeetingOnRoomEmpty (lib/livekit.ts) when LiveKit's
+  // room_finished webhook fires — the room's real emptyTimeout-based
+  // close, not the event's scheduled endsAt. Cleared back to null by
+  // startEventMeeting on the next "Start Meeting" click, so its presence
+  // unambiguously means "started, then genuinely ended" rather than
+  // "never started" (both fields null covers that case). Only ever set
+  // for LiveKit-backed events — Meet gives no equivalent server-side
+  // signal, so Meet-backed events keep gating on scheduled time instead.
+  meetingEndedAt                  DateTime?
   meetingOrganizerMessage         String?
   meetingOrganizerMessageImageKey String?
   // Audience-Restricted Group Events, Objective 01 (§4.6 extension) —
@@ -1129,13 +1140,13 @@ model EventRecording {
 // one column) and can't hold more than one LiveKit segment; those columns
 // stay untouched and keep serving Meet-path recordings exactly as before.
 model MeetingRequestRecording {
-  id               String        @id @default(cuid())
+  id               String         @id @default(cuid())
   meetingRequestId String
   meetingRequest   MeetingRequest @relation(fields: [meetingRequestId], references: [id], onDelete: Cascade)
   objectKey        String
-  egressId         String        @unique
+  egressId         String         @unique
   startedAt        DateTime
-  createdAt        DateTime      @default(now())
+  createdAt        DateTime       @default(now())
 
   @@index([meetingRequestId])
   @@map("meeting_request_recordings")
