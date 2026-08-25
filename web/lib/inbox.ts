@@ -1,7 +1,7 @@
 // Client-safe Inbox types (PRD §4.7) — kept separate from inbox-server.ts so
 // client components can import them without pulling in the "server-only"
 // query logic.
-import type { MeetingRequestMessageAction, MeetingRequestStatus } from "@/lib/generated/prisma/enums";
+import type { MeetingPlatform, MeetingRequestMessageAction, MeetingRequestStatus } from "@/lib/generated/prisma/enums";
 
 /** A row in the inbox list for a message thread — one entry per thread, not per message. */
 export type InboxMessageListItem = {
@@ -61,6 +61,8 @@ export type MeetingRequestListItem = {
   /** ISO timestamps — the current outstanding proposal. */
   proposedTimes: string[];
   status: MeetingRequestStatus;
+  /** The platform chosen at request time — drives the "if accepted" copy before meetingUrl/livekitRoomName exist. */
+  meetingPlatform: MeetingPlatform;
   /** True if the current user has an unread comment/negotiation step anywhere in this thread. */
   unread: boolean;
   /** Timestamp of the thread's most recent message (status change or freeform comment), for "most recent activity" sort. */

@@ -72,6 +72,7 @@ export function MeetingWaitingRoom({
   tokenEndpoint,
   recordingStartEndpoint,
   recordingStopEndpoint,
+  chatEndpoint,
   backHref,
 }: {
   initialStatus: MeetingWaitingRoomStatus;
@@ -82,6 +83,8 @@ export function MeetingWaitingRoom({
   tokenEndpoint: string;
   recordingStartEndpoint: string;
   recordingStopEndpoint: string;
+  /** POST endpoint for archiving in-meeting chat into a discussion thread — null for a MeetingRequest, which has none. */
+  chatEndpoint?: string | null;
   backHref: string;
 }) {
   const [status, setStatus] = useState(initialStatus);
@@ -271,6 +274,7 @@ export function MeetingWaitingRoom({
         tokenEndpoint={tokenEndpoint}
         recordingStartEndpoint={recordingStartEndpoint}
         recordingStopEndpoint={recordingStopEndpoint}
+        chatEndpoint={chatEndpoint}
         title={status.title}
         organizerName={status.organizerName}
         backHref={backHref}

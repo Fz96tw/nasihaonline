@@ -85,6 +85,9 @@ model User {
   eventRsvps       RSVP[]         @relation("EventRsvp")
   eventAttendances Attendance[]   @relation("EventAttendance")
   eventInvitations EventInvitee[] @relation("EventInvitee")
+  // Resend Notifications (event detail page) — who triggered each member-wide
+  // broadcast, not just the automatic one at createEvent() time.
+  eventNotificationBroadcastsSent EventNotificationBroadcast[] @relation("EventNotificationBroadcastSentBy")
 
   // Knowledge Library / Forums (§4.9/§4.13) — Blog was consolidated into
   // the Library as the blog_post content type; the old Post/PostComment
@@ -883,6 +886,11 @@ enum NotificationType {
   // Objective 03 — sent to every current invitee when the host changes a
   // restricted event's startsAt/endsAt (paired with email).
   event_rescheduled
+  // Sent to every member (not just this event's invitees — there are none,
+  // it's public) when a host schedules a new community-visibility event.
+  // Paired with email, mirrors board_announcement's all-members broadcast
+  // but scoped to one event rather than a Board-authored post.
+  event_published
   // Restricted Knowledge Library Submissions — sent to a newly-added
   // invitee of a restricted, already-published library item (paired with
   // email, like event_invited). Never fires for a still-pending_review
@@ -1076,9 +1084,40 @@ model Event {
   // default (lib/google-calendar.ts) — one row per occurrence, since a
   // recurring event reuses the same Meet space/link across every session.
   recordings    EventRecording[]
+  // Resend Notifications — the audit trail of every member-wide broadcast
+  // for this event (the automatic one at creation, plus any manual resend
+  // the organizer/admin triggers from the event detail page).
+  notificationBroadcasts EventNotificationBroadcast[]
+  // LiveKit in-meeting chat archival — staged messages captured while the
+  // meeting is live (EventChatMessage), compiled into a single ForumPost
+  // per occurrence when the room ends and linked back via
+  // EventChatTranscript so the event page can jump straight to it.
+  chatMessages    EventChatMessage[]
+  chatTranscripts EventChatTranscript[]
 
   @@index([startsAt])
   @@map("events")
+}
+
+// Audit trail for member-wide event broadcasts (Resend Notifications,
+// event-detail page) — one row per send: the automatic one createEvent()
+// fires for a new community event, plus any manual resend an organizer/
+// admin triggers afterward. Deliberately separate from the per-recipient
+// Notification rows themselves, which a member can delete once read
+// (clearReadNotifications) — this is the durable, organizer-facing record
+// of when a broadcast went out and to how many people, independent of what
+// any individual recipient later does with their own copy.
+model EventNotificationBroadcast {
+  id             String   @id @default(cuid())
+  eventId        String
+  event          Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  sentById       String
+  sentBy         User     @relation("EventNotificationBroadcastSentBy", fields: [sentById], references: [id])
+  recipientCount Int
+  sentAt         DateTime @default(now())
+
+  @@index([eventId, sentAt])
+  @@map("event_notification_broadcasts")
 }
 
 // A finished recording for one occurrence of an Event's meeting. Two
@@ -1140,6 +1179,54 @@ model EventRecording {
 
   @@index([eventId, occurrenceDate])
   @@map("event_recordings")
+}
+
+// Short-lived staging row for one LiveKit in-meeting chat message, captured
+// live via POST /api/events/[id]/meeting/chat as each participant's own
+// client reports messages it sent (never messages claimed on behalf of
+// another participant — see ChatCaptureListener's doc comment). Deleted by
+// finalizeEventChatTranscript once compiled into a ForumPost when the
+// room_finished webhook fires; a lingering row past that point means
+// finalization hasn't run yet (or the event has no forumThreadId, in which
+// case rows are still cleared but nothing gets posted).
+model EventChatMessage {
+  id      String @id @default(cuid())
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  // LiveKit's own per-message id (ReceivedChatMessage.id) — the dedupe key
+  // that makes a retried/re-effect-fired POST an idempotent no-op.
+  livekitMessageId String
+  // Display-name snapshot at send time, not a live User join — a guest
+  // attendee has no User row at all, and even a member's name could change
+  // later; the transcript should read as it did at meeting time either way.
+  authorName   String
+  authorUserId String?
+  body         String
+  sentAt       DateTime
+  createdAt    DateTime @default(now())
+
+  @@unique([eventId, livekitMessageId])
+  @@index([eventId])
+  @@map("event_chat_messages")
+}
+
+// Links a compiled chat-transcript ForumPost back to the specific event
+// occurrence it belongs to. Needed because a recurring event has one
+// persistent LiveKit room shared across every occurrence (Event.id ===
+// Event.livekitRoomName, not one room per occurrence) — same reason
+// EventRecording needs its own occurrenceDate rather than relying on
+// Event.startsAt. Read by getMemberEventById to resolve the "View chat
+// transcript" link for the occurrence currently being viewed.
+model EventChatTranscript {
+  id             String   @id @default(cuid())
+  eventId        String
+  event          Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  occurrenceDate DateTime
+  forumPostId    String
+  createdAt      DateTime @default(now())
+
+  @@index([eventId, occurrenceDate])
+  @@map("event_chat_transcripts")
 }
 
 // LiveKit-only counterpart to EventRecording's `livekit` rows, for a

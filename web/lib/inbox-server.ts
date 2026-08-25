@@ -126,6 +126,7 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
       unread,
       lastActivityAt: (latestMessage?.createdAt ?? meetingRequest.updatedAt).toISOString(),
       scheduledAt: meetingRequest.scheduledAt?.toISOString() ?? null,
+      meetingPlatform: meetingRequest.meetingPlatform,
       meetingUrl: meetingRequest.meetingUrl,
       livekitRoomName: meetingRequest.livekitRoomName,
       recordingUrl: meetingRequest.recordingUrl,

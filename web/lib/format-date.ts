@@ -39,6 +39,15 @@ export function formatEventDateTime(date: Date, timeZone?: string | null): strin
   });
 }
 
+/** Time-only counterpart to formatEventDateTime, e.g. "7:00 PM" — same explicit-timeZone rationale. */
+export function formatEventTime(date: Date, timeZone?: string | null): string {
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: timeZone ?? DEFAULT_EVENT_TIME_ZONE,
+  });
+}
+
 /** "12 min" for a segment of 60s or more, "<1 min" for a shorter clip (never "0 min"). */
 export function formatDurationMinutes(seconds: number): string {
   const minutes = Math.round(seconds / 60);

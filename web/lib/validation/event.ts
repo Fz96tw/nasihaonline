@@ -156,7 +156,7 @@ export type CreateEventValues = z.infer<typeof createEventSchema>;
  * Discussion" button on the event detail page, not a create/edit form field.
  */
 export const updateEventSchema = eventFieldsSchema
-  .extend({ recurrence: recurrenceInputSchema })
+  .extend({ meetLinkSource: z.enum(["auto", "manual", "livekit"]), recurrence: recurrenceInputSchema })
   .superRefine(requireDeidentificationForCaseDiscussion)
   .superRefine(requireRecurrenceInvariants);
 

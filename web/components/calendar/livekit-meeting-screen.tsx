@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { X } from "lucide-react";
 import { RoomEvent, type RemoteParticipant } from "livekit-client";
-import { LiveKitRoom, VideoConference, useRoomContext } from "@livekit/components-react";
+import { LiveKitRoom, VideoConference, useChat, useRoomContext } from "@livekit/components-react";
 import "@livekit/components-styles";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { getPublicMeetingClosingNote } from "@/lib/legal";
@@ -175,6 +175,53 @@ function RecordingStateListener({
 }
 
 /**
+ * Archives this participant's own chat messages into the event's
+ * discussion thread (LiveKit meeting chat archival) — mirrors
+ * ParticipantActivityListener/RecordingStateListener's shape (headless,
+ * inside <LiveKitRoom>, no UI of its own).
+ *
+ * VideoConference's built-in Chat panel uses LiveKit's `lk.chat` data
+ * channel via the same useChat() hook — calling it again here just
+ * subscribes to the identical message stream, no interference with the
+ * panel itself. Only messages *this* participant sent are ever POSTed
+ * (`msg.from?.identity === room.localParticipant.identity`): the archive
+ * endpoint is a plain HTTP route, not a LiveKit-signed channel, so
+ * forwarding a message attributed to someone else would let any attendee
+ * forge lines as if another participant said them. Each client is
+ * responsible only for archiving its own messages; the server derives the
+ * true sender identity/name from the caller's own session, never from this
+ * request body.
+ *
+ * `sentIds` dedupes across re-renders (chatMessages is a growing array, not
+ * a stream of new-message events) and `keepalive: true` gives the POST a
+ * chance to complete even if the tab closes right as "Leave" is clicked.
+ */
+function ChatCaptureListener({ chatEndpoint }: { chatEndpoint: string | null | undefined }) {
+  const room = useRoomContext();
+  const { chatMessages } = useChat();
+  const sentIds = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!chatEndpoint) return;
+    const myIdentity = room.localParticipant.identity;
+    for (const msg of chatMessages) {
+      if (msg.from?.identity !== myIdentity || sentIds.current.has(msg.id)) continue;
+      sentIds.current.add(msg.id);
+      fetch(chatEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: msg.id, message: msg.message, timestamp: msg.timestamp }),
+        keepalive: true,
+      }).catch(() => {
+        sentIds.current.delete(msg.id);
+      });
+    }
+  }, [chatMessages, chatEndpoint, room]);
+
+  return null;
+}
+
+/**
  * Floating Record/Stop control, any attendee can use it (objective 4) —
  * same absolutely-positioned-sibling pattern as the other overlays here.
  * `recording` reflects the live room-metadata-synced state from
@@ -271,6 +318,7 @@ export function LiveKitMeetingScreen({
   tokenEndpoint,
   recordingStartEndpoint,
   recordingStopEndpoint,
+  chatEndpoint,
   title,
   organizerName,
   backHref,
@@ -279,6 +327,8 @@ export function LiveKitMeetingScreen({
   /** POST endpoints for the Record/Stop control — any attendee can use them (objective 4), same auth as tokenEndpoint. */
   recordingStartEndpoint: string;
   recordingStopEndpoint: string;
+  /** POST endpoint for archiving this participant's own chat messages (LiveKit meeting chat archival) — null/undefined for a MeetingRequest, which has no discussion thread to archive into. */
+  chatEndpoint?: string | null;
   title: string;
   organizerName: string;
   /** Where to navigate once the participant leaves the call (VideoConference's built-in Leave button, or a connection drop) — same destination the page's own BackLink uses. */
@@ -359,6 +409,7 @@ export function LiveKitMeetingScreen({
       >
         <ParticipantActivityListener onEvent={pushToast} />
         <RecordingStateListener onChange={setRecording} onToast={pushToast} />
+        <ChatCaptureListener chatEndpoint={chatEndpoint} />
         <VideoConference />
       </LiveKitRoom>
     </div>

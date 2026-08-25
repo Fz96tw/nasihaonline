@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getEventAttendanceChecklist } from "@/lib/attendance-server";
-import { getEventAttendees, getEventRoster, getMemberEventById } from "@/lib/events-server";
+import { getEventAttendees, getEventNotificationBroadcasts, getEventRoster, getMemberEventById } from "@/lib/events-server";
 import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-server";
 import { getForumThreadDetail } from "@/lib/forums-server";
 import { EVENTS_FORUM_SLUG } from "@/lib/forums";
@@ -76,13 +76,16 @@ export default async function EventDetailPage({
   // already covered by the roster/ManageInvitees block above, and
   // "registered guests" is structurally always empty (a restricted event
   // can never also be `open`, the only way EventRegistration rows exist).
-  const [attendees, hostProfile, roster, attendanceChecklist] = await Promise.all([
+  // Resend Notifications' history trail (event detail page) — host/admin
+  // only (resendEventNotifications' own gate applies to both visibilities).
+  const [attendees, hostProfile, roster, attendanceChecklist, notificationBroadcasts] = await Promise.all([
     canEdit && !isRestricted ? getEventAttendees(event.seriesId) : Promise.resolve(null),
     getDirectoryMemberById(event.hostId),
     isRestricted ? getEventRoster(event.seriesId) : Promise.resolve(null),
     canEdit && isRestricted && isPast
       ? getEventAttendanceChecklist(event.seriesId, new Date(event.startsAt))
       : Promise.resolve(null),
+    canEdit ? getEventNotificationBroadcasts(event.seriesId) : Promise.resolve(null),
   ]);
 
   // Inert for an Events-forum thread specifically (isKnowledgeItemThreadVisible
@@ -118,6 +121,7 @@ export default async function EventDetailPage({
         hostProfile={hostProfile}
         roster={roster}
         attendanceChecklist={attendanceChecklist}
+        notificationBroadcasts={notificationBroadcasts}
       />
 
       {!event.forumThreadId && (

@@ -116,9 +116,10 @@ export async function createMeetingRequest(
   // the event on acceptance, in resolveMeetingRequest), so this reassures
   // the recipient it *will* be one rather than showing a link that doesn't
   // exist yet.
+  const platformName = input.meetingPlatform === MeetingPlatform.livekit ? "Nasiha Conference" : "Google Meet";
   await sendMeetingRequestEmail(recipient.email, recipient.name ?? "there", {
     subject: `New meeting request: ${input.topic}`,
-    message: `${notificationMessage} If you accept, a Google Meet video link will be created automatically and emailed to you both.`,
+    message: `${notificationMessage} If you accept, a ${platformName} video link will be created automatically and emailed to you both.`,
     link: `${APP_URL}${link}`,
   });
 

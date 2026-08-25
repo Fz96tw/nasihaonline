@@ -11,6 +11,7 @@ import { AddToCalendarButton } from "@/components/calendar/add-to-calendar-butto
 import { EventViewCounter } from "@/components/calendar/event-view-counter";
 import { ManageInvitees } from "@/components/calendar/manage-invitees";
 import { CancelEventButton } from "@/components/calendar/cancel-event-button";
+import { ResendNotifications } from "@/components/calendar/resend-notifications";
 import { DeleteRecordingButton } from "@/components/calendar/delete-recording-button";
 import { AttendanceChecklist } from "@/components/calendar/attendance-checklist";
 import {
@@ -28,6 +29,8 @@ import type { DirectoryMember } from "@/lib/members";
 import { useHasMounted } from "@/lib/use-has-mounted";
 import { formatDurationMinutes, formatTimestamp } from "@/lib/format-date";
 import { FEED_TYPE_LABELS } from "@/lib/feed";
+import { EventVisibility } from "@/lib/generated/prisma/enums";
+import type { EventNotificationBroadcastItem } from "@/lib/events";
 
 function formatEventDateRange(startsAt: string, endsAt: string | null) {
   const start = new Date(startsAt);
@@ -63,6 +66,7 @@ export function EventDetail({
   hostProfile,
   roster,
   attendanceChecklist,
+  notificationBroadcasts,
 }: {
   event: MemberEvent;
   canEdit: boolean;
@@ -75,6 +79,8 @@ export function EventDetail({
   roster: EventRosterMember[] | null;
   /** Host/admin-facing attendance checklist (Objective 04) — non-null only once a restricted event's startsAt has passed and the viewer can edit it. */
   attendanceChecklist: AttendanceChecklistMember[] | null;
+  /** Resend Notifications' history trail — non-null only for a community event when canEdit (host/admin), matching resendEventNotifications' own gate. */
+  notificationBroadcasts: EventNotificationBroadcastItem[] | null;
 }) {
   const [event, setEvent] = useState(initialEvent);
   const hasMounted = useHasMounted();
@@ -221,6 +227,17 @@ export function EventDetail({
         </div>
       ) : null}
 
+      {event.chatTranscriptPostId ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href={`#post-${event.chatTranscriptPostId}`}
+            className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            View chat transcript
+          </Link>
+        </div>
+      ) : null}
+
       {event.description ? (
         <p className="whitespace-pre-line text-sm leading-relaxed">{event.description}</p>
       ) : null}
@@ -311,6 +328,14 @@ export function EventDetail({
           eventId={event.seriesId}
           occurrenceDate={event.startsAt}
           initialMembers={attendanceChecklist}
+        />
+      ) : null}
+
+      {canEdit && notificationBroadcasts ? (
+        <ResendNotifications
+          eventId={event.seriesId}
+          restricted={event.visibility === EventVisibility.invited}
+          initialBroadcasts={notificationBroadcasts}
         />
       ) : null}
     </div>

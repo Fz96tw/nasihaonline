@@ -711,10 +711,21 @@ export function MeetingRequestDetail({
 
         {(item.status === "pending" || item.status === "rescheduled") && (
           <p className="text-xs text-muted-foreground">
-            If accepted, this will be a Google Meet video call — a link will be created automatically and sent
-            to both of you. It&apos;ll also appear on your Calendar page&apos;s Upcoming List, visible only to
-            the two of you, not the rest of the community. The meeting is recorded automatically, and a link
-            to the recording will be added here once it&apos;s ready after the call ends.
+            {item.meetingPlatform === "livekit" ? (
+              <>
+                If accepted, this will be a Nasiha Conference video call — a link will be created automatically
+                and sent to both of you. It&apos;ll also appear on your Calendar page&apos;s Upcoming List,
+                visible only to the two of you, not the rest of the community. The meeting is recorded
+                automatically, and a link to the recording will be added here once it&apos;s ready after the
+                call ends.
+              </>
+            ) : (
+              <>
+                If accepted, this will be a Google Meet video call — a link will be created automatically and
+                sent to both of you. It&apos;ll also appear on your Calendar page&apos;s Upcoming List, visible
+                only to the two of you, not the rest of the community.
+              </>
+            )}
           </p>
         )}
 

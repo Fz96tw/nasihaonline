@@ -14,6 +14,7 @@ import type { Prisma } from "@/lib/generated/prisma/client";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import type {
   DashboardUpcomingEvent,
+  EventNotificationBroadcastItem,
   EventRegistrationAttendee,
   EventRosterMember,
   EventRsvpAttendee,
@@ -35,8 +36,16 @@ import {
 } from "@/lib/google-calendar";
 import { createLiveKitRoom } from "@/lib/livekit";
 import { createNotification } from "@/lib/notifications-server";
-import { sendEventInviteEmail, sendEventLifecycleEmail, sendRsvpConfirmationEmail } from "@/lib/email";
-import { formatEventDateTime } from "@/lib/format-date";
+import {
+  sendEventAnnouncementEmail,
+  sendEventInviteEmail,
+  sendEventLifecycleEmail,
+  sendEventRegistrationReminderEmail,
+  sendRsvpConfirmationEmail,
+} from "@/lib/email";
+import { formatEventDateTime, formatEventTime } from "@/lib/format-date";
+import { createForumPost } from "@/lib/forums-server";
+import { enqueueForumThreadIndexSync } from "@/lib/queues/search-index-queue";
 import { buildRRule, buildRRuleString, describeRecurrence, expandOccurrences, type RecurrenceInput } from "@/lib/recurrence";
 import {
   deleteEventHeroImage,
@@ -88,6 +97,28 @@ function recurrenceInputsEqual(a: RecurrenceInput | null, b: RecurrenceInput | n
     aWeekdays.length === bWeekdays.length &&
     aWeekdays.every((day, index) => day === bWeekdays[index])
   );
+}
+
+/**
+ * Derives which meetLinkSource an already-created event is currently using
+ * — there's no stored `meetLinkSource` column (only create-time input), so
+ * this is inferred from which of the three underlying fields is populated.
+ * Checked in this order since a livekit-backed event also carries a
+ * googleEventId (the plain, non-Meet calendar entry
+ * createLiveKitMeetingCalendarEvent creates alongside the room), so
+ * googleEventId alone can't distinguish "auto" from "livekit". Shared by
+ * getEventForEdit (to default the edit form's selector correctly) and
+ * updateEvent (Meeting Platform Switching, to detect an actual change).
+ */
+function deriveMeetLinkSource(event: {
+  meetingUrl: string | null;
+  googleEventId: string | null;
+  livekitRoomName: string | null;
+}): "auto" | "manual" | "livekit" | "none" {
+  if (event.livekitRoomName) return "livekit";
+  if (event.googleEventId) return "auto";
+  if (event.meetingUrl) return "manual";
+  return "none";
 }
 
 /**
@@ -381,6 +412,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
         // a member would look for on the event itself, not while browsing.
         recordingUrl: null,
         liveKitRecordingSegments: [],
+        chatTranscriptPostId: null,
         meetingEndedAt: null,
         attendeeCount: event._count.rsvps + event._count.registrations,
         forumThreadId: event.forumThread?.id ?? null,
@@ -443,6 +475,9 @@ export async function getMemberEventById(
           durationSeconds: true,
         },
       },
+      chatTranscripts: {
+        select: { occurrenceDate: true, forumPostId: true, createdAt: true },
+      },
       _count: {
         select: {
           rsvps: { where: { status: RSVPStatus.going } },
@@ -480,6 +515,9 @@ export async function getMemberEventById(
   const liveKitSegments = occurrenceRecordings
     .filter((recording) => recording.origin === RecordingOrigin.livekit && recording.startedAt)
     .sort((a, b) => a.startedAt!.getTime() - b.startedAt!.getTime());
+  const chatTranscriptForOccurrence = event.chatTranscripts
+    .filter((transcript) => transcript.occurrenceDate.getTime() === occurrenceStart.getTime())
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
 
   const rsvped = event.rsvps.length > 0;
   return {
@@ -510,6 +548,7 @@ export async function getMemberEventById(
             durationSeconds: s.durationSeconds,
           }))
         : [],
+    chatTranscriptPostId: (rsvped || event.hostId === userId) ? (chatTranscriptForOccurrence?.forumPostId ?? null) : null,
     attendeeCount: event._count.rsvps + event._count.registrations,
     forumThreadId: event.forumThread?.id ?? null,
     forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
@@ -951,6 +990,89 @@ async function emailInvitedUsers(
 }
 
 /**
+ * Bell-notifies this event's audience — every member for a community event
+ * (mirroring announcements-server.ts's board_announcement broadcast, scoped
+ * to one event), or just the current EventInvitee list for a restricted one
+ * — and logs the send as an EventNotificationBroadcast row, the durable
+ * trail the "Resend Notifications" section on the event detail page reads
+ * back (getEventNotificationBroadcasts) regardless of which audience it
+ * went to. Shared by createEvent's automatic community-event send and
+ * resendEventNotifications' manual one below (both visibilities); takes a
+ * transaction client so both insert atomically alongside their own other
+ * writes, same reason as notifyInvitedUsers. Logs the broadcast row even
+ * when `userIds` is empty (a resend that reaches no one is still a real,
+ * timestamped attempt worth showing in the trail).
+ */
+async function broadcastEventNotification(
+  tx: Prisma.TransactionClient,
+  params: {
+    eventId: string;
+    sentById: string;
+    type: NotificationType;
+    message: string;
+    userIds: string[];
+    /** Anonymous EventRegistration guests reached by email alongside this send (resendEventNotifications, `open` events only) — they have no User account, so they're folded into the logged recipientCount without a bell Notification row of their own. */
+    extraRecipientCount?: number;
+  },
+): Promise<{ id: string; sentAt: Date }> {
+  if (params.userIds.length > 0) {
+    const link = `/calendar/${params.eventId}`;
+    await tx.notification.createMany({
+      data: params.userIds.map((userId) => ({
+        recipientId: userId,
+        type: params.type,
+        message: params.message,
+        link,
+      })),
+    });
+  }
+  return tx.eventNotificationBroadcast.create({
+    data: {
+      eventId: params.eventId,
+      sentById: params.sentById,
+      recipientCount: params.userIds.length + (params.extraRecipientCount ?? 0),
+    },
+    select: { id: true, sentAt: true },
+  });
+}
+
+/**
+ * Emails every member the same "community event" copy, best-effort —
+ * counterpart to broadcastEventNotification. `isReminder` swaps the
+ * "scheduled a new event" copy for "reminder" copy on a manual resend
+ * (resendEventNotifications) — the automatic send at creation time never
+ * sets it.
+ */
+async function emailEventBroadcast(
+  users: { email: string; name: string | null }[],
+  params: {
+    eventId: string;
+    title: string;
+    description: string | null;
+    hostName: string;
+    startsAt: Date;
+    timezone: string | null;
+    isReminder?: boolean;
+  },
+): Promise<void> {
+  if (users.length === 0) return;
+  const link = `${APP_URL}/calendar/${params.eventId}`;
+  await Promise.allSettled(
+    users.map((user) =>
+      sendEventAnnouncementEmail(user.email, user.name ?? "there", {
+        hostName: params.hostName,
+        title: params.title,
+        description: params.description,
+        startsAt: params.startsAt,
+        timezone: params.timezone,
+        link,
+        isReminder: params.isReminder,
+      }),
+    ),
+  );
+}
+
+/**
  * Creates an Event from a member's "Submit Event" action (§4.6), gated to
  * EVENT_SUBMISSION_TIERS by the caller. The submitting member always
  * becomes the host — there's no host picker — since `Event.host` is also
@@ -1069,6 +1191,19 @@ export async function createEvent(
   if (isRestricted && invitedUsers.length === 0) {
     throw new EventError(400, "Select at least one member to invite.");
   }
+
+  // A community event has no invitee list of its own — its "audience" is
+  // every member, discovered via RSVP after the fact — so it's announced to
+  // everyone instead, same recipient query as
+  // announcements-server.ts's board_announcement broadcast. The host is
+  // excluded — they don't need a notification about the event they just
+  // scheduled.
+  const publicEventRecipients = !isRestricted
+    ? await db.user.findMany({
+        where: { role: { in: [Role.member, Role.moderator, Role.admin] }, tier: { not: null }, id: { not: hostId } },
+        select: { id: true, email: true, name: true },
+      })
+    : [];
 
   let heroImageUrl: string | null = null;
   if (input.heroImage) {
@@ -1200,6 +1335,17 @@ export async function createEvent(
       });
     }
 
+    if (!isRestricted) {
+      const when = formatEventDateTime(startsAt, input.timezone);
+      await broadcastEventNotification(tx, {
+        eventId: created.id,
+        sentById: hostId,
+        type: NotificationType.event_published,
+        message: `${hostName} scheduled a new event: "${input.title}" on ${when}.`,
+        userIds: publicEventRecipients.map((user) => user.id),
+      });
+    }
+
     return created;
   });
 
@@ -1213,8 +1359,173 @@ export async function createEvent(
     startsAt,
     timezone: input.timezone,
   });
+  await emailEventBroadcast(publicEventRecipients, {
+    eventId: event.id,
+    title: input.title,
+    description: input.description,
+    hostName,
+    startsAt,
+    timezone: input.timezone,
+  });
 
   return { id: event.id };
+}
+
+/**
+ * "Resend Notifications" (event detail page) — lets an event's host, or an
+ * admin, re-send its announcement, e.g. as a reminder closer to the date.
+ * Host/admin gate mirrors updateEvent's; blocked once cancelled (its
+ * audience, if any, already got an event_cancelled notification instead).
+ *
+ * Branches on visibility for who gets notified and what the copy says: a
+ * community event re-broadcasts to every member (mirrors createEvent's
+ * automatic member-wide send); a restricted event re-sends only to its
+ * current EventInvitee list, reusing the same "please RSVP" copy
+ * (sendEventInviteEmail) an invitee got when first added — an invite list
+ * can change after creation (updateEventInvitees), so this always resends
+ * against who's invited *now*, not whoever was invited at creation time.
+ * Either way the send is logged to the same EventNotificationBroadcast
+ * trail, which doesn't distinguish audience type — it's just "who resent
+ * this, when, to how many." A community event that's also `open` (register-
+ * without-membership) additionally re-emails its anonymous EventRegistration
+ * guests — no User account, so no bell notification, just the email — and
+ * their count is folded into both the returned and logged recipientCount.
+ */
+export async function resendEventNotifications(
+  eventId: string,
+  actingUser: UserModel,
+): Promise<{ recipientCount: number }> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      startsAt: true,
+      timezone: true,
+      visibility: true,
+      open: true,
+      meetingUrl: true,
+      livekitRoomName: true,
+      hostId: true,
+      cancelledAt: true,
+    },
+  });
+  if (!event) throw new EventError(404, "Event not found.");
+
+  const isAdmin = actingUser.role === Role.admin;
+  const isHost = event.hostId === actingUser.id;
+  if (!isAdmin && !isHost) {
+    throw new EventError(403, "Only the event's host or an admin can resend notifications.");
+  }
+  if (event.cancelledAt) {
+    throw new EventError(400, "This event has been cancelled.");
+  }
+
+  const host = await db.user.findUnique({ where: { id: event.hostId }, select: { name: true } });
+  const hostName = host?.name ?? "A member";
+  const isRestricted = event.visibility === EventVisibility.invited;
+
+  const recipients = isRestricted
+    ? (
+        await db.eventInvitee.findMany({
+          where: { eventId: event.id },
+          select: { user: { select: { id: true, email: true, name: true } } },
+        })
+      ).map((invitee) => invitee.user)
+    : await db.user.findMany({
+        where: { role: { in: [Role.member, Role.moderator, Role.admin] }, tier: { not: null }, id: { not: event.hostId } },
+        select: { id: true, email: true, name: true },
+      });
+
+  // A "truly public" event — open registration on top of community
+  // visibility — also has anonymous EventRegistration guests: no User
+  // account, so no bell notification, but still worth re-emailing a
+  // reminder to. `open` can never be true for a restricted event
+  // (createEvent/updateEvent both block that combination), so this is
+  // naturally empty on the isRestricted branch.
+  const registrations = !isRestricted && event.open
+    ? await db.eventRegistration.findMany({ where: { eventId: event.id }, select: { email: true, name: true } })
+    : [];
+
+  const when = formatEventDateTime(event.startsAt, event.timezone);
+  const message = isRestricted
+    ? `Reminder from ${hostName}: please RSVP to "${event.title}" on ${when}.`
+    : `Reminder from ${hostName}: "${event.title}" on ${when}.`;
+
+  await db.$transaction((tx) =>
+    broadcastEventNotification(tx, {
+      eventId: event.id,
+      sentById: actingUser.id,
+      type: isRestricted ? NotificationType.event_invited : NotificationType.event_published,
+      message,
+      userIds: recipients.map((user) => user.id),
+      extraRecipientCount: registrations.length,
+    }),
+  );
+
+  if (isRestricted) {
+    await emailInvitedUsers(recipients, {
+      eventId: event.id,
+      title: event.title,
+      hostName,
+      startsAt: event.startsAt,
+      timezone: event.timezone,
+    });
+  } else {
+    await emailEventBroadcast(recipients, {
+      eventId: event.id,
+      title: event.title,
+      description: event.description,
+      hostName,
+      startsAt: event.startsAt,
+      timezone: event.timezone,
+      isReminder: true,
+    });
+  }
+
+  if (registrations.length > 0) {
+    await Promise.allSettled(
+      registrations.map((registration) =>
+        sendEventRegistrationReminderEmail(registration.email, registration.name ?? "there", {
+          id: event.id,
+          title: event.title,
+          description: event.description,
+          startsAt: event.startsAt,
+          timezone: event.timezone,
+          meetingUrl: event.meetingUrl,
+          livekitRoomName: event.livekitRoomName,
+          link: `${APP_URL}/events/${event.id}`,
+        }),
+      ),
+    );
+  }
+
+  return { recipientCount: recipients.length + registrations.length };
+}
+
+/**
+ * Resend Notifications' history trail (event detail page) — every
+ * notification send for this event, newest first: the automatic one at
+ * creation, plus any manual resend (either visibility — a community event's
+ * broadcast to all members, or a restricted event's send to its invitees).
+ * Host/admin-only, same "caller enforces the gate" convention as
+ * getEventAttendees — the page only calls this once it's already confirmed
+ * the viewer is canEdit.
+ */
+export async function getEventNotificationBroadcasts(eventId: string): Promise<EventNotificationBroadcastItem[]> {
+  const broadcasts = await db.eventNotificationBroadcast.findMany({
+    where: { eventId },
+    select: { id: true, sentAt: true, recipientCount: true, sentBy: { select: { name: true } } },
+    orderBy: { sentAt: "desc" },
+  });
+
+  return broadcasts.map((broadcast) => ({
+    id: broadcast.id,
+    sentAt: broadcast.sentAt.toISOString(),
+    sentByName: broadcast.sentBy.name ?? "A member",
+    recipientCount: broadcast.recipientCount,
+  }));
 }
 
 /**
@@ -1237,6 +1548,8 @@ export async function getEventForEdit(eventId: string) {
       endsAt: true,
       open: true,
       meetingUrl: true,
+      googleEventId: true,
+      livekitRoomName: true,
       heroImageUrl: true,
       deidentificationConfirmed: true,
       hostId: true,
@@ -1248,6 +1561,13 @@ export async function getEventForEdit(eventId: string) {
   });
   if (!event) return null;
 
+  // Defaults the edit form's platform selector to whatever this event is
+  // actually using right now — "none" (never set) falls back to "manual"
+  // (an empty, fill-it-in-yourself link), same as a brand-new event's own
+  // default in create mode.
+  const derivedMeetLinkSource = deriveMeetLinkSource(event);
+  const meetLinkSource = derivedMeetLinkSource === "none" ? "manual" : derivedMeetLinkSource;
+
   return {
     id: event.id,
     title: event.title,
@@ -1257,6 +1577,7 @@ export async function getEventForEdit(eventId: string) {
     endsAt: event.endsAt?.toISOString() ?? null,
     open: event.open,
     meetingUrl: event.meetingUrl,
+    meetLinkSource,
     heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
     visibility: event.visibility,
     deidentificationConfirmed: event.deidentificationConfirmed,
@@ -1292,6 +1613,8 @@ export async function updateEvent(
     endsAt: string | null;
     open: boolean;
     meetingUrl: string | null;
+    /** Only meaningful when it differs from the event's current platform (derived from meetingUrl/googleEventId/livekitRoomName below) — otherwise this is just "manual" carried along unchanged, same value every edit re-submits. */
+    meetLinkSource: "auto" | "manual" | "livekit";
     deidentificationConfirmed: boolean;
     timezone: string | null;
     heroImage: File | null;
@@ -1317,7 +1640,13 @@ export async function updateEvent(
       endsAt: true,
       visibility: true,
       googleEventId: true,
+      meetingUrl: true,
+      livekitRoomName: true,
       recurrence: { select: RECURRENCE_SELECT },
+      // Only ever non-empty for a restricted event — the attendee list a
+      // regenerated Meet/LiveKit calendar event needs when switching
+      // platforms below, same audience createEvent itself invites.
+      invitees: { select: { user: { select: { email: true, name: true } } } },
     },
   });
   if (!event) throw new EventError(404, "Event not found.");
@@ -1376,6 +1705,7 @@ export async function updateEvent(
   // repeat schedule never fires a needless Google Calendar patch below.
   const priorRecurrence = event.recurrence ? toRecurrenceInput(event.recurrence) : null;
   const recurrenceChanged = !recurrenceInputsEqual(recurrenceInput, priorRecurrence);
+  const recurrenceRuleString = recurrenceInput ? buildRRuleString(recurrenceInput, startsAt) : null;
 
   let heroImageUrl = event.heroImageUrl;
   if (input.heroImage) {
@@ -1401,6 +1731,81 @@ export async function updateEvent(
     }
   }
 
+  // Meeting Platform Switching — lets the host move an existing event
+  // between Nasiha Conference (LiveKit), Google Meet (auto), and a manual
+  // link after creation, mirroring createEvent's own meetLinkSource
+  // branching.
+  const currentMeetLinkSource = deriveMeetLinkSource(event);
+  // "none" -> "manual" isn't a real platform switch, just a host typing a
+  // link into a field that was previously empty — everything else
+  // (including "manual" -> "manual" with a *different* link, which the
+  // caller's own meetingUrl-changed check already covers separately) only
+  // regenerates when the underlying platform itself actually changes.
+  const platformChanged =
+    input.meetLinkSource !== currentMeetLinkSource &&
+    !(currentMeetLinkSource === "none" && input.meetLinkSource === "manual");
+
+  let meetingUrl = input.meetingUrl;
+  let googleEventId = event.googleEventId;
+  let livekitRoomName = event.livekitRoomName;
+
+  if (platformChanged) {
+    // Best-effort cleanup of whatever calendar event backed the old link —
+    // otherwise it lingers on every attendee's calendar as a stale invite
+    // once it's no longer the real meeting. A LiveKit room needs no
+    // equivalent cleanup call; an unused one just times out empty on its
+    // own (see createLiveKitRoom's comment).
+    if (event.googleEventId) {
+      await cancelMeetingCalendarEvent(event.googleEventId);
+    }
+
+    meetingUrl = null;
+    googleEventId = null;
+    livekitRoomName = null;
+
+    const host = await db.user.findUnique({ where: { id: event.hostId }, select: { email: true, name: true } });
+    const hostName = host?.name ?? "A member";
+    // Same audience createEvent itself invites: host plus, for a restricted
+    // event, its current invitees — [] here for a community event, which
+    // naturally reduces the attendee list to "host only", identical to
+    // createEvent's own comment on this.
+    const attendees = host
+      ? [
+          { email: host.email, name: hostName },
+          ...event.invitees.map((invitee) => ({ email: invitee.user.email, name: invitee.user.name ?? "Member" })),
+        ]
+      : [];
+
+    if (input.meetLinkSource === "auto" && host) {
+      const created = await createMeetingCalendarEvent({
+        topic: input.title,
+        startsAt,
+        durationMinutes: endsAt ? Math.round((endsAt.getTime() - startsAt.getTime()) / 60_000) : undefined,
+        attendees,
+        description: input.description ?? undefined,
+        recurrenceRule: recurrenceRuleString ?? undefined,
+        timeZone: input.timezone,
+      });
+      meetingUrl = created.meetingUrl;
+      googleEventId = created.googleEventId;
+    } else if (input.meetLinkSource === "livekit" && host) {
+      livekitRoomName = await createLiveKitRoom(event.id, input.title);
+      const created = await createLiveKitMeetingCalendarEvent({
+        topic: input.title,
+        startsAt,
+        durationMinutes: endsAt ? Math.round((endsAt.getTime() - startsAt.getTime()) / 60_000) : undefined,
+        attendees,
+        description: input.description ?? undefined,
+        recurrenceRule: recurrenceRuleString ?? undefined,
+        timeZone: input.timezone,
+        meetingPageUrl: `${APP_URL}/meet/event/${event.id}`,
+      });
+      googleEventId = created.googleEventId;
+    } else {
+      meetingUrl = input.meetingUrl;
+    }
+  }
+
   const updated = await db.$transaction(async (tx) => {
     const result = await tx.event.update({
       where: { id: event.id },
@@ -1413,7 +1818,9 @@ export async function updateEvent(
         timezone: input.timezone,
         open: input.open,
         heroImageUrl,
-        meetingUrl: input.meetingUrl,
+        meetingUrl,
+        googleEventId,
+        livekitRoomName,
         deidentificationConfirmed: input.deidentificationConfirmed,
         meetingOrganizerMessage: input.meetingOrganizerMessage,
         meetingOrganizerMessageImageKey,
@@ -1471,17 +1878,20 @@ export async function updateEvent(
   // invite — applies to any event with an auto-generated Meet link
   // (googleEventId), not just restricted ones (see createEvent: Meet
   // auto-generation isn't restricted-only). Best-effort, same non-fatal
-  // philosophy as every other Google call in this file.
-  if (timeChanged && event.googleEventId) {
-    await updateMeetingCalendarEventTime(event.googleEventId, startsAt, endsAt, input.timezone);
+  // philosophy as every other Google call in this file. Skipped when
+  // platformChanged already created this googleEventId fresh just above,
+  // with the current startsAt/endsAt baked in from the start — patching it
+  // again here would be a redundant, harmless-but-wasteful extra API call.
+  if (timeChanged && googleEventId && !platformChanged) {
+    await updateMeetingCalendarEventTime(googleEventId, startsAt, endsAt, input.timezone);
   }
 
   // Keep the underlying Google Calendar event's recurrence in sync when the
   // host changes (or adds/removes) the repeat schedule — same best-effort
-  // philosophy as the time sync above.
-  if (recurrenceChanged && event.googleEventId) {
-    const recurrenceRuleString = recurrenceInput ? buildRRuleString(recurrenceInput, startsAt) : null;
-    await updateMeetingCalendarEventRecurrence(event.googleEventId, recurrenceRuleString);
+  // philosophy as the time sync above, same platformChanged skip as above
+  // (a freshly (re)created calendar event already carries the current rule).
+  if (recurrenceChanged && googleEventId && !platformChanged) {
+    await updateMeetingCalendarEventRecurrence(googleEventId, recurrenceRuleString);
   }
 
   // Reschedule notification (Objective 03) — every visibility now notifies
@@ -1857,10 +2267,12 @@ export async function rsvpToEvent(
   if (rsvped) {
     const icsFilename = `${event.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "event"}.ics`;
     await sendRsvpConfirmationEmail(actingUser.email, actingUser.name ?? "there", {
+      id: eventId,
       title: event.title,
       startsAt: event.startsAt,
       timezone: event.timezone,
       meetingUrl: event.meetingUrl,
+      livekitRoomName: event.livekitRoomName,
       link: `${APP_URL}/calendar/${eventId}`,
       icsContent: buildEventIcs({
         id: eventId,
@@ -1909,6 +2321,7 @@ export async function registerForEvent(
   startsAt: Date;
   timezone: string | null;
   meetingUrl: string | null;
+  livekitRoomName: string | null;
   icsContent: string;
   icsFilename: string;
 }> {
@@ -1948,6 +2361,7 @@ export async function registerForEvent(
     startsAt: event.startsAt,
     timezone: event.timezone,
     meetingUrl: event.meetingUrl,
+    livekitRoomName: event.livekitRoomName,
     icsContent: buildEventIcs({
       id: event.id,
       title: event.title,
@@ -2248,6 +2662,75 @@ export async function markLiveKitEventRecordingSegmentFailed(egressId: string): 
     data: { failedAt: new Date() },
   });
   return result.count > 0;
+}
+
+/**
+ * Compiles this room's staged LiveKit chat messages (EventChatMessage,
+ * captured live via POST /api/events/[id]/meeting/chat) into a single
+ * chat-log-formatted ForumPost on the event's discussion thread, called
+ * from the room_finished webhook handler right after
+ * resetMeetingOnRoomEmpty. No-ops silently — never throws, matching every
+ * other LiveKit webhook side-effect's best-effort philosophy — when there's
+ * no matching Event, no discussion thread to post into, no staged messages,
+ * or no admin account to author the post as.
+ *
+ * occurrenceDate resolution mirrors attachLiveKitEventRecordingSegment's
+ * "closest scheduled occurrence at or before X" logic, anchored to the
+ * room_finished instant rather than a recording's startedAt — this is what
+ * lets a recurring event's separate occurrences each link to their own
+ * transcript (EventChatTranscript) rather than one clobbering another's.
+ */
+export async function finalizeEventChatTranscript(roomName: string): Promise<void> {
+  const event = await db.event.findFirst({
+    where: { livekitRoomName: roomName },
+    select: {
+      id: true,
+      forumThread: { select: { id: true } },
+      timezone: true,
+      startsAt: true,
+      recurrence: { select: RECURRENCE_SELECT },
+    },
+  });
+  if (!event?.forumThread) return;
+  const threadId = event.forumThread.id;
+
+  const messages = await db.eventChatMessage.findMany({
+    where: { eventId: event.id },
+    orderBy: { sentAt: "asc" },
+  });
+  if (messages.length === 0) return;
+
+  const admin = await db.user.findFirst({
+    where: { role: Role.admin },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+  if (!admin) return;
+
+  const endedAt = new Date();
+  let occurrenceDate = event.startsAt;
+  if (event.recurrence) {
+    const rule = buildRRule(toRecurrenceInput(event.recurrence), event.startsAt);
+    occurrenceDate = rule.before(endedAt, true) ?? event.startsAt;
+  }
+
+  const heading = `Chat transcript from meeting adjourned on ${formatEventDateTime(endedAt, event.timezone)}`;
+  const lines = messages.map(
+    (message) => `**${message.authorName}** · ${formatEventTime(message.sentAt, event.timezone)}: ${message.body}`,
+  );
+  const body = [heading, "", ...lines].join("\n");
+
+  const post = await createForumPost(
+    threadId,
+    admin.id,
+    { body, parentId: null, deidentificationConfirmed: false },
+    true,
+  );
+  await enqueueForumThreadIndexSync(threadId);
+  await db.eventChatTranscript.create({
+    data: { eventId: event.id, occurrenceDate, forumPostId: post.id },
+  });
+  await db.eventChatMessage.deleteMany({ where: { eventId: event.id } });
 }
 
 /**

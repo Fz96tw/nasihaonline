@@ -144,6 +144,7 @@ export async function sendEventRegistrationConfirmationEmail(
     startsAt: Date;
     timezone: string | null;
     meetingUrl: string | null;
+    livekitRoomName: string | null;
     icsContent: string;
     icsFilename: string;
   },
@@ -155,12 +156,20 @@ export async function sendEventRegistrationConfirmationEmail(
 
   const when = formatEventDateTime(event.startsAt, event.timezone);
 
-  // Links to the in-app waiting-room page rather than the raw Meet link
+  // Links to the in-app waiting-room page rather than the raw meeting URL
   // (meeting-join-experience) — same underlying access (open events stay
   // unauthenticated-readable there), but now with a countdown/host-message
-  // instead of dropping straight into Meet's own lobby.
-  const joinLine = event.meetingUrl
-    ? `Join with Google Meet: ${APP_URL}/meet/event/${event.id}`
+  // instead of dropping straight into the video call's own lobby. The
+  // waiting-room page itself resolves Google Meet vs Nasiha Conference
+  // (LiveKit), so this line stays platform-agnostic rather than naming one.
+  // Checks both meetingUrl and livekitRoomName (not meetingUrl alone) —
+  // the attached .ics's own LOCATION field (buildEventIcs) already resolves
+  // a join link the same way, so a LiveKit-backed event's link showing up
+  // there while this text still said "we'll share details later" would be
+  // a contradiction the recipient could actually see.
+  const joinUrl = event.meetingUrl || event.livekitRoomName ? `${APP_URL}/meet/event/${event.id}` : null;
+  const joinLine = joinUrl
+    ? `Use this link to join the meeting at the scheduled time:\n${joinUrl}`
     : "We'll share the joining details closer to the event.";
 
   const membershipPitch =
@@ -183,6 +192,70 @@ export async function sendEventRegistrationConfirmationEmail(
     });
   } catch (error) {
     console.error("[email] Failed to send event registration confirmation email", error);
+  }
+}
+
+/**
+ * Sent to every anonymous (non-member) EventRegistration guest when the
+ * host/admin resends notifications for an `open`, community-visibility
+ * event (lib/events-server.ts's resendEventNotifications) — the guest
+ * counterpart to sendEventAnnouncementEmail's member-facing reminder.
+ * Guests have no User account and thus no bell notification, so this is
+ * their only reminder channel; no membership pitch here (unlike the
+ * registration-confirmation email above) since a reminder isn't the moment
+ * for that pitch.
+ *
+ * Carries the same meetingUrl/livekitRoomName-aware join link as
+ * sendEventRegistrationConfirmationEmail, resolved fresh at send time
+ * rather than reusing whatever link (if any) was live when the guest first
+ * registered — this is the only channel that ever hands a guest a join
+ * link at all (the public /events/[id] page this email's `link` points to
+ * deliberately never exposes meetingUrl, see getPublicEventById), so a
+ * resend fired after the organizer adds/changes the link is how a guest
+ * who registered before that actually finds out. Best-effort, same
+ * rationale as every other function here.
+ */
+export async function sendEventRegistrationReminderEmail(
+  to: string,
+  name: string,
+  event: {
+    id: string;
+    title: string;
+    description: string | null;
+    startsAt: Date;
+    timezone: string | null;
+    meetingUrl: string | null;
+    livekitRoomName: string | null;
+    link: string;
+  },
+) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping event registration reminder email to ${to}`);
+    return;
+  }
+
+  const when = formatEventDateTime(event.startsAt, event.timezone);
+  const description = event.description?.trim() || null;
+  const safeDescription = description ? escapeHtml(description).replace(/\n/g, "<br>") : "";
+  const joinUrl = event.meetingUrl || event.livekitRoomName ? `${APP_URL}/meet/event/${event.id}` : null;
+  const joinLine = joinUrl
+    ? `Use this link to join the meeting at the scheduled time:\n${joinUrl}`
+    : "We'll share the joining details closer to the event.";
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: `Reminder: ${event.title}`,
+      text: `Hi ${name},\n\nJust a reminder that you're registered for "${event.title}" on ${when}.${
+        description ? `\n\n${description}` : ""
+      }\n\n${joinLine}\n\nEvent details: ${event.link}\n\n— The NASIHA Team`,
+      html: `<div><h1>${escapeHtml(event.title)}</h1><p>Just a reminder that you're registered for this event on ${escapeHtml(when)}.</p>${
+        safeDescription ? `<p>${safeDescription}</p>` : ""
+      }<p>${joinUrl ? `Use this link to join the meeting at the scheduled time: <a href="${joinUrl}">${joinUrl}</a>` : escapeHtml(joinLine)}</p><p><a href="${event.link}">Event details</a></p></div>`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send event registration reminder email", error);
   }
 }
 
@@ -380,6 +453,59 @@ export async function sendEventInviteEmail(
 }
 
 /**
+ * Sent to every member when a host schedules a new community-visibility
+ * (public) event — the all-members broadcast counterpart to
+ * sendEventInviteEmail's targeted "you were invited" copy, always paired
+ * with an in-app event_published Notification. Best-effort, same rationale
+ * as every other function here: the Event/Notification rows already exist
+ * by the time this runs. `isReminder` swaps the "scheduled a new event"
+ * copy for reminder copy — set only by a manual "Resend Notifications"
+ * click (lib/events-server.ts's resendEventNotifications), never by the
+ * automatic send at creation time.
+ */
+export async function sendEventAnnouncementEmail(
+  to: string,
+  name: string,
+  event: {
+    hostName: string;
+    title: string;
+    description: string | null;
+    startsAt: Date;
+    timezone: string | null;
+    link: string;
+    isReminder?: boolean;
+  },
+) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping event announcement email to ${to}`);
+    return;
+  }
+
+  const when = formatEventDateTime(event.startsAt, event.timezone);
+  const description = event.description?.trim() || null;
+  const safeDescription = description ? escapeHtml(description).replace(/\n/g, "<br>") : "";
+  const introText = event.isReminder
+    ? `${event.hostName} wanted to remind you about an upcoming event: "${event.title}" on ${when}.`
+    : `${event.hostName} scheduled a new event: "${event.title}" on ${when}.`;
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: `${event.isReminder ? "Reminder" : "New event"}: ${event.title}`,
+      text: `Hi ${name},\n\n${introText}${
+        description ? `\n\n${description}` : ""
+      }\n\nView details here:\n${event.link}\n\n— The NASIHA Team`,
+      html: `<div><h1>${escapeHtml(event.title)}</h1><p>${escapeHtml(introText)}</p>${
+        safeDescription ? `<p>${safeDescription}</p>` : ""
+      }<p><a href="${event.link}">View details</a></p></div>`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send event announcement email", error);
+  }
+}
+
+/**
  * Sent to a member right after they RSVP `going` to an event (§4.6) —
  * the calendar-invite counterpart to sendEventRegistrationConfirmationEmail's
  * anonymous-visitor flow. Carries a `.ics` attachment (built by the caller
@@ -393,10 +519,12 @@ export async function sendRsvpConfirmationEmail(
   to: string,
   name: string,
   event: {
+    id: string;
     title: string;
     startsAt: Date;
     timezone: string | null;
     meetingUrl: string | null;
+    livekitRoomName: string | null;
     link: string;
     icsContent: string;
     icsFilename: string;
@@ -408,8 +536,13 @@ export async function sendRsvpConfirmationEmail(
   }
 
   const when = formatEventDateTime(event.startsAt, event.timezone);
-  const joinLine = event.meetingUrl
-    ? `Join with Google Meet: ${event.meetingUrl}`
+  // Links to the in-app waiting-room page, same platform-agnostic
+  // convention as sendEventRegistrationConfirmationEmail — resolves Google
+  // Meet vs Nasiha Conference (LiveKit) itself, and previously linking
+  // straight to event.meetingUrl silently dropped the join line entirely
+  // for LiveKit events (meetingUrl is only ever set on the Google Meet path).
+  const joinLine = (event.meetingUrl || event.livekitRoomName)
+    ? `Join the event: ${APP_URL}/meet/event/${event.id}`
     : "We'll share the joining details closer to the event.";
 
   try {

@@ -40,6 +40,7 @@ export default async function EditEventPage({ params }: { params: { eventId: str
           endsAt: event.endsAt,
           open: event.open,
           meetingUrl: event.meetingUrl,
+          meetLinkSource: event.meetLinkSource,
           heroImageUrl: event.heroImageUrl,
           deidentificationConfirmed: event.deidentificationConfirmed,
           visibility: event.visibility,

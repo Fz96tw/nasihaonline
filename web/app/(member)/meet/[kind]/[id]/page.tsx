@@ -110,6 +110,10 @@ export default async function MeetPage({ params }: { params: Promise<{ kind: str
     kind === "event"
       ? `/api/events/${id}/meeting/recording/stop`
       : `/api/inbox/meeting-requests/${id}/meeting/recording/stop`;
+  // MeetingRequests have no discussion thread to archive chat into (only
+  // Events do), so this stays null for kind === "request" rather than
+  // pointing at a route that doesn't exist.
+  const chatEndpoint = kind === "event" ? `/api/events/${id}/meeting/chat` : null;
 
   return (
     <MeetingWaitingRoom
@@ -121,6 +125,7 @@ export default async function MeetPage({ params }: { params: Promise<{ kind: str
       tokenEndpoint={tokenEndpoint}
       recordingStartEndpoint={recordingStartEndpoint}
       recordingStopEndpoint={recordingStopEndpoint}
+      chatEndpoint={chatEndpoint}
       backHref={backHref}
     />
   );

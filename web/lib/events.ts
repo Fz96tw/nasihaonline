@@ -88,6 +88,8 @@ export type MemberEvent = EventWithRsvp & {
   }[];
   /** Set once resetMeetingOnRoomEmpty's room_finished handler fires (LiveKit only — Meet has no equivalent signal) — the detail page gates recording-link visibility on this for LiveKit-backed events instead of the scheduled endsAt/startsAt time. */
   meetingEndedAt: string | null;
+  /** Id of the ForumPost compiled from this occurrence's LiveKit meeting chat (finalizeEventChatTranscript, events-server.ts), if any — null when the meeting had no chat, no discussion thread to post into, or hasn't ended yet. Resolved per-occurrence via EventChatTranscript, same as liveKitRecordingSegments above. */
+  chatTranscriptPostId: string | null;
   /** True once the organizer has cancelled this event (getMemberEventById is the only MemberEvent query that ever sets this — listing queries filter cancelled events out entirely). */
   cancelled: boolean;
   /** Going RSVPs (members) plus EventRegistrations (non-members) — same merge as getEventEngagementForAdmin. */
@@ -166,6 +168,16 @@ export type EventRegistrationAttendee = {
   id: string;
   name: string | null;
   email: string;
+};
+
+// Resend Notifications' history trail (event detail page, host/admin-only) —
+// one entry per member-wide broadcast: the automatic one at creation, plus
+// any manual resend the organizer/admin triggers afterward.
+export type EventNotificationBroadcastItem = {
+  id: string;
+  sentAt: string;
+  sentByName: string;
+  recipientCount: number;
 };
 
 // Dashboard's upcoming-events widget (§10 Phase 4 capstone) — a trimmed-down

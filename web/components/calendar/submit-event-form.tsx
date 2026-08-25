@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,6 +26,16 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { EventType, EventVisibility, RecurrenceFrequency } from "@/lib/generated/prisma/enums";
 import { EVENT_TYPE_LABELS } from "@/lib/events";
 import { createEventSchema, updateEventSchema, type CreateEventValues } from "@/lib/validation/event";
@@ -97,6 +108,7 @@ type ExistingEvent = {
   endsAt: string | null;
   open: boolean;
   meetingUrl: string | null;
+  meetLinkSource: "auto" | "manual" | "livekit";
   heroImageUrl: string | null;
   deidentificationConfirmed: boolean;
   visibility: EventVisibility;
@@ -141,6 +153,12 @@ export function SubmitEventForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [heroImage, setHeroImage] = useState<File | null>(null);
+  // "Notify everyone about the new link?" prompt (edit mode only) — set
+  // right after a successful save whose meetingUrl differs from what the
+  // event had before, holding the saved event's id so the dialog's actions
+  // know what to resend/navigate to. Null means no prompt is showing.
+  const [linkChangePrompt, setLinkChangePrompt] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
   // Waiting-room greeting shown to attendees on /meet/event/[id] before
   // Start (meeting-join-experience) — plain local state like heroImage
   // above, not RHF-managed, since it's optional auxiliary content outside
@@ -177,7 +195,7 @@ export function SubmitEventForm({
           // "Open to the public" toggle etc. for an actually-restricted event.
           visibility: existingEvent.visibility,
           invitedUserIds: [],
-          meetLinkSource: "manual",
+          meetLinkSource: existingEvent.meetLinkSource,
           recurrence: existingEvent.recurrence,
         }
       : DEFAULT_VALUES,
@@ -230,10 +248,10 @@ export function SubmitEventForm({
         "deidentificationConfirmed",
         String(isCaseDiscussion && values.deidentificationConfirmed),
       );
+      formData.append("meetLinkSource", values.meetLinkSource);
       if (!existingEvent) {
         formData.append("visibility", values.visibility);
         formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
-        formData.append("meetLinkSource", values.meetLinkSource);
       }
       if (values.recurrence) formData.append("recurrence", JSON.stringify(values.recurrence));
       if (heroImage) formData.append("heroImage", heroImage);
@@ -256,6 +274,24 @@ export function SubmitEventForm({
         );
       }
       const { id } = await res.json();
+
+      // The meeting link just changed to a real value (not cleared to
+      // blank) — either the platform itself (Nasiha Conference/Google
+      // Meet/manual, which always regenerates a brand-new link server-side,
+      // see updateEvent's platformChanged branch) or, staying on manual, the
+      // pasted link text. Anyone who already RSVP'd/registered/was invited
+      // may still have the old one saved, so offer to resend before
+      // navigating away rather than silently leaving them with a stale link.
+      const linkMayHaveChanged =
+        existingEvent &&
+        (values.meetLinkSource !== existingEvent.meetLinkSource ||
+          (values.meetLinkSource === "manual" && values.meetingUrl && values.meetingUrl !== existingEvent.meetingUrl));
+      if (linkMayHaveChanged) {
+        setLinkChangePrompt(id);
+        setSubmitting(false);
+        return;
+      }
+
       if (existingEvent) {
         // Replace (not push) so this edit page's history entry doesn't
         // linger for BackLink's router.back() on the details page to land
@@ -270,6 +306,36 @@ export function SubmitEventForm({
     } finally {
       setSubmitting(false);
     }
+  }
+
+  /**
+   * Resolves the "Notify everyone about the new link?" prompt — either
+   * choice navigates on to the saved event's detail page afterward, since
+   * the edit itself already succeeded either way. A failed resend here is
+   * best-effort from the UI's perspective too: it doesn't block navigation,
+   * since the organizer can always retry from the "Resend Notifications"
+   * button on the detail page directly.
+   */
+  async function resolveLinkChangePrompt(shouldNotify: boolean) {
+    const id = linkChangePrompt;
+    if (!id) return;
+    if (shouldNotify) {
+      setResending(true);
+      try {
+        const csrfToken = await getCsrfToken();
+        await fetch(`/api/events/${id}/resend-notifications`, {
+          method: "POST",
+          headers: { "x-csrf-token": csrfToken },
+        });
+      } catch {
+        // Best-effort — see comment above.
+      } finally {
+        setResending(false);
+      }
+    }
+    setLinkChangePrompt(null);
+    router.replace(`/calendar/${id}?saved=1`);
+    router.refresh();
   }
 
   return (
@@ -555,81 +621,64 @@ export function SubmitEventForm({
           }}
         />
 
-        {!existingEvent ? (
-          <div className="flex flex-col gap-3">
-            <FormField
-              control={form.control}
-              name="meetLinkSource"
-              render={({ field }) => (
-                <FormItem className="rounded-md border p-4">
-                  <FormLabel>Meeting link</FormLabel>
-                  <FormDescription>
-                    Nasiha Conference and Google Meet both auto-generate their own meeting link — or paste your own
-                    below. Nasiha Conference gives you real in-meeting host controls (admit, mute, or remove
-                    participants) and lets any attendee manually start or stop recording. Google Meet does not
-                    record these meetings.
-                  </FormDescription>
-                  <FormControl>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="livekit">Nasiha Conference</SelectItem>
-                        <SelectItem value="auto">Google Meet</SelectItem>
-                        <SelectItem value="manual">Paste my own link</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-
-            {meetLinkSource === "manual" && (
-              <FormField
-                control={form.control}
-                name="meetingUrl"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Meeting link{isRestricted ? "" : " (optional)"}</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="https://meet.google.com/…"
-                        value={field.value ?? ""}
-                        onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      {isRestricted ? "Shared with invited members." : "Only shown to members who RSVP."}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-          </div>
-        ) : (
+        <div className="flex flex-col gap-3">
           <FormField
             control={form.control}
-            name="meetingUrl"
+            name="meetLinkSource"
             render={({ field }) => (
-              <FormItem>
-                <FormLabel>Meeting link{isRestricted ? "" : " (optional)"}</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="https://meet.google.com/…"
-                    value={field.value ?? ""}
-                    onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
-                  />
-                </FormControl>
+              <FormItem className="rounded-md border p-4">
+                <FormLabel>Meeting link</FormLabel>
                 <FormDescription>
-                  {isRestricted ? "Shared with invited members." : "Only shown to members who RSVP."}
+                  Nasiha Conference and Google Meet both auto-generate their own meeting link — or paste your own
+                  below. Nasiha Conference gives you real in-meeting host controls (admit, mute, or remove
+                  participants) and lets any attendee manually start or stop recording. Google Meet does not
+                  record these meetings.
+                  {existingEvent && (
+                    <span className="mt-1 block">
+                      Switching platforms here replaces the current link with a brand-new one — you&apos;ll get a
+                      chance to notify everyone who already has the old link once you save.
+                    </span>
+                  )}
                 </FormDescription>
-                <FormMessage />
+                <FormControl>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="livekit">Nasiha Conference</SelectItem>
+                      <SelectItem value="auto">Google Meet</SelectItem>
+                      <SelectItem value="manual">Paste my own link</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormControl>
               </FormItem>
             )}
           />
-        )}
+
+          {meetLinkSource === "manual" && (
+            <FormField
+              control={form.control}
+              name="meetingUrl"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Meeting link{isRestricted ? "" : " (optional)"}</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="https://meet.google.com/…"
+                      value={field.value ?? ""}
+                      onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {isRestricted ? "Shared with invited members." : "Only shown to members who RSVP."}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+        </div>
 
         <div className="flex flex-col gap-2">
           <label htmlFor="hero-image" className="text-sm font-medium">
@@ -746,6 +795,59 @@ export function SubmitEventForm({
           </Button>
         </div>
       </form>
+
+      {existingEvent && (
+        <AlertDialog
+          open={linkChangePrompt !== null}
+          onOpenChange={(next) => {
+            if (!next && !resending) resolveLinkChangePrompt(false);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Notify everyone about the new meeting link?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Your changes are saved. Anyone who already RSVP&apos;d
+                {existingEvent.visibility === EventVisibility.invited
+                  ? " to this invited event"
+                  : existingEvent.open
+                    ? ", registered as a guest, or was already invited"
+                    : " or was already invited"}{" "}
+                may still have the old link saved — if they don&apos;t revisit this event before it starts, they
+                could show up to the wrong place, or nowhere at all. Resending sends a fresh bell notification and
+                email (
+                {existingEvent.visibility === EventVisibility.invited
+                  ? "to this event's current invitee list"
+                  : existingEvent.open
+                    ? "to every member, plus a reminder email to every registered guest"
+                    : "to every member"}
+                ) with today&apos;s link, so everyone shows up to the right place at the scheduled time.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                disabled={resending}
+                onClick={(e) => {
+                  e.preventDefault();
+                  resolveLinkChangePrompt(false);
+                }}
+              >
+                Not now
+              </AlertDialogCancel>
+              <AlertDialogAction
+                disabled={resending}
+                onClick={(e) => {
+                  e.preventDefault();
+                  resolveLinkChangePrompt(true);
+                }}
+              >
+                {resending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                Notify everyone
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </Form>
   );
 }

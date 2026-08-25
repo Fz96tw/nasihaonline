@@ -13,3 +13,7 @@ turn:
   relay_range_end: 51100
 keys:
   <GENERATE_API_KEY>: <GENERATE_API_SECRET>
+webhook:
+  api_key: <GENERATE_API_KEY>
+  urls:
+    - https://nasihaforyou.org/api/webhooks/livekit

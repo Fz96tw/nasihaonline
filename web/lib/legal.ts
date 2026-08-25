@@ -10,7 +10,7 @@ export const EDUCATIONAL_DISCLAIMER =
 export const PUBLIC_MEETING_DISCLAIMER_SECTIONS: { heading: string; body: string }[] = [
   {
     heading: "Recording",
-    body: "This meeting may be recorded or transcribed. By joining, you consent to being recorded and to that recording being used by NASIHA for community and educational purposes.",
+    body: "This meeting may be recorded or transcribed, and any messages sent in the meeting chat are saved as part of that record. By joining, you consent to being recorded and to that recording being used by NASIHA for community and educational purposes.",
   },
   {
     heading: "No unauthorized sharing",
@@ -44,7 +44,7 @@ export function getPublicMeetingClosingNote(platform: "google_meet" | "livekit")
     platform === "livekit"
       ? "This meeting is hosted on a third-party video platform; your use of it is also subject to that platform's own Terms of Service."
       : "This meeting is hosted on Google Meet; your use of it is also subject to Google's own Terms of Service.";
-  return `The host reserves the right to remove any participant for disruptive or inappropriate behavior. Please be respectful and abide by NASIHA's Terms of Service. This meeting will be recorded, and the recording will be made available in the event's details after the meeting has ended. ${platformNote}`;
+  return `The host reserves the right to remove any participant for disruptive or inappropriate behavior. Please be respectful and abide by NASIHA's Terms of Service. This meeting will be recorded, including the meeting chat, and the recording will be made available in the event's details after the meeting has ended. ${platformNote}`;
 }
 
 // Source of truth: docs/Nasiha_Charter.md § Code of Conduct.

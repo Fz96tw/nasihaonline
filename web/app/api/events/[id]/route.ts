@@ -42,6 +42,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     endsAt: formData.get("endsAt") || null,
     open: formData.get("open") === "true",
     meetingUrl: formData.get("meetingUrl") || null,
+    meetLinkSource: formData.get("meetLinkSource") || "manual",
     deidentificationConfirmed: formData.get("deidentificationConfirmed") === "true",
     timezone: formData.get("timezone") || null,
     recurrence,
