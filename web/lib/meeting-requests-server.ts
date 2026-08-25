@@ -992,7 +992,7 @@ export async function getMeetingRequestMeetingStatus(
  */
 export async function attachLiveKitMeetingRequestRecordingSegment(
   roomName: string,
-  segment: { egressId: string; objectKey: string; startedAt: Date },
+  segment: { egressId: string; objectKey: string | null; startedAt: Date },
 ): Promise<boolean> {
   const meetingRequest = await db.meetingRequest.findFirst({
     where: { livekitRoomName: roomName },
@@ -1003,9 +1003,19 @@ export async function attachLiveKitMeetingRequestRecordingSegment(
   await db.meetingRequestRecording.upsert({
     where: { egressId: segment.egressId },
     create: { meetingRequestId: meetingRequest.id, ...segment },
-    update: {},
+    // Same two-phase-write rationale as attachLiveKitEventRecordingSegment.
+    update: segment.objectKey !== null ? { objectKey: segment.objectKey, startedAt: segment.startedAt } : {},
   });
   return true;
+}
+
+/** MeetingRequest counterpart to markLiveKitEventRecordingSegmentFailed — see its doc comment. */
+export async function markLiveKitMeetingRequestRecordingSegmentFailed(egressId: string): Promise<boolean> {
+  const result = await db.meetingRequestRecording.updateMany({
+    where: { egressId },
+    data: { failedAt: new Date() },
+  });
+  return result.count > 0;
 }
 
 /**
@@ -1033,7 +1043,7 @@ export async function getMeetingRequestRecordingObjectKey(
     where: { id: recordingId, meetingRequestId },
     select: { objectKey: true },
   });
-  if (!recording) throw new MeetingRequestError(404, "Recording not found.");
+  if (!recording?.objectKey) throw new MeetingRequestError(404, "Recording not found.");
   return recording.objectKey;
 }
 

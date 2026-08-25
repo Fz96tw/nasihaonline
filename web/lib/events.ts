@@ -73,9 +73,13 @@ export type MemberEvent = EventWithRsvp & {
    * Ordered by startedAt; the UI renders them together as "Part 1", "Part
    * 2", etc. Each links through /api/events/:id/recording/:recordingId,
    * which mints a fresh short-lived presigned MinIO URL per click rather
-   * than a stored URL.
+   * than a stored URL. `ready`/`failed` reflect the segment's own
+   * lifecycle (created at Record-click time, `ready` false/`failed` false
+   * until the egress_ended webhook resolves it) — a ready or failed
+   * segment renders regardless of the event's current meetingEndedAt
+   * state, since that reflects a possibly newer, unrelated session.
    */
-  liveKitRecordingSegments: { id: string; startedAt: string }[];
+  liveKitRecordingSegments: { id: string; startedAt: string; ready: boolean; failed: boolean }[];
   /** Set once resetMeetingOnRoomEmpty's room_finished handler fires (LiveKit only — Meet has no equivalent signal) — the detail page gates recording-link visibility on this for LiveKit-backed events instead of the scheduled endsAt/startsAt time. */
   meetingEndedAt: string | null;
   /** True once the organizer has cancelled this event (getMemberEventById is the only MemberEvent query that ever sets this — listing queries filter cancelled events out entirely). */

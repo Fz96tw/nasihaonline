@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
-import { EventError, getEventMeetingStatus } from "@/lib/events-server";
+import { attachLiveKitEventRecordingSegment, EventError, getEventMeetingStatus } from "@/lib/events-server";
 import { setRoomRecordingMetadata } from "@/lib/livekit";
 import { startEgress } from "@/lib/livekit-egress";
 
@@ -27,6 +27,15 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     if ("error" in result) {
       return NextResponse.json({ error: "Couldn't start recording. Try again shortly." }, { status: 502 });
     }
+
+    // Create the segment row now, not just when egress_ended eventually
+    // arrives (can be minutes later) — gives the detail page something to
+    // show ("processing…") instead of dead silence in the meantime.
+    await attachLiveKitEventRecordingSegment(status.livekitRoomName, {
+      egressId: result.egressId,
+      objectKey: null,
+      startedAt: new Date(),
+    });
 
     await setRoomRecordingMetadata(status.livekitRoomName, { recording: true, egressId: result.egressId });
     return NextResponse.json({ recording: true, egressId: result.egressId });

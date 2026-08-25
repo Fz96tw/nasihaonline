@@ -580,6 +580,16 @@ export function MeetingRequestDetail({
   // stamped as meetingEndedAt); Meet has no equivalent, so its recording
   // link keeps gating on the scheduled isPast time above.
   const isRecordingAvailable = item.livekitRoomName ? item.meetingEndedAt !== null : isPast;
+  // Same per-segment rationale as event-detail.tsx's sibling: a ready or
+  // failed segment stays visible even once a newer session resets
+  // meetingEndedAt; only a still-pending segment waits for its own
+  // session to end. Labels come from position in the FULL list.
+  const visibleLiveKitSegments = item.liveKitRecordingSegments
+    .map((segment, index) => ({
+      segment,
+      label: item.liveKitRecordingSegments.length > 1 ? `Part ${index + 1}` : "Watch recording",
+    }))
+    .filter(({ segment }) => segment.ready || segment.failed || isRecordingAvailable);
   // Either party may kick off a reschedule of a *settled* accepted meeting
   // at any time — not turn-gated, since there's no outstanding proposal yet
   // to hold a turn on (contrast canRespond below, for when one already is).
@@ -741,8 +751,8 @@ export function MeetingRequestDetail({
                 onDeleted={onUpdated}
               />
             )}
-            {isRecordingAvailable &&
-              item.liveKitRecordingSegments.map((segment, index) => (
+            {visibleLiveKitSegments.map(({ segment, label }) =>
+              segment.ready ? (
                 <Link
                   key={segment.id}
                   href={`/api/inbox/meeting-requests/${item.id}/recording/${segment.id}`}
@@ -750,9 +760,14 @@ export function MeetingRequestDetail({
                   rel="noopener noreferrer"
                   className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
                 >
-                  {item.liveKitRecordingSegments.length > 1 ? `Part ${index + 1}` : "Watch recording"}
+                  {label}
                 </Link>
-              ))}
+              ) : (
+                <span key={segment.id} className="w-fit text-sm text-muted-foreground">
+                  {label} — {segment.failed ? "recording failed" : "processing…"}
+                </span>
+              ),
+            )}
             {(item.meetingUrl || item.livekitRoomName) && item.direction === "sent" && !messageEditingOpen && (
               <Button
                 size="sm"

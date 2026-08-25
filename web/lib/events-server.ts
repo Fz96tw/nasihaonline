@@ -432,7 +432,15 @@ export async function getMemberEventById(
       rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
       recurrence: { select: RECURRENCE_SELECT },
       recordings: {
-        select: { occurrenceDate: true, recordingUrl: true, origin: true, id: true, startedAt: true },
+        select: {
+          occurrenceDate: true,
+          recordingUrl: true,
+          origin: true,
+          id: true,
+          startedAt: true,
+          objectKey: true,
+          failedAt: true,
+        },
       },
       _count: {
         select: {
@@ -493,7 +501,12 @@ export async function getMemberEventById(
     recordingUrl: (rsvped || event.hostId === userId) ? (recordingForOccurrence?.recordingUrl ?? null) : null,
     liveKitRecordingSegments:
       rsvped || event.hostId === userId
-        ? liveKitSegments.map((s) => ({ id: s.id, startedAt: s.startedAt!.toISOString() }))
+        ? liveKitSegments.map((s) => ({
+            id: s.id,
+            startedAt: s.startedAt!.toISOString(),
+            ready: s.objectKey !== null,
+            failed: s.failedAt !== null,
+          }))
         : [],
     attendeeCount: event._count.rsvps + event._count.registrations,
     forumThreadId: event.forumThread?.id ?? null,
@@ -2181,7 +2194,7 @@ export async function getEventMeetingStatus(
  */
 export async function attachLiveKitEventRecordingSegment(
   roomName: string,
-  segment: { egressId: string; objectKey: string; startedAt: Date },
+  segment: { egressId: string; objectKey: string | null; startedAt: Date },
 ): Promise<boolean> {
   const event = await db.event.findFirst({
     where: { livekitRoomName: roomName },
@@ -2205,9 +2218,31 @@ export async function attachLiveKitEventRecordingSegment(
       egressId: segment.egressId,
       startedAt: segment.startedAt,
     },
-    update: {},
+    // Called twice per segment: once at Record-click time with objectKey
+    // null (creates the pending row), once from the egress_ended webhook
+    // with the real key (fills it in). Only write objectKey/startedAt when
+    // a real value is given, so the second call can't clobber an
+    // already-resolved row back to null on a stray redelivery/race.
+    update:
+      segment.objectKey !== null ? { objectKey: segment.objectKey, startedAt: segment.startedAt } : {},
   });
   return true;
+}
+
+/**
+ * Marks a LiveKit recording segment as failed (egress_ended reported
+ * EGRESS_FAILED/EGRESS_ABORTED/no file result) — updateMany rather than
+ * update since the row is expected to exist (created at Record-click
+ * time) but this must never throw if it somehow doesn't. Returns whether
+ * a row was actually matched, same try-Event-then-MeetingRequest pattern
+ * as attachLiveKitEventRecordingSegment's caller.
+ */
+export async function markLiveKitEventRecordingSegmentFailed(egressId: string): Promise<boolean> {
+  const result = await db.eventRecording.updateMany({
+    where: { egressId },
+    data: { failedAt: new Date() },
+  });
+  return result.count > 0;
 }
 
 /**

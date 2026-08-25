@@ -1,8 +1,11 @@
 import { EgressStatus } from "livekit-server-sdk";
 import { NextResponse, type NextRequest } from "next/server";
 import { resetMeetingOnRoomEmpty, verifyLiveKitWebhook } from "@/lib/livekit";
-import { attachLiveKitEventRecordingSegment } from "@/lib/events-server";
-import { attachLiveKitMeetingRequestRecordingSegment } from "@/lib/meeting-requests-server";
+import { attachLiveKitEventRecordingSegment, markLiveKitEventRecordingSegmentFailed } from "@/lib/events-server";
+import {
+  attachLiveKitMeetingRequestRecordingSegment,
+  markLiveKitMeetingRequestRecordingSegmentFailed,
+} from "@/lib/meeting-requests-server";
 
 /**
  * Receives LiveKit's webhook events (LiveKit Meeting Infrastructure
@@ -56,14 +59,18 @@ async function handleEgressEnded(egressInfo: NonNullable<Awaited<ReturnType<type
       console.warn("[livekit] egress_ended payload missing roomName/egressId — skipping");
       return;
     }
-    if (egressInfo.status === EgressStatus.EGRESS_FAILED || egressInfo.status === EgressStatus.EGRESS_ABORTED) {
-      console.warn(`[livekit] egress ${egressInfo.egressId} ended with status ${egressInfo.status}: ${egressInfo.error || "no error detail"}`);
-      return;
-    }
-
     const file = egressInfo.fileResults?.[0];
-    if (!file?.filename) {
-      console.warn(`[livekit] egress ${egressInfo.egressId} ended with no file result — skipping`);
+    const failed =
+      egressInfo.status === EgressStatus.EGRESS_FAILED ||
+      egressInfo.status === EgressStatus.EGRESS_ABORTED ||
+      !file?.filename;
+
+    if (failed || !file) {
+      console.warn(`[livekit] egress ${egressInfo.egressId} ended with status ${egressInfo.status}: ${egressInfo.error || "no file result"}`);
+      // Mark the pending row (created at Record-click time) as failed
+      // rather than leaving it stuck showing "processing" forever.
+      const markedEvent = await markLiveKitEventRecordingSegmentFailed(egressInfo.egressId);
+      if (!markedEvent) await markLiveKitMeetingRequestRecordingSegmentFailed(egressInfo.egressId);
       return;
     }
 

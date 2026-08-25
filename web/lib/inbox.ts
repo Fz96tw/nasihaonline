@@ -73,8 +73,8 @@ export type MeetingRequestListItem = {
   livekitRoomName: string | null;
   /** Drive playback link once Google's finished processing the meeting's recording (lib/meeting-recordings-sync.ts) — null until then. */
   recordingUrl: string | null;
-  /** LiveKit recording segments (objective 4) — see MemberEvent.liveKitRecordingSegments for the shared rationale. Each links through /api/inbox/meeting-requests/:id/recording/:recordingId. */
-  liveKitRecordingSegments: { id: string; startedAt: string }[];
+  /** LiveKit recording segments (objective 4) — see MemberEvent.liveKitRecordingSegments for the shared rationale, including ready/failed. Each links through /api/inbox/meeting-requests/:id/recording/:recordingId. */
+  liveKitRecordingSegments: { id: string; startedAt: string; ready: boolean; failed: boolean }[];
   /** Set once resetMeetingOnRoomEmpty's room_finished handler fires (LiveKit only — Meet has no equivalent signal) — the detail page gates recording-link visibility on this for LiveKit-backed meeting requests instead of the scheduled time. */
   meetingEndedAt: string | null;
   /** Waiting-room greeting shown to the recipient on /meet/request/[id] before Start (meeting-join-experience) — sender-editable via MeetingRequestDetail's inline editor. */

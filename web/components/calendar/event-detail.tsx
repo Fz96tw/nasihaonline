@@ -82,6 +82,19 @@ export function EventDetail({
   // stamped as meetingEndedAt); Meet has no equivalent, so its recording
   // link keeps gating on the scheduled isPast time above.
   const isRecordingAvailable = event.livekitRoomName ? event.meetingEndedAt !== null : isPast;
+  // Per-segment visibility, not gated by isRecordingAvailable alone: a
+  // ready or failed segment is a terminal state and stays visible even
+  // once a newer, unrelated session starts (which resets meetingEndedAt
+  // to null) — only a still-pending segment waits for its own session to
+  // end before showing a "processing" placeholder. Labels are computed
+  // from each segment's position in the FULL list before filtering, so
+  // "Part N" numbering never shifts based on what's currently visible.
+  const visibleLiveKitSegments = event.liveKitRecordingSegments
+    .map((segment, index) => ({
+      segment,
+      label: event.liveKitRecordingSegments.length > 1 ? `Part ${index + 1}` : "Watch recording",
+    }))
+    .filter(({ segment }) => segment.ready || segment.failed || isRecordingAvailable);
   const hostName = event.hostName ?? "NASIHA Member";
   const audienceBadge = getEventAudienceBadge(event);
 
@@ -178,20 +191,26 @@ export function EventDetail({
         </div>
       ) : null}
 
-      {isRecordingAvailable && event.liveKitRecordingSegments.length > 0 ? (
+      {visibleLiveKitSegments.length > 0 ? (
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm font-medium text-muted-foreground">Recording:</span>
-          {event.liveKitRecordingSegments.map((segment, index) => (
-            <Link
-              key={segment.id}
-              href={`/api/events/${event.seriesId}/recording/${segment.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
-            >
-              {event.liveKitRecordingSegments.length > 1 ? `Part ${index + 1}` : "Watch recording"}
-            </Link>
-          ))}
+          {visibleLiveKitSegments.map(({ segment, label }) =>
+            segment.ready ? (
+              <Link
+                key={segment.id}
+                href={`/api/events/${event.seriesId}/recording/${segment.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
+              >
+                {label}
+              </Link>
+            ) : (
+              <span key={segment.id} className="w-fit text-sm text-muted-foreground">
+                {label} — {segment.failed ? "recording failed" : "processing…"}
+              </span>
+            ),
+          )}
         </div>
       ) : null}
 

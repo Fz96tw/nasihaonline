@@ -1127,6 +1127,11 @@ model EventRecording {
   // "Part 1"/"Part 2" grouping, since createdAt only reflects when the
   // webhook happened to arrive.
   startedAt      DateTime?
+  // Set by the egress_ended webhook when LiveKit reports EGRESS_FAILED/
+  // EGRESS_ABORTED/no file result — distinguishes "still processing"
+  // (objectKey null, failedAt null) from "genuinely failed" (failedAt
+  // set), so the UI never shows a permanently-stuck processing indicator.
+  failedAt       DateTime?
   createdAt      DateTime        @default(now())
 
   @@index([eventId, occurrenceDate])
@@ -1143,9 +1148,14 @@ model MeetingRequestRecording {
   id               String         @id @default(cuid())
   meetingRequestId String
   meetingRequest   MeetingRequest @relation(fields: [meetingRequestId], references: [id], onDelete: Cascade)
-  objectKey        String
+  // Nullable as of the pending-row-at-Record-click change — null until the
+  // egress_ended webhook fills it in. See EventRecording.objectKey's
+  // sibling comment for why a stored URL/presigned-URL would be wrong.
+  objectKey        String?
   egressId         String         @unique
   startedAt        DateTime
+  // Same semantics as EventRecording.failedAt — see its comment.
+  failedAt         DateTime?
   createdAt        DateTime       @default(now())
 
   @@index([meetingRequestId])
