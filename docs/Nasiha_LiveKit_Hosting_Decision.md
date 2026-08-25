@@ -12,7 +12,7 @@ Self-hosting removes LiveKit's account-level quotas entirely. The production VPS
 
 ## What was set up
 
-- `livekit-server` (embedded TURN) + `egress` (recording) services, added to `docker-compose.yml` — see `livekit.yaml.example` / `egress.yaml.example` for config (real `livekit.yaml`/`egress.yaml` are gitignored, generated per-deploy).
+- `livekit-server` (embedded TURN) + `egress` (recording) services, added to `vps/docker-compose.yml` — see `vps/livekit.yaml.example` / `vps/egress.yaml.example` for config (real `livekit.yaml`/`egress.yaml` are gitignored, generated per-deploy). These services only run in `vps/` — `homelab/`'s app container points its `LIVEKIT_URL` at this shared VPS instance instead.
 - Egress coordinates with `livekit-server` via the existing `redis` service (no new Redis instance).
 - Recordings write to a dedicated MinIO bucket (`livekit-recordings`) via a scoped `livekit-egress` user, provisioned by `scripts/setup-minio-recordings.sh`.
 - Public endpoints (reverse-proxied through the VPS's existing nginx-proxy-manager, TLS via its normal Let's Encrypt flow):
@@ -35,7 +35,7 @@ nginxproxymanager:
         - vps-s3.nasihaforyou.org
 ```
 
-(This lives only in the VPS's deployed compose file, since `nginxproxymanager` itself isn't tracked in this repo's `docker-compose.yml` — it's environment-specific, set up directly on the host.)
+(This lives in `vps/docker-compose.yml` — `nginxproxymanager` is only defined there, not in `homelab/docker-compose.yml`, since the two are separate self-contained deployments, not a shared/merged file. See `CLAUDE.md` for the `homelab/` vs `vps/` split.)
 
 ## Verified end-to-end (2026-08-25)
 

@@ -1,0 +1,205 @@
+name: nasiha
+
+services:
+  nginxproxymanager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nginx_proxy_manager
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "127.0.0.1:81:81"
+    volumes:
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+    networks:
+      appnet:
+        aliases:
+          - livekit.nasihaforyou.org
+          - vps-s3.nasihaforyou.org
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: nasiha
+      POSTGRES_PASSWORD: nasiha
+      POSTGRES_DB: nasiha
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nasiha"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+      - appnet
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+      - appnet
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: nasiha
+      MINIO_ROOT_PASSWORD: nasiha123
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+      - appnet
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.10
+    environment:
+      MEILI_MASTER_KEY: nasiha-dev-master-key
+      MEILI_ENV: development
+    volumes:
+      - meilisearch_data:/meili_data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:7700/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+      - appnet
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: livekit
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      - "7881:7881/tcp"
+      - "50000-50200:50000-50200/udp"
+      - "3478:3478/udp"
+      - "51000-51100:51000-51100/udp"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - default
+      - appnet
+
+  egress:
+    image: livekit/egress:latest
+    container_name: livekit-egress
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN
+    environment:
+      EGRESS_CONFIG_FILE: /etc/egress.yaml
+    volumes:
+      - ./egress.yaml:/etc/egress.yaml:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+    networks:
+      - default
+      - appnet
+
+  app:
+    image: fz96tw/nasihaonline-app:latest
+    ports:
+      - "3010:3000"
+    environment:
+      LIVEKIT_URL: ${LIVEKIT_URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      DATABASE_URL: postgresql://nasiha:nasiha@postgres:5432/nasiha?schema=public
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      CLERK_WEBHOOK_SIGNING_SECRET: ${CLERK_WEBHOOK_SIGNING_SECRET}
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: /accept-invite
+      NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: /whats-new
+      NEXT_PUBLIC_CLERK_AFTER_SIGN_OUT_URL: /
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3010}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-NASIHA <no-reply@mail.nasihaforyou.org>}
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_USE_SSL: "false"
+      MINIO_ACCESS_KEY: nasiha
+      MINIO_SECRET_KEY: nasiha123
+      MINIO_BUCKET_AVATARS: avatars
+      MINIO_BUCKET_RECORDINGS: ${MINIO_BUCKET_RECORDINGS}
+      MINIO_RECORDINGS_ACCESS_KEY: ${MINIO_RECORDINGS_ACCESS_KEY}
+      MINIO_RECORDINGS_SECRET_KEY: ${MINIO_RECORDINGS_SECRET_KEY}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
+      MINIO_PUBLIC_PORT: ${MINIO_PUBLIC_PORT}
+      MINIO_PUBLIC_USE_SSL: ${MINIO_PUBLIC_USE_SSL}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SIGNING_SECRET: ${STRIPE_WEBHOOK_SIGNING_SECRET}
+      MEILI_HOST: http://meilisearch:7700
+      MEILI_MASTER_KEY: nasiha-dev-master-key
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_CALENDAR_REFRESH_TOKEN: ${GOOGLE_CALENDAR_REFRESH_TOKEN}
+      GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID:-primary}
+      NODE_OPTIONS: --max-old-space-size=4096
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    networks:
+      - default
+      - appnet
+
+  worker:
+    image: fz96tw/nasihaonline-worker:latest
+    command: ["npm", "run", "worker"]
+    environment:
+      DATABASE_URL: postgresql://nasiha:nasiha@postgres:5432/nasiha?schema=public
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+      MEILI_HOST: http://meilisearch:7700
+      MEILI_MASTER_KEY: nasiha-dev-master-key
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    networks:
+      - default
+      - appnet
+
+volumes:
+  postgres_data:
+  minio_data:
+  meilisearch_data:
+  npm_data:
+  npm_letsencrypt:
+
+networks:
+  appnet:
+    name: appnet
+    driver: bridge

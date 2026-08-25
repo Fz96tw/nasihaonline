@@ -67,9 +67,10 @@ Outbound app email — application-confirmation, approval/welcome (with the acco
 
 ## Getting Started (Docker)
 
-From the repo root:
+From `homelab/` (the repo's local-dev / homelab-deployment compose stack — see `CLAUDE.md`):
 
 ```bash
+cd homelab
 docker compose up
 ```
 
@@ -83,7 +84,7 @@ The `app`/`worker` containers do **not** bind-mount `./web` — their filesystem
 docker compose up -d --build app worker
 ```
 
-`NEXT_PUBLIC_*` vars and `DATABASE_URL` are passed in as Docker build args (`docker-compose.yml`'s `build.args`, sourced from the root `.env`) so they're correctly inlined into the client bundle at build time. If you add a new `NEXT_PUBLIC_*` env var, add it to both the `ARG`/`ENV` list in `web/Dockerfile` and `build.args` in `docker-compose.yml`.
+`NEXT_PUBLIC_*` vars and `DATABASE_URL` are passed in as Docker build args (`homelab/docker-compose.yml`'s `build.args`, sourced from `homelab/.env`) so they're correctly inlined into the client bundle at build time. If you add a new `NEXT_PUBLIC_*` env var, add it to both the `ARG`/`ENV` list in `web/Dockerfile` and `build.args` in `homelab/docker-compose.yml`.
 
 Because the build no longer runs inside an already-running, fully-configured container, any route that needs a live DB/Redis connection has to be marked `export const dynamic = "force-dynamic";` (see `app/api/team/route.ts`, `app/api/health/route.ts`) — otherwise Next.js tries to statically prerender it during `docker build`, before Postgres/Redis are reachable, and the build fails outright (or, worse, a handler that swallows its own errors — like the health check — would silently freeze a stale response into the image instead of failing loudly).
 
