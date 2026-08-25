@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { RoomEvent, type RemoteParticipant } from "livekit-client";
@@ -81,6 +81,117 @@ function ParticipantActivityListener({ onEvent }: { onEvent: (message: string) =
   return null;
 }
 
+type RoomRecordingMetadata = { recording: boolean; egressId: string | null };
+
+/**
+ * Mirrors ParticipantActivityListener's shape exactly — must render inside
+ * <LiveKitRoom> to reach useRoomContext(), reports state up via callbacks so
+ * the actual Record/Stop button can live outside LiveKitRoom's DOM tree
+ * (objective 4). Room metadata (not a data-channel message) is the sync
+ * mechanism: the server sets it once via RoomServiceClient.updateRoomMetadata
+ * whenever recording starts/stops (lib/livekit.ts), and LiveKit already
+ * pushes RoomEvent.RoomMetadataChanged to every connected client for free —
+ * that's what keeps "any attendee can start/stop" in sync across everyone
+ * in the room without extra plumbing. The initial mount read is silent (no
+ * toast) — only actual transitions after that toast, so joining a call
+ * that's already recording doesn't announce a false "started".
+ */
+function RecordingStateListener({
+  onChange,
+  onToast,
+}: {
+  onChange: (recording: boolean) => void;
+  onToast: (message: string) => void;
+}) {
+  const room = useRoomContext();
+  const previousRef = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    function apply(metadata: string | undefined) {
+      let recording = false;
+      if (metadata) {
+        try {
+          recording = (JSON.parse(metadata) as Partial<RoomRecordingMetadata>).recording === true;
+        } catch {
+          recording = false;
+        }
+      }
+      onChange(recording);
+      if (previousRef.current !== null && previousRef.current !== recording) {
+        onToast(recording ? "Recording started" : "Recording stopped");
+      }
+      previousRef.current = recording;
+    }
+
+    apply(room.metadata);
+    function onMetadataChanged(metadata: string) {
+      apply(metadata);
+    }
+    room.on(RoomEvent.RoomMetadataChanged, onMetadataChanged);
+    return () => {
+      room.off(RoomEvent.RoomMetadataChanged, onMetadataChanged);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room]);
+
+  return null;
+}
+
+/**
+ * Floating Record/Stop control, any attendee can use it (objective 4) —
+ * same absolutely-positioned-sibling pattern as the other overlays here.
+ * `recording` reflects the live room-metadata-synced state from
+ * RecordingStateListener, not local optimistic state, so the button always
+ * shows the true shared state even if someone else started/stopped it.
+ */
+function RecordingControl({
+  recording,
+  startEndpoint,
+  stopEndpoint,
+  onError,
+}: {
+  recording: boolean;
+  startEndpoint: string;
+  stopEndpoint: string;
+  onError: (message: string) => void;
+}) {
+  const [pending, setPending] = useState(false);
+
+  async function toggle() {
+    setPending(true);
+    try {
+      const csrfToken = await getCsrfToken();
+      const res = await fetch(recording ? stopEndpoint : startEndpoint, {
+        method: "POST",
+        headers: { "x-csrf-token": csrfToken },
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        onError(typeof payload?.error === "string" ? payload.error : "Couldn't update recording. Try again.");
+      }
+      // On success, the button's own state updates via the room-metadata
+      // broadcast (RecordingStateListener), not this response directly —
+      // keeps this client in sync the exact same way every other client is.
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="pointer-events-none absolute bottom-4 right-4 z-50">
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={pending}
+        className="pointer-events-auto flex items-center gap-2 rounded-full border bg-background/95 px-4 py-2 text-sm font-medium shadow-lg backdrop-blur disabled:opacity-60"
+      >
+        <span className={`h-2.5 w-2.5 rounded-full ${recording ? "animate-pulse bg-destructive" : "bg-muted-foreground"}`} />
+        {recording ? "Stop recording" : "Record"}
+      </button>
+    </div>
+  );
+}
+
 /** The visible toast stack — a sibling of <LiveKitRoom>, not nested inside it (see ParticipantActivityListener). */
 function ParticipantActivityToasts({ toasts }: { toasts: Toast[] }) {
   if (toasts.length === 0) return null;
@@ -121,11 +232,16 @@ function ParticipantActivityToasts({ toasts }: { toasts: Toast[] }) {
  */
 export function LiveKitMeetingScreen({
   tokenEndpoint,
+  recordingStartEndpoint,
+  recordingStopEndpoint,
   title,
   organizerName,
   backHref,
 }: {
   tokenEndpoint: string;
+  /** POST endpoints for the Record/Stop control — any attendee can use them (objective 4), same auth as tokenEndpoint. */
+  recordingStartEndpoint: string;
+  recordingStopEndpoint: string;
   title: string;
   organizerName: string;
   /** Where to navigate once the participant leaves the call (VideoConference's built-in Leave button, or a connection drop) — same destination the page's own BackLink uses. */
@@ -135,6 +251,7 @@ export function LiveKitMeetingScreen({
   const [credentials, setCredentials] = useState<{ token: string; serverUrl: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [recording, setRecording] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -196,6 +313,12 @@ export function LiveKitMeetingScreen({
       </div>
       <DisclaimerReminderFlash />
       <ParticipantActivityToasts toasts={toasts} />
+      <RecordingControl
+        recording={recording}
+        startEndpoint={recordingStartEndpoint}
+        stopEndpoint={recordingStopEndpoint}
+        onError={pushToast}
+      />
       <LiveKitRoom
         token={credentials.token}
         serverUrl={credentials.serverUrl}
@@ -209,6 +332,7 @@ export function LiveKitMeetingScreen({
         onDisconnected={() => router.replace(backHref)}
       >
         <ParticipantActivityListener onEvent={pushToast} />
+        <RecordingStateListener onChange={setRecording} onToast={pushToast} />
         <VideoConference />
       </LiveKitRoom>
     </div>

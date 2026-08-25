@@ -1,5 +1,8 @@
+import { EgressStatus } from "livekit-server-sdk";
 import { NextResponse, type NextRequest } from "next/server";
 import { resetMeetingOnRoomEmpty, verifyLiveKitWebhook } from "@/lib/livekit";
+import { attachLiveKitEventRecordingSegment } from "@/lib/events-server";
+import { attachLiveKitMeetingRequestRecordingSegment } from "@/lib/meeting-requests-server";
 
 /**
  * Receives LiveKit's webhook events (LiveKit Meeting Infrastructure
@@ -9,10 +12,14 @@ import { resetMeetingOnRoomEmpty, verifyLiveKitWebhook } from "@/lib/livekit";
  * check + session auth in middleware.ts for the same reason (isWebhookRoute
  * matches any /api/webhooks/* path).
  *
- * Only `room_finished` is handled today — see resetMeetingOnRoomEmpty's
- * doc comment. A future objective (4) can extend this same route to also
- * handle `egress_ended` (recording) once the storage-destination decision
- * is made, rather than adding a second webhook route.
+ * Handles `room_finished` (see resetMeetingOnRoomEmpty's doc comment) and,
+ * as of objective 4, `egress_ended` — a finished recording segment gets
+ * attached to whichever Event/MeetingRequest owns the room. A
+ * malformed/incomplete egress_ended payload (missing roomName, no
+ * successful file result, an owning row that's since vanished) is logged
+ * and skipped rather than thrown — this route must never 500 on a webhook
+ * payload it doesn't like, same as the signature-verification failure path
+ * below.
  */
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
@@ -36,5 +43,49 @@ export async function POST(request: NextRequest) {
     console.log(`[livekit] room_finished received, reset meeting for room ${event.room.name}`);
   }
 
+  if (event.event === "egress_ended") {
+    await handleEgressEnded(event.egressInfo);
+  }
+
   return NextResponse.json({ received: true });
+}
+
+async function handleEgressEnded(egressInfo: NonNullable<Awaited<ReturnType<typeof verifyLiveKitWebhook>>>["egressInfo"]) {
+  try {
+    if (!egressInfo?.roomName || !egressInfo.egressId) {
+      console.warn("[livekit] egress_ended payload missing roomName/egressId — skipping");
+      return;
+    }
+    if (egressInfo.status === EgressStatus.EGRESS_FAILED || egressInfo.status === EgressStatus.EGRESS_ABORTED) {
+      console.warn(`[livekit] egress ${egressInfo.egressId} ended with status ${egressInfo.status}: ${egressInfo.error || "no error detail"}`);
+      return;
+    }
+
+    const file = egressInfo.fileResults?.[0];
+    if (!file?.filename) {
+      console.warn(`[livekit] egress ${egressInfo.egressId} ended with no file result — skipping`);
+      return;
+    }
+
+    const segment = {
+      egressId: egressInfo.egressId,
+      objectKey: file.filename,
+      // startedAt is unix nanoseconds as a bigint on the wire.
+      startedAt: file.startedAt ? new Date(Number(file.startedAt / BigInt(1_000_000))) : new Date(),
+    };
+
+    const attachedToEvent = await attachLiveKitEventRecordingSegment(egressInfo.roomName, segment);
+    if (!attachedToEvent) {
+      const attachedToMeetingRequest = await attachLiveKitMeetingRequestRecordingSegment(egressInfo.roomName, segment);
+      if (!attachedToMeetingRequest) {
+        console.warn(`[livekit] egress_ended for room ${egressInfo.roomName} matched no Event or MeetingRequest`);
+      }
+    }
+  } catch (error) {
+    // Never let a malformed/unexpected payload crash the webhook route —
+    // the underlying recording file already exists in MinIO regardless of
+    // whether this DB write succeeds; a lost webhook delivery just means a
+    // recording that isn't linked in the app, not a lost file.
+    console.error("[livekit] Failed to handle egress_ended", error);
+  }
 }

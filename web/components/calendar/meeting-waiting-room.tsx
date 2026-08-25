@@ -70,6 +70,8 @@ export function MeetingWaitingRoom({
   resetEndpoint,
   messageEndpoint,
   tokenEndpoint,
+  recordingStartEndpoint,
+  recordingStopEndpoint,
   backHref,
 }: {
   initialStatus: MeetingWaitingRoomStatus;
@@ -78,6 +80,8 @@ export function MeetingWaitingRoom({
   resetEndpoint: string;
   messageEndpoint: string;
   tokenEndpoint: string;
+  recordingStartEndpoint: string;
+  recordingStopEndpoint: string;
   backHref: string;
 }) {
   const [status, setStatus] = useState(initialStatus);
@@ -265,6 +269,8 @@ export function MeetingWaitingRoom({
     return (
       <LiveKitMeetingScreen
         tokenEndpoint={tokenEndpoint}
+        recordingStartEndpoint={recordingStartEndpoint}
+        recordingStopEndpoint={recordingStopEndpoint}
         title={status.title}
         organizerName={status.organizerName}
         backHref={backHref}

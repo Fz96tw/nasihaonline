@@ -102,6 +102,14 @@ export default async function MeetPage({ params }: { params: Promise<{ kind: str
     kind === "event" ? `/api/events/${id}/meeting/message` : `/api/inbox/meeting-requests/${id}/meeting/message`;
   const tokenEndpoint =
     kind === "event" ? `/api/events/${id}/meeting/token` : `/api/inbox/meeting-requests/${id}/meeting/token`;
+  const recordingStartEndpoint =
+    kind === "event"
+      ? `/api/events/${id}/meeting/recording/start`
+      : `/api/inbox/meeting-requests/${id}/meeting/recording/start`;
+  const recordingStopEndpoint =
+    kind === "event"
+      ? `/api/events/${id}/meeting/recording/stop`
+      : `/api/inbox/meeting-requests/${id}/meeting/recording/stop`;
 
   return (
     <MeetingWaitingRoom
@@ -111,6 +119,8 @@ export default async function MeetPage({ params }: { params: Promise<{ kind: str
       resetEndpoint={resetEndpoint}
       messageEndpoint={messageEndpoint}
       tokenEndpoint={tokenEndpoint}
+      recordingStartEndpoint={recordingStartEndpoint}
+      recordingStopEndpoint={recordingStopEndpoint}
       backHref={backHref}
     />
   );

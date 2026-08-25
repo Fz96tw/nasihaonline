@@ -983,6 +983,60 @@ export async function getMeetingRequestMeetingStatus(
   };
 }
 
+/**
+ * MeetingRequest counterpart to attachLiveKitEventRecordingSegment
+ * (lib/events-server.ts) — see its doc comment for the shared rationale.
+ * No occurrence resolution needed here: a MeetingRequest is always a
+ * one-off meeting, same reasoning MeetingRequest.recordingUrl's own
+ * schema comment already gives.
+ */
+export async function attachLiveKitMeetingRequestRecordingSegment(
+  roomName: string,
+  segment: { egressId: string; objectKey: string; startedAt: Date },
+): Promise<boolean> {
+  const meetingRequest = await db.meetingRequest.findFirst({
+    where: { livekitRoomName: roomName },
+    select: { id: true },
+  });
+  if (!meetingRequest) return false;
+
+  await db.meetingRequestRecording.upsert({
+    where: { egressId: segment.egressId },
+    create: { meetingRequestId: meetingRequest.id, ...segment },
+    update: {},
+  });
+  return true;
+}
+
+/**
+ * MeetingRequest counterpart to getEventRecordingObjectKey
+ * (lib/events-server.ts) — see its doc comment for the shared rationale.
+ * Access is simpler here: a MeetingRequest is always a private 2-party
+ * 1:1, so "sender or recipient" is the whole gate (mirrors
+ * getMeetingRequestMeetingStatus's own check).
+ */
+export async function getMeetingRequestRecordingObjectKey(
+  meetingRequestId: string,
+  recordingId: string,
+  userId: string,
+): Promise<string> {
+  const meetingRequest = await db.meetingRequest.findUnique({
+    where: { id: meetingRequestId },
+    select: { senderId: true, recipientId: true },
+  });
+  if (!meetingRequest) throw new MeetingRequestError(404, "Meeting request not found.");
+  if (meetingRequest.senderId !== userId && meetingRequest.recipientId !== userId) {
+    throw new MeetingRequestError(403, "You're not part of this meeting.");
+  }
+
+  const recording = await db.meetingRequestRecording.findFirst({
+    where: { id: recordingId, meetingRequestId },
+    select: { objectKey: true },
+  });
+  if (!recording) throw new MeetingRequestError(404, "Recording not found.");
+  return recording.objectKey;
+}
+
 /** Sender-only: sets/edits the optional waiting-room message + image shown to the recipient before Start. */
 export async function updateMeetingRequestMeetingMessage(
   meetingRequestId: string,

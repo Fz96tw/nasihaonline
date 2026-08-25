@@ -1,7 +1,15 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
-import { EventType, EventVisibility, NotificationType, RecurrenceFrequency, Role, RSVPStatus } from "@/lib/generated/prisma/enums";
+import {
+  EventType,
+  EventVisibility,
+  NotificationType,
+  RecordingOrigin,
+  RecurrenceFrequency,
+  Role,
+  RSVPStatus,
+} from "@/lib/generated/prisma/enums";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import type {
@@ -372,6 +380,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
         // (getMemberEventById below) — a recording is a post-meeting artifact
         // a member would look for on the event itself, not while browsing.
         recordingUrl: null,
+        liveKitRecordingSegments: [],
         attendeeCount: event._count.rsvps + event._count.registrations,
         forumThreadId: event.forumThread?.id ?? null,
         forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
@@ -420,7 +429,9 @@ export async function getMemberEventById(
       host: { select: { name: true } },
       rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
       recurrence: { select: RECURRENCE_SELECT },
-      recordings: { select: { occurrenceDate: true, recordingUrl: true } },
+      recordings: {
+        select: { occurrenceDate: true, recordingUrl: true, origin: true, id: true, startedAt: true },
+      },
       _count: {
         select: {
           rsvps: { where: { status: RSVPStatus.going } },
@@ -451,9 +462,13 @@ export async function getMemberEventById(
     occurrenceEnd = durationMs !== null ? new Date(resolved.getTime() + durationMs) : null;
   }
 
-  const recordingForOccurrence = event.recordings.find(
+  const occurrenceRecordings = event.recordings.filter(
     (recording) => recording.occurrenceDate.getTime() === occurrenceStart.getTime(),
   );
+  const recordingForOccurrence = occurrenceRecordings.find((recording) => recording.origin === RecordingOrigin.meet);
+  const liveKitSegments = occurrenceRecordings
+    .filter((recording) => recording.origin === RecordingOrigin.livekit && recording.startedAt)
+    .sort((a, b) => a.startedAt!.getTime() - b.startedAt!.getTime());
 
   const rsvped = event.rsvps.length > 0;
   return {
@@ -473,6 +488,10 @@ export async function getMemberEventById(
     meetingUrl: rsvped || event.hostId === userId ? event.meetingUrl : null,
     livekitRoomName: rsvped || event.hostId === userId ? event.livekitRoomName : null,
     recordingUrl: (rsvped || event.hostId === userId) ? (recordingForOccurrence?.recordingUrl ?? null) : null,
+    liveKitRecordingSegments:
+      rsvped || event.hostId === userId
+        ? liveKitSegments.map((s) => ({ id: s.id, startedAt: s.startedAt!.toISOString() }))
+        : [],
     attendeeCount: event._count.rsvps + event._count.registrations,
     forumThreadId: event.forumThread?.id ?? null,
     forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
@@ -1725,11 +1744,16 @@ export async function deleteEventRecording(
     throw new EventError(403, "Only the event's host or an admin can delete its recording.");
   }
 
-  const recording = await db.eventRecording.findUnique({
-    where: { eventId_occurrenceDate: { eventId, occurrenceDate } },
+  // findFirst, not findUnique on a compound key — [eventId, occurrenceDate]
+  // is no longer unique now that a livekit-origin meeting can have multiple
+  // segment rows for the same occurrence (see EventRecording's doc comment
+  // in prisma/schema.prisma). This route only ever deletes the single
+  // Drive-backed `meet` row, so origin is part of the lookup.
+  const recording = await db.eventRecording.findFirst({
+    where: { eventId, occurrenceDate, origin: RecordingOrigin.meet },
     select: { id: true, driveFileId: true },
   });
-  if (!recording) throw new EventError(404, "Recording not found.");
+  if (!recording?.driveFileId) throw new EventError(404, "Recording not found.");
 
   const deleted = await deleteMeetingRecording(recording.driveFileId);
   if (!deleted) {
@@ -2135,6 +2159,93 @@ export async function getEventMeetingStatus(
     configured: event.meetingUrl !== null || event.livekitRoomName !== null,
     requiresCodeOfConductAgreement: event.open,
   };
+}
+
+/**
+ * Attaches one finished LiveKit recording segment (objective 4) to whichever
+ * Event owns `roomName`, called from the egress_ended webhook handler.
+ * Upserted on `egressId` (unique) so a redelivered webhook is a no-op
+ * rather than a duplicate row. Returns false if no Event owns this room
+ * (the caller then tries the MeetingRequest side — see
+ * attachLiveKitMeetingRequestRecordingSegment in meeting-requests-server.ts
+ * — `livekitRoomName` is effectively unique across both tables, same
+ * assumption resetMeetingOnRoomEmpty already relies on).
+ *
+ * occurrenceDate resolution for a recurring event mirrors
+ * getMemberEventById's own "which occurrence" logic, just anchored to when
+ * the recording actually started rather than to "now" — the closest
+ * scheduled occurrence at or before segment.startedAt.
+ */
+export async function attachLiveKitEventRecordingSegment(
+  roomName: string,
+  segment: { egressId: string; objectKey: string; startedAt: Date },
+): Promise<boolean> {
+  const event = await db.event.findFirst({
+    where: { livekitRoomName: roomName },
+    select: { id: true, startsAt: true, recurrence: { select: RECURRENCE_SELECT } },
+  });
+  if (!event) return false;
+
+  let occurrenceDate = event.startsAt;
+  if (event.recurrence) {
+    const rule = buildRRule(toRecurrenceInput(event.recurrence), event.startsAt);
+    occurrenceDate = rule.before(segment.startedAt, true) ?? event.startsAt;
+  }
+
+  await db.eventRecording.upsert({
+    where: { egressId: segment.egressId },
+    create: {
+      eventId: event.id,
+      occurrenceDate,
+      origin: RecordingOrigin.livekit,
+      objectKey: segment.objectKey,
+      egressId: segment.egressId,
+      startedAt: segment.startedAt,
+    },
+    update: {},
+  });
+  return true;
+}
+
+/**
+ * Access check for one LiveKit recording segment's streaming route
+ * (app/api/events/[id]/recording/[recordingId]/route.ts) — same
+ * rsvped-or-host visibility gate getMemberEventById already applies to
+ * recordingUrl/liveKitRecordingSegments, re-derived here rather than
+ * reused directly since the route only needs this one recording's object
+ * key, not the whole event detail payload. Requires a signed-in userId,
+ * same as getMemberEventById/deleteEventRecording — an open event's
+ * anonymous attendee can join the live meeting, but recordings (Meet or
+ * LiveKit) have never been exposed to a signed-out viewer anywhere in this
+ * codebase, so this doesn't introduce a new anonymous-access case. Admins
+ * are NOT special-cased here — that bypass is explicitly split into the
+ * follow-on admin/Dashboard objective (c602a120), not this one.
+ */
+export async function getEventRecordingObjectKey(eventId: string, recordingId: string, userId: string): Promise<string> {
+  const event = await db.event.findFirst({
+    where: {
+      id: eventId,
+      OR: [{ visibility: EventVisibility.community }, { hostId: userId }, { invitees: { some: { userId } } }],
+    },
+    select: {
+      hostId: true,
+      rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
+    },
+  });
+  if (!event) throw new EventError(404, "Event not found.");
+
+  const isHost = event.hostId === userId;
+  const rsvped = event.rsvps.length > 0;
+  if (!isHost && !rsvped) {
+    throw new EventError(403, "RSVP to this event to view its recording.");
+  }
+
+  const recording = await db.eventRecording.findFirst({
+    where: { id: recordingId, eventId, origin: RecordingOrigin.livekit },
+    select: { objectKey: true },
+  });
+  if (!recording?.objectKey) throw new EventError(404, "Recording not found.");
+  return recording.objectKey;
 }
 
 /** Host-only: sets/edits the optional waiting-room message + image shown to attendees before Start. */

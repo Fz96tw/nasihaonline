@@ -7,7 +7,7 @@
 // scripts/backfill-meet-links.ts.
 import { google, type meet_v2 } from "googleapis";
 import { db } from "@/lib/db";
-import { MeetingRequestStatus } from "@/lib/generated/prisma/enums";
+import { MeetingRequestStatus, RecordingOrigin } from "@/lib/generated/prisma/enums";
 import { expandOccurrences, type RecurrenceInput } from "@/lib/recurrence";
 
 /**
@@ -129,8 +129,13 @@ async function syncEventRecordings(meet: meet_v2.Meet, windowStart: Date, window
         : [];
 
     for (const occurrenceStart of occurrenceStarts) {
-      const existing = await db.eventRecording.findUnique({
-        where: { eventId_occurrenceDate: { eventId: event.id, occurrenceDate: occurrenceStart } },
+      // findFirst, not findUnique on a compound key — the DB no longer
+      // enforces one row per [eventId, occurrenceDate] (a livekit-origin
+      // meeting can have multiple segment rows there), so this is now the
+      // only thing guaranteeing a Meet-origin row isn't inserted twice for
+      // the same occurrence.
+      const existing = await db.eventRecording.findFirst({
+        where: { eventId: event.id, occurrenceDate: occurrenceStart, origin: RecordingOrigin.meet },
         select: { id: true },
       });
       if (existing) continue;

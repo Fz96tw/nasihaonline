@@ -760,6 +760,10 @@ model MeetingRequest {
   // EventRecording.driveFileId's comment for why this is needed separately
   // from the playback link.
   driveFileId                     String?
+  // LiveKit-only segments (objective 4) — see MeetingRequestRecording's
+  // doc comment for why these live in a separate child table instead of
+  // recordingUrl/driveFileId above.
+  recordings                      MeetingRequestRecording[]
   // In-app waiting-room feature — same shape/semantics as Event's fields
   // above. Organizer = sender for a MeetingRequest (matches every other
   // sender-privileged action in this model).
@@ -1066,28 +1070,80 @@ model Event {
   @@map("events")
 }
 
-// A finished recording for one occurrence of an Event's Meet-hosted
-// meeting, discovered after the fact by lib/meeting-recordings-sync.ts
-// polling the Meet API's conferenceRecords/recordings resources (Google
-// processes a recording asynchronously after the call ends — there's no
-// way to get the link at creation time). `occurrenceDate` mirrors
-// Attendance's own field for the same reason: a recurring event needs one
-// recording per session, not a single column that gets overwritten weekly.
+// A finished recording for one occurrence of an Event's meeting. Two
+// origins share this table (LiveKit Meeting Infrastructure, objective 4):
+// `meet` rows are discovered after the fact by lib/meeting-recordings-sync.ts
+// polling the Meet API (Google processes a recording asynchronously — no
+// way to get the link at creation time), one row per occurrence, upsert-
+// guarded in application logic (not a DB constraint — see below) via a
+// `findFirst` on [eventId, occurrenceDate]. `livekit` rows are pushed by
+// the egress_ended webhook (lib/livekit.ts) and are NOT one-per-occurrence:
+// LiveKit's egress API has no pause/resume, so an attendee repeatedly
+// starting/stopping the in-meeting Record control produces one row per
+// segment, ordered by `startedAt` and presented together as "Part 1",
+// "Part 2", etc. wherever a meeting's recording(s) are surfaced.
+//
+// The unique index that used to guarantee exactly one row per
+// [eventId, occurrenceDate] was dropped for this reason — it would reject
+// every segment after the first for a livekit-origin meeting. Meet's own
+// one-row-per-occurrence guarantee still holds; it's just enforced by
+// meeting-recordings-sync.ts's own existence check instead of the DB.
 model EventRecording {
-  id             String   @id @default(cuid())
+  id             String          @id @default(cuid())
   eventId        String
-  event          Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event          Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
   occurrenceDate DateTime
-  recordingUrl   String
-  // The recording's Drive fileId (Recording.driveDestination.file, distinct
-  // from recordingUrl's playback link) — needed to actually delete the file
-  // via the Drive API when the host removes a recording, not just unlink it.
-  driveFileId    String
-  createdAt      DateTime @default(now())
+  origin         RecordingOrigin @default(meet)
+  // --- meet origin only ---
+  // Drive playback link. The recording's Drive fileId
+  // (Recording.driveDestination.file, distinct from recordingUrl's
+  // playback link) is needed to actually delete the file via the Drive API
+  // when the host removes a recording, not just unlink it.
+  recordingUrl   String?
+  driveFileId    String?
+  // --- livekit origin only ---
+  // MinIO object key for this segment (not a URL — see the streaming
+  // route's doc comment in app/api/events/[id]/recording/[recordingId]/route.ts
+  // for why a stored URL/presigned-URL would be wrong here).
+  objectKey      String?
+  // LiveKit's egress id for this segment — unique (Postgres allows
+  // unlimited NULLs on a unique nullable column, so meet-origin rows with
+  // no egressId don't collide with each other), lets the egress_ended
+  // webhook be replay-safe (upsert on egressId instead of blindly
+  // inserting a duplicate row on a redelivered webhook).
+  egressId       String?         @unique
+  // When this segment's egress actually started — the ordering key for
+  // "Part 1"/"Part 2" grouping, since createdAt only reflects when the
+  // webhook happened to arrive.
+  startedAt      DateTime?
+  createdAt      DateTime        @default(now())
 
-  @@unique([eventId, occurrenceDate])
-  @@index([eventId])
+  @@index([eventId, occurrenceDate])
   @@map("event_recordings")
+}
+
+// LiveKit-only counterpart to EventRecording's `livekit` rows, for a
+// MeetingRequest's one-off meeting. Doesn't reuse MeetingRequest's existing
+// recordingUrl/driveFileId columns — those are single nullable columns
+// (a MeetingRequest is always one-off, so Meet's single recording fits in
+// one column) and can't hold more than one LiveKit segment; those columns
+// stay untouched and keep serving Meet-path recordings exactly as before.
+model MeetingRequestRecording {
+  id               String        @id @default(cuid())
+  meetingRequestId String
+  meetingRequest   MeetingRequest @relation(fields: [meetingRequestId], references: [id], onDelete: Cascade)
+  objectKey        String
+  egressId         String        @unique
+  startedAt        DateTime
+  createdAt        DateTime      @default(now())
+
+  @@index([meetingRequestId])
+  @@map("meeting_request_recordings")
+}
+
+enum RecordingOrigin {
+  meet
+  livekit
 }
 
 // One row per unique member visit to an Event's detail page, for the

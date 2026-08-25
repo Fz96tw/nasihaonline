@@ -8,7 +8,7 @@ const LIVEKIT_URL = process.env.LIVEKIT_URL;
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
 
-function getRoomServiceClient(): RoomServiceClient | null {
+export function getRoomServiceClient(): RoomServiceClient | null {
   if (!LIVEKIT_URL || !LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) return null;
   // RoomServiceClient talks to LiveKit's HTTP twirp API, not the wss://
   // signaling endpoint the browser client connects to — same host, different scheme.
@@ -142,4 +142,42 @@ export async function resetMeetingOnRoomEmpty(roomName: string): Promise<void> {
     db.event.updateMany({ where: { livekitRoomName: roomName }, data: { meetingStartedAt: null } }),
     db.meetingRequest.updateMany({ where: { livekitRoomName: roomName }, data: { meetingStartedAt: null } }),
   ]);
+}
+
+/**
+ * Recording-state shape stored as the LiveKit room's own metadata string
+ * (objective 4) — every connected client already receives
+ * RoomEvent.RoomMetadataChanged for free whenever this changes, which is
+ * what keeps the in-meeting Record/Stop control in sync across all
+ * participants without a separate data-channel broadcast. `egressId` is
+ * included (not just the boolean) so the stop route can look up which
+ * egress is actually active server-side, rather than trusting a
+ * client-supplied id — any attendee can stop it, not just whoever started it.
+ */
+export type RoomRecordingMetadata = { recording: boolean; egressId: string | null };
+
+/** Best-effort: a failed metadata update must never block start/stop egress itself, same non-fatal philosophy as the rest of this module. */
+export async function setRoomRecordingMetadata(roomName: string, state: RoomRecordingMetadata): Promise<void> {
+  const roomService = getRoomServiceClient();
+  if (!roomService) return;
+  try {
+    await roomService.updateRoomMetadata(roomName, JSON.stringify(state));
+  } catch (error) {
+    console.error("[livekit] Failed to update room recording metadata", error);
+  }
+}
+
+/** Reads back the room's current recording state — used by the stop route to find which egress is active without trusting client input. */
+export async function getRoomRecordingMetadata(roomName: string): Promise<RoomRecordingMetadata | null> {
+  const roomService = getRoomServiceClient();
+  if (!roomService) return null;
+  try {
+    const [room] = await roomService.listRooms([roomName]);
+    if (!room?.metadata) return null;
+    const parsed = JSON.parse(room.metadata) as Partial<RoomRecordingMetadata>;
+    return { recording: parsed.recording === true, egressId: parsed.egressId ?? null };
+  } catch (error) {
+    console.error("[livekit] Failed to read room recording metadata", error);
+    return null;
+  }
 }

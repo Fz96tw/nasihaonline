@@ -65,6 +65,17 @@ export type MemberEvent = EventWithRsvp & {
   livekitRoomName: string | null;
   /** Drive playback link once Google's finished processing the occurrence's recording — same rsvped/host gating as meetingUrl, null until then (or forever, for a manually-pasted meetingUrl). getMemberEventById is the only MemberEvent query that ever sets this. */
   recordingUrl: string | null;
+  /**
+   * LiveKit recording segments for this occurrence (objective 4) — separate
+   * from recordingUrl above since a LiveKit meeting can have several (any
+   * attendee can start/stop the in-meeting Record control repeatedly; each
+   * cycle is its own segment, LiveKit's egress API has no pause/resume).
+   * Ordered by startedAt; the UI renders them together as "Part 1", "Part
+   * 2", etc. Each links through /api/events/:id/recording/:recordingId,
+   * which mints a fresh short-lived presigned MinIO URL per click rather
+   * than a stored URL.
+   */
+  liveKitRecordingSegments: { id: string; startedAt: string }[];
   /** True once the organizer has cancelled this event (getMemberEventById is the only MemberEvent query that ever sets this — listing queries filter cancelled events out entirely). */
   cancelled: boolean;
   /** Going RSVPs (members) plus EventRegistrations (non-members) — same merge as getEventEngagementForAdmin. */

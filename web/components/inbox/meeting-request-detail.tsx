@@ -737,6 +737,18 @@ export function MeetingRequestDetail({
                 onDeleted={onUpdated}
               />
             )}
+            {isPast &&
+              item.liveKitRecordingSegments.map((segment, index) => (
+                <Link
+                  key={segment.id}
+                  href={`/api/inbox/meeting-requests/${item.id}/recording/${segment.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  {item.liveKitRecordingSegments.length > 1 ? `Part ${index + 1}` : "Watch recording"}
+                </Link>
+              ))}
             {(item.meetingUrl || item.livekitRoomName) && item.direction === "sent" && !messageEditingOpen && (
               <Button
                 size="sm"

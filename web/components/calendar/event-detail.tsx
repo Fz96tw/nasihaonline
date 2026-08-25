@@ -174,6 +174,23 @@ export function EventDetail({
         </div>
       ) : null}
 
+      {isPast && event.liveKitRecordingSegments.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-medium text-muted-foreground">Recording:</span>
+          {event.liveKitRecordingSegments.map((segment, index) => (
+            <Link
+              key={segment.id}
+              href={`/api/events/${event.seriesId}/recording/${segment.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
+            >
+              {event.liveKitRecordingSegments.length > 1 ? `Part ${index + 1}` : "Watch recording"}
+            </Link>
+          ))}
+        </div>
+      ) : null}
+
       {event.description ? (
         <p className="whitespace-pre-line text-sm leading-relaxed">{event.description}</p>
       ) : null}

@@ -32,6 +32,7 @@ const MEETING_REQUEST_INCLUDE = {
     orderBy: { createdAt: "asc" as const },
     include: { sender: { select: { name: true } } },
   },
+  recordings: { orderBy: { startedAt: "asc" as const }, select: { id: true, startedAt: true } },
 } as const;
 
 /**
@@ -125,6 +126,7 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
       meetingUrl: meetingRequest.meetingUrl,
       livekitRoomName: meetingRequest.livekitRoomName,
       recordingUrl: meetingRequest.recordingUrl,
+      liveKitRecordingSegments: meetingRequest.recordings.map((r) => ({ id: r.id, startedAt: r.startedAt.toISOString() })),
       meetingOrganizerMessage: meetingRequest.meetingOrganizerMessage,
       meetingOrganizerMessageImageUrl: getMeetingMessageImageUrl(meetingRequest.meetingOrganizerMessageImageKey),
     });
