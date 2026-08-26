@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Pencil, Users, Video } from "lucide-react";
+import { Download, Pencil, Users, Video } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -197,7 +197,7 @@ export function EventDetail({
           ) : null}
 
           {showRecordingUrl ? (
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-1.5">
               <Link
                 href={event.recordingUrl!}
                 target="_blank"
@@ -206,6 +206,16 @@ export function EventDetail({
               >
                 Watch recording
               </Link>
+              <Button size="icon" variant="ghost" className="h-6 w-6" asChild>
+                <Link
+                  href={`/api/events/${event.seriesId}/recording/download?occurrence=${encodeURIComponent(event.startsAt)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Download recording"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
               {canEdit && (
                 <DeleteRecordingButton
                   deleteUrl={`/api/events/${event.seriesId}/recording?occurrence=${encodeURIComponent(event.startsAt)}`}
@@ -220,7 +230,7 @@ export function EventDetail({
               <span className="text-sm font-medium text-muted-foreground">Recording</span>
               {visibleLiveKitSegments.map(({ segment, label }) =>
                 segment.ready ? (
-                  <div key={segment.id} className="flex flex-wrap items-baseline gap-1.5">
+                  <div key={segment.id} className="flex flex-wrap items-center gap-1.5">
                     <Link
                       href={`/api/events/${event.seriesId}/recording/${segment.id}`}
                       target="_blank"
@@ -229,6 +239,16 @@ export function EventDetail({
                     >
                       {label}
                     </Link>
+                    <Button size="icon" variant="ghost" className="h-6 w-6" asChild>
+                      <Link
+                        href={`/api/events/${event.seriesId}/recording/${segment.id}?download=1`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Download ${label.toLowerCase()}`}
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </Link>
+                    </Button>
                     <span className="text-xs text-muted-foreground">
                       (
                       {segment.durationSeconds !== null ? `${formatDurationMinutes(segment.durationSeconds)} · ` : ""}

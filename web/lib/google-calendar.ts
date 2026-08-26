@@ -392,3 +392,32 @@ export async function deleteMeetingRecording(driveFileId: string): Promise<boole
     return false;
   }
 }
+
+/**
+ * Mints a direct-download link for a Meet recording's Drive file — the
+ * "Download recording" button next to "Watch recording" (the `exportUri`
+ * link, which opens Drive's own viewer rather than downloading). Drive has
+ * no presigned-URL equivalent (unlike getRecordingPresignedUrl's MinIO
+ * flow), so this asks the Drive API for `webContentLink`, the same
+ * force-download URL Drive's own UI uses; the caller 302-redirects an
+ * already-authorized viewer straight to it, so their own signed-in Google
+ * session (which already needs read access to open "Watch recording")
+ * handles the actual transfer, not this server. Returns null on any
+ * failure — the caller treats that the same as an unconfigured client.
+ */
+export async function getMeetingRecordingDownloadUrl(driveFileId: string): Promise<string | null> {
+  const auth = getOAuthClient();
+  if (!auth) {
+    console.warn("[google-calendar] Google Calendar isn't configured — skipping recording download link");
+    return null;
+  }
+
+  try {
+    const drive = google.drive({ version: "v3", auth });
+    const { data } = await drive.files.get({ fileId: driveFileId, fields: "webContentLink" });
+    return data.webContentLink ?? null;
+  } catch (error) {
+    console.error("[google-calendar] Failed to get meeting recording download link", error);
+    return null;
+  }
+}

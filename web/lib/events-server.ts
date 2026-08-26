@@ -30,6 +30,7 @@ import {
   createLiveKitMeetingCalendarEvent,
   createMeetingCalendarEvent,
   deleteMeetingRecording,
+  getMeetingRecordingDownloadUrl,
   updateMeetingCalendarEventAttendees,
   updateMeetingCalendarEventRecurrence,
   updateMeetingCalendarEventTime,
@@ -2777,6 +2778,48 @@ export async function getEventRecordingObjectKey(eventId: string, recordingId: s
   });
   if (!recording?.objectKey) throw new EventError(404, "Recording not found.");
   return recording.objectKey;
+}
+
+/**
+ * Resolves the direct-download link (lib/google-calendar.ts's
+ * getMeetingRecordingDownloadUrl) for one occurrence's Meet-origin
+ * recording — same rsvped-or-host access gate getMemberEventById already
+ * applies to `recordingUrl`, re-derived here for the same reason
+ * getEventRecordingObjectKey re-derives it rather than reusing the whole
+ * event detail payload.
+ */
+export async function getEventMeetRecordingDownloadUrl(
+  eventId: string,
+  occurrenceDate: Date,
+  userId: string,
+): Promise<string> {
+  const event = await db.event.findFirst({
+    where: {
+      id: eventId,
+      OR: [{ visibility: EventVisibility.community }, { hostId: userId }, { invitees: { some: { userId } } }],
+    },
+    select: {
+      hostId: true,
+      rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
+    },
+  });
+  if (!event) throw new EventError(404, "Event not found.");
+
+  const isHost = event.hostId === userId;
+  const rsvped = event.rsvps.length > 0;
+  if (!isHost && !rsvped) {
+    throw new EventError(403, "RSVP to this event to view its recording.");
+  }
+
+  const recording = await db.eventRecording.findFirst({
+    where: { eventId, occurrenceDate, origin: RecordingOrigin.meet },
+    select: { driveFileId: true },
+  });
+  if (!recording?.driveFileId) throw new EventError(404, "Recording not found.");
+
+  const url = await getMeetingRecordingDownloadUrl(recording.driveFileId);
+  if (!url) throw new EventError(502, "Couldn't get a download link — please try again.");
+  return url;
 }
 
 /** Host-only: sets/edits the optional waiting-room message + image shown to attendees before Start. */

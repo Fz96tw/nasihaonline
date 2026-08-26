@@ -16,6 +16,7 @@ import {
   createLiveKitMeetingCalendarEvent,
   createMeetingCalendarEvent,
   deleteMeetingRecording,
+  getMeetingRecordingDownloadUrl,
   updateMeetingCalendarEventTime,
 } from "@/lib/google-calendar";
 import { formatEventTime } from "@/lib/format-date";
@@ -1101,6 +1102,30 @@ export async function getMeetingRequestRecordingObjectKey(
   });
   if (!recording?.objectKey) throw new MeetingRequestError(404, "Recording not found.");
   return recording.objectKey;
+}
+
+/**
+ * MeetingRequest counterpart to getEventMeetRecordingDownloadUrl
+ * (lib/events-server.ts) — same sender-or-recipient gate as
+ * getMeetingRequestRecordingObjectKey above.
+ */
+export async function getMeetingRequestMeetRecordingDownloadUrl(
+  meetingRequestId: string,
+  userId: string,
+): Promise<string> {
+  const meetingRequest = await db.meetingRequest.findUnique({
+    where: { id: meetingRequestId },
+    select: { senderId: true, recipientId: true, driveFileId: true },
+  });
+  if (!meetingRequest) throw new MeetingRequestError(404, "Meeting request not found.");
+  if (meetingRequest.senderId !== userId && meetingRequest.recipientId !== userId) {
+    throw new MeetingRequestError(403, "You're not part of this meeting.");
+  }
+  if (!meetingRequest.driveFileId) throw new MeetingRequestError(404, "Recording not found.");
+
+  const url = await getMeetingRecordingDownloadUrl(meetingRequest.driveFileId);
+  if (!url) throw new MeetingRequestError(502, "Couldn't get a download link — please try again.");
+  return url;
 }
 
 /** Sender-only: sets/edits the optional waiting-room message + image shown to the recipient before Start. */

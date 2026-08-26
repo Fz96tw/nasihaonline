@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowLeft, Plus, Video, X } from "lucide-react";
+import { ArrowLeft, Download, Plus, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DeleteRecordingButton } from "@/components/calendar/delete-recording-button";
 import { Textarea } from "@/components/ui/textarea";
@@ -749,14 +749,26 @@ export function MeetingRequestDetail({
               </Button>
             )}
             {isRecordingAvailable && item.recordingUrl && (
-              <Link
-                href={item.recordingUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
-              >
-                Watch recording
-              </Link>
+              <div className="flex items-center gap-1.5">
+                <Link
+                  href={item.recordingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  Watch recording
+                </Link>
+                <Button size="icon" variant="ghost" className="h-6 w-6" asChild>
+                  <Link
+                    href={`/api/inbox/meeting-requests/${item.id}/recording/download`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Download recording"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+              </div>
             )}
             {isRecordingAvailable && item.recordingUrl && item.direction === "sent" && (
               <DeleteRecordingButton
@@ -766,7 +778,7 @@ export function MeetingRequestDetail({
             )}
             {visibleLiveKitSegments.map(({ segment, label }) =>
               segment.ready ? (
-                <span key={segment.id} className="flex items-baseline gap-1.5">
+                <span key={segment.id} className="flex items-center gap-1.5">
                   <Link
                     href={`/api/inbox/meeting-requests/${item.id}/recording/${segment.id}`}
                     target="_blank"
@@ -775,6 +787,16 @@ export function MeetingRequestDetail({
                   >
                     {label}
                   </Link>
+                  <Button size="icon" variant="ghost" className="h-6 w-6" asChild>
+                    <Link
+                      href={`/api/inbox/meeting-requests/${item.id}/recording/${segment.id}?download=1`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Download ${label.toLowerCase()}`}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </Link>
+                  </Button>
                   {hasMounted && (
                     <span className="text-xs text-muted-foreground">
                       (

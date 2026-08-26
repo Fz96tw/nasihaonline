@@ -80,12 +80,21 @@ export function getRecordingsS3Config(): {
  * fresh per request, since a stored presigned URL would go stale sitting in
  * a DB row (MinIO/S3 presigned URLs are capped well under a meeting's
  * likely shelf life).
+ *
+ * Pass `downloadFilename` for the "Download recording" button variant — it
+ * asks MinIO to echo back a `response-content-disposition: attachment`
+ * header on the object response, which is what makes the browser save the
+ * file instead of opening the video inline (the plain "Watch recording"
+ * link omits this, since scrubbing/streaming wants the inline player).
  */
-export async function getRecordingPresignedUrl(objectKey: string): Promise<string | null> {
+export async function getRecordingPresignedUrl(objectKey: string, downloadFilename?: string): Promise<string | null> {
   const minio = getRecordingsClient();
   if (!minio) return null;
   try {
-    return await minio.presignedGetObject(BUCKET_RECORDINGS, objectKey, PRESIGN_EXPIRY_SECONDS);
+    const reqParams = downloadFilename
+      ? { "response-content-disposition": `attachment; filename="${downloadFilename}"` }
+      : undefined;
+    return await minio.presignedGetObject(BUCKET_RECORDINGS, objectKey, PRESIGN_EXPIRY_SECONDS, reqParams);
   } catch (error) {
     console.error("[recordings-storage] Failed to presign recording URL", error);
     return null;

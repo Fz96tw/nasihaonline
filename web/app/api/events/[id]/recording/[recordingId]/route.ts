@@ -17,8 +17,12 @@ import { getRecordingPresignedUrl } from "@/lib/recordings-storage";
  * just works. Never returns a stored/cached URL: MinIO/S3 presigned URLs
  * expire, so minting one fresh per click means the link in the UI never
  * goes stale even though the presigned URL underneath it does.
+ *
+ * `?download=1` mints the same redirect with a `response-content-disposition:
+ * attachment` header attached (see getRecordingPresignedUrl), so the
+ * "Download" button forces a save instead of opening the inline player.
  */
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string; recordingId: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string; recordingId: string }> }) {
   let user;
   try {
     user = await requireUser();
@@ -28,10 +32,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   }
 
   const { id, recordingId } = await params;
+  const isDownload = new URL(request.url).searchParams.get("download") === "1";
 
   try {
     const objectKey = await getEventRecordingObjectKey(id, recordingId, user.id);
-    const url = await getRecordingPresignedUrl(objectKey);
+    const url = await getRecordingPresignedUrl(objectKey, isDownload ? objectKey.split("/").pop() : undefined);
     if (!url) {
       return NextResponse.json({ error: "Recording storage isn't configured." }, { status: 502 });
     }
