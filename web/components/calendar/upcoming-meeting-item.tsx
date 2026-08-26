@@ -28,6 +28,10 @@ function formatMeetingDateTime(iso: string) {
  */
 export function UpcomingMeetingItem({ meeting }: { meeting: UpcomingMeeting }) {
   const hasMounted = useHasMounted();
+  // This component is also reused by the Past Events tab (whose meetings still
+  // carry meetingUrl/livekitRoomName so the recording-availability logic can
+  // read them) — gate the join button on time, same as EventListItem's isPast.
+  const isPast = hasMounted && new Date(meeting.scheduledAt) < new Date();
 
   return (
     <li className="flex flex-col gap-3 border-b py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
@@ -57,7 +61,7 @@ export function UpcomingMeetingItem({ meeting }: { meeting: UpcomingMeeting }) {
           </p>
         </div>
       </div>
-      {(meeting.meetingUrl || meeting.livekitRoomName) && (
+      {!isPast && (meeting.meetingUrl || meeting.livekitRoomName) && (
         <Button size="sm" variant="outline" className="flex-shrink-0" asChild>
           <Link href={`/meet/request/${meeting.id}`}>
             <Video className="mr-1.5 h-3.5 w-3.5" />
