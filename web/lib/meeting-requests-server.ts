@@ -20,9 +20,10 @@ import {
   updateMeetingCalendarEventTime,
 } from "@/lib/google-calendar";
 import { formatEventTime } from "@/lib/format-date";
-import { createLiveKitRoom } from "@/lib/livekit";
+import { createLiveKitRoom, getRoomMetadata } from "@/lib/livekit";
 import { INBOX_TIERS } from "@/lib/members";
 import { createNotification } from "@/lib/notifications-server";
+import { deleteRecordingObject } from "@/lib/recordings-storage";
 import {
   deleteMeetingMessageImage,
   getMeetingMessageImageUrl,
@@ -1229,4 +1230,46 @@ export async function deleteMeetingRequestRecording(meetingRequestId: string, ac
     where: { id: meetingRequestId },
     data: { recordingUrl: null, driveFileId: null },
   });
+}
+
+/**
+ * Deletes one LiveKit recording segment (sender only — same gate as
+ * deleteMeetingRequestRecording above, not the wider sender-or-recipient
+ * gate the read-only recording routes use). Per-segment counterpart to
+ * deleteMeetingRequestRecording, mirroring deleteEventRecordingSegment's
+ * behavior and still-recording decision — see its doc comment in
+ * lib/events-server.ts for the shared rationale (attachLiveKitMeetingRequestRecordingSegment
+ * upserts by egressId the same way attachLiveKitEventRecordingSegment does).
+ */
+export async function deleteMeetingRequestRecordingSegment(
+  meetingRequestId: string,
+  recordingId: string,
+  actingUserId: string,
+): Promise<void> {
+  const meetingRequest = await db.meetingRequest.findUnique({
+    where: { id: meetingRequestId },
+    select: { senderId: true, livekitRoomName: true },
+  });
+  if (!meetingRequest) throw new MeetingRequestError(404, "Meeting request not found.");
+  if (meetingRequest.senderId !== actingUserId) {
+    throw new MeetingRequestError(403, "Only the meeting organizer can delete its recording.");
+  }
+
+  const recording = await db.meetingRequestRecording.findFirst({
+    where: { id: recordingId, meetingRequestId },
+    select: { id: true, objectKey: true, egressId: true, failedAt: true },
+  });
+  if (!recording) throw new MeetingRequestError(404, "Recording not found.");
+
+  if (!recording.objectKey && !recording.failedAt && meetingRequest.livekitRoomName) {
+    const current = await getRoomMetadata(meetingRequest.livekitRoomName);
+    if (current?.recording && current.egressId === recording.egressId) {
+      throw new MeetingRequestError(409, "This recording is still in progress — stop it before deleting.");
+    }
+  }
+
+  if (recording.objectKey) {
+    await deleteRecordingObject(recording.objectKey);
+  }
+  await db.meetingRequestRecording.delete({ where: { id: recording.id } });
 }

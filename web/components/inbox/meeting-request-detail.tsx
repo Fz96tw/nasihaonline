@@ -791,7 +791,7 @@ export function MeetingRequestDetail({
             )}
             {visibleLiveKitSegments.map(({ segment, label }) =>
               segment.ready ? (
-                <span key={segment.id} className="flex items-center gap-1.5">
+                <div key={segment.id} className="flex flex-wrap items-center gap-1.5">
                   <Link
                     href={`/api/inbox/meeting-requests/${item.id}/recording/${segment.id}`}
                     target="_blank"
@@ -817,11 +817,25 @@ export function MeetingRequestDetail({
                       {formatTimestamp(segment.startedAt)})
                     </span>
                   )}
-                </span>
+                  {item.direction === "sent" && (
+                    <DeleteRecordingButton
+                      deleteUrl={`/api/inbox/meeting-requests/${item.id}/recording/${segment.id}`}
+                      onDeleted={onUpdated}
+                    />
+                  )}
+                </div>
               ) : (
-                <span key={segment.id} className="w-fit text-sm text-muted-foreground">
-                  {label} — {segment.failed ? "recording failed" : "processing…"}
-                </span>
+                <div key={segment.id} className="flex flex-wrap items-center gap-1.5">
+                  <span className="w-fit text-sm text-muted-foreground">
+                    {label} — {segment.failed ? "recording failed" : "processing…"}
+                  </span>
+                  {item.direction === "sent" && (
+                    <DeleteRecordingButton
+                      deleteUrl={`/api/inbox/meeting-requests/${item.id}/recording/${segment.id}`}
+                      onDeleted={onUpdated}
+                    />
+                  )}
+                </div>
               ),
             )}
             {(item.meetingUrl || item.livekitRoomName) && item.direction === "sent" && !messageEditingOpen && (

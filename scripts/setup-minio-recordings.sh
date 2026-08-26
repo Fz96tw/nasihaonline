@@ -60,7 +60,7 @@ POLICY_JSON=$(cat <<EOF
   "Version": "2012-10-17",
   "Statement": [{
     "Effect": "Allow",
-    "Action": ["s3:PutObject", "s3:GetObject", "s3:ListBucket", "s3:ListMultipartUploadParts", "s3:AbortMultipartUpload"],
+    "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:ListBucket", "s3:ListMultipartUploadParts", "s3:AbortMultipartUpload"],
     "Resource": ["arn:aws:s3:::${BUCKET}", "arn:aws:s3:::${BUCKET}/*"]
   }]
 }
@@ -101,7 +101,7 @@ docker compose exec -T minio sh -c "
 
 cat <<EOF
 
-==> Done. '$ACCESS_KEY' can now PutObject/GetObject/ListBucket only within
+==> Done. '$ACCESS_KEY' can now PutObject/GetObject/DeleteObject/ListBucket only within
     '$BUCKET' — confirm the app container's env still has matching
     MINIO_BUCKET_RECORDINGS / MINIO_RECORDINGS_ACCESS_KEY /
     MINIO_RECORDINGS_SECRET_KEY (it reads them from this same .env).

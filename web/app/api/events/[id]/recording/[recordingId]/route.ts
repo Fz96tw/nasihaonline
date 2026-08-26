@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser, AuthError, authErrorResponse } from "@/lib/auth";
-import { EventError, getEventRecordingObjectKey } from "@/lib/events-server";
+import { deleteEventRecordingSegment, EventError, getEventRecordingObjectKey } from "@/lib/events-server";
 import { getRecordingPresignedUrl } from "@/lib/recordings-storage";
 
 /**
@@ -41,6 +41,29 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: "Recording storage isn't configured." }, { status: 502 });
     }
     return NextResponse.redirect(url, { status: 302 });
+  } catch (error) {
+    if (error instanceof EventError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    throw error;
+  }
+}
+
+/** DELETE /api/events/:id/recording/:recordingId — host or admin only (enforced inside deleteEventRecordingSegment). */
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string; recordingId: string }> }) {
+  let user;
+  try {
+    user = await requireUser();
+  } catch (error) {
+    if (error instanceof AuthError) return authErrorResponse(error);
+    throw error;
+  }
+
+  const { id, recordingId } = await params;
+
+  try {
+    await deleteEventRecordingSegment(id, recordingId, user);
+    return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof EventError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

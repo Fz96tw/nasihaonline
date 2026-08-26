@@ -254,11 +254,35 @@ export function EventDetail({
                       {segment.durationSeconds !== null ? `${formatDurationMinutes(segment.durationSeconds)} · ` : ""}
                       {formatTimestamp(segment.startedAt)})
                     </span>
+                    {canEdit && (
+                      <DeleteRecordingButton
+                        deleteUrl={`/api/events/${event.seriesId}/recording/${segment.id}`}
+                        onDeleted={() =>
+                          setEvent((prev) => ({
+                            ...prev,
+                            liveKitRecordingSegments: prev.liveKitRecordingSegments.filter((s) => s.id !== segment.id),
+                          }))
+                        }
+                      />
+                    )}
                   </div>
                 ) : (
-                  <span key={segment.id} className="w-fit text-sm text-muted-foreground">
-                    {label} — {segment.failed ? "recording failed" : "processing…"}
-                  </span>
+                  <div key={segment.id} className="flex flex-wrap items-center gap-1.5">
+                    <span className="w-fit text-sm text-muted-foreground">
+                      {label} — {segment.failed ? "recording failed" : "processing…"}
+                    </span>
+                    {canEdit && (
+                      <DeleteRecordingButton
+                        deleteUrl={`/api/events/${event.seriesId}/recording/${segment.id}`}
+                        onDeleted={() =>
+                          setEvent((prev) => ({
+                            ...prev,
+                            liveKitRecordingSegments: prev.liveKitRecordingSegments.filter((s) => s.id !== segment.id),
+                          }))
+                        }
+                      />
+                    )}
+                  </div>
                 ),
               )}
             </div>

@@ -35,8 +35,9 @@ import {
   updateMeetingCalendarEventRecurrence,
   updateMeetingCalendarEventTime,
 } from "@/lib/google-calendar";
-import { createLiveKitRoom } from "@/lib/livekit";
+import { createLiveKitRoom, getRoomMetadata } from "@/lib/livekit";
 import { createNotification } from "@/lib/notifications-server";
+import { deleteRecordingObject } from "@/lib/recordings-storage";
 import {
   sendEventAnnouncementEmail,
   sendEventInviteEmail,
@@ -2210,6 +2211,60 @@ export async function deleteEventRecording(
     throw new EventError(502, "Couldn't delete the recording — please try again.");
   }
 
+  await db.eventRecording.delete({ where: { id: recording.id } });
+}
+
+/**
+ * Deletes one LiveKit recording segment (host or admin only) — the
+ * per-segment counterpart to deleteEventRecording above, which only ever
+ * handles the single Meet-origin row. Removes the MinIO object first when
+ * the segment has one (a ready segment); a still-pending or failed segment
+ * with no objectKey yet just drops its row — for a pending row that's how a
+ * host dismisses/cancels a segment they don't want without waiting on it.
+ *
+ * Decision on a still-recording segment (egress not yet stopped): blocked
+ * with a 409 rather than silently allowed. attachLiveKitEventRecordingSegment
+ * upserts by egressId, so deleting a row whose egress is still the room's
+ * *currently active* one would just get silently recreated once that
+ * egress's egress_ended webhook eventually lands — the delete would look
+ * like it worked, then the segment would reappear. A pending row that's
+ * already stopped (webhook just hasn't landed yet) isn't blocked — that race
+ * window is seconds wide and accepted, same as any other pending/failed
+ * segment above.
+ */
+export async function deleteEventRecordingSegment(
+  eventId: string,
+  recordingId: string,
+  actingUser: UserModel,
+): Promise<void> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { hostId: true, livekitRoomName: true },
+  });
+  if (!event) throw new EventError(404, "Event not found.");
+
+  const isAdmin = actingUser.role === Role.admin;
+  const isHost = actingUser.id === event.hostId;
+  if (!isAdmin && !isHost) {
+    throw new EventError(403, "Only the event's host or an admin can delete its recording.");
+  }
+
+  const recording = await db.eventRecording.findFirst({
+    where: { id: recordingId, eventId, origin: RecordingOrigin.livekit },
+    select: { id: true, objectKey: true, egressId: true, failedAt: true },
+  });
+  if (!recording) throw new EventError(404, "Recording not found.");
+
+  if (!recording.objectKey && !recording.failedAt && event.livekitRoomName) {
+    const current = await getRoomMetadata(event.livekitRoomName);
+    if (current?.recording && current.egressId === recording.egressId) {
+      throw new EventError(409, "This recording is still in progress — stop it before deleting.");
+    }
+  }
+
+  if (recording.objectKey) {
+    await deleteRecordingObject(recording.objectKey);
+  }
   await db.eventRecording.delete({ where: { id: recording.id } });
 }
 

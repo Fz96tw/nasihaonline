@@ -8,7 +8,7 @@ import { Client as MinioClient } from "minio";
  * creds for recordings, since those are the shared "nasiha"/"nasiha123" dev
  * creds with full-account access. This uses a dedicated, narrowly-scoped
  * MinIO user (`livekit-egress`) whose policy only grants
- * PutObject/GetObject/ListBucket/AbortMultipartUpload on the
+ * PutObject/GetObject/DeleteObject/ListBucket/AbortMultipartUpload on the
  * livekit-recordings bucket, provisioned via `mc admin user add` against
  * the running minio container — see the objective's Planning decisions for
  * the full rationale.
@@ -98,5 +98,24 @@ export async function getRecordingPresignedUrl(objectKey: string, downloadFilena
   } catch (error) {
     console.error("[recordings-storage] Failed to presign recording URL", error);
     return null;
+  }
+}
+
+/**
+ * Deletes one recording segment's MinIO object — used when a host removes a
+ * ready LiveKit segment (deleteEventRecordingSegment /
+ * deleteMeetingRequestRecordingSegment). Callers only invoke this once
+ * objectKey is known non-null; a pending/failed segment with no object yet
+ * just drops its DB row without ever calling this.
+ */
+export async function deleteRecordingObject(objectKey: string): Promise<boolean> {
+  const minio = getRecordingsClient();
+  if (!minio) return false;
+  try {
+    await minio.removeObject(BUCKET_RECORDINGS, objectKey);
+    return true;
+  } catch (error) {
+    console.error("[recordings-storage] Failed to delete recording object", error);
+    return false;
   }
 }
