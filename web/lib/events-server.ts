@@ -463,6 +463,7 @@ export async function getMemberEventById(
       forumThread: { select: { id: true, _count: { select: { posts: true } } } },
       hostId: true,
       host: { select: { name: true } },
+      invitees: { where: { userId }, select: { userId: true } },
       rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
       recurrence: { select: RECURRENCE_SELECT },
       recordings: {
@@ -522,6 +523,16 @@ export async function getMemberEventById(
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
 
   const rsvped = event.rsvps.length > 0;
+  // Same rationale as getEventRecordingObjectKey/getEventMeetRecordingDownloadUrl's
+  // identical exception: a restricted event's invitee list is already its
+  // access control, so an invitee shouldn't also need to RSVP "going" just
+  // to see a recording on the event page — notably, someone who missed the
+  // live meeting (the exact reason to want the recording) has no reason to
+  // RSVP going to it. Deliberately narrow to the recording fields only —
+  // meetingUrl/livekitRoomName/meetingEndedAt (live-meeting-join concerns)
+  // and chatTranscriptPostId keep the unchanged rsvped-or-host gate, since
+  // widening those wasn't part of this fix's confirmed scope.
+  const canViewRecording = rsvped || event.hostId === userId || (event.visibility === EventVisibility.invited && event.invitees.length > 0);
   return {
     id: event.recurrence ? `${event.id}::${occurrenceStart.toISOString()}` : event.id,
     title: event.title,
@@ -539,17 +550,16 @@ export async function getMemberEventById(
     meetingUrl: rsvped || event.hostId === userId ? event.meetingUrl : null,
     livekitRoomName: rsvped || event.hostId === userId ? event.livekitRoomName : null,
     meetingEndedAt: (rsvped || event.hostId === userId) ? (event.meetingEndedAt?.toISOString() ?? null) : null,
-    recordingUrl: (rsvped || event.hostId === userId) ? (recordingForOccurrence?.recordingUrl ?? null) : null,
-    liveKitRecordingSegments:
-      rsvped || event.hostId === userId
-        ? liveKitSegments.map((s) => ({
-            id: s.id,
-            startedAt: s.startedAt!.toISOString(),
-            ready: s.objectKey !== null,
-            failed: s.failedAt !== null,
-            durationSeconds: s.durationSeconds,
-          }))
-        : [],
+    recordingUrl: canViewRecording ? (recordingForOccurrence?.recordingUrl ?? null) : null,
+    liveKitRecordingSegments: canViewRecording
+      ? liveKitSegments.map((s) => ({
+          id: s.id,
+          startedAt: s.startedAt!.toISOString(),
+          ready: s.objectKey !== null,
+          failed: s.failedAt !== null,
+          durationSeconds: s.durationSeconds,
+        }))
+      : [],
     chatTranscriptPostId: (rsvped || event.hostId === userId) ? (chatTranscriptForOccurrence?.forumPostId ?? null) : null,
     attendeeCount: event._count.rsvps + event._count.registrations,
     forumThreadId: event.forumThread?.id ?? null,
@@ -2906,6 +2916,8 @@ export async function getEventRecordingObjectKey(eventId: string, recordingId: s
     },
     select: {
       hostId: true,
+      visibility: true,
+      invitees: { where: { userId }, select: { userId: true } },
       rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
     },
   });
@@ -2913,7 +2925,15 @@ export async function getEventRecordingObjectKey(eventId: string, recordingId: s
 
   const isHost = event.hostId === userId;
   const rsvped = event.rsvps.length > 0;
-  if (!isHost && !rsvped) {
+  // A restricted event's invitee list IS its access control (see this
+  // query's own OR clause) — RSVP is a separate "I'm planning to attend"
+  // signal that shouldn't also be required just to watch a recording,
+  // especially since the exact reason to share a recording is often that
+  // an invitee missed the live meeting and so never RSVP'd going. A
+  // community event has no invitee gate at all, so RSVP stays the only
+  // signal short of hosting there.
+  const invitedToRestrictedEvent = event.visibility === EventVisibility.invited && event.invitees.length > 0;
+  if (!isHost && !rsvped && !invitedToRestrictedEvent) {
     throw new EventError(403, "RSVP to this event to view its recording.");
   }
 
@@ -2945,6 +2965,8 @@ export async function getEventMeetRecordingDownloadUrl(
     },
     select: {
       hostId: true,
+      visibility: true,
+      invitees: { where: { userId }, select: { userId: true } },
       rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
     },
   });
@@ -2952,7 +2974,9 @@ export async function getEventMeetRecordingDownloadUrl(
 
   const isHost = event.hostId === userId;
   const rsvped = event.rsvps.length > 0;
-  if (!isHost && !rsvped) {
+  // Same rationale as getEventRecordingObjectKey's identical check above.
+  const invitedToRestrictedEvent = event.visibility === EventVisibility.invited && event.invitees.length > 0;
+  if (!isHost && !rsvped && !invitedToRestrictedEvent) {
     throw new EventError(403, "RSVP to this event to view its recording.");
   }
 
