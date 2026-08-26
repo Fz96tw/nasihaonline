@@ -12,28 +12,28 @@
     {
       "type": "gauge", "title": "CPU Usage",
       "gridPos": { "h": 6, "w": 6, "x": 0, "y": 1 }, "id": 1,
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [{ "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)", "refId": "A" }],
       "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "steps": [{ "color": "green" }, { "color": "orange", "value": 70 }, { "color": "red", "value": 90 }] } }, "overrides": [] }
     },
     {
       "type": "gauge", "title": "Memory Usage",
       "gridPos": { "h": 6, "w": 6, "x": 6, "y": 1 }, "id": 2,
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [{ "expr": "100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))", "refId": "A" }],
       "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "steps": [{ "color": "green" }, { "color": "orange", "value": 70 }, { "color": "red", "value": 90 }] } }, "overrides": [] }
     },
     {
       "type": "gauge", "title": "Disk Usage (/)",
       "gridPos": { "h": 6, "w": 6, "x": 12, "y": 1 }, "id": 3,
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [{ "expr": "100 * (1 - (node_filesystem_avail_bytes{mountpoint=\"/\",fstype!=\"tmpfs\"} / node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"tmpfs\"}))", "refId": "A" }],
       "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "steps": [{ "color": "green" }, { "color": "orange", "value": 70 }, { "color": "red", "value": 90 }] } }, "overrides": [] }
     },
     {
       "type": "stat", "title": "Load Average (1m / 5m / 15m)",
       "gridPos": { "h": 6, "w": 6, "x": 18, "y": 1 }, "id": 4,
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         { "expr": "node_load1", "legendFormat": "1m", "refId": "A" },
         { "expr": "node_load5", "legendFormat": "5m", "refId": "B" },
@@ -47,7 +47,7 @@
     {
       "type": "timeseries", "title": "Network Throughput",
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 }, "id": 10,
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         { "expr": "rate(node_network_receive_bytes_total{device=\"ens3\"}[1m]) * 8", "legendFormat": "receive", "refId": "A" },
         { "expr": "rate(node_network_transmit_bytes_total{device=\"ens3\"}[1m]) * 8", "legendFormat": "transmit", "refId": "B" }
@@ -60,14 +60,14 @@
     {
       "type": "timeseries", "title": "CPU Usage Over Time",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 }, "id": 20,
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [{ "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)", "legendFormat": "cpu %", "refId": "A" }],
       "fieldConfig": { "defaults": { "unit": "percent", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] }
     },
     {
       "type": "timeseries", "title": "Memory Used",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 }, "id": 21,
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         { "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes", "legendFormat": "used", "refId": "A" },
         { "expr": "node_memory_MemTotal_bytes", "legendFormat": "total", "refId": "B" }
@@ -77,7 +77,7 @@
     {
       "type": "timeseries", "title": "Disk I/O",
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 25 }, "id": 22,
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         { "expr": "sum(rate(node_disk_read_bytes_total[5m]))", "legendFormat": "read", "refId": "A" },
         { "expr": "sum(rate(node_disk_written_bytes_total[5m]))", "legendFormat": "write", "refId": "B" }
