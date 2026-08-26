@@ -578,6 +578,14 @@ export function MeetingRequestDetail({
   // scheduled-time/Meet-link display, cancel eligibility) needs both.
   const hasBeenAccepted = item.status === "accepted" || isRenegotiatingAccepted;
   const isPast = hasMounted && item.scheduledAt !== null && new Date(item.scheduledAt) < new Date();
+  // Reported 2026-08-26: the Join button below has no time gating at all,
+  // so an accepted meeting nobody ever started stays indistinguishable from
+  // one still upcoming. Left the button itself functional (clicking it
+  // already lands on a waiting room that explains "waiting for the host to
+  // start"), just surfaced the passed time here instead of hiding it —
+  // once meetingStartedAt is set, this stops applying regardless of time,
+  // same as isRecordingAvailable's LiveKit branch above.
+  const scheduledTimePassedWithoutStarting = isPast && item.meetingStartedAt === null;
   // LiveKit gives a real "meeting genuinely ended" signal (room_finished,
   // stamped as meetingEndedAt); Meet has no equivalent, so its recording
   // link keeps gating on the scheduled isPast time above.
@@ -741,12 +749,17 @@ export function MeetingRequestDetail({
               </div>
             )}
             {(item.meetingUrl || item.livekitRoomName) && (
-              <Button size="sm" variant="outline" className="w-fit" asChild>
-                <Link href={`/meet/request/${item.id}`}>
-                  <Video className="mr-1.5 h-3.5 w-3.5" />
-                  Join meeting
-                </Link>
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="outline" className="w-fit" asChild>
+                  <Link href={`/meet/request/${item.id}`}>
+                    <Video className="mr-1.5 h-3.5 w-3.5" />
+                    Join meeting
+                  </Link>
+                </Button>
+                {scheduledTimePassedWithoutStarting && (
+                  <span className="text-xs text-muted-foreground">Scheduled time has passed</span>
+                )}
+              </div>
             )}
             {isRecordingAvailable && item.recordingUrl && (
               <div className="flex items-center gap-1.5">

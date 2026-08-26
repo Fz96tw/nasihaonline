@@ -138,6 +138,7 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
         durationSeconds: r.durationSeconds,
       })),
       meetingEndedAt: meetingRequest.meetingEndedAt?.toISOString() ?? null,
+      meetingStartedAt: meetingRequest.meetingStartedAt?.toISOString() ?? null,
       meetingOrganizerMessage: meetingRequest.meetingOrganizerMessage,
       meetingOrganizerMessageImageUrl: getMeetingMessageImageUrl(meetingRequest.meetingOrganizerMessageImageKey),
     });

@@ -85,6 +85,8 @@ export type MeetingRequestListItem = {
   }[];
   /** Set once resetMeetingOnRoomEmpty's room_finished handler fires (LiveKit only — Meet has no equivalent signal) — the detail page gates recording-link visibility on this for LiveKit-backed meeting requests instead of the scheduled time. */
   meetingEndedAt: string | null;
+  /** Set when the sender clicks "Start Meeting" — null means nobody has ever started it. The detail page uses this alongside scheduledAt to flag a passed-but-never-started meeting, without hiding the still-functional Join button. */
+  meetingStartedAt: string | null;
   /** Waiting-room greeting shown to the recipient on /meet/request/[id] before Start (meeting-join-experience) — sender-editable via MeetingRequestDetail's inline editor. */
   meetingOrganizerMessage: string | null;
   meetingOrganizerMessageImageUrl: string | null;

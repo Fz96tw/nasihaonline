@@ -372,16 +372,38 @@ function ChatCaptureListener({ chatEndpoint }: { chatEndpoint: string | null | u
 }
 
 /**
- * Record/Stop button — rendered inside TopRightOverlay below, not
- * independently positioned (reported 2026-08-25: a standalone bottom-right
- * overlay collided with LiveKit's own `.lk-control-bar`, whose Chat toggle
- * is its right-most button with no flex-wrap to make room — worse when the
- * chat panel is open, since `.lk-chat` (up to 60ch wide) shrinks the
- * video-conference column while a fixed-to-viewport button stays pinned to
- * the true right edge). `recording` reflects the live room-metadata-synced
- * state from RecordingStateListener, not local optimistic state, so the
- * button always shows the true shared state even if someone else
- * started/stopped it.
+ * Dark-theme control styling matching LiveKit's own `.lk-button` (from
+ * `--lk-control-bg`/`--lk-control-hover-bg`/`--lk-border-radius` in
+ * `data-lk-theme="default"`, which is always dark regardless of the app's
+ * own light/dark mode). Hardcoded rather than reusing the `.lk-button`
+ * class directly: that class's colors come from CSS custom properties
+ * scoped to `[data-lk-theme]`, which is set on <LiveKitRoom>'s own root —
+ * these controls render as siblings of it (see TopLeftOverlay), outside
+ * that scope, so the variables wouldn't resolve. Reported 2026-08-26: the
+ * previous light pill/backdrop-blur look read as visually disconnected
+ * from the actual control bar right below it.
+ */
+// px shrinks on mobile since the label text collapses to icon-only there
+// (see each button's own `hidden sm:inline` span) — same `sm` (640px)
+// breakpoint LiveKit's own ControlBar auto-switches to icon-only around.
+const LK_BUTTON_CLASS =
+  "inline-flex items-center gap-2 rounded-lg bg-[#1d1d1d] px-2.5 py-2.5 sm:px-4 text-sm text-white hover:bg-[#2a2a2a] disabled:opacity-50";
+const LK_BUTTON_ACTIVE_CLASS = "bg-[#373737] hover:bg-[#373737]";
+/** Matches `--lk-border-color: rgba(255,255,255,.1)` — for the dropdown panel and badges below, same dark-theme-consistency rationale as LK_BUTTON_CLASS. */
+const LK_PANEL_CLASS = "border-white/10 bg-[#1d1d1d] text-white";
+
+/**
+ * Record/Stop button — rendered inside TopLeftOverlay below, not
+ * independently positioned. Originally bottom-right (reported 2026-08-25:
+ * collided with LiveKit's own `.lk-control-bar`, whose Chat toggle is its
+ * right-most button with no flex-wrap to make room), then moved to
+ * top-right — still wrong (reported 2026-08-26): `.lk-chat` is a full-
+ * height sidebar the whole right edge, not just the bottom, so it collided
+ * whenever the chat panel was open. The right edge is never a safe zone
+ * while chat can be open; the left edge always is. `recording` reflects
+ * the live room-metadata-synced state from RecordingStateListener, not
+ * local optimistic state, so the button always shows the true shared state
+ * even if someone else started/stopped it.
  */
 function RecordingControl({
   recording,
@@ -421,10 +443,11 @@ function RecordingControl({
       type="button"
       onClick={toggle}
       disabled={pending}
-      className="pointer-events-auto flex items-center gap-2 rounded-full border bg-background/95 px-4 py-2 text-sm font-medium shadow-lg backdrop-blur disabled:opacity-60"
+      aria-pressed={recording}
+      className={`pointer-events-auto ${LK_BUTTON_CLASS} ${recording ? LK_BUTTON_ACTIVE_CLASS : ""}`}
     >
-      <span className={`h-2.5 w-2.5 rounded-full ${recording ? "animate-pulse bg-destructive" : "bg-muted-foreground"}`} />
-      {recording ? "Stop recording" : "Record"}
+      <span className={`h-2.5 w-2.5 rounded-full ${recording ? "animate-pulse bg-red-500" : "bg-white/50"}`} />
+      <span className="hidden sm:inline">{recording ? "Stop recording" : "Record"}</span>
     </button>
   );
 }
@@ -486,14 +509,12 @@ function ParticipantRow({
     <li className="flex items-center justify-between gap-2 rounded-sm px-2 py-1 text-sm">
       <span className="truncate">
         {participant.name}
-        {participant.isLocal && <span className="text-muted-foreground"> (You)</span>}
+        {participant.isLocal && <span className="text-white/50"> (You)</span>}
       </span>
       {participant.isHost ? (
-        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-          Host
-        </span>
+        <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white/70">Host</span>
       ) : isGuestIdentity(participant.identity) ? null : viewerIsHostOrCoHost && coHostsEndpoint ? (
-        <label className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <label className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-white/70">
           <input
             type="checkbox"
             checked={participant.isCoHost}
@@ -503,7 +524,7 @@ function ParticipantRow({
           Co-host
         </label>
       ) : participant.isCoHost ? (
-        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+        <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white/70">
           Co-host
         </span>
       ) : null}
@@ -512,7 +533,7 @@ function ParticipantRow({
 }
 
 /**
- * Participants button + dropdown list, rendered inside TopRightOverlay
+ * Participants button + dropdown list, rendered inside TopLeftOverlay
  * alongside RecordingControl. `participants` comes from ParticipantsListener
  * inside <LiveKitRoom>, same lift-state-up pattern as recording/toasts.
  */
@@ -535,13 +556,15 @@ function ParticipantsControl({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex items-center gap-2 rounded-full border bg-background/95 px-4 py-2 text-sm font-medium shadow-lg backdrop-blur"
+        aria-pressed={open}
+        className={`${LK_BUTTON_CLASS} ${open ? LK_BUTTON_ACTIVE_CLASS : ""}`}
       >
         <Users className="h-4 w-4" />
-        Participants ({participants.length})
+        <span className="hidden sm:inline">Participants ({participants.length})</span>
+        <span className="sm:hidden">{participants.length}</span>
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-2 max-h-72 w-64 overflow-y-auto rounded-md border bg-background/95 p-2 shadow-lg backdrop-blur">
+        <div className={`absolute left-0 top-full mt-2 max-h-72 w-64 overflow-y-auto rounded-lg border p-2 shadow-lg ${LK_PANEL_CLASS}`}>
           <ul className="space-y-1">
             {participants.map((p) => (
               <ParticipantRow
@@ -559,9 +582,9 @@ function ParticipantsControl({
   );
 }
 
-/** Shared top-right overlay slot for Record and Participants — see RecordingControl's doc comment for why this corner. */
-function TopRightOverlay({ children }: { children: ReactNode }) {
-  return <div className="pointer-events-none absolute right-4 top-4 z-50 flex flex-col items-end gap-2">{children}</div>;
+/** Shared top-left overlay slot for Record and Participants — see RecordingControl's doc comment for why this corner (never the right, which LiveKit's chat panel can claim). */
+function TopLeftOverlay({ children }: { children: ReactNode }) {
+  return <div className="pointer-events-none absolute left-4 top-4 z-50 flex flex-col items-start gap-2">{children}</div>;
 }
 
 /** The visible toast stack — a sibling of <LiveKitRoom>, not nested inside it (see ParticipantActivityListener). */
@@ -618,7 +641,7 @@ export function LiveKitMeetingScreen({
   /** POST endpoints for the Record/Stop control — host/co-host only (Recording Access initiative; previously any attendee), same auth as tokenEndpoint. */
   recordingStartEndpoint: string;
   recordingStopEndpoint: string;
-  /** POST endpoint for granting/revoking co-host — undefined/null for a MeetingRequest, which has no co-host concept (see TopRightOverlay usage below). */
+  /** POST endpoint for granting/revoking co-host — undefined/null for a MeetingRequest, which has no co-host concept (see TopLeftOverlay usage below). */
   coHostsEndpoint?: string | null;
   /** POST endpoint for archiving this participant's own chat messages (LiveKit meeting chat archival) — null/undefined for a MeetingRequest, which has no discussion thread to archive into. */
   chatEndpoint?: string | null;
@@ -699,7 +722,7 @@ export function LiveKitMeetingScreen({
       <MeetingBanner title={title} organizerName={organizerName} />
       <DisclaimerReminderFlash />
       <ParticipantActivityToasts toasts={toasts} />
-      <TopRightOverlay>
+      <TopLeftOverlay>
         {isHostOrCoHost && (
           <RecordingControl
             recording={recording}
@@ -714,7 +737,7 @@ export function LiveKitMeetingScreen({
           coHostsEndpoint={coHostsEndpoint}
           onError={pushToast}
         />
-      </TopRightOverlay>
+      </TopLeftOverlay>
       <LiveKitRoom
         token={credentials.token}
         serverUrl={credentials.serverUrl}
