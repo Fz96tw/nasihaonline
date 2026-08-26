@@ -8,8 +8,10 @@ import {
   MeetingRequestMessageAction,
   MeetingRequestStatus,
   NotificationType,
+  Role,
 } from "@/lib/generated/prisma/enums";
 import type { MeetingRequestModel } from "@/lib/generated/prisma/models/MeetingRequest";
+import type { UserModel } from "@/lib/generated/prisma/models/User";
 import type { UpcomingMeeting } from "@/lib/meeting-requests";
 import { sendMeetingRequestEmail } from "@/lib/email";
 import {
@@ -1170,19 +1172,21 @@ export async function finalizeMeetingRequestChatTranscript(roomName: string): Pr
  * (lib/events-server.ts) — see its doc comment for the shared rationale.
  * Access is simpler here: a MeetingRequest is always a private 2-party
  * 1:1, so "sender or recipient" is the whole gate (mirrors
- * getMeetingRequestMeetingStatus's own check).
+ * getMeetingRequestMeetingStatus's own check) — an admin bypasses it
+ * entirely (objective c602a120).
  */
 export async function getMeetingRequestRecordingObjectKey(
   meetingRequestId: string,
   recordingId: string,
-  userId: string,
+  actingUser: UserModel,
 ): Promise<string> {
   const meetingRequest = await db.meetingRequest.findUnique({
     where: { id: meetingRequestId },
     select: { senderId: true, recipientId: true },
   });
   if (!meetingRequest) throw new MeetingRequestError(404, "Meeting request not found.");
-  if (meetingRequest.senderId !== userId && meetingRequest.recipientId !== userId) {
+  const isAdmin = actingUser.role === Role.admin;
+  if (!isAdmin && meetingRequest.senderId !== actingUser.id && meetingRequest.recipientId !== actingUser.id) {
     throw new MeetingRequestError(403, "You're not part of this meeting.");
   }
 

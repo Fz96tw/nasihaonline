@@ -115,6 +115,12 @@ const ADMIN_SECTIONS = [
     group: "Programs & Reports",
   },
   {
+    href: "/admin/recordings",
+    title: "Recordings",
+    description: "Every LiveKit recording across all Events and 1:1 Meetings.",
+    group: "Programs & Reports",
+  },
+  {
     href: "/admin/reports",
     title: "Reports",
     description: "Community, engagement, and organizational KPIs.",

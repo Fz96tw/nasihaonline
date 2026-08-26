@@ -2957,37 +2957,54 @@ export async function finalizeEventChatTranscript(roomName: string): Promise<voi
  * same as getMemberEventById/deleteEventRecording — an open event's
  * anonymous attendee can join the live meeting, but recordings (Meet or
  * LiveKit) have never been exposed to a signed-out viewer anywhere in this
- * codebase, so this doesn't introduce a new anonymous-access case. Admins
- * are NOT special-cased here — that bypass is explicitly split into the
- * follow-on admin/Dashboard objective (c602a120), not this one.
+ * codebase, so this doesn't introduce a new anonymous-access case. An admin
+ * bypasses the visibility/host/invitee/RSVP gate entirely (objective
+ * c602a120) — including the outer `where`, not just the `if` below it,
+ * since a non-matching event would otherwise 404 before the bypass ever
+ * gets a chance to apply.
  */
-export async function getEventRecordingObjectKey(eventId: string, recordingId: string, userId: string): Promise<string> {
+export async function getEventRecordingObjectKey(
+  eventId: string,
+  recordingId: string,
+  actingUser: UserModel,
+): Promise<string> {
+  const isAdmin = actingUser.role === Role.admin;
   const event = await db.event.findFirst({
     where: {
       id: eventId,
-      OR: [{ visibility: EventVisibility.community }, { hostId: userId }, { invitees: { some: { userId } } }],
+      ...(isAdmin
+        ? {}
+        : {
+            OR: [
+              { visibility: EventVisibility.community },
+              { hostId: actingUser.id },
+              { invitees: { some: { userId: actingUser.id } } },
+            ],
+          }),
     },
     select: {
       hostId: true,
       visibility: true,
-      invitees: { where: { userId }, select: { userId: true } },
-      rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
+      invitees: { where: { userId: actingUser.id }, select: { userId: true } },
+      rsvps: { where: { userId: actingUser.id, status: RSVPStatus.going }, select: { id: true } },
     },
   });
   if (!event) throw new EventError(404, "Event not found.");
 
-  const isHost = event.hostId === userId;
-  const rsvped = event.rsvps.length > 0;
-  // A restricted event's invitee list IS its access control (see this
-  // query's own OR clause) — RSVP is a separate "I'm planning to attend"
-  // signal that shouldn't also be required just to watch a recording,
-  // especially since the exact reason to share a recording is often that
-  // an invitee missed the live meeting and so never RSVP'd going. A
-  // community event has no invitee gate at all, so RSVP stays the only
-  // signal short of hosting there.
-  const invitedToRestrictedEvent = event.visibility === EventVisibility.invited && event.invitees.length > 0;
-  if (!isHost && !rsvped && !invitedToRestrictedEvent) {
-    throw new EventError(403, "RSVP to this event to view its recording.");
+  if (!isAdmin) {
+    const isHost = event.hostId === actingUser.id;
+    const rsvped = event.rsvps.length > 0;
+    // A restricted event's invitee list IS its access control (see this
+    // query's own OR clause) — RSVP is a separate "I'm planning to attend"
+    // signal that shouldn't also be required just to watch a recording,
+    // especially since the exact reason to share a recording is often that
+    // an invitee missed the live meeting and so never RSVP'd going. A
+    // community event has no invitee gate at all, so RSVP stays the only
+    // signal short of hosting there.
+    const invitedToRestrictedEvent = event.visibility === EventVisibility.invited && event.invitees.length > 0;
+    if (!isHost && !rsvped && !invitedToRestrictedEvent) {
+      throw new EventError(403, "RSVP to this event to view its recording.");
+    }
   }
 
   const recording = await db.eventRecording.findFirst({

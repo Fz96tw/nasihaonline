@@ -35,7 +35,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const isDownload = new URL(request.url).searchParams.get("download") === "1";
 
   try {
-    const objectKey = await getEventRecordingObjectKey(id, recordingId, user.id);
+    const objectKey = await getEventRecordingObjectKey(id, recordingId, user);
     const url = await getRecordingPresignedUrl(objectKey, isDownload ? objectKey.split("/").pop() : undefined);
     if (!url) {
       return NextResponse.json({ error: "Recording storage isn't configured." }, { status: 502 });
