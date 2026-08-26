@@ -69,6 +69,7 @@ export function EventListItem({
                 Repeats
               </Badge>
             ) : null}
+            {isPast && event.hasRecording ? <Badge variant="success">Recording available</Badge> : null}
             <span className="flex items-center gap-1 text-xs text-muted-foreground" title="Registered or RSVP'd">
               <Users className="h-3.5 w-3.5" />
               {attendeeCount}

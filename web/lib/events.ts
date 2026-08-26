@@ -102,6 +102,8 @@ export type MemberEvent = EventWithRsvp & {
   forumReplyCount: number | null;
   /** Unique-visitor count for the event detail page's eye-icon (§4.6). */
   viewCount: number;
+  /** Whether this occurrence has a viewable recording (Meet or a ready LiveKit segment) — a lightweight flag for list views; getMemberEventById still owns the full recording detail (URLs/segments). */
+  hasRecording: boolean;
 };
 
 // Shared "Open" / "Members Only" / "Invitees Only" audience badge — used by

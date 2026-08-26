@@ -372,6 +372,10 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
       host: { select: { name: true } },
       rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
       recurrence: { select: RECURRENCE_SELECT },
+      invitees: { where: { userId }, select: { userId: true } },
+      recordings: {
+        select: { occurrenceDate: true, origin: true, objectKey: true, recordingUrl: true },
+      },
       // Going RSVPs (members) plus EventRegistrations (non-members) — same
       // merge as getEventEngagementForAdmin's attendee/interest count.
       _count: {
@@ -390,6 +394,19 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
     .sort((a, b) => a.occurrenceStart.getTime() - b.occurrenceStart.getTime())
     .map((event) => {
       const rsvped = event.rsvps.length > 0;
+      // Same occurrence-match + visibility gate as getMemberEventById's
+      // canViewRecording — a boolean is enough here since the Past Events
+      // list only needs to know whether to show the badge, not the URL.
+      const occurrenceRecordings = event.recordings.filter(
+        (recording) => recording.occurrenceDate.getTime() === event.occurrenceStart.getTime(),
+      );
+      const canViewRecording =
+        rsvped || event.hostId === userId || (event.visibility === EventVisibility.invited && event.invitees.length > 0);
+      const hasRecording =
+        canViewRecording &&
+        occurrenceRecordings.some((recording) =>
+          recording.origin === RecordingOrigin.meet ? recording.recordingUrl !== null : recording.objectKey !== null,
+        );
       return {
         id: event.occurrenceId,
         title: event.title,
@@ -416,6 +433,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
         liveKitRecordingSegments: [],
         chatTranscriptPostId: null,
         meetingEndedAt: null,
+        hasRecording,
         attendeeCount: event._count.rsvps + event._count.registrations,
         forumThreadId: event.forumThread?.id ?? null,
         forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : null,
@@ -551,6 +569,9 @@ export async function getMemberEventById(
     livekitRoomName: rsvped || event.hostId === userId ? event.livekitRoomName : null,
     meetingEndedAt: (rsvped || event.hostId === userId) ? (event.meetingEndedAt?.toISOString() ?? null) : null,
     recordingUrl: canViewRecording ? (recordingForOccurrence?.recordingUrl ?? null) : null,
+    hasRecording:
+      canViewRecording &&
+      (recordingForOccurrence?.recordingUrl != null || liveKitSegments.some((s) => s.objectKey !== null)),
     liveKitRecordingSegments: canViewRecording
       ? liveKitSegments.map((s) => ({
           id: s.id,

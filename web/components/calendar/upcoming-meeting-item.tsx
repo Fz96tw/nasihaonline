@@ -44,6 +44,7 @@ export function UpcomingMeetingItem({ meeting }: { meeting: UpcomingMeeting }) {
             <Badge variant={meeting.isPending ? "warning" : "info"}>
               {meeting.isPending ? "Meeting request" : "Meeting"}
             </Badge>
+            {meeting.hasRecording ? <Badge variant="success">Recording available</Badge> : null}
           </div>
           <Link href={`/inbox?item=${meeting.id}`} className="block truncate font-medium hover:underline">
             {meeting.topic}

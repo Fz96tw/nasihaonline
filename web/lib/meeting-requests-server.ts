@@ -10,6 +10,7 @@ import {
   NotificationType,
 } from "@/lib/generated/prisma/enums";
 import type { MeetingRequestModel } from "@/lib/generated/prisma/models/MeetingRequest";
+import type { UpcomingMeeting } from "@/lib/meeting-requests";
 import { sendMeetingRequestEmail } from "@/lib/email";
 import {
   cancelMeetingCalendarEvent,
@@ -889,6 +890,8 @@ export async function getUpcomingMeetingsForUser(userId: string) {
     isOrganizer: meeting.senderId === userId,
     otherPartyName:
       (meeting.senderId === userId ? meeting.recipient.name : meeting.sender.name) ?? "NASIHA Member",
+    // Always still upcoming here — a recording can't exist before the meeting happens.
+    hasRecording: false,
   }));
 
   const pendingMeetings = negotiating.flatMap((meeting) => {
@@ -907,11 +910,68 @@ export async function getUpcomingMeetingsForUser(userId: string) {
         isOrganizer: meeting.senderId === userId,
         otherPartyName:
           (meeting.senderId === userId ? meeting.recipient.name : meeting.sender.name) ?? "NASIHA Member",
+        hasRecording: false,
       },
     ];
   });
 
   return [...confirmedMeetings, ...pendingMeetings].sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+}
+
+/**
+ * Confirmed 1:1 meetings already in the past, for the calendar page's "Past
+ * Events" tab — symmetric to getUpcomingMeetingsForUser's confirmed branch,
+ * but scheduledAt before today's start instead of on-or-after it (same
+ * start-of-day cutoff, so a today meeting stays exclusively in Upcoming).
+ * No pending/negotiating branch: a request that was never accepted isn't a
+ * past *meeting* that happened, just a stale proposal — it's excluded here.
+ */
+export async function getPastMeetingsForUser(userId: string): Promise<UpcomingMeeting[]> {
+  const startOfToday = new Date();
+  startOfToday.setUTCHours(0, 0, 0, 0);
+
+  const meetings = await db.meetingRequest.findMany({
+    where: {
+      status: {
+        in: [
+          MeetingRequestStatus.accepted,
+          MeetingRequestStatus.reschedule_by_sender,
+          MeetingRequestStatus.reschedule_by_recipient,
+        ],
+      },
+      scheduledAt: { lt: startOfToday },
+      OR: [{ senderId: userId }, { recipientId: userId }],
+    },
+    select: {
+      id: true,
+      topic: true,
+      scheduledAt: true,
+      meetingUrl: true,
+      livekitRoomName: true,
+      recordingUrl: true,
+      senderId: true,
+      recipientId: true,
+      sender: { select: { name: true } },
+      recipient: { select: { name: true } },
+      recordings: { select: { objectKey: true } },
+    },
+    orderBy: { scheduledAt: "desc" },
+  });
+
+  return meetings.map((meeting) => ({
+    id: meeting.id,
+    topic: meeting.topic,
+    scheduledAt: (meeting.scheduledAt as Date).toISOString(),
+    meetingUrl: meeting.meetingUrl,
+    livekitRoomName: meeting.livekitRoomName,
+    isPending: false,
+    isOrganizer: meeting.senderId === userId,
+    otherPartyName:
+      (meeting.senderId === userId ? meeting.recipient.name : meeting.sender.name) ?? "NASIHA Member",
+    hasRecording: meeting.livekitRoomName
+      ? meeting.recordings.some((r) => r.objectKey !== null)
+      : meeting.recordingUrl !== null,
+  }));
 }
 
 // ===== In-app meeting waiting room (meeting-join-experience) =====

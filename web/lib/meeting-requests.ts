@@ -45,4 +45,6 @@ export type UpcomingMeeting = {
   /** True if the viewer sent this request (the organizer); false if they received it. */
   isOrganizer: boolean;
   otherPartyName: string;
+  /** Whether a viewable recording exists (Meet recordingUrl, or a ready LiveKit segment) — always false for a still-upcoming meeting. */
+  hasRecording: boolean;
 };

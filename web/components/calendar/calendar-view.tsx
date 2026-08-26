@@ -87,12 +87,15 @@ function renderEventContent(arg: EventContentArg) {
 export function CalendarView({
   events,
   meetings = [],
+  pastMeetings = [],
   currentUserId,
   forcedTab,
 }: {
   events: MemberEvent[];
   /** 1:1 meeting requests (confirmed or still pending), private to the viewer — surfaced in both the Month grid and the Upcoming List. */
   meetings?: UpcomingMeeting[];
+  /** Confirmed 1:1 meetings already in the past, for the Past Events tab. */
+  pastMeetings?: UpcomingMeeting[];
   /** Current viewer's id — lets the Upcoming List hide the RSVP button on events this viewer hosts (they never RSVP to their own event). */
   currentUserId: string;
   /** Referral-driven override (e.g. arriving via ?ref=feed) — wins over any remembered tab, but isn't itself remembered. */
@@ -107,16 +110,17 @@ export function CalendarView({
   const calendarRef = useRef<FullCalendar>(null);
   const [title, setTitle] = useState("");
   const router = useRouter();
-  const [tab, setTab] = useState<"month" | "list">(forcedTab ?? "month");
+  const [tab, setTab] = useState<"month" | "list" | "past">(forcedTab ?? "month");
+  const [recordingsOnly, setRecordingsOnly] = useState(false);
 
   useEffect(() => {
     if (forcedTab) return;
     const stored = window.localStorage.getItem(CALENDAR_TAB_STORAGE_KEY);
-    if (stored === "month" || stored === "list") setTab(stored);
+    if (stored === "month" || stored === "list" || stored === "past") setTab(stored);
   }, [forcedTab]);
 
   function handleTabChange(value: string) {
-    setTab(value as "month" | "list");
+    setTab(value as "month" | "list" | "past");
     window.localStorage.setItem(CALENDAR_TAB_STORAGE_KEY, value);
   }
 
@@ -145,6 +149,21 @@ export function CalendarView({
       upcomingItemStart(a).localeCompare(upcomingItemStart(b)),
     );
   }, [resolvedEvents, meetings]);
+
+  // Past Events tab — mirrors `upcoming` above but flipped to startsAt-before-now
+  // and sorted most-recent-first, since that's what's most relevant when
+  // checking back for a recording.
+  const pastItems = useMemo<UpcomingItem[]>(() => {
+    const pastEvents: UpcomingItem[] = resolvedEvents
+      .filter((event) => event.startsAt < new Date().toISOString())
+      .map((event) => ({ kind: "event" as const, ...event }));
+    const pastMeetingItems: UpcomingItem[] = pastMeetings.map((meeting) => ({ kind: "meeting" as const, ...meeting }));
+
+    return [...pastEvents, ...pastMeetingItems].sort((a, b) =>
+      upcomingItemStart(b).localeCompare(upcomingItemStart(a)),
+    );
+  }, [resolvedEvents, pastMeetings]);
+  const displayedPastItems = recordingsOnly ? pastItems.filter((item) => item.hasRecording) : pastItems;
 
   function handleRsvpToggled(eventId: string, result: RsvpState) {
     setRsvpState((prev) => ({ ...prev, [eventId]: result }));
@@ -177,11 +196,42 @@ export function CalendarView({
     }
   }
 
+  function renderItemList(items: UpcomingItem[]) {
+    return (
+      <ul>
+        {items.map((item, index) => {
+          const label = monthLabel(upcomingItemStart(item));
+          const showDivider = index === 0 || label !== monthLabel(upcomingItemStart(items[index - 1]));
+
+          return (
+            <Fragment key={item.id}>
+              {showDivider && (
+                <li className="list-none mt-16 first:mt-0">
+                  <h3 className="mb-4 border-b-2 pb-2 text-2xl font-bold text-foreground">{label}</h3>
+                </li>
+              )}
+              {item.kind === "event" ? (
+                <EventListItem
+                  event={item}
+                  isHost={item.hostId === currentUserId}
+                  onRsvpToggled={(result) => handleRsvpToggled(item.seriesId, result)}
+                />
+              ) : (
+                <UpcomingMeetingItem meeting={item} />
+              )}
+            </Fragment>
+          );
+        })}
+      </ul>
+    );
+  }
+
   return (
     <Tabs value={tab} onValueChange={handleTabChange}>
       <TabsList>
         <TabsTrigger value="month">Month</TabsTrigger>
         <TabsTrigger value="list">Upcoming List</TabsTrigger>
+        <TabsTrigger value="past">Past Events</TabsTrigger>
       </TabsList>
 
       <TabsContent value="month">
@@ -226,33 +276,30 @@ export function CalendarView({
                 No upcoming events right now — check back soon.
               </p>
             ) : (
-              <ul>
-                {upcoming.map((item, index) => {
-                  const label = monthLabel(upcomingItemStart(item));
-                  const showDivider = index === 0 || label !== monthLabel(upcomingItemStart(upcoming[index - 1]));
+              renderItemList(upcoming)
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
 
-                  return (
-                    <Fragment key={item.id}>
-                      {showDivider && (
-                        <li className="list-none mt-16 first:mt-0">
-                          <h3 className="mb-4 border-b-2 pb-2 text-2xl font-bold text-foreground">
-                            {label}
-                          </h3>
-                        </li>
-                      )}
-                      {item.kind === "event" ? (
-                        <EventListItem
-                          event={item}
-                          isHost={item.hostId === currentUserId}
-                          onRsvpToggled={(result) => handleRsvpToggled(item.seriesId, result)}
-                        />
-                      ) : (
-                        <UpcomingMeetingItem meeting={item} />
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </ul>
+      <TabsContent value="past">
+        <Card className="hover:translate-y-0 hover:shadow-sm">
+          <CardContent className="pt-6">
+            <div className="mb-4 flex justify-end">
+              <Button
+                variant={recordingsOnly ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setRecordingsOnly((v) => !v)}
+              >
+                Recordings only
+              </Button>
+            </div>
+            {displayedPastItems.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {recordingsOnly ? "No past events with recordings." : "No past events yet."}
+              </p>
+            ) : (
+              renderItemList(displayedPastItems)
             )}
           </CardContent>
         </Card>
