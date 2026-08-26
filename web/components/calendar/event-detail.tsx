@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Download, Pencil, Users, Video } from "lucide-react";
+import { Pencil, Users, Video } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,7 @@ import { EventViewCounter } from "@/components/calendar/event-view-counter";
 import { ManageInvitees } from "@/components/calendar/manage-invitees";
 import { CancelEventButton } from "@/components/calendar/cancel-event-button";
 import { ResendNotifications } from "@/components/calendar/resend-notifications";
-import { DeleteRecordingButton } from "@/components/calendar/delete-recording-button";
-import { CopyLinkButton } from "@/components/calendar/copy-link-button";
+import { RecordingRow } from "@/components/calendar/recording-row";
 import { AttendanceChecklist } from "@/components/calendar/attendance-checklist";
 import {
   EVENT_TYPE_LABELS,
@@ -85,9 +84,9 @@ export function EventDetail({
 }) {
   const [event, setEvent] = useState(initialEvent);
   const hasMounted = useHasMounted();
-  // Only used inside CopyLinkButton's click handler (never rendered into
+  // Only used to build each RecordingRow's copyUrl (never rendered into
   // the DOM), so the SSR-time "" fallback never causes a hydration
-  // mismatch — see copy-link-button.tsx's doc comment for why the copied
+  // mismatch — see recording-row.tsx's doc comment for why the copied
   // link needs to be absolute rather than a relative path.
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const isPast = hasMounted && new Date(event.endsAt ?? event.startsAt) < new Date();
@@ -203,99 +202,55 @@ export function EventDetail({
           ) : null}
 
           {showRecordingUrl ? (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Link
-                href={event.recordingUrl!}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
-              >
-                Watch recording
-              </Link>
-              <Button size="icon" variant="ghost" className="h-6 w-6" asChild>
-                <Link
-                  href={`/api/events/${event.seriesId}/recording/download?occurrence=${encodeURIComponent(event.startsAt)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Download recording"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                </Link>
-              </Button>
-              <CopyLinkButton url={event.recordingUrl!} label="Copy recording link" />
-              {canEdit && (
-                <DeleteRecordingButton
-                  deleteUrl={`/api/events/${event.seriesId}/recording?occurrence=${encodeURIComponent(event.startsAt)}`}
-                  onDeleted={() => setEvent((prev) => ({ ...prev, recordingUrl: null }))}
-                />
-              )}
-            </div>
+            <RecordingRow
+              label="Watch recording"
+              meta={null}
+              status="ready"
+              watchHref={event.recordingUrl!}
+              downloadHref={`/api/events/${event.seriesId}/recording/download?occurrence=${encodeURIComponent(event.startsAt)}`}
+              copyUrl={event.recordingUrl!}
+              copyLabel="Copy recording link"
+              deleteUrl={
+                canEdit
+                  ? `/api/events/${event.seriesId}/recording?occurrence=${encodeURIComponent(event.startsAt)}`
+                  : null
+              }
+              onDeleted={() => setEvent((prev) => ({ ...prev, recordingUrl: null }))}
+            />
           ) : null}
 
           {visibleLiveKitSegments.length > 0 ? (
             <div className="flex flex-col gap-1.5">
               <span className="text-sm font-medium text-muted-foreground">Recording</span>
-              {visibleLiveKitSegments.map(({ segment, label }) =>
-                segment.ready ? (
-                  <div key={segment.id} className="flex flex-wrap items-center gap-1.5">
-                    <Link
-                      href={`/api/events/${event.seriesId}/recording/${segment.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
-                    >
-                      {label}
-                    </Link>
-                    <Button size="icon" variant="ghost" className="h-6 w-6" asChild>
-                      <Link
-                        href={`/api/events/${event.seriesId}/recording/${segment.id}?download=1`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`Download ${label.toLowerCase()}`}
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                      </Link>
-                    </Button>
-                    <span className="text-xs text-muted-foreground">
-                      (
-                      {segment.durationSeconds !== null ? `${formatDurationMinutes(segment.durationSeconds)} · ` : ""}
-                      {formatTimestamp(segment.startedAt)})
-                    </span>
-                    <CopyLinkButton
-                      url={`${origin}/api/events/${event.seriesId}/recording/${segment.id}`}
-                      label={`Copy ${label.toLowerCase()} link`}
-                    />
-                    {canEdit && (
-                      <DeleteRecordingButton
-                        deleteUrl={`/api/events/${event.seriesId}/recording/${segment.id}`}
-                        onDeleted={() =>
-                          setEvent((prev) => ({
-                            ...prev,
-                            liveKitRecordingSegments: prev.liveKitRecordingSegments.filter((s) => s.id !== segment.id),
-                          }))
-                        }
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <div key={segment.id} className="flex flex-wrap items-center gap-1.5">
-                    <span className="w-fit text-sm text-muted-foreground">
-                      {label} — {segment.failed ? "recording failed" : "processing…"}
-                    </span>
-                    {canEdit && (
-                      <DeleteRecordingButton
-                        deleteUrl={`/api/events/${event.seriesId}/recording/${segment.id}`}
-                        onDeleted={() =>
-                          setEvent((prev) => ({
-                            ...prev,
-                            liveKitRecordingSegments: prev.liveKitRecordingSegments.filter((s) => s.id !== segment.id),
-                          }))
-                        }
-                      />
-                    )}
-                  </div>
-                ),
-              )}
+              <div className="flex flex-col gap-1.5">
+                {visibleLiveKitSegments.map(({ segment, label }) => (
+                  <RecordingRow
+                    key={segment.id}
+                    label={label}
+                    meta={
+                      segment.ready
+                        ? `${segment.durationSeconds !== null ? `${formatDurationMinutes(segment.durationSeconds)} · ` : ""}${formatTimestamp(segment.startedAt)}`
+                        : `Started ${formatTimestamp(segment.startedAt)}`
+                    }
+                    status={segment.ready ? "ready" : segment.failed ? "failed" : "processing"}
+                    watchHref={segment.ready ? `/api/events/${event.seriesId}/recording/${segment.id}` : null}
+                    downloadHref={
+                      segment.ready ? `/api/events/${event.seriesId}/recording/${segment.id}?download=1` : null
+                    }
+                    copyUrl={
+                      segment.ready ? `${origin}/api/events/${event.seriesId}/recording/${segment.id}` : null
+                    }
+                    copyLabel={`Copy ${label.toLowerCase()} link`}
+                    deleteUrl={canEdit ? `/api/events/${event.seriesId}/recording/${segment.id}` : null}
+                    onDeleted={() =>
+                      setEvent((prev) => ({
+                        ...prev,
+                        liveKitRecordingSegments: prev.liveKitRecordingSegments.filter((s) => s.id !== segment.id),
+                      }))
+                    }
+                  />
+                ))}
+              </div>
             </div>
           ) : null}
 

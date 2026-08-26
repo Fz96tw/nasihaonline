@@ -5,10 +5,9 @@ import Link from "next/link";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowLeft, Download, Plus, Video, X } from "lucide-react";
+import { ArrowLeft, Plus, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DeleteRecordingButton } from "@/components/calendar/delete-recording-button";
-import { CopyLinkButton } from "@/components/calendar/copy-link-button";
+import { RecordingRow } from "@/components/calendar/recording-row";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -591,9 +590,9 @@ export function MeetingRequestDetail({
   // stamped as meetingEndedAt); Meet has no equivalent, so its recording
   // link keeps gating on the scheduled isPast time above.
   const isRecordingAvailable = item.livekitRoomName ? item.meetingEndedAt !== null : isPast;
-  // Only used inside CopyLinkButton's click handler (never rendered into
+  // Only used to build each RecordingRow's copyUrl (never rendered into
   // the DOM), so the SSR-time "" fallback never causes a hydration
-  // mismatch — see copy-link-button.tsx's doc comment for why the copied
+  // mismatch — see recording-row.tsx's doc comment for why the copied
   // link needs to be absolute rather than a relative path.
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   // Same per-segment rationale as event-detail.tsx's sibling: a ready or
@@ -768,87 +767,44 @@ export function MeetingRequestDetail({
               </div>
             )}
             {isRecordingAvailable && item.recordingUrl && (
-              <div className="flex items-center gap-1.5">
-                <Link
-                  href={item.recordingUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
-                >
-                  Watch recording
-                </Link>
-                <Button size="icon" variant="ghost" className="h-6 w-6" asChild>
-                  <Link
-                    href={`/api/inbox/meeting-requests/${item.id}/recording/download`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="Download recording"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                  </Link>
-                </Button>
-                <CopyLinkButton url={item.recordingUrl} label="Copy recording link" />
-              </div>
-            )}
-            {isRecordingAvailable && item.recordingUrl && item.direction === "sent" && (
-              <DeleteRecordingButton
-                deleteUrl={`/api/inbox/meeting-requests/${item.id}/recording`}
+              <RecordingRow
+                label="Watch recording"
+                meta={null}
+                status="ready"
+                watchHref={item.recordingUrl}
+                downloadHref={`/api/inbox/meeting-requests/${item.id}/recording/download`}
+                copyUrl={item.recordingUrl}
+                copyLabel="Copy recording link"
+                deleteUrl={item.direction === "sent" ? `/api/inbox/meeting-requests/${item.id}/recording` : null}
                 onDeleted={onUpdated}
               />
             )}
-            {visibleLiveKitSegments.map(({ segment, label }) =>
-              segment.ready ? (
-                <div key={segment.id} className="flex flex-wrap items-center gap-1.5">
-                  <Link
-                    href={`/api/inbox/meeting-requests/${item.id}/recording/${segment.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
-                  >
-                    {label}
-                  </Link>
-                  <Button size="icon" variant="ghost" className="h-6 w-6" asChild>
-                    <Link
-                      href={`/api/inbox/meeting-requests/${item.id}/recording/${segment.id}?download=1`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`Download ${label.toLowerCase()}`}
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                    </Link>
-                  </Button>
-                  {hasMounted && (
-                    <span className="text-xs text-muted-foreground">
-                      (
-                      {segment.durationSeconds !== null ? `${formatDurationMinutes(segment.durationSeconds)} · ` : ""}
-                      {formatTimestamp(segment.startedAt)})
-                    </span>
-                  )}
-                  <CopyLinkButton
-                    url={`${origin}/api/inbox/meeting-requests/${item.id}/recording/${segment.id}`}
-                    label={`Copy ${label.toLowerCase()} link`}
-                  />
-                  {item.direction === "sent" && (
-                    <DeleteRecordingButton
-                      deleteUrl={`/api/inbox/meeting-requests/${item.id}/recording/${segment.id}`}
-                      onDeleted={onUpdated}
-                    />
-                  )}
-                </div>
-              ) : (
-                <div key={segment.id} className="flex flex-wrap items-center gap-1.5">
-                  <span className="w-fit text-sm text-muted-foreground">
-                    {label} — {segment.failed ? "recording failed" : "processing…"}
-                  </span>
-                  {item.direction === "sent" && (
-                    <DeleteRecordingButton
-                      deleteUrl={`/api/inbox/meeting-requests/${item.id}/recording/${segment.id}`}
-                      onDeleted={onUpdated}
-                    />
-                  )}
-                </div>
-              ),
-            )}
+            {visibleLiveKitSegments.map(({ segment, label }) => (
+              <RecordingRow
+                key={segment.id}
+                label={label}
+                meta={
+                  !hasMounted
+                    ? null
+                    : segment.ready
+                      ? `${segment.durationSeconds !== null ? `${formatDurationMinutes(segment.durationSeconds)} · ` : ""}${formatTimestamp(segment.startedAt)}`
+                      : `Started ${formatTimestamp(segment.startedAt)}`
+                }
+                status={segment.ready ? "ready" : segment.failed ? "failed" : "processing"}
+                watchHref={segment.ready ? `/api/inbox/meeting-requests/${item.id}/recording/${segment.id}` : null}
+                downloadHref={
+                  segment.ready ? `/api/inbox/meeting-requests/${item.id}/recording/${segment.id}?download=1` : null
+                }
+                copyUrl={
+                  segment.ready ? `${origin}/api/inbox/meeting-requests/${item.id}/recording/${segment.id}` : null
+                }
+                copyLabel={`Copy ${label.toLowerCase()} link`}
+                deleteUrl={
+                  item.direction === "sent" ? `/api/inbox/meeting-requests/${item.id}/recording/${segment.id}` : null
+                }
+                onDeleted={onUpdated}
+              />
+            ))}
             {(item.meetingUrl || item.livekitRoomName) && item.direction === "sent" && !messageEditingOpen && (
               <Button
                 size="sm"
