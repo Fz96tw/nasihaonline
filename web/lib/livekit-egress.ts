@@ -1,5 +1,12 @@
 import "server-only";
-import { EgressClient, EncodedFileOutput, EncodedFileType, EgressStatus, S3Upload } from "livekit-server-sdk";
+import {
+  EgressClient,
+  EncodedFileOutput,
+  EncodedFileType,
+  EgressStatus,
+  EncodingOptions,
+  S3Upload,
+} from "livekit-server-sdk";
 import { getRecordingsS3Config } from "@/lib/recordings-storage";
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
@@ -71,6 +78,13 @@ export async function startEgress(roomName: string): Promise<StartEgressResult> 
         // large focus tile, other participants in a small sidebar strip)
         // instead of LiveKit's default "grid" template's equally-sized cells.
         layout: "speaker",
+        // Resolution stays at LiveKit's 720p default deliberately — this is
+        // a composite frame containing the screen share, so shrinking it
+        // would blur shared text/slides/code, not just the webcam strip.
+        // Framerate/bitrate are trimmed instead: screen shares are mostly
+        // static content, so 20fps costs nothing visually while still
+        // cutting real encode load (~3Mbps default -> 2Mbps).
+        encodingOptions: new EncodingOptions({ width: 1280, height: 720, framerate: 20, videoBitrate: 2000 }),
       });
       if (info.status === EgressStatus.EGRESS_FAILED) {
         return { error: info.error || "Egress failed to start." };

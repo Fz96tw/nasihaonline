@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Users, X } from "lucide-react";
-import { RoomEvent, type RemoteParticipant } from "livekit-client";
+import { RoomEvent, VideoPreset, VideoPresets, type RemoteParticipant } from "livekit-client";
 import { LiveKitRoom, VideoConference, useChat, useParticipants, useRoomContext } from "@livekit/components-react";
 import "@livekit/components-styles";
 import { getCsrfToken } from "@/lib/csrf-client";
@@ -25,6 +25,19 @@ import { getPublicMeetingClosingNote } from "@/lib/legal";
  */
 type DisplayMediaStreamOptionsWithSelfBrowserSurface = DisplayMediaStreamOptions & {
   selfBrowserSurface?: "include" | "exclude";
+};
+
+/**
+ * Webcam is shown small (sidebar strip under the "speaker" layout — see
+ * livekit-egress.ts) so there's little value in LiveKit's 720p/3-simulcast-
+ * layer default; capping capture at 480p with a single simulcast layer cuts
+ * per-participant encode and SFU forwarding cost without touching screen
+ * share, which keeps its own (larger) default resolution.
+ */
+const WEBCAM_480P = new VideoPreset(854, 480, 600_000, 20);
+const ROOM_OPTIONS = {
+  videoCaptureDefaults: { resolution: WEBCAM_480P.resolution },
+  publishDefaults: { videoSimulcastLayers: [VideoPresets.h180] },
 };
 
 /**
@@ -742,6 +755,7 @@ export function LiveKitMeetingScreen({
         token={credentials.token}
         serverUrl={credentials.serverUrl}
         connect
+        options={ROOM_OPTIONS}
         data-lk-theme="default"
         style={{ height: "100%" }}
         // replace, not push — the meeting page (this same URL) is already
