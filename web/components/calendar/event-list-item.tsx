@@ -94,10 +94,12 @@ export function EventListItem({
           ) : null}
         </div>
       </div>
-      <div className="flex flex-shrink-0 flex-col items-start gap-2 sm:items-end">
-        {!isHost && <RsvpButton eventId={event.seriesId} rsvped={rsvped} onToggled={onRsvpToggled} />}
-        <AddToCalendarButton eventId={event.seriesId} occurrenceIso={event.isRecurring ? event.startsAt : undefined} />
-      </div>
+      {isPast ? null : (
+        <div className="flex flex-shrink-0 flex-col items-start gap-2 sm:items-end">
+          {!isHost && <RsvpButton eventId={event.seriesId} rsvped={rsvped} onToggled={onRsvpToggled} />}
+          <AddToCalendarButton eventId={event.seriesId} occurrenceIso={event.isRecurring ? event.startsAt : undefined} />
+        </div>
+      )}
     </li>
   );
 }
