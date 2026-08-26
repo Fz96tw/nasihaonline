@@ -66,7 +66,12 @@ export async function startEgress(roomName: string): Promise<StartEgressResult> 
 
   async function attempt(): Promise<StartEgressResult> {
     try {
-      const info = await egressClient!.startRoomCompositeEgress(roomName, output);
+      const info = await egressClient!.startRoomCompositeEgress(roomName, output, {
+        // Match the live meeting's VideoConference layout (screen share as the
+        // large focus tile, other participants in a small sidebar strip)
+        // instead of LiveKit's default "grid" template's equally-sized cells.
+        layout: "speaker",
+      });
       if (info.status === EgressStatus.EGRESS_FAILED) {
         return { error: info.error || "Egress failed to start." };
       }

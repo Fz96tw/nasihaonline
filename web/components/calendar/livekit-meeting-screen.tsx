@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { X } from "lucide-react";
+import { Users, X } from "lucide-react";
 import { RoomEvent, type RemoteParticipant } from "livekit-client";
-import { LiveKitRoom, VideoConference, useChat, useRoomContext } from "@livekit/components-react";
+import { LiveKitRoom, VideoConference, useChat, useParticipants, useRoomContext } from "@livekit/components-react";
 import "@livekit/components-styles";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { getPublicMeetingClosingNote } from "@/lib/legal";
@@ -17,6 +17,40 @@ import { getPublicMeetingClosingNote } from "@/lib/legal";
  * they're in (user request, 2026-08-25). Re-appears on a fresh page load/
  * rejoin — nothing about the dismissal is persisted.
  */
+
+/**
+ * Chrome/Edge-only `getDisplayMedia()` extension
+ * (https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia#selfbrowsersurface)
+ * not yet in TS's DOM lib.
+ */
+type DisplayMediaStreamOptionsWithSelfBrowserSurface = DisplayMediaStreamOptions & {
+  selfBrowserSurface?: "include" | "exclude";
+};
+
+/**
+ * VideoConference's built-in screen-share button (from ControlBar) calls
+ * `getDisplayMedia()` with no way to pass capture options through — the
+ * prefab exposes no captureOptions prop for it. Patching the browser API
+ * directly, for the lifetime of this meeting screen, is the only way to
+ * default `selfBrowserSurface: "exclude"` so this meeting's own tab (or a
+ * window/monitor showing it) is hidden from the share picker. Without it,
+ * an attendee sharing that surface recurses the meeting UI into itself in
+ * the shared video (reported 2026-08-25). Only overrides the default —
+ * an explicit caller-supplied value (there is none today, but future code
+ * might add one) still wins.
+ */
+function usePreventScreenShareSelfMirror() {
+  useEffect(() => {
+    const { mediaDevices } = navigator;
+    const original = mediaDevices.getDisplayMedia.bind(mediaDevices);
+    mediaDevices.getDisplayMedia = (options?: DisplayMediaStreamOptionsWithSelfBrowserSurface) =>
+      original({ selfBrowserSurface: "exclude", ...options });
+    return () => {
+      mediaDevices.getDisplayMedia = original;
+    };
+  }, []);
+}
+
 function MeetingBanner({ title, organizerName }: { title: string; organizerName: string }) {
   const [visible, setVisible] = useState(true);
 
@@ -86,6 +120,25 @@ function DisclaimerReminderFlash() {
 const TOAST_DURATION_MS = 5_000;
 
 type Toast = { id: string; message: string };
+
+type ParticipantSummary = { identity: string; name: string; isLocal: boolean };
+
+/**
+ * Live attendee list — must render inside <LiveKitRoom> to reach
+ * useParticipants(), but renders no UI of its own (same pattern as
+ * ParticipantActivityListener below: reports up via onChange so the actual
+ * button/panel can live outside <LiveKitRoom>'s DOM tree). useParticipants()
+ * already includes the local participant and re-renders on join/leave.
+ */
+function ParticipantsListener({ onChange }: { onChange: (participants: ParticipantSummary[]) => void }) {
+  const participants = useParticipants();
+
+  useEffect(() => {
+    onChange(participants.map((p) => ({ identity: p.identity, name: p.name || p.identity, isLocal: p.isLocal })));
+  }, [participants, onChange]);
+
+  return null;
+}
 
 /**
  * Listens for remote participant join/leave events — must render inside
@@ -241,11 +294,16 @@ function ChatCaptureListener({ chatEndpoint }: { chatEndpoint: string | null | u
 }
 
 /**
- * Floating Record/Stop control, any attendee can use it (objective 4) —
- * same absolutely-positioned-sibling pattern as the other overlays here.
- * `recording` reflects the live room-metadata-synced state from
- * RecordingStateListener, not local optimistic state, so the button always
- * shows the true shared state even if someone else started/stopped it.
+ * Record/Stop button — rendered inside TopRightOverlay below, not
+ * independently positioned (reported 2026-08-25: a standalone bottom-right
+ * overlay collided with LiveKit's own `.lk-control-bar`, whose Chat toggle
+ * is its right-most button with no flex-wrap to make room — worse when the
+ * chat panel is open, since `.lk-chat` (up to 60ch wide) shrinks the
+ * video-conference column while a fixed-to-viewport button stays pinned to
+ * the true right edge). `recording` reflects the live room-metadata-synced
+ * state from RecordingStateListener, not local optimistic state, so the
+ * button always shows the true shared state even if someone else
+ * started/stopped it.
  */
 function RecordingControl({
   recording,
@@ -281,18 +339,56 @@ function RecordingControl({
   }
 
   return (
-    <div className="pointer-events-none absolute bottom-4 right-4 z-50">
+    <button
+      type="button"
+      onClick={toggle}
+      disabled={pending}
+      className="pointer-events-auto flex items-center gap-2 rounded-full border bg-background/95 px-4 py-2 text-sm font-medium shadow-lg backdrop-blur disabled:opacity-60"
+    >
+      <span className={`h-2.5 w-2.5 rounded-full ${recording ? "animate-pulse bg-destructive" : "bg-muted-foreground"}`} />
+      {recording ? "Stop recording" : "Record"}
+    </button>
+  );
+}
+
+/**
+ * Participants button + dropdown list, rendered inside TopRightOverlay
+ * alongside RecordingControl. `participants` comes from ParticipantsListener
+ * inside <LiveKitRoom>, same lift-state-up pattern as recording/toasts.
+ */
+function ParticipantsControl({ participants }: { participants: ParticipantSummary[] }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="pointer-events-auto relative">
       <button
         type="button"
-        onClick={toggle}
-        disabled={pending}
-        className="pointer-events-auto flex items-center gap-2 rounded-full border bg-background/95 px-4 py-2 text-sm font-medium shadow-lg backdrop-blur disabled:opacity-60"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex items-center gap-2 rounded-full border bg-background/95 px-4 py-2 text-sm font-medium shadow-lg backdrop-blur"
       >
-        <span className={`h-2.5 w-2.5 rounded-full ${recording ? "animate-pulse bg-destructive" : "bg-muted-foreground"}`} />
-        {recording ? "Stop recording" : "Record"}
+        <Users className="h-4 w-4" />
+        Participants ({participants.length})
       </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-2 max-h-72 w-56 overflow-y-auto rounded-md border bg-background/95 p-2 shadow-lg backdrop-blur">
+          <ul className="space-y-1">
+            {participants.map((p) => (
+              <li key={p.identity} className="truncate rounded-sm px-2 py-1 text-sm">
+                {p.name}
+                {p.isLocal && <span className="text-muted-foreground"> (You)</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
+}
+
+/** Shared top-right overlay slot for Record and Participants — see RecordingControl's doc comment for why this corner. */
+function TopRightOverlay({ children }: { children: ReactNode }) {
+  return <div className="pointer-events-none absolute right-4 top-4 z-50 flex flex-col items-end gap-2">{children}</div>;
 }
 
 /** The visible toast stack — a sibling of <LiveKitRoom>, not nested inside it (see ParticipantActivityListener). */
@@ -358,6 +454,9 @@ export function LiveKitMeetingScreen({
   const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [recording, setRecording] = useState(false);
+  const [participants, setParticipants] = useState<ParticipantSummary[]>([]);
+
+  usePreventScreenShareSelfMirror();
 
   useEffect(() => {
     let cancelled = false;
@@ -408,12 +507,15 @@ export function LiveKitMeetingScreen({
       <MeetingBanner title={title} organizerName={organizerName} />
       <DisclaimerReminderFlash />
       <ParticipantActivityToasts toasts={toasts} />
-      <RecordingControl
-        recording={recording}
-        startEndpoint={recordingStartEndpoint}
-        stopEndpoint={recordingStopEndpoint}
-        onError={pushToast}
-      />
+      <TopRightOverlay>
+        <RecordingControl
+          recording={recording}
+          startEndpoint={recordingStartEndpoint}
+          stopEndpoint={recordingStopEndpoint}
+          onError={pushToast}
+        />
+        <ParticipantsControl participants={participants} />
+      </TopRightOverlay>
       <LiveKitRoom
         token={credentials.token}
         serverUrl={credentials.serverUrl}
@@ -429,6 +531,7 @@ export function LiveKitMeetingScreen({
         <ParticipantActivityListener onEvent={pushToast} />
         <RecordingStateListener onChange={setRecording} onToast={pushToast} />
         <ChatCaptureListener chatEndpoint={chatEndpoint} />
+        <ParticipantsListener onChange={setParticipants} />
         <VideoConference />
       </LiveKitRoom>
     </div>
