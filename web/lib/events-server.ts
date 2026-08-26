@@ -2746,15 +2746,19 @@ export async function markLiveKitEventRecordingSegmentFailed(egressId: string): 
 /**
  * Compiles this room's staged LiveKit chat messages (EventChatMessage,
  * captured live via POST /api/events/[id]/meeting/chat) into a single
- * chat-log-formatted ForumPost on the event's discussion thread, called
- * from the room_finished webhook handler right after
- * resetMeetingOnRoomEmpty. No-ops silently — never throws, matching every
- * other LiveKit webhook side-effect's best-effort philosophy — when there's
- * no matching Event, no discussion thread to post into, or no staged
- * messages. Posted as the event's own host (not a system/admin account —
- * there's no dedicated one in this app, and posting under an unrelated
- * admin's name read as confusing/misleading in practice), same as every
- * other post that host could make in their own event's thread.
+ * chat-log-formatted ForumPost on the event's discussion thread, auto-
+ * creating the thread via startEventDiscussion if the event doesn't have
+ * one yet (bug fixed 2026-08-26: previously no-op'd in that case, silently
+ * dropping the whole chat log with the staged rows never cleaned up either
+ * — a discussion thread being merely optional at event creation shouldn't
+ * mean in-meeting chat is lost). Called from the room_finished webhook
+ * handler right after resetMeetingOnRoomEmpty. No-ops silently — never
+ * throws, matching every other LiveKit webhook side-effect's best-effort
+ * philosophy — only when there's no matching Event or no staged messages.
+ * Posted as the event's own host (not a system/admin account — there's no
+ * dedicated one in this app, and posting under an unrelated admin's name
+ * read as confusing/misleading in practice), same as every other post that
+ * host could make in their own event's thread.
  *
  * occurrenceDate resolution mirrors attachLiveKitEventRecordingSegment's
  * "closest scheduled occurrence at or before X" logic, anchored to the
@@ -2774,14 +2778,22 @@ export async function finalizeEventChatTranscript(roomName: string): Promise<voi
       recurrence: { select: RECURRENCE_SELECT },
     },
   });
-  if (!event?.forumThread) return;
-  const threadId = event.forumThread.id;
+  if (!event) return;
 
   const messages = await db.eventChatMessage.findMany({
     where: { eventId: event.id },
     orderBy: { sentAt: "asc" },
   });
   if (messages.length === 0) return;
+
+  // Bug fixed 2026-08-26: previously no-op'd here when the event had no
+  // discussion thread yet (host never clicked "Start a Discussion"),
+  // silently dropping the entire chat log — worse, the EventChatMessage
+  // rows below are only deleted after a successful post, so they were
+  // never cleaned up either, just orphaned. Auto-create the thread instead,
+  // the same idempotent path the manual button uses — the host always
+  // passes its own canView check, so this never 404s.
+  const threadId = event.forumThread?.id ?? (await startEventDiscussion(event.id, event.hostId)).threadId;
 
   const endedAt = new Date();
   let occurrenceDate = event.startsAt;
