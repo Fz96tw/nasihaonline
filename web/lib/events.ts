@@ -104,6 +104,16 @@ export type MemberEvent = EventWithRsvp & {
   viewCount: number;
   /** Whether this occurrence has a viewable recording (Meet or a ready LiveKit segment) — a lightweight flag for list views; getMemberEventById still owns the full recording detail (URLs/segments). */
   hasRecording: boolean;
+  /**
+   * Direct link to watch the recording — the Drive URL for a Meet-origin
+   * recording, or this app's own /api/events/:id/recording/:recordingId
+   * redirect route for the earliest ready LiveKit segment (later parts, if
+   * any, are only reachable from the full detail page). Null whenever
+   * hasRecording is false. Kept separate from the always-null `recordingUrl`
+   * above so list views can offer a working "Watch recording" link without
+   * exposing the raw Drive URL there.
+   */
+  recordingWatchHref: string | null;
 };
 
 // Shared "Open" / "Members Only" / "Invitees Only" audience badge — used by

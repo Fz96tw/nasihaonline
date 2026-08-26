@@ -340,6 +340,22 @@ export async function getEventsForViewer(userId: string | null): Promise<EventWi
 // earlier in the current month), not just what's still upcoming. The
 // "Upcoming List" tab derives its own future-only view client-side
 // (CalendarView) rather than this query doing it server-side.
+// Picks the one link getMemberEvents' list view is willing to hand out for
+// an occurrence's recording: the Meet Drive URL if that's how it was
+// recorded, otherwise the earliest ready LiveKit segment (later parts, if
+// any, stay reachable only from the full detail page's Part 1/Part 2 list).
+function pickEventRecordingWatchHref(
+  eventId: string,
+  recordings: { id: string; origin: RecordingOrigin; objectKey: string | null; recordingUrl: string | null; startedAt: Date | null }[],
+): string | null {
+  const meet = recordings.find((recording) => recording.origin === RecordingOrigin.meet && recording.recordingUrl !== null);
+  if (meet) return meet.recordingUrl;
+  const readyLiveKit = recordings
+    .filter((recording) => recording.origin === RecordingOrigin.livekit && recording.objectKey !== null)
+    .sort((a, b) => (a.startedAt?.getTime() ?? 0) - (b.startedAt?.getTime() ?? 0))[0];
+  return readyLiveKit ? `/api/events/${eventId}/recording/${readyLiveKit.id}` : null;
+}
+
 export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
   // Recurring events have no month-cursor param to bound expansion by the
   // month actually being browsed (FullCalendar fetches this whole dataset
@@ -374,7 +390,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
       recurrence: { select: RECURRENCE_SELECT },
       invitees: { where: { userId }, select: { userId: true } },
       recordings: {
-        select: { occurrenceDate: true, origin: true, objectKey: true, recordingUrl: true },
+        select: { id: true, occurrenceDate: true, origin: true, objectKey: true, recordingUrl: true, startedAt: true },
       },
       // Going RSVPs (members) plus EventRegistrations (non-members) — same
       // merge as getEventEngagementForAdmin's attendee/interest count.
@@ -430,6 +446,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
         // (getMemberEventById below) — a recording is a post-meeting artifact
         // a member would look for on the event itself, not while browsing.
         recordingUrl: null,
+        recordingWatchHref: canViewRecording ? pickEventRecordingWatchHref(event.id, occurrenceRecordings) : null,
         liveKitRecordingSegments: [],
         chatTranscriptPostId: null,
         meetingEndedAt: null,
@@ -569,6 +586,7 @@ export async function getMemberEventById(
     livekitRoomName: rsvped || event.hostId === userId ? event.livekitRoomName : null,
     meetingEndedAt: (rsvped || event.hostId === userId) ? (event.meetingEndedAt?.toISOString() ?? null) : null,
     recordingUrl: canViewRecording ? (recordingForOccurrence?.recordingUrl ?? null) : null,
+    recordingWatchHref: canViewRecording ? pickEventRecordingWatchHref(event.id, occurrenceRecordings) : null,
     hasRecording:
       canViewRecording &&
       (recordingForOccurrence?.recordingUrl != null || liveKitSegments.some((s) => s.objectKey !== null)),

@@ -892,6 +892,7 @@ export async function getUpcomingMeetingsForUser(userId: string) {
       (meeting.senderId === userId ? meeting.recipient.name : meeting.sender.name) ?? "NASIHA Member",
     // Always still upcoming here — a recording can't exist before the meeting happens.
     hasRecording: false,
+    recordingWatchHref: null,
   }));
 
   const pendingMeetings = negotiating.flatMap((meeting) => {
@@ -911,6 +912,7 @@ export async function getUpcomingMeetingsForUser(userId: string) {
         otherPartyName:
           (meeting.senderId === userId ? meeting.recipient.name : meeting.sender.name) ?? "NASIHA Member",
         hasRecording: false,
+        recordingWatchHref: null,
       },
     ];
   });
@@ -926,6 +928,22 @@ export async function getUpcomingMeetingsForUser(userId: string) {
  * No pending/negotiating branch: a request that was never accepted isn't a
  * past *meeting* that happened, just a stale proposal — it's excluded here.
  */
+// Same rationale as events-server.ts's pickEventRecordingWatchHref: the
+// Meet Drive URL if that's how it was recorded, otherwise the earliest
+// ready LiveKit segment — MeetingRequestRecording rows are LiveKit-only,
+// so there's no `origin` column to branch on here.
+function pickMeetingRecordingWatchHref(
+  meetingId: string,
+  recordingUrl: string | null,
+  recordings: { id: string; objectKey: string | null; startedAt: Date | null }[],
+): string | null {
+  if (recordingUrl) return recordingUrl;
+  const ready = recordings
+    .filter((recording) => recording.objectKey !== null)
+    .sort((a, b) => (a.startedAt?.getTime() ?? 0) - (b.startedAt?.getTime() ?? 0))[0];
+  return ready ? `/api/inbox/meeting-requests/${meetingId}/recording/${ready.id}` : null;
+}
+
 export async function getPastMeetingsForUser(userId: string): Promise<UpcomingMeeting[]> {
   const startOfToday = new Date();
   startOfToday.setUTCHours(0, 0, 0, 0);
@@ -953,7 +971,7 @@ export async function getPastMeetingsForUser(userId: string): Promise<UpcomingMe
       recipientId: true,
       sender: { select: { name: true } },
       recipient: { select: { name: true } },
-      recordings: { select: { objectKey: true } },
+      recordings: { select: { id: true, objectKey: true, startedAt: true } },
     },
     orderBy: { scheduledAt: "desc" },
   });
@@ -971,6 +989,7 @@ export async function getPastMeetingsForUser(userId: string): Promise<UpcomingMe
     hasRecording: meeting.livekitRoomName
       ? meeting.recordings.some((r) => r.objectKey !== null)
       : meeting.recordingUrl !== null,
+    recordingWatchHref: pickMeetingRecordingWatchHref(meeting.id, meeting.recordingUrl, meeting.recordings),
   }));
 }
 
