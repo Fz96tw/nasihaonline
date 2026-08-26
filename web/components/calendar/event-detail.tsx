@@ -13,6 +13,7 @@ import { ManageInvitees } from "@/components/calendar/manage-invitees";
 import { CancelEventButton } from "@/components/calendar/cancel-event-button";
 import { ResendNotifications } from "@/components/calendar/resend-notifications";
 import { DeleteRecordingButton } from "@/components/calendar/delete-recording-button";
+import { CopyLinkButton } from "@/components/calendar/copy-link-button";
 import { AttendanceChecklist } from "@/components/calendar/attendance-checklist";
 import {
   EVENT_TYPE_LABELS,
@@ -84,6 +85,11 @@ export function EventDetail({
 }) {
   const [event, setEvent] = useState(initialEvent);
   const hasMounted = useHasMounted();
+  // Only used inside CopyLinkButton's click handler (never rendered into
+  // the DOM), so the SSR-time "" fallback never causes a hydration
+  // mismatch — see copy-link-button.tsx's doc comment for why the copied
+  // link needs to be absolute rather than a relative path.
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
   const isPast = hasMounted && new Date(event.endsAt ?? event.startsAt) < new Date();
   // LiveKit gives a real "meeting genuinely ended" signal (room_finished,
   // stamped as meetingEndedAt); Meet has no equivalent, so its recording
@@ -216,6 +222,7 @@ export function EventDetail({
                   <Download className="h-3.5 w-3.5" />
                 </Link>
               </Button>
+              <CopyLinkButton url={event.recordingUrl!} label="Copy recording link" />
               {canEdit && (
                 <DeleteRecordingButton
                   deleteUrl={`/api/events/${event.seriesId}/recording?occurrence=${encodeURIComponent(event.startsAt)}`}
@@ -254,6 +261,10 @@ export function EventDetail({
                       {segment.durationSeconds !== null ? `${formatDurationMinutes(segment.durationSeconds)} · ` : ""}
                       {formatTimestamp(segment.startedAt)})
                     </span>
+                    <CopyLinkButton
+                      url={`${origin}/api/events/${event.seriesId}/recording/${segment.id}`}
+                      label={`Copy ${label.toLowerCase()} link`}
+                    />
                     {canEdit && (
                       <DeleteRecordingButton
                         deleteUrl={`/api/events/${event.seriesId}/recording/${segment.id}`}
