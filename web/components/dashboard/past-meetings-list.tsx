@@ -76,6 +76,9 @@ export function PastMeetingsList({ items }: { items: AttendanceHistoryItem[] }) 
                       </Badge>
                       {item.eventType ? <Badge variant="neutral">{EVENT_TYPE_LABELS[item.eventType]}</Badge> : null}
                       {item.hasRecording ? <Badge variant="success">Recording available</Badge> : null}
+                      {item.recordingPartCount > 1 ? (
+                        <Badge variant="neutral">{item.recordingPartCount} parts</Badge>
+                      ) : null}
                     </div>
                     <Link href={item.detailHref} className="block truncate font-medium hover:underline">
                       {item.title}
@@ -85,11 +88,11 @@ export function PastMeetingsList({ items }: { items: AttendanceHistoryItem[] }) 
                     </p>
                   </div>
                   {item.hasRecording && item.recordingPartCount > 1 ? (
-                    <Button asChild size="sm" variant="outline" className="flex-shrink-0">
-                      <Link href={item.detailHref}>{`View recording (${item.recordingPartCount} parts)`}</Link>
+                    <Button asChild size="sm" variant="outline" className="w-full flex-shrink-0 sm:w-auto">
+                      <Link href={item.detailHref}>View recording</Link>
                     </Button>
                   ) : item.hasRecording && item.recordingWatchHref ? (
-                    <Button asChild size="sm" variant="outline" className="flex-shrink-0">
+                    <Button asChild size="sm" variant="outline" className="w-full flex-shrink-0 sm:w-auto">
                       <a href={item.recordingWatchHref} target="_blank" rel="noopener noreferrer">
                         Watch recording
                       </a>
