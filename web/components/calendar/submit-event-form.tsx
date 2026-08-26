@@ -55,6 +55,7 @@ const DEFAULT_VALUES: CreateEventValues = {
   timezone: null,
   visibility: EventVisibility.community,
   invitedUserIds: [],
+  coHostUserIds: [],
   meetLinkSource: "livekit",
   recurrence: null,
 };
@@ -195,6 +196,11 @@ export function SubmitEventForm({
           // "Open to the public" toggle etc. for an actually-restricted event.
           visibility: existingEvent.visibility,
           invitedUserIds: [],
+          // Same reasoning as invitedUserIds — co-hosts are create-only from
+          // this form; after creation, the host/an existing co-host manages
+          // them live from the meeting's own participant list instead
+          // (POST /api/events/:id/meeting/co-hosts), not from an edit here.
+          coHostUserIds: [],
           meetLinkSource: existingEvent.meetLinkSource,
           recurrence: existingEvent.recurrence,
         }
@@ -252,6 +258,7 @@ export function SubmitEventForm({
       if (!existingEvent) {
         formData.append("visibility", values.visibility);
         formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
+        formData.append("coHostUserIds", JSON.stringify(values.coHostUserIds));
       }
       if (values.recurrence) formData.append("recurrence", JSON.stringify(values.recurrence));
       if (heroImage) formData.append("heroImage", heroImage);
@@ -631,8 +638,8 @@ export function SubmitEventForm({
                 <FormDescription>
                   Nasiha Conference and Google Meet both auto-generate their own meeting link — or paste your own
                   below. Nasiha Conference gives you real in-meeting host controls (admit, mute, or remove
-                  participants) and lets any attendee manually start or stop recording. Google Meet does not
-                  record these meetings.
+                  participants), and lets you and any co-hosts you name below start or stop recording. Google Meet
+                  does not record these meetings.
                   {existingEvent && (
                     <span className="mt-1 block">
                       Switching platforms here replaces the current link with a brand-new one — you&apos;ll get a
@@ -655,6 +662,26 @@ export function SubmitEventForm({
               </FormItem>
             )}
           />
+
+          {!existingEvent && meetLinkSource === "livekit" && (
+            <FormField
+              control={form.control}
+              name="coHostUserIds"
+              render={({ field }) => (
+                <FormItem className="rounded-md border p-4">
+                  <FormLabel>Co-hosts</FormLabel>
+                  <FormControl>
+                    <InviteePicker value={field.value} onChange={field.onChange} excludeUserId={currentUserId} />
+                  </FormControl>
+                  <FormDescription>
+                    Co-hosts can start/stop recording and name further co-hosts, the same as you. You can also add
+                    or remove co-hosts from the participant list once the meeting is underway.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
 
           {meetLinkSource === "manual" && (
             <FormField

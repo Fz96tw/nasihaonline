@@ -110,6 +110,8 @@ export default async function MeetPage({ params }: { params: Promise<{ kind: str
     kind === "event"
       ? `/api/events/${id}/meeting/recording/stop`
       : `/api/inbox/meeting-requests/${id}/meeting/recording/stop`;
+  // Event-only (Recording Access initiative) — a MeetingRequest has no co-host concept.
+  const coHostsEndpoint = kind === "event" ? `/api/events/${id}/meeting/co-hosts` : null;
   // A MeetingRequest has no discussion thread — its chat compiles into a
   // MeetingRequestMessage on the Inbox timeline instead of a ForumPost
   // (finalizeMeetingRequestChatTranscript, meeting-requests-server.ts).
@@ -126,6 +128,7 @@ export default async function MeetPage({ params }: { params: Promise<{ kind: str
       tokenEndpoint={tokenEndpoint}
       recordingStartEndpoint={recordingStartEndpoint}
       recordingStopEndpoint={recordingStopEndpoint}
+      coHostsEndpoint={coHostsEndpoint}
       chatEndpoint={chatEndpoint}
       backHref={backHref}
     />

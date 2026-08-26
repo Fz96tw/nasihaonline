@@ -85,6 +85,9 @@ model User {
   eventRsvps       RSVP[]         @relation("EventRsvp")
   eventAttendances Attendance[]   @relation("EventAttendance")
   eventInvitations EventInvitee[] @relation("EventInvitee")
+  // Recording Access initiative — members the host has designated as
+  // co-host, able to start/stop recording and manage further co-hosts.
+  eventCoHostOf    EventCoHost[]  @relation("EventCoHost")
   // Resend Notifications (event detail page) — who triggered each member-wide
   // broadcast, not just the automatic one at createEvent() time.
   eventNotificationBroadcastsSent EventNotificationBroadcast[] @relation("EventNotificationBroadcastSentBy")
@@ -1085,6 +1088,11 @@ model Event {
   // RSVP (who responded). Supports add/remove after creation (a later
   // objective), not just bulk-insert at createEvent() time.
   invitees      EventInvitee[]
+  // Recording Access initiative — separate from `invitees`: co-hosts must
+  // work for community/open events too, which have no EventInvitee rows.
+  // Assigned by the host at scheduling time; the host or an existing
+  // co-host can also grant/revoke it live during the meeting.
+  coHosts       EventCoHost[]
   // Optional discussion thread in the seeded "Events" forum (EVENTS_FORUM_SLUG,
   // lib/forums.ts), opted into at creation time. The FK lives on ForumThread
   // (below) rather than here so createEvent can create the Event first and
@@ -1362,6 +1370,27 @@ model EventInvitee {
   @@unique([eventId, userId])
   @@index([userId])
   @@map("event_invitees")
+}
+
+// Recording Access initiative — who besides the host (Event.hostId) can
+// start/stop LiveKit recording, and grant/revoke further co-hosts, both
+// before and during the meeting. Deliberately separate from EventInvitee,
+// which only exists for visibility = invited and doesn't cover
+// community/open attendees. The DB row is the authoritative source of
+// truth (not LiveKit's ephemeral room state) — see lib/livekit.ts's
+// coHostUserIds room-metadata field, which only mirrors this for live
+// client sync, and web/app/api/events/[id]/meeting/co-hosts/route.ts.
+model EventCoHost {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("EventCoHost", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, userId])
+  @@index([userId])
+  @@map("event_co_hosts")
 }
 
 // Captures a non-member's email (and optional name) when they register

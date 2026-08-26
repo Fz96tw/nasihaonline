@@ -27,6 +27,10 @@ export type MeetingWaitingRoomStatus = {
   isOrganizer: boolean;
   configured: boolean;
   requiresCodeOfConductAgreement: boolean;
+  /** Event-only (Recording Access initiative) — undefined for a MeetingRequest, which has no co-host concept (see livekit-meeting-screen.tsx's TopRightOverlay doc comment). */
+  isHostOrCoHost?: boolean;
+  /** Event-only, paired with isHostOrCoHost — see getEventMeetingStatus's doc comment. */
+  hostId?: string;
 };
 
 /** Always hours:minutes:seconds, zero-padded — a fixed-width format reads better at large sizes than one that reflows as hours drop off. */
@@ -72,6 +76,7 @@ export function MeetingWaitingRoom({
   tokenEndpoint,
   recordingStartEndpoint,
   recordingStopEndpoint,
+  coHostsEndpoint,
   chatEndpoint,
   backHref,
 }: {
@@ -83,6 +88,8 @@ export function MeetingWaitingRoom({
   tokenEndpoint: string;
   recordingStartEndpoint: string;
   recordingStopEndpoint: string;
+  /** POST endpoint for granting/revoking co-host — Event-only (Recording Access initiative), null for a MeetingRequest, which has no co-host concept. */
+  coHostsEndpoint?: string | null;
   /** POST endpoint for archiving in-meeting chat into a discussion thread — null for a MeetingRequest, which has none. */
   chatEndpoint?: string | null;
   backHref: string;
@@ -274,9 +281,12 @@ export function MeetingWaitingRoom({
         tokenEndpoint={tokenEndpoint}
         recordingStartEndpoint={recordingStartEndpoint}
         recordingStopEndpoint={recordingStopEndpoint}
+        coHostsEndpoint={coHostsEndpoint}
         chatEndpoint={chatEndpoint}
         title={status.title}
         organizerName={status.organizerName}
+        hostId={status.hostId}
+        isHostOrCoHost={status.isHostOrCoHost ?? false}
         backHref={backHref}
       />
     );

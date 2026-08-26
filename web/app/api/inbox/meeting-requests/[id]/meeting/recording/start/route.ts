@@ -5,10 +5,18 @@ import {
   getMeetingRequestMeetingStatus,
   MeetingRequestError,
 } from "@/lib/meeting-requests-server";
-import { setRoomRecordingMetadata } from "@/lib/livekit";
+import { updateRoomMetadata } from "@/lib/livekit";
 import { startEgress } from "@/lib/livekit-egress";
 
-/** Same shape/rationale as the Event route — see app/api/events/[id]/meeting/recording/start/route.ts. */
+/**
+ * Same shape as the Event route (see
+ * app/api/events/[id]/meeting/recording/start/route.ts) but NOT restricted
+ * to host/co-host — the Recording Access initiative's host/co-host model
+ * is Event-specific ("assigned by the event organizer when scheduling the
+ * event"); a MeetingRequest is a 1:1 call with only two participants
+ * (getMeetingRequestMeetingStatus already scopes access to them), so it
+ * stays open to either side.
+ */
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   let user;
   try {
@@ -39,7 +47,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       startedAt: new Date(),
     });
 
-    await setRoomRecordingMetadata(status.livekitRoomName, { recording: true, egressId: result.egressId });
+    await updateRoomMetadata(status.livekitRoomName, { recording: true, egressId: result.egressId });
     return NextResponse.json({ recording: true, egressId: result.egressId });
   } catch (error) {
     if (error instanceof MeetingRequestError) {

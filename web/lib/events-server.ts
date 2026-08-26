@@ -1104,6 +1104,8 @@ export async function createEvent(
     heroImage: File | null;
     visibility: EventVisibility;
     invitedUserIds: string[];
+    /** Recording Access initiative — members granted co-host (recording start/stop, managing further co-hosts) from creation. Optional, any visibility — unlike invitedUserIds. */
+    coHostUserIds: string[];
     meetLinkSource: "auto" | "manual" | "livekit";
     /** Optional waiting-room greeting shown to attendees on /meet/event/[id] before Start (meeting-join-experience). */
     meetingOrganizerMessage: string | null;
@@ -1192,6 +1194,19 @@ export async function createEvent(
   if (isRestricted && invitedUsers.length === 0) {
     throw new EventError(400, "Select at least one member to invite.");
   }
+
+  // Recording Access initiative — unlike invitedUserIds, co-hosts apply to
+  // any visibility (a community/open event has no invited list at all, but
+  // can still have co-hosts) and are always optional. Same eligibility
+  // re-resolution and host-exclusion precedent as invitedUsers above.
+  const coHostUsers = await db.user.findMany({
+    where: {
+      id: { in: input.coHostUserIds, notIn: [hostId] },
+      tier: { in: DIRECTORY_TIERS },
+      profile: { listInDirectory: true },
+    },
+    select: { id: true },
+  });
 
   // A community event has no invitee list of its own — its "audience" is
   // every member, discovered via RSVP after the fact — so it's announced to
@@ -1333,6 +1348,12 @@ export async function createEvent(
         title: input.title,
         hostName,
         userIds: invitedUsers.map((user) => user.id),
+      });
+    }
+
+    if (coHostUsers.length > 0) {
+      await tx.eventCoHost.createMany({
+        data: coHostUsers.map((user) => ({ eventId: created.id, userId: user.id })),
       });
     }
 
@@ -2537,6 +2558,10 @@ export async function getEventMeetingStatus(
   organizerMessage: string | null;
   organizerMessageImageUrl: string | null;
   isOrganizer: boolean;
+  /** Host or designated co-host (Recording Access initiative) — the two roles allowed to start/stop recording and manage further co-hosts. */
+  isHostOrCoHost: boolean;
+  /** The host's User.id, matching the `identity` LiveKit issues them (mintLiveKitToken) — lets the client's participant list identify which roster row is the host, distinct from `organizerName` (a display name, not an identity). */
+  hostId: string;
   configured: boolean;
   /** Open events are reachable by never-vetted anonymous registrants (no membership application, so no prior Code of Conduct agreement) — gates the actual Meet redirect on a click-through agreement. Community/invited events skip this: every attendee there is already a member who agreed once at /join. */
   requiresCodeOfConductAgreement: boolean;
@@ -2561,6 +2586,7 @@ export async function getEventMeetingStatus(
   if (!event || event.cancelledAt) throw new EventError(404, "Event not found.");
 
   const isHost = userId !== null && event.hostId === userId;
+  const isHostOrCoHost = isHost || (userId !== null && (await isEventCoHost(eventId, userId)));
 
   if (userId === null) {
     if (!event.open) throw new EventError(403, "Sign in to view this meeting.");
@@ -2589,9 +2615,61 @@ export async function getEventMeetingStatus(
     organizerMessage: event.meetingOrganizerMessage,
     organizerMessageImageUrl: getMeetingMessageImageUrl(event.meetingOrganizerMessageImageKey),
     isOrganizer: isHost,
+    isHostOrCoHost,
+    hostId: event.hostId,
     configured: event.meetingUrl !== null || event.livekitRoomName !== null,
     requiresCodeOfConductAgreement: event.open,
   };
+}
+
+/** Recording Access initiative — is `userId` a designated co-host of `eventId`? DB is authoritative, not LiveKit's ephemeral room state (see EventCoHost's doc comment in schema.prisma). */
+export async function isEventCoHost(eventId: string, userId: string): Promise<boolean> {
+  const row = await db.eventCoHost.findUnique({
+    where: { eventId_userId: { eventId, userId } },
+    select: { id: true },
+  });
+  return row !== null;
+}
+
+/**
+ * Grants or revokes co-host status for `targetUserId` on `eventId`, called
+ * by an attendee during a live meeting. Authorization is enforced here
+ * (same convention as updateEventInvitees above), not left to the route:
+ * only the host or an existing co-host may call this, and the host itself
+ * can't be targeted (fixed via Event.hostId, not toggleable). Returns the
+ * event's full current co-host user-id list so the route can mirror it
+ * into LiveKit room metadata for every connected client's participant list.
+ */
+export async function setEventCoHost(
+  eventId: string,
+  actingUserId: string,
+  targetUserId: string,
+  isCoHost: boolean,
+): Promise<string[]> {
+  const event = await db.event.findUnique({ where: { id: eventId }, select: { hostId: true, cancelledAt: true } });
+  if (!event || event.cancelledAt) throw new EventError(404, "Event not found.");
+
+  const actingIsHost = actingUserId === event.hostId;
+  if (!actingIsHost && !(await isEventCoHost(eventId, actingUserId))) {
+    throw new EventError(403, "Only the host or a co-host can manage co-hosts.");
+  }
+  if (targetUserId === event.hostId) {
+    throw new EventError(400, "The host is already the host — co-host status doesn't apply to them.");
+  }
+
+  if (isCoHost) {
+    const target = await db.user.findUnique({ where: { id: targetUserId }, select: { id: true } });
+    if (!target) throw new EventError(404, "Member not found.");
+    await db.eventCoHost.upsert({
+      where: { eventId_userId: { eventId, userId: targetUserId } },
+      create: { eventId, userId: targetUserId },
+      update: {},
+    });
+  } else {
+    await db.eventCoHost.deleteMany({ where: { eventId, userId: targetUserId } });
+  }
+  const rows = await db.eventCoHost.findMany({ where: { eventId }, select: { userId: true } });
+  return rows.map((row) => row.userId);
 }
 
 /**

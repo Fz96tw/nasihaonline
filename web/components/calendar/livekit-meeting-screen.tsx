@@ -121,7 +121,15 @@ const TOAST_DURATION_MS = 5_000;
 
 type Toast = { id: string; message: string };
 
-type ParticipantSummary = { identity: string; name: string; isLocal: boolean };
+type ParticipantSummary = {
+  identity: string;
+  name: string;
+  isLocal: boolean;
+  /** identity === hostId (Event.hostId, the LiveKit identity a host's token is minted with) — fixed, not toggleable via the co-host control. Always false for a MeetingRequest (no hostId prop passed). */
+  isHost: boolean;
+  /** identity is in the live coHostUserIds set (Recording Access initiative) — see CoHostStateListener. Always false for a MeetingRequest. */
+  isCoHost: boolean;
+};
 
 /**
  * Live attendee list — must render inside <LiveKitRoom> to reach
@@ -129,13 +137,32 @@ type ParticipantSummary = { identity: string; name: string; isLocal: boolean };
  * ParticipantActivityListener below: reports up via onChange so the actual
  * button/panel can live outside <LiveKitRoom>'s DOM tree). useParticipants()
  * already includes the local participant and re-renders on join/leave.
+ * `hostId`/`coHostUserIds` are passed in (not read here) so a change to
+ * either — e.g. a co-host grant arriving via CoHostStateListener — also
+ * recomputes each row's badge, not just a participant join/leave.
  */
-function ParticipantsListener({ onChange }: { onChange: (participants: ParticipantSummary[]) => void }) {
+function ParticipantsListener({
+  hostId,
+  coHostUserIds,
+  onChange,
+}: {
+  hostId: string | undefined;
+  coHostUserIds: string[];
+  onChange: (participants: ParticipantSummary[]) => void;
+}) {
   const participants = useParticipants();
 
   useEffect(() => {
-    onChange(participants.map((p) => ({ identity: p.identity, name: p.name || p.identity, isLocal: p.isLocal })));
-  }, [participants, onChange]);
+    onChange(
+      participants.map((p) => ({
+        identity: p.identity,
+        name: p.name || p.identity,
+        isLocal: p.isLocal,
+        isHost: hostId !== undefined && p.identity === hostId,
+        isCoHost: coHostUserIds.includes(p.identity),
+      })),
+    );
+  }, [participants, hostId, coHostUserIds, onChange]);
 
   return null;
 }
@@ -171,7 +198,8 @@ function ParticipantActivityListener({ onEvent }: { onEvent: (message: string) =
   return null;
 }
 
-type RoomRecordingMetadata = { recording: boolean; egressId: string | null };
+/** Mirrors lib/livekit.ts's RoomMetadata shape — kept as a separate client-side type rather than importing it (a "server-only" module). */
+type RoomMetadata = { recording: boolean; egressId: string | null; coHostUserIds: string[] };
 
 /**
  * Mirrors ParticipantActivityListener's shape exactly — must render inside
@@ -181,10 +209,10 @@ type RoomRecordingMetadata = { recording: boolean; egressId: string | null };
  * mechanism: the server sets it once via RoomServiceClient.updateRoomMetadata
  * whenever recording starts/stops (lib/livekit.ts), and LiveKit already
  * pushes RoomEvent.RoomMetadataChanged to every connected client for free —
- * that's what keeps "any attendee can start/stop" in sync across everyone
- * in the room without extra plumbing. The initial mount read is silent (no
- * toast) — only actual transitions after that toast, so joining a call
- * that's already recording doesn't announce a false "started".
+ * that's what keeps host/co-host in sync across everyone in the room
+ * without extra plumbing. The initial mount read is silent (no toast) —
+ * only actual transitions after that toast, so joining a call that's
+ * already recording doesn't announce a false "started".
  */
 function RecordingStateListener({
   onChange,
@@ -201,7 +229,7 @@ function RecordingStateListener({
       let recording = false;
       if (metadata) {
         try {
-          recording = (JSON.parse(metadata) as Partial<RoomRecordingMetadata>).recording === true;
+          recording = (JSON.parse(metadata) as Partial<RoomMetadata>).recording === true;
         } catch {
           recording = false;
         }
@@ -223,6 +251,44 @@ function RecordingStateListener({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room]);
+
+  return null;
+}
+
+/**
+ * Same shape/mechanism as RecordingStateListener, for the `coHostUserIds`
+ * slice of the same room-metadata blob instead of `recording` — grant/
+ * revoke calls made by anyone (POST /api/events/:id/meeting/co-hosts) reach
+ * every connected client's ParticipantsListener via this, live, no reload.
+ * No toast (unlike recording) — a co-host change is reflected directly in
+ * the participant list's own badges, which is feedback enough.
+ */
+function CoHostStateListener({ onChange }: { onChange: (coHostUserIds: string[]) => void }) {
+  const room = useRoomContext();
+
+  useEffect(() => {
+    function apply(metadata: string | undefined) {
+      if (!metadata) {
+        onChange([]);
+        return;
+      }
+      try {
+        const parsed = JSON.parse(metadata) as Partial<RoomMetadata>;
+        onChange(Array.isArray(parsed.coHostUserIds) ? parsed.coHostUserIds : []);
+      } catch {
+        onChange([]);
+      }
+    }
+
+    apply(room.metadata);
+    function onMetadataChanged(metadata: string) {
+      apply(metadata);
+    }
+    room.on(RoomEvent.RoomMetadataChanged, onMetadataChanged);
+    return () => {
+      room.off(RoomEvent.RoomMetadataChanged, onMetadataChanged);
+    };
+  }, [room, onChange]);
 
   return null;
 }
@@ -352,11 +418,103 @@ function RecordingControl({
 }
 
 /**
+ * A guest identity is only ever `guest-<uuid>` (anonymous open-event
+ * attendee — see app/api/events/[id]/meeting/token/route.ts), never a real
+ * User.id — so it can never be a co-host and must never show the control
+ * (acceptance criterion, Recording Access initiative).
+ */
+function isGuestIdentity(identity: string): boolean {
+  return identity.startsWith("guest-");
+}
+
+/**
+ * One row of the participant list. Host: fixed badge, never interactive
+ * (host isn't a co-host, isn't demotable here). Everyone else: an
+ * interactive checkbox if the *viewer* is host/co-host (they're the ones
+ * allowed to grant/revoke — enforced again server-side in setEventCoHost,
+ * this is only the UI-level gate), a read-only badge otherwise. Guests
+ * never get any co-host affordance at all.
+ */
+function ParticipantRow({
+  participant,
+  viewerIsHostOrCoHost,
+  coHostsEndpoint,
+  onError,
+}: {
+  participant: ParticipantSummary;
+  viewerIsHostOrCoHost: boolean;
+  coHostsEndpoint: string | null | undefined;
+  onError: (message: string) => void;
+}) {
+  const [pending, setPending] = useState(false);
+
+  async function toggleCoHost(next: boolean) {
+    if (!coHostsEndpoint) return;
+    setPending(true);
+    try {
+      const csrfToken = await getCsrfToken();
+      const res = await fetch(coHostsEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        body: JSON.stringify({ userId: participant.identity, isCoHost: next }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        onError(typeof payload?.error === "string" ? payload.error : "Couldn't update co-host status. Try again.");
+      }
+      // On success, every client's badge (including this one) updates via
+      // the room-metadata broadcast (CoHostStateListener), not this
+      // response directly — same pattern as RecordingControl.toggle.
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <li className="flex items-center justify-between gap-2 rounded-sm px-2 py-1 text-sm">
+      <span className="truncate">
+        {participant.name}
+        {participant.isLocal && <span className="text-muted-foreground"> (You)</span>}
+      </span>
+      {participant.isHost ? (
+        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+          Host
+        </span>
+      ) : isGuestIdentity(participant.identity) ? null : viewerIsHostOrCoHost ? (
+        <label className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={participant.isCoHost}
+            disabled={pending}
+            onChange={(e) => toggleCoHost(e.target.checked)}
+          />
+          Co-host
+        </label>
+      ) : participant.isCoHost ? (
+        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+          Co-host
+        </span>
+      ) : null}
+    </li>
+  );
+}
+
+/**
  * Participants button + dropdown list, rendered inside TopRightOverlay
  * alongside RecordingControl. `participants` comes from ParticipantsListener
  * inside <LiveKitRoom>, same lift-state-up pattern as recording/toasts.
  */
-function ParticipantsControl({ participants }: { participants: ParticipantSummary[] }) {
+function ParticipantsControl({
+  participants,
+  viewerIsHostOrCoHost,
+  coHostsEndpoint,
+  onError,
+}: {
+  participants: ParticipantSummary[];
+  viewerIsHostOrCoHost: boolean;
+  coHostsEndpoint: string | null | undefined;
+  onError: (message: string) => void;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -371,13 +529,16 @@ function ParticipantsControl({ participants }: { participants: ParticipantSummar
         Participants ({participants.length})
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-2 max-h-72 w-56 overflow-y-auto rounded-md border bg-background/95 p-2 shadow-lg backdrop-blur">
+        <div className="absolute right-0 top-full mt-2 max-h-72 w-64 overflow-y-auto rounded-md border bg-background/95 p-2 shadow-lg backdrop-blur">
           <ul className="space-y-1">
             {participants.map((p) => (
-              <li key={p.identity} className="truncate rounded-sm px-2 py-1 text-sm">
-                {p.name}
-                {p.isLocal && <span className="text-muted-foreground"> (You)</span>}
-              </li>
+              <ParticipantRow
+                key={p.identity}
+                participant={p}
+                viewerIsHostOrCoHost={viewerIsHostOrCoHost}
+                coHostsEndpoint={coHostsEndpoint}
+                onError={onError}
+              />
             ))}
           </ul>
         </div>
@@ -433,19 +594,28 @@ export function LiveKitMeetingScreen({
   tokenEndpoint,
   recordingStartEndpoint,
   recordingStopEndpoint,
+  coHostsEndpoint,
   chatEndpoint,
   title,
   organizerName,
+  hostId,
+  isHostOrCoHost,
   backHref,
 }: {
   tokenEndpoint: string;
-  /** POST endpoints for the Record/Stop control — any attendee can use them (objective 4), same auth as tokenEndpoint. */
+  /** POST endpoints for the Record/Stop control — host/co-host only (Recording Access initiative; previously any attendee), same auth as tokenEndpoint. */
   recordingStartEndpoint: string;
   recordingStopEndpoint: string;
+  /** POST endpoint for granting/revoking co-host — undefined/null for a MeetingRequest, which has no co-host concept (see TopRightOverlay usage below). */
+  coHostsEndpoint?: string | null;
   /** POST endpoint for archiving this participant's own chat messages (LiveKit meeting chat archival) — null/undefined for a MeetingRequest, which has no discussion thread to archive into. */
   chatEndpoint?: string | null;
   title: string;
   organizerName: string;
+  /** Event.hostId, matching the LiveKit identity a host's token is minted with — undefined for a MeetingRequest (no host/co-host concept there). */
+  hostId?: string;
+  /** Whether the *viewer* is host or co-host — gates the Record button and the co-host checkbox's interactivity. Always false when hostId/coHostsEndpoint are absent (MeetingRequest). */
+  isHostOrCoHost: boolean;
   /** Where to navigate once the participant leaves the call (VideoConference's built-in Leave button, or a connection drop) — same destination the page's own BackLink uses. */
   backHref: string;
 }) {
@@ -455,6 +625,7 @@ export function LiveKitMeetingScreen({
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [recording, setRecording] = useState(false);
   const [participants, setParticipants] = useState<ParticipantSummary[]>([]);
+  const [coHostUserIds, setCoHostUserIds] = useState<string[]>([]);
 
   usePreventScreenShareSelfMirror();
 
@@ -508,13 +679,20 @@ export function LiveKitMeetingScreen({
       <DisclaimerReminderFlash />
       <ParticipantActivityToasts toasts={toasts} />
       <TopRightOverlay>
-        <RecordingControl
-          recording={recording}
-          startEndpoint={recordingStartEndpoint}
-          stopEndpoint={recordingStopEndpoint}
+        {isHostOrCoHost && (
+          <RecordingControl
+            recording={recording}
+            startEndpoint={recordingStartEndpoint}
+            stopEndpoint={recordingStopEndpoint}
+            onError={pushToast}
+          />
+        )}
+        <ParticipantsControl
+          participants={participants}
+          viewerIsHostOrCoHost={isHostOrCoHost}
+          coHostsEndpoint={coHostsEndpoint}
           onError={pushToast}
         />
-        <ParticipantsControl participants={participants} />
       </TopRightOverlay>
       <LiveKitRoom
         token={credentials.token}
@@ -530,8 +708,9 @@ export function LiveKitMeetingScreen({
       >
         <ParticipantActivityListener onEvent={pushToast} />
         <RecordingStateListener onChange={setRecording} onToast={pushToast} />
+        <CoHostStateListener onChange={setCoHostUserIds} />
         <ChatCaptureListener chatEndpoint={chatEndpoint} />
-        <ParticipantsListener onChange={setParticipants} />
+        <ParticipantsListener hostId={hostId} coHostUserIds={coHostUserIds} onChange={setParticipants} />
         <VideoConference />
       </LiveKitRoom>
     </div>

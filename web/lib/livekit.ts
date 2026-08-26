@@ -158,39 +158,64 @@ export async function resetMeetingOnRoomEmpty(roomName: string): Promise<void> {
 }
 
 /**
- * Recording-state shape stored as the LiveKit room's own metadata string
- * (objective 4) — every connected client already receives
- * RoomEvent.RoomMetadataChanged for free whenever this changes, which is
- * what keeps the in-meeting Record/Stop control in sync across all
+ * Shared shape for the LiveKit room's own metadata string (objective 4;
+ * `coHostUserIds` added by the Recording Access initiative) — every
+ * connected client already receives RoomEvent.RoomMetadataChanged for free
+ * whenever this changes, which is what keeps the in-meeting Record/Stop
+ * control and the participant list's co-host badges in sync across all
  * participants without a separate data-channel broadcast. `egressId` is
  * included (not just the boolean) so the stop route can look up which
  * egress is actually active server-side, rather than trusting a
- * client-supplied id — any attendee can stop it, not just whoever started it.
+ * client-supplied id — any host/co-host can stop it, not just whoever
+ * started it. `coHostUserIds` mirrors the EventCoHost table for live UI
+ * sync only — the DB row, not this, is authoritative (see EventCoHost's
+ * doc comment in schema.prisma); a lost or stale metadata write here never
+ * grants or revokes real recording permission.
  */
-export type RoomRecordingMetadata = { recording: boolean; egressId: string | null };
+export type RoomMetadata = { recording: boolean; egressId: string | null; coHostUserIds: string[] };
 
-/** Best-effort: a failed metadata update must never block start/stop egress itself, same non-fatal philosophy as the rest of this module. */
-export async function setRoomRecordingMetadata(roomName: string, state: RoomRecordingMetadata): Promise<void> {
+/**
+ * Merges `patch` into the room's current metadata rather than overwriting
+ * it wholesale, so the recording routes and the co-hosts route (which each
+ * only know about their own slice of this shape) don't clobber each
+ * other's fields. Best-effort and non-atomic (read-then-write, no
+ * compare-and-swap available in LiveKit's API) — acceptable here since
+ * both callers are low-frequency, human-triggered actions, same accepted
+ * risk profile as the rest of this best-effort module. A failed update
+ * must never block start/stop egress or a co-host change itself.
+ */
+export async function updateRoomMetadata(roomName: string, patch: Partial<RoomMetadata>): Promise<void> {
   const roomService = getRoomServiceClient();
   if (!roomService) return;
   try {
-    await roomService.updateRoomMetadata(roomName, JSON.stringify(state));
+    const current = await getRoomMetadata(roomName);
+    const next: RoomMetadata = {
+      recording: current?.recording ?? false,
+      egressId: current?.egressId ?? null,
+      coHostUserIds: current?.coHostUserIds ?? [],
+      ...patch,
+    };
+    await roomService.updateRoomMetadata(roomName, JSON.stringify(next));
   } catch (error) {
-    console.error("[livekit] Failed to update room recording metadata", error);
+    console.error("[livekit] Failed to update room metadata", error);
   }
 }
 
-/** Reads back the room's current recording state — used by the stop route to find which egress is active without trusting client input. */
-export async function getRoomRecordingMetadata(roomName: string): Promise<RoomRecordingMetadata | null> {
+/** Reads back the room's current metadata — used by the stop route to find which egress is active, and by clients' initial state, without trusting client input. */
+export async function getRoomMetadata(roomName: string): Promise<RoomMetadata | null> {
   const roomService = getRoomServiceClient();
   if (!roomService) return null;
   try {
     const [room] = await roomService.listRooms([roomName]);
     if (!room?.metadata) return null;
-    const parsed = JSON.parse(room.metadata) as Partial<RoomRecordingMetadata>;
-    return { recording: parsed.recording === true, egressId: parsed.egressId ?? null };
+    const parsed = JSON.parse(room.metadata) as Partial<RoomMetadata>;
+    return {
+      recording: parsed.recording === true,
+      egressId: parsed.egressId ?? null,
+      coHostUserIds: Array.isArray(parsed.coHostUserIds) ? parsed.coHostUserIds : [],
+    };
   } catch (error) {
-    console.error("[livekit] Failed to read room recording metadata", error);
+    console.error("[livekit] Failed to read room metadata", error);
     return null;
   }
 }

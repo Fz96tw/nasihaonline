@@ -140,6 +140,11 @@ export const createEventSchema = eventFieldsSchema
   .extend({
     visibility: z.nativeEnum(EventVisibility),
     invitedUserIds: z.array(z.string()),
+    // Recording Access initiative — who besides the host can start/stop
+    // LiveKit recording and manage further co-hosts. Unlike invitedUserIds,
+    // valid for any visibility and always optional — no invariant enforces
+    // a minimum here.
+    coHostUserIds: z.array(z.string()),
     meetLinkSource: z.enum(["auto", "manual", "livekit"]),
     recurrence: recurrenceInputSchema,
   })

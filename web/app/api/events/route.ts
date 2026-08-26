@@ -48,6 +48,19 @@ export async function POST(request: Request) {
     }
   }
 
+  // Recording Access initiative — same JSON-encoded-field pattern as
+  // invitedUserIds above; falls back to [] (co-hosts are always optional,
+  // no invariant like invitedUserIds' "at least one" for a restricted event).
+  let coHostUserIds: unknown = [];
+  const coHostUserIdsRaw = formData.get("coHostUserIds");
+  if (typeof coHostUserIdsRaw === "string" && coHostUserIdsRaw.length > 0) {
+    try {
+      coHostUserIds = JSON.parse(coHostUserIdsRaw);
+    } catch {
+      coHostUserIds = [];
+    }
+  }
+
   // Repeat schedule (§4.6 recurring events) — same JSON-encoded-field
   // pattern as invitedUserIds above; absent/malformed means "does not
   // repeat" rather than a hard error, since createEventSchema's
@@ -74,6 +87,7 @@ export async function POST(request: Request) {
     timezone: formData.get("timezone") || null,
     visibility: formData.get("visibility") || "community",
     invitedUserIds,
+    coHostUserIds,
     meetLinkSource: formData.get("meetLinkSource") || "manual",
     recurrence,
   });
