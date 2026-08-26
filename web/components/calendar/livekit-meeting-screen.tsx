@@ -38,10 +38,22 @@ type DisplayMediaStreamOptionsWithSelfBrowserSurface = DisplayMediaStreamOptions
  * the shared video (reported 2026-08-25). Only overrides the default —
  * an explicit caller-supplied value (there is none today, but future code
  * might add one) still wins.
+ *
+ * Bug fixed 2026-08-26: unconditionally did `.getDisplayMedia.bind(...)`,
+ * which crashed the whole page for any attendee on a browser with no
+ * getDisplayMedia at all (iOS Safari has no screen-share API — its
+ * `mediaDevices.getDisplayMedia` is `undefined`) — `.bind()` on `undefined`
+ * threw a TypeError on mount, surfacing as a generic client-side
+ * "Application error" with nothing in the server logs (reported: a
+ * MeetingRequest invitee couldn't join at all). Now a no-op when the API
+ * isn't there, same as the browser's own behavior for an unsupported
+ * feature — screen sharing (and thus this mirror-prevention) is simply
+ * unavailable, not a hard failure.
  */
 function usePreventScreenShareSelfMirror() {
   useEffect(() => {
     const { mediaDevices } = navigator;
+    if (!mediaDevices?.getDisplayMedia) return;
     const original = mediaDevices.getDisplayMedia.bind(mediaDevices);
     mediaDevices.getDisplayMedia = (options?: DisplayMediaStreamOptionsWithSelfBrowserSurface) =>
       original({ selfBrowserSurface: "exclude", ...options });
@@ -480,7 +492,7 @@ function ParticipantRow({
         <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
           Host
         </span>
-      ) : isGuestIdentity(participant.identity) ? null : viewerIsHostOrCoHost ? (
+      ) : isGuestIdentity(participant.identity) ? null : viewerIsHostOrCoHost && coHostsEndpoint ? (
         <label className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <input
             type="checkbox"
@@ -614,7 +626,16 @@ export function LiveKitMeetingScreen({
   organizerName: string;
   /** Event.hostId, matching the LiveKit identity a host's token is minted with — undefined for a MeetingRequest (no host/co-host concept there). */
   hostId?: string;
-  /** Whether the *viewer* is host or co-host — gates the Record button and the co-host checkbox's interactivity. Always false when hostId/coHostsEndpoint are absent (MeetingRequest). */
+  /**
+   * Whether the *viewer* is allowed to record. Gates the Record button
+   * directly; the co-host checkbox is additionally gated on coHostsEndpoint
+   * being present (see ParticipantRow), since a MeetingRequest has no
+   * co-host concept even though its recording is open to both parties
+   * (meeting-waiting-room.tsx defaults this to `true` for a MeetingRequest,
+   * matching its recording routes' intentionally-unrestricted policy —
+   * bug fixed 2026-08-26, previously defaulted to `false` there and hid
+   * the Record button for every MeetingRequest participant).
+   */
   isHostOrCoHost: boolean;
   /** Where to navigate once the participant leaves the call (VideoConference's built-in Leave button, or a connection drop) — same destination the page's own BackLink uses. */
   backHref: string;

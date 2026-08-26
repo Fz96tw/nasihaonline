@@ -286,7 +286,15 @@ export function MeetingWaitingRoom({
         title={status.title}
         organizerName={status.organizerName}
         hostId={status.hostId}
-        isHostOrCoHost={status.isHostOrCoHost ?? false}
+        // Bug fixed 2026-08-26: defaulting to false hid the Record button
+        // for every MeetingRequest participant — that status type has no
+        // isHostOrCoHost field at all (undefined, not false), since a
+        // MeetingRequest's recording routes are deliberately left open to
+        // either party (see their route doc comments). Default to true so
+        // the missing-field case (MeetingRequest) matches that unrestricted
+        // policy; Event always supplies a real boolean here, so this
+        // fallback never applies there.
+        isHostOrCoHost={status.isHostOrCoHost ?? true}
         backHref={backHref}
       />
     );
