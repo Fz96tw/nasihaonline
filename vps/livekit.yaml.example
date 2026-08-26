@@ -17,3 +17,5 @@ webhook:
   api_key: <GENERATE_API_KEY>
   urls:
     - https://nasihaforyou.org/api/webhooks/livekit
+
+prometheus_port: 6789

@@ -1,0 +1,117 @@
+{
+  "title": "LiveKit SFU",
+  "uid": "livekit-sfu",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    { "type": "row", "title": "Overview", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "id": 100, "collapsed": false, "panels": [] },
+
+    {
+      "type": "stat", "title": "Active Rooms",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 }, "id": 1,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "livekit_room_total", "refId": "A" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green" }] } }, "overrides": [] }
+    },
+    {
+      "type": "stat", "title": "Active Participants",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 }, "id": 2,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "livekit_participant_total", "refId": "A" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green" }] } }, "overrides": [] }
+    },
+    {
+      "type": "stat", "title": "Dropped Packets/s",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 }, "id": 3,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum(rate(livekit_node_packet_total{type=\"dropped\"}[5m]))", "refId": "A" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green" }, { "color": "orange", "value": 1 }, { "color": "red", "value": 50 }] } }, "overrides": [] }
+    },
+    {
+      "type": "stat", "title": "SFU CPU %",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 }, "id": 4,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "rate(process_cpu_seconds_total{job=\"livekit\"}[5m]) * 100", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green" }, { "color": "orange", "value": 200 }, { "color": "red", "value": 350 }] } }, "overrides": [] }
+    },
+    {
+      "type": "stat", "title": "SFU Memory",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 }, "id": 5,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "process_resident_memory_bytes{job=\"livekit\"}", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "bytes", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green" }] } }, "overrides": [] }
+    },
+    {
+      "type": "stat", "title": "Goroutines",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 }, "id": 6,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "go_goroutines{job=\"livekit\"}", "refId": "A" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green" }] } }, "overrides": [] }
+    },
+
+    { "type": "row", "title": "Packet Forwarding", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 }, "id": 101, "collapsed": false, "panels": [] },
+
+    {
+      "type": "timeseries", "title": "Packet Rate by Type",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 }, "id": 10,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(livekit_node_packet_total{type=\"out\"}[1m]))", "legendFormat": "out", "refId": "A" },
+        { "expr": "sum(rate(livekit_node_packet_total{type=\"dropped\"}[1m]))", "legendFormat": "dropped", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [
+        { "matcher": { "id": "byName", "options": "dropped" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
+      ] }
+    },
+    {
+      "type": "timeseries", "title": "Forward Latency / Jitter",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 }, "id": 11,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "livekit_forward_latency", "legendFormat": "latency", "refId": "A" },
+        { "expr": "livekit_forward_jitter", "legendFormat": "jitter", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] }
+    },
+
+    { "type": "row", "title": "Call Quality", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 }, "id": 102, "collapsed": false, "panels": [] },
+
+    {
+      "type": "timeseries", "title": "Quality Score (p50 / p10)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 }, "id": 20,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "0 = worst, higher = better. Watch p10 for outlier participants having a bad connection.",
+      "targets": [
+        { "expr": "histogram_quantile(0.5, sum(rate(livekit_quality_score_bucket[5m])) by (le))", "legendFormat": "p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.1, sum(rate(livekit_quality_score_bucket[5m])) by (le))", "legendFormat": "p10 (worst)", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] }
+    },
+    {
+      "type": "timeseries", "title": "Webhook Queue Length",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 }, "id": 21,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Sustained growth means your app's /api/webhooks/livekit endpoint is falling behind.",
+      "targets": [
+        { "expr": "histogram_quantile(0.9, sum(rate(livekit_webhook_queue_length_bucket[5m])) by (le))", "legendFormat": "p90", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] }
+    },
+
+    { "type": "row", "title": "Rooms", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 }, "id": 103, "collapsed": false, "panels": [] },
+
+    {
+      "type": "timeseries", "title": "Room Duration (p50 / p90)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 }, "id": 30,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "histogram_quantile(0.5, sum(rate(livekit_room_duration_seconds_bucket[15m])) by (le))", "legendFormat": "p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.9, sum(rate(livekit_room_duration_seconds_bucket[15m])) by (le))", "legendFormat": "p90", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] }
+    }
+  ]
+}
