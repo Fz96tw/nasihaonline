@@ -114,6 +114,8 @@ export type MemberEvent = EventWithRsvp & {
    * exposing the raw Drive URL there.
    */
   recordingWatchHref: string | null;
+  /** How many ready parts make up the recording (1 for Meet, or the count of ready LiveKit segments) — 0 when there's none. A list view whose recordingWatchHref only ever points at the first part should route to the detail page instead whenever this is > 1, since that's the only place every part is listed. */
+  recordingPartCount: number;
 };
 
 // Shared "Open" / "Members Only" / "Invitees Only" audience badge — used by

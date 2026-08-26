@@ -16,6 +16,8 @@ export type AttendanceHistoryItem = {
   organizerName: string;
   hasRecording: boolean;
   recordingWatchHref: string | null;
+  /** How many ready parts make up the recording — recordingWatchHref only ever points at the first, so the widget routes to detailHref instead whenever this is > 1. */
+  recordingPartCount: number;
   detailHref: string;
 };
 
@@ -50,6 +52,7 @@ export function buildAttendanceHistory(
       organizerName: event.hostId === currentUserId ? "You" : event.hostName ?? "NASIHA Member",
       hasRecording: event.hasRecording,
       recordingWatchHref: event.recordingWatchHref,
+      recordingPartCount: event.recordingPartCount,
       detailHref: eventDetailHref(event),
     }));
 
@@ -62,6 +65,7 @@ export function buildAttendanceHistory(
     organizerName: meeting.isOrganizer ? "You" : meeting.otherPartyName,
     hasRecording: meeting.hasRecording,
     recordingWatchHref: meeting.recordingWatchHref,
+    recordingPartCount: meeting.recordingPartCount,
     detailHref: `/inbox?item=${meeting.id}`,
   }));
 

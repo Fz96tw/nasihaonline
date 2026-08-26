@@ -893,6 +893,7 @@ export async function getUpcomingMeetingsForUser(userId: string) {
     // Always still upcoming here — a recording can't exist before the meeting happens.
     hasRecording: false,
     recordingWatchHref: null,
+    recordingPartCount: 0,
   }));
 
   const pendingMeetings = negotiating.flatMap((meeting) => {
@@ -913,6 +914,7 @@ export async function getUpcomingMeetingsForUser(userId: string) {
           (meeting.senderId === userId ? meeting.recipient.name : meeting.sender.name) ?? "NASIHA Member",
         hasRecording: false,
         recordingWatchHref: null,
+        recordingPartCount: 0,
       },
     ];
   });
@@ -928,20 +930,24 @@ export async function getUpcomingMeetingsForUser(userId: string) {
  * No pending/negotiating branch: a request that was never accepted isn't a
  * past *meeting* that happened, just a stale proposal — it's excluded here.
  */
-// Same rationale as events-server.ts's pickEventRecordingWatchHref: the
-// Meet Drive URL if that's how it was recorded, otherwise the earliest
-// ready LiveKit segment — MeetingRequestRecording rows are LiveKit-only,
-// so there's no `origin` column to branch on here.
-function pickMeetingRecordingWatchHref(
+// Same rationale as events-server.ts's resolveEventRecordingLink: the Meet
+// Drive URL if that's how it was recorded (partCount 1), otherwise every
+// ready LiveKit segment — MeetingRequestRecording rows are LiveKit-only, so
+// there's no `origin` column to branch on here. watchHref points at the
+// earliest segment; a caller should route to the meeting's own detail view
+// instead whenever partCount > 1, since that's the only place every part is
+// listed.
+function resolveMeetingRecordingLink(
   meetingId: string,
   recordingUrl: string | null,
   recordings: { id: string; objectKey: string | null; startedAt: Date | null }[],
-): string | null {
-  if (recordingUrl) return recordingUrl;
-  const ready = recordings
+): { watchHref: string | null; partCount: number } {
+  if (recordingUrl) return { watchHref: recordingUrl, partCount: 1 };
+  const readySegments = recordings
     .filter((recording) => recording.objectKey !== null)
-    .sort((a, b) => (a.startedAt?.getTime() ?? 0) - (b.startedAt?.getTime() ?? 0))[0];
-  return ready ? `/api/inbox/meeting-requests/${meetingId}/recording/${ready.id}` : null;
+    .sort((a, b) => (a.startedAt?.getTime() ?? 0) - (b.startedAt?.getTime() ?? 0));
+  if (readySegments.length === 0) return { watchHref: null, partCount: 0 };
+  return { watchHref: `/api/inbox/meeting-requests/${meetingId}/recording/${readySegments[0].id}`, partCount: readySegments.length };
 }
 
 export async function getPastMeetingsForUser(userId: string): Promise<UpcomingMeeting[]> {
@@ -976,21 +982,25 @@ export async function getPastMeetingsForUser(userId: string): Promise<UpcomingMe
     orderBy: { scheduledAt: "desc" },
   });
 
-  return meetings.map((meeting) => ({
-    id: meeting.id,
-    topic: meeting.topic,
-    scheduledAt: (meeting.scheduledAt as Date).toISOString(),
-    meetingUrl: meeting.meetingUrl,
-    livekitRoomName: meeting.livekitRoomName,
-    isPending: false,
-    isOrganizer: meeting.senderId === userId,
-    otherPartyName:
-      (meeting.senderId === userId ? meeting.recipient.name : meeting.sender.name) ?? "NASIHA Member",
-    hasRecording: meeting.livekitRoomName
-      ? meeting.recordings.some((r) => r.objectKey !== null)
-      : meeting.recordingUrl !== null,
-    recordingWatchHref: pickMeetingRecordingWatchHref(meeting.id, meeting.recordingUrl, meeting.recordings),
-  }));
+  return meetings.map((meeting) => {
+    const recordingLink = resolveMeetingRecordingLink(meeting.id, meeting.recordingUrl, meeting.recordings);
+    return {
+      id: meeting.id,
+      topic: meeting.topic,
+      scheduledAt: (meeting.scheduledAt as Date).toISOString(),
+      meetingUrl: meeting.meetingUrl,
+      livekitRoomName: meeting.livekitRoomName,
+      isPending: false,
+      isOrganizer: meeting.senderId === userId,
+      otherPartyName:
+        (meeting.senderId === userId ? meeting.recipient.name : meeting.sender.name) ?? "NASIHA Member",
+      hasRecording: meeting.livekitRoomName
+        ? meeting.recordings.some((r) => r.objectKey !== null)
+        : meeting.recordingUrl !== null,
+      recordingWatchHref: recordingLink.watchHref,
+      recordingPartCount: recordingLink.partCount,
+    };
+  });
 }
 
 // ===== In-app meeting waiting room (meeting-join-experience) =====

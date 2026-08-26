@@ -84,7 +84,11 @@ export function PastMeetingsList({ items }: { items: AttendanceHistoryItem[] }) 
                       {formatDate(item.startsAt)} · Hosted by {item.organizerName}
                     </p>
                   </div>
-                  {item.hasRecording && item.recordingWatchHref ? (
+                  {item.hasRecording && item.recordingPartCount > 1 ? (
+                    <Button asChild size="sm" variant="outline" className="flex-shrink-0">
+                      <Link href={item.detailHref}>{`View recording (${item.recordingPartCount} parts)`}</Link>
+                    </Button>
+                  ) : item.hasRecording && item.recordingWatchHref ? (
                     <Button asChild size="sm" variant="outline" className="flex-shrink-0">
                       <a href={item.recordingWatchHref} target="_blank" rel="noopener noreferrer">
                         Watch recording

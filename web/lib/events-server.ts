@@ -340,20 +340,26 @@ export async function getEventsForViewer(userId: string | null): Promise<EventWi
 // earlier in the current month), not just what's still upcoming. The
 // "Upcoming List" tab derives its own future-only view client-side
 // (CalendarView) rather than this query doing it server-side.
-// Picks the one link getMemberEvents' list view is willing to hand out for
-// an occurrence's recording: the Meet Drive URL if that's how it was
-// recorded, otherwise the earliest ready LiveKit segment (later parts, if
-// any, stay reachable only from the full detail page's Part 1/Part 2 list).
-function pickEventRecordingWatchHref(
+// Resolves what a list view can hand out for an occurrence's recording: the
+// Meet Drive URL if that's how it was recorded (always one artifact, so
+// partCount is 1), otherwise every ready LiveKit segment — watchHref points
+// at the earliest one, with partCount telling the caller whether that's the
+// whole recording or just "Part 1" of several (a LiveKit meeting can have
+// several since any attendee can start/stop the in-meeting Record control
+// repeatedly). Callers should route to the full detail page instead of
+// watchHref when partCount > 1, since that's the only place every part is
+// listed.
+function resolveEventRecordingLink(
   eventId: string,
   recordings: { id: string; origin: RecordingOrigin; objectKey: string | null; recordingUrl: string | null; startedAt: Date | null }[],
-): string | null {
+): { watchHref: string | null; partCount: number } {
   const meet = recordings.find((recording) => recording.origin === RecordingOrigin.meet && recording.recordingUrl !== null);
-  if (meet) return meet.recordingUrl;
-  const readyLiveKit = recordings
+  if (meet) return { watchHref: meet.recordingUrl, partCount: 1 };
+  const readySegments = recordings
     .filter((recording) => recording.origin === RecordingOrigin.livekit && recording.objectKey !== null)
-    .sort((a, b) => (a.startedAt?.getTime() ?? 0) - (b.startedAt?.getTime() ?? 0))[0];
-  return readyLiveKit ? `/api/events/${eventId}/recording/${readyLiveKit.id}` : null;
+    .sort((a, b) => (a.startedAt?.getTime() ?? 0) - (b.startedAt?.getTime() ?? 0));
+  if (readySegments.length === 0) return { watchHref: null, partCount: 0 };
+  return { watchHref: `/api/events/${eventId}/recording/${readySegments[0].id}`, partCount: readySegments.length };
 }
 
 export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
@@ -423,6 +429,9 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
         occurrenceRecordings.some((recording) =>
           recording.origin === RecordingOrigin.meet ? recording.recordingUrl !== null : recording.objectKey !== null,
         );
+      const recordingLink = canViewRecording
+        ? resolveEventRecordingLink(event.id, occurrenceRecordings)
+        : { watchHref: null, partCount: 0 };
       return {
         id: event.occurrenceId,
         title: event.title,
@@ -446,7 +455,8 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
         // (getMemberEventById below) — a recording is a post-meeting artifact
         // a member would look for on the event itself, not while browsing.
         recordingUrl: null,
-        recordingWatchHref: canViewRecording ? pickEventRecordingWatchHref(event.id, occurrenceRecordings) : null,
+        recordingWatchHref: recordingLink.watchHref,
+        recordingPartCount: recordingLink.partCount,
         liveKitRecordingSegments: [],
         chatTranscriptPostId: null,
         meetingEndedAt: null,
@@ -568,6 +578,9 @@ export async function getMemberEventById(
   // and chatTranscriptPostId keep the unchanged rsvped-or-host gate, since
   // widening those wasn't part of this fix's confirmed scope.
   const canViewRecording = rsvped || event.hostId === userId || (event.visibility === EventVisibility.invited && event.invitees.length > 0);
+  const recordingLink = canViewRecording
+    ? resolveEventRecordingLink(event.id, occurrenceRecordings)
+    : { watchHref: null, partCount: 0 };
   return {
     id: event.recurrence ? `${event.id}::${occurrenceStart.toISOString()}` : event.id,
     title: event.title,
@@ -586,7 +599,8 @@ export async function getMemberEventById(
     livekitRoomName: rsvped || event.hostId === userId ? event.livekitRoomName : null,
     meetingEndedAt: (rsvped || event.hostId === userId) ? (event.meetingEndedAt?.toISOString() ?? null) : null,
     recordingUrl: canViewRecording ? (recordingForOccurrence?.recordingUrl ?? null) : null,
-    recordingWatchHref: canViewRecording ? pickEventRecordingWatchHref(event.id, occurrenceRecordings) : null,
+    recordingWatchHref: recordingLink.watchHref,
+    recordingPartCount: recordingLink.partCount,
     hasRecording:
       canViewRecording &&
       (recordingForOccurrence?.recordingUrl != null || liveKitSegments.some((s) => s.objectKey !== null)),

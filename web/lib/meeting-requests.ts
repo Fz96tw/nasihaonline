@@ -49,4 +49,6 @@ export type UpcomingMeeting = {
   hasRecording: boolean;
   /** Direct link to watch the recording (the Meet Drive URL, or this app's own /api/inbox/meeting-requests/:id/recording/:recordingId redirect route for the earliest ready LiveKit segment) — null whenever hasRecording is false. */
   recordingWatchHref: string | null;
+  /** How many ready parts make up the recording (1 for Meet, or the count of ready LiveKit segments) — 0 when there's none. recordingWatchHref only ever points at the first part, so a caller should route to the meeting's own detail view instead whenever this is > 1. */
+  recordingPartCount: number;
 };
