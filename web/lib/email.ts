@@ -140,6 +140,7 @@ export async function sendEventRegistrationConfirmationEmail(
   name: string,
   event: {
     id: string;
+    registrationId: string;
     title: string;
     startsAt: Date;
     timezone: string | null;
@@ -167,7 +168,13 @@ export async function sendEventRegistrationConfirmationEmail(
   // a join link the same way, so a LiveKit-backed event's link showing up
   // there while this text still said "we'll share details later" would be
   // a contradiction the recipient could actually see.
-  const joinUrl = event.meetingUrl || event.livekitRoomName ? `${APP_URL}/meet/event/${event.id}` : null;
+  // `?rid=` is now required, not just a display nicety — getEventMeetingStatus
+  // rejects an anonymous caller without a valid one (registration-required
+  // anonymous join). It also resolves this guest's registered name/email
+  // into the meeting display instead of a bare "Guest".
+  const joinUrl = event.meetingUrl || event.livekitRoomName
+    ? `${APP_URL}/meet/event/${event.id}?rid=${encodeURIComponent(event.registrationId)}`
+    : null;
   const joinLine = joinUrl
     ? `Use this link to join the meeting at the scheduled time:\n${joinUrl}`
     : "We'll share the joining details closer to the event.";
@@ -220,6 +227,7 @@ export async function sendEventRegistrationReminderEmail(
   name: string,
   event: {
     id: string;
+    registrationId: string;
     title: string;
     description: string | null;
     startsAt: Date;
@@ -237,7 +245,10 @@ export async function sendEventRegistrationReminderEmail(
   const when = formatEventDateTime(event.startsAt, event.timezone);
   const description = event.description?.trim() || null;
   const safeDescription = description ? escapeHtml(description).replace(/\n/g, "<br>") : "";
-  const joinUrl = event.meetingUrl || event.livekitRoomName ? `${APP_URL}/meet/event/${event.id}` : null;
+  // `?rid=` — same guest-identity linkage as sendEventRegistrationConfirmationEmail above.
+  const joinUrl = event.meetingUrl || event.livekitRoomName
+    ? `${APP_URL}/meet/event/${event.id}?rid=${encodeURIComponent(event.registrationId)}`
+    : null;
   const joinLine = joinUrl
     ? `Use this link to join the meeting at the scheduled time:\n${joinUrl}`
     : "We'll share the joining details closer to the event.";

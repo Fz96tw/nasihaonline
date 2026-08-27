@@ -1002,6 +1002,8 @@ export class EventError extends Error {
   constructor(
     public readonly status: 400 | 403 | 404 | 409 | 502,
     message: string,
+    /** True only for the specific 403 that means "sign in would let you through" (a non-open event's anonymous caller) — distinguishes that case from getEventMeetingStatus's other anonymous 403 ("register for this event"), which signing in does nothing to fix, so the /meet page must not auto-redirect there the same way. */
+    public readonly requiresSignIn: boolean = false,
   ) {
     super(message);
   }
@@ -1531,7 +1533,10 @@ export async function resendEventNotifications(
   // (createEvent/updateEvent both block that combination), so this is
   // naturally empty on the isRestricted branch.
   const registrations = !isRestricted && event.open
-    ? await db.eventRegistration.findMany({ where: { eventId: event.id }, select: { email: true, name: true } })
+    ? await db.eventRegistration.findMany({
+        where: { eventId: event.id },
+        select: { id: true, email: true, name: true },
+      })
     : [];
 
   const when = formatEventDateTime(event.startsAt, event.timezone);
@@ -1575,6 +1580,7 @@ export async function resendEventNotifications(
       registrations.map((registration) =>
         sendEventRegistrationReminderEmail(registration.email, registration.name ?? "there", {
           id: event.id,
+          registrationId: registration.id,
           title: event.title,
           description: event.description,
           startsAt: event.startsAt,
@@ -2457,6 +2463,7 @@ export async function registerForEvent(
   input: { email: string; name: string },
 ): Promise<{
   id: string;
+  registrationId: string;
   title: string;
   startsAt: Date;
   timezone: string | null;
@@ -2489,7 +2496,7 @@ export async function registerForEvent(
     throw new EventError(400, "This event isn't open for public registration.");
   }
 
-  await db.eventRegistration.upsert({
+  const registration = await db.eventRegistration.upsert({
     where: { eventId_email: { eventId, email: input.email } },
     create: { eventId, email: input.email, name: input.name },
     update: { name: input.name },
@@ -2497,6 +2504,7 @@ export async function registerForEvent(
 
   return {
     id: event.id,
+    registrationId: registration.id,
     title: event.title,
     startsAt: event.startsAt,
     timezone: event.timezone,
@@ -2661,10 +2669,21 @@ export async function getEventIcs(
  * a signed-in non-host needs the same community/invitee visibility gate,
  * then the same rsvped-or-host gate that already controls whether the join
  * link appears anywhere else in the app.
+ *
+ * `registrationId` is the `rid` query param carried by a guest's emailed
+ * join link (sendEventRegistrationConfirmationEmail/sendEventRegistrationReminderEmail)
+ * — for an anonymous caller (`userId === null`) it is now the actual
+ * enforcement of registration, not just how the link is distributed:
+ * previously any anonymous caller who knew/guessed an `open` event's id
+ * (visible in its public /events/[eventId] URL) could reach the meeting
+ * with no registration at all. It must resolve to a real EventRegistration
+ * for *this* event or the caller is rejected — same shape as the existing
+ * RSVP'd-or-host gate for a signed-in non-host below.
  */
 export async function getEventMeetingStatus(
   eventId: string,
   userId: string | null,
+  registrationId?: string | null,
 ): Promise<{
   title: string;
   organizerName: string;
@@ -2683,6 +2702,8 @@ export async function getEventMeetingStatus(
   configured: boolean;
   /** Open events are reachable by never-vetted anonymous registrants (no membership application, so no prior Code of Conduct agreement) — gates the actual Meet redirect on a click-through agreement. Community/invited events skip this: every attendee there is already a member who agreed once at /join. */
   requiresCodeOfConductAgreement: boolean;
+  /** `"<name> (<email>)"` resolved from `registrationId` for an anonymous caller — null for a signed-in caller (their own User.name is used instead, see the token route). */
+  guestName: string | null;
 }> {
   const event = await db.event.findUnique({
     where: { id: eventId },
@@ -2706,8 +2727,19 @@ export async function getEventMeetingStatus(
   const isHost = userId !== null && event.hostId === userId;
   const isHostOrCoHost = isHost || (userId !== null && (await isEventCoHost(eventId, userId)));
 
+  let guestName: string | null = null;
   if (userId === null) {
-    if (!event.open) throw new EventError(403, "Sign in to view this meeting.");
+    if (!event.open) throw new EventError(403, "Sign in to view this meeting.", true);
+    const registration = registrationId
+      ? await db.eventRegistration.findUnique({
+          where: { id: registrationId },
+          select: { eventId: true, name: true, email: true },
+        })
+      : null;
+    if (!registration || registration.eventId !== eventId) {
+      throw new EventError(403, "Register for this event to view the meeting.");
+    }
+    guestName = `${registration.name} (${registration.email})`;
   } else if (!isHost) {
     const visible =
       event.visibility === EventVisibility.community ||
@@ -2737,6 +2769,7 @@ export async function getEventMeetingStatus(
     hostId: event.hostId,
     configured: event.meetingUrl !== null || event.livekitRoomName !== null,
     requiresCodeOfConductAgreement: event.open,
+    guestName,
   };
 }
 

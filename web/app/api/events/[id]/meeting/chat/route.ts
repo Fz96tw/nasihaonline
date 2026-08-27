@@ -21,6 +21,7 @@ import { EventError, getEventMeetingStatus } from "@/lib/events-server";
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser();
   const { id } = await params;
+  const registrationId = new URL(request.url).searchParams.get("rid");
 
   const payload = await request.json().catch(() => null);
   if (!payload?.id || typeof payload.id !== "string" || !payload.message || typeof payload.message !== "string") {
@@ -31,7 +32,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   try {
-    const status = await getEventMeetingStatus(id, user?.id ?? null);
+    const status = await getEventMeetingStatus(id, user?.id ?? null, registrationId);
     if (!status.started || !status.livekitRoomName) {
       return NextResponse.json({ error: "This meeting hasn't started yet." }, { status: 409 });
     }
@@ -41,7 +42,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       create: {
         eventId: id,
         livekitMessageId: payload.id,
-        authorName: user?.name ?? "Guest",
+        authorName: user?.name ?? status.guestName ?? "Guest",
         authorUserId: user?.id ?? null,
         body: payload.message,
         sentAt: new Date(payload.timestamp),

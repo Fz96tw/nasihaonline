@@ -5,6 +5,7 @@ import { EventError, getEventMeetingStatus } from "@/lib/events-server";
 import { getMeetingRequestMeetingStatus, MeetingRequestError } from "@/lib/meeting-requests-server";
 import { MeetingWaitingRoom, type MeetingWaitingRoomStatus } from "@/components/calendar/meeting-waiting-room";
 import { BackLink } from "@/components/back-link";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "Join Meeting — NASIHA",
@@ -22,8 +23,23 @@ export const metadata: Metadata = {
  * entity isn't reachable without one (kind "request" always; kind "event"
  * only when the event isn't `open`).
  */
-export default async function MeetPage({ params }: { params: Promise<{ kind: string; id: string }> }) {
+export default async function MeetPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ kind: string; id: string }>;
+  searchParams: Promise<{ rid?: string }>;
+}) {
   const { kind, id } = await params;
+  // `rid` (EventRegistration.id) rides only on an event's emailed join link
+  // (sendEventRegistrationConfirmationEmail/sendEventRegistrationReminderEmail).
+  // Passed into getEventMeetingStatus below (now the actual enforcement of
+  // registration for an anonymous caller, not just how the link is handed
+  // out — see that function's doc comment) and threaded into every event
+  // endpoint an anonymous browser calls (statusEndpoint/tokenEndpoint/
+  // chatEndpoint below), which each independently re-validate it. Meaningless
+  // for kind "request" (no anonymous-guest concept there).
+  const { rid } = await searchParams;
   if (kind !== "event" && kind !== "request") notFound();
 
   const user = await getSessionUser();
@@ -42,11 +58,17 @@ export default async function MeetPage({ params }: { params: Promise<{ kind: str
   try {
     status =
       kind === "event"
-        ? await getEventMeetingStatus(id, user?.id ?? null)
+        ? await getEventMeetingStatus(id, user?.id ?? null, rid ?? null)
         : await getMeetingRequestMeetingStatus(id, user!.id);
   } catch (error) {
     if (error instanceof EventError || error instanceof MeetingRequestError) {
-      if (error.status === 403 && !user) redirect("/sign-in");
+      // Only the "this event isn't open, sign in instead" 403 redirects —
+      // getEventMeetingStatus's other anonymous 403 ("register for this
+      // event") means signing in wouldn't help, so that one falls through
+      // to the denied-message card below instead (with a link to register).
+      if (error.status === 403 && !user && error instanceof EventError && error.requiresSignIn) {
+        redirect("/sign-in");
+      }
       if (error.status === 404) notFound();
       deniedMessage = error.message;
     } else {
@@ -63,6 +85,14 @@ export default async function MeetPage({ params }: { params: Promise<{ kind: str
         />
         <h1 className="text-2xl font-bold tracking-tight">Can&apos;t open this meeting</h1>
         <p className="text-muted-foreground">{deniedMessage}</p>
+        {/* The only anonymous-caller 403 that reaches this card (rather than
+            redirecting to /sign-in above) is getEventMeetingStatus's
+            "register for this event" case — give a direct path to fix it. */}
+        {kind === "event" && !user && (
+          <Button asChild>
+            <a href={`/events/${id}`}>Register for this event</a>
+          </Button>
+        )}
       </main>
     );
   }
@@ -92,8 +122,14 @@ export default async function MeetPage({ params }: { params: Promise<{ kind: str
     redirect(status.meetingUrl);
   }
 
+  // Appended to every event endpoint an anonymous guest's browser actually
+  // calls (status poll, token mint, chat archive) — each independently
+  // re-validates it via getEventMeetingStatus, not just the token route.
+  const ridQuery = rid ? `?rid=${encodeURIComponent(rid)}` : "";
   const statusEndpoint =
-    kind === "event" ? `/api/events/${id}/meeting/status` : `/api/inbox/meeting-requests/${id}/meeting/status`;
+    kind === "event"
+      ? `/api/events/${id}/meeting/status${ridQuery}`
+      : `/api/inbox/meeting-requests/${id}/meeting/status`;
   const startEndpoint =
     kind === "event" ? `/api/events/${id}/meeting/start` : `/api/inbox/meeting-requests/${id}/meeting/start`;
   const resetEndpoint =
@@ -101,7 +137,7 @@ export default async function MeetPage({ params }: { params: Promise<{ kind: str
   const messageEndpoint =
     kind === "event" ? `/api/events/${id}/meeting/message` : `/api/inbox/meeting-requests/${id}/meeting/message`;
   const tokenEndpoint =
-    kind === "event" ? `/api/events/${id}/meeting/token` : `/api/inbox/meeting-requests/${id}/meeting/token`;
+    kind === "event" ? `/api/events/${id}/meeting/token${ridQuery}` : `/api/inbox/meeting-requests/${id}/meeting/token`;
   const recordingStartEndpoint =
     kind === "event"
       ? `/api/events/${id}/meeting/recording/start`
@@ -116,7 +152,7 @@ export default async function MeetPage({ params }: { params: Promise<{ kind: str
   // MeetingRequestMessage on the Inbox timeline instead of a ForumPost
   // (finalizeMeetingRequestChatTranscript, meeting-requests-server.ts).
   const chatEndpoint =
-    kind === "event" ? `/api/events/${id}/meeting/chat` : `/api/inbox/meeting-requests/${id}/meeting/chat`;
+    kind === "event" ? `/api/events/${id}/meeting/chat${ridQuery}` : `/api/inbox/meeting-requests/${id}/meeting/chat`;
 
   return (
     <MeetingWaitingRoom
