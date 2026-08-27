@@ -2,6 +2,7 @@
 
 import { useEffect, type ReactNode } from "react";
 import { useSearchQuery } from "@/components/header-search-context";
+import { cn } from "@/lib/utils";
 
 // Two thresholds (instead of one) create a dead zone so scroll jitter near the
 // boundary (e.g. trackpad momentum/rubber-banding) can't flip the header back
@@ -11,7 +12,14 @@ const EXPAND_THRESHOLD = 10;
 const HEADER_HEIGHT_EXPANDED = "92px";
 const HEADER_HEIGHT_COMPACT = "62px";
 
-export function ScrollHeader({ children }: { children: ReactNode }) {
+export function ScrollHeader({
+  children,
+  hasSearchRow = false,
+}: {
+  children: ReactNode;
+  /** True when a HeaderSearchRow immediately follows this header — that row owns the bottom border/shadow instead (see below), so this one must not also draw its own. */
+  hasSearchRow?: boolean;
+}) {
   // Frozen at full height while a search is pinned (see header-search-
   // context.tsx) — "the nav bar does not change size" while actively
   // searching applies to this row too, not just the search row below it.
@@ -49,7 +57,19 @@ export function ScrollHeader({ children }: { children: ReactNode }) {
   }, [pinned]);
 
   return (
-    <header className="sticky top-0 z-50 flex h-[var(--header-height)] items-center gap-3 border-b bg-background px-4 shadow-sm transition-[height] duration-300 ease-in-out lg:gap-6 lg:px-8">
+    <header
+      className={cn(
+        "sticky top-0 z-50 flex h-[var(--header-height)] items-center gap-3 bg-background px-4 transition-[height] duration-300 ease-in-out lg:gap-6 lg:px-8",
+        // When a HeaderSearchRow follows, IT owns the bottom border/shadow
+        // instead, at whatever its *current* height is (0 or expanded).
+        // Without this, two independent bottom borders stack whenever the
+        // search row is revealed: this row's own (fixed at its own height)
+        // plus the search row's, showing up as a stray divider line between
+        // the icon row and the search row instead of one seamless expanded
+        // header.
+        !hasSearchRow && "border-b shadow-sm",
+      )}
+    >
       {children}
     </header>
   );

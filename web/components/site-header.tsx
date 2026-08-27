@@ -38,7 +38,7 @@ export async function SiteHeader() {
 
   return (
     <SearchQueryProvider>
-      <ScrollHeader>
+      <ScrollHeader hasSearchRow={Boolean(user)}>
         <Link href="/" className="flex flex-shrink-0 items-center gap-[.65rem]">
           <Image
             src="/images/nasihalogo-cropped.png"

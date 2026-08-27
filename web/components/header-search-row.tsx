@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { useSearchQuery } from "@/components/header-search-context";
 
@@ -39,11 +39,14 @@ const FLIP_COOLDOWN_MS = 200;
 export function HeaderSearchRow() {
   const { query, setQuery, pinned } = useSearchQuery();
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const urlQuery = pathname === "/whats-new" ? searchParams.get("q") ?? "" : "";
+  // Reads `q` off whatever page is currently active, not just /whats-new —
+  // every detail page reached from a search result also carries `&q=` (see
+  // lib/feed.ts's withFeedRef), so the row should keep showing the active
+  // query there too, not clear itself the moment you click through.
+  const urlQuery = searchParams.get("q") ?? "";
   useEffect(() => {
     setQuery(urlQuery);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setQuery is stable (useState setter via context)
@@ -112,7 +115,7 @@ export function HeaderSearchRow() {
             event.preventDefault();
             submit();
           }}
-          className="relative w-full max-w-md"
+          className="relative ml-auto w-full max-w-md"
         >
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
