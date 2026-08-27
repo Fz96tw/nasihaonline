@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   BookOpen,
   CalendarDays,
@@ -15,11 +16,13 @@ import {
   Mail,
   Menu,
   MessageSquare,
+  Search,
   UserPlus,
   Users,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
   Sheet,
@@ -118,6 +121,19 @@ export function MobileNav({
   canModerate?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
+  const router = useRouter();
+
+  // Closes the sheet and lands on the same /whats-new?q= results route the
+  // desktop header search and FeedSearchForm both use — a real navigation
+  // (not results rendered inline in the sheet) so the browser back button
+  // returns to the results page, same rationale as header-search-box.tsx.
+  function submitSearch() {
+    const trimmed = searchValue.trim();
+    setOpen(false);
+    router.push(trimmed ? `/whats-new?q=${encodeURIComponent(trimmed)}` : "/whats-new");
+  }
+
   // Signed-in members already get the Community links from
   // MEMBER_NAV_SECTIONS' own "Community" section below (Events Calendar,
   // Blogs, Knowledge Library, Forums, Member Directory, Message Inbox), so
@@ -144,6 +160,25 @@ export function MobileNav({
           <SheetTitle className="sr-only">Menu</SheetTitle>
         </SheetHeader>
         <nav className="flex flex-col gap-1">
+          {signedIn && (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitSearch();
+              }}
+              className="relative mb-2 px-1"
+            >
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                value={searchValue}
+                onChange={(event) => setSearchValue(event.currentTarget.value)}
+                placeholder="Search NASIHA…"
+                aria-label="Search NASIHA"
+                className="pl-9 [&::-webkit-search-cancel-button]:appearance-none"
+              />
+            </form>
+          )}
           {signedIn ? (
             <Accordion type="single" collapsible className="flex flex-col gap-1">
               <AccordionItem value="mission" className="border-none">
