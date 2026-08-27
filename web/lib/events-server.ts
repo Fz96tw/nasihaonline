@@ -573,11 +573,17 @@ export async function getMemberEventById(
   // access control, so an invitee shouldn't also need to RSVP "going" just
   // to see a recording on the event page — notably, someone who missed the
   // live meeting (the exact reason to want the recording) has no reason to
-  // RSVP going to it. Deliberately narrow to the recording fields only —
-  // meetingUrl/livekitRoomName/meetingEndedAt (live-meeting-join concerns)
-  // and chatTranscriptPostId keep the unchanged rsvped-or-host gate, since
-  // widening those wasn't part of this fix's confirmed scope.
-  const canViewRecording = rsvped || event.hostId === userId || (event.visibility === EventVisibility.invited && event.invitees.length > 0);
+  // RSVP going to it. A community event is public to every member by
+  // definition, so its recording is too. Deliberately narrow to the
+  // recording fields only — meetingUrl/livekitRoomName/meetingEndedAt
+  // (live-meeting-join concerns) and chatTranscriptPostId keep the
+  // unchanged rsvped-or-host gate, since widening those wasn't part of
+  // this fix's confirmed scope.
+  const canViewRecording =
+    rsvped ||
+    event.hostId === userId ||
+    event.visibility === EventVisibility.community ||
+    (event.visibility === EventVisibility.invited && event.invitees.length > 0);
   const recordingLink = canViewRecording
     ? resolveEventRecordingLink(event.id, occurrenceRecordings)
     : { watchHref: null, partCount: 0 };
@@ -3032,10 +3038,11 @@ export async function getEventRecordingObjectKey(
     // signal that shouldn't also be required just to watch a recording,
     // especially since the exact reason to share a recording is often that
     // an invitee missed the live meeting and so never RSVP'd going. A
-    // community event has no invitee gate at all, so RSVP stays the only
-    // signal short of hosting there.
+    // community event is public to every member by definition, so its
+    // recording is too — RSVP isn't required there either.
     const invitedToRestrictedEvent = event.visibility === EventVisibility.invited && event.invitees.length > 0;
-    if (!isHost && !rsvped && !invitedToRestrictedEvent) {
+    const isCommunityEvent = event.visibility === EventVisibility.community;
+    if (!isHost && !rsvped && !invitedToRestrictedEvent && !isCommunityEvent) {
       throw new EventError(403, "RSVP to this event to view its recording.");
     }
   }
@@ -3079,7 +3086,8 @@ export async function getEventMeetRecordingDownloadUrl(
   const rsvped = event.rsvps.length > 0;
   // Same rationale as getEventRecordingObjectKey's identical check above.
   const invitedToRestrictedEvent = event.visibility === EventVisibility.invited && event.invitees.length > 0;
-  if (!isHost && !rsvped && !invitedToRestrictedEvent) {
+  const isCommunityEvent = event.visibility === EventVisibility.community;
+  if (!isHost && !rsvped && !invitedToRestrictedEvent && !isCommunityEvent) {
     throw new EventError(403, "RSVP to this event to view its recording.");
   }
 
