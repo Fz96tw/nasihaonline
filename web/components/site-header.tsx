@@ -9,8 +9,8 @@ import { MobileNav } from "@/components/mobile-nav";
 import { ScrollHeader } from "@/components/scroll-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DesktopNavLinks } from "@/components/desktop-nav-links";
-import { HeaderSearchBox } from "@/components/header-search-box";
-import { SearchExpandedProvider } from "@/components/header-search-context";
+import { HeaderSearchRow } from "@/components/header-search-row";
+import { SearchQueryProvider } from "@/components/header-search-context";
 import { getSessionUser } from "@/lib/auth";
 import { getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
 
@@ -37,7 +37,7 @@ export async function SiteHeader() {
   const profile = user ? withResolvedAvatarUrl(await getOrCreateProfile(user.id)) : null;
 
   return (
-    <SearchExpandedProvider>
+    <SearchQueryProvider>
       <ScrollHeader>
         <Link href="/" className="flex flex-shrink-0 items-center gap-[.65rem]">
           <Image
@@ -61,7 +61,6 @@ export async function SiteHeader() {
         <div className="ml-auto flex min-w-0 items-center gap-1 overflow-x-auto py-1 [scrollbar-width:none] sm:gap-3 [&::-webkit-scrollbar]:hidden">
           {user ? (
             <>
-              <HeaderSearchBox />
               <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="What's New" title="What's New" asChild>
                 <Link href="/whats-new">
                   <Rss className="h-4 w-4" />
@@ -100,6 +99,7 @@ export async function SiteHeader() {
           />
         </div>
       </ScrollHeader>
-    </SearchExpandedProvider>
+      {user && <HeaderSearchRow />}
+    </SearchQueryProvider>
   );
 }

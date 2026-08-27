@@ -52,7 +52,7 @@ export function MemberSidebar({
         // Desktop nav now covers this (Dashboard/What's New icons + dropdowns),
         // so the sidebar is parked here rather than removed — kept `hidden`
         // at every breakpoint (was `lg:block` on desktop) until it's needed again.
-        "sticky top-[var(--header-height)] z-40 hidden h-[calc(100vh-var(--header-height))] flex-shrink-0 transition-[width,top,height] duration-300 ease-in-out",
+        "sticky top-[calc(var(--header-height)+var(--search-row-height))] z-40 hidden h-[calc(100vh-var(--header-height)-var(--search-row-height))] flex-shrink-0 transition-[width,top,height] duration-300 ease-in-out",
         pinned ? "w-[240px]" : "w-16",
       )}
     >

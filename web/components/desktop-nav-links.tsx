@@ -1,22 +1,12 @@
-"use client";
-
 import Link from "next/link";
 import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { NavDropdown } from "@/components/nav-dropdown";
-import { useSearchExpanded } from "@/components/header-search-context";
 import { cn } from "@/lib/utils";
 
-/**
- * The desktop "Our Mission"/"Community"/"Support Us" group from the header.
- * Hidden while the header search is expanded — reclaims that width for the
- * growing search input rather than fighting it for space (see
- * header-search-context.tsx).
- */
+/** The desktop "Our Mission"/"Community"/"Support Us" group from the header. */
 export function DesktopNavLinks({ signedIn }: { signedIn: boolean }) {
-  const { expanded } = useSearchExpanded();
-  if (expanded) return null;
 
   return (
     <div className="hidden items-center gap-3 self-stretch lg:flex">

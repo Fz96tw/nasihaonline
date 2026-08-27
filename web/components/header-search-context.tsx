@@ -1,51 +1,31 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 
-type SearchExpandedContextValue = {
-  expanded: boolean;
-  expand: () => void;
-  collapse: () => void;
-  toggle: () => void;
+type SearchQueryContextValue = {
+  query: string;
+  setQuery: (value: string) => void;
+  /** True once the user has typed something — freezes both header rows at full size regardless of scroll (see scroll-header.tsx / header-search-row.tsx), and is restored to normal scroll-driven behavior the moment the field is cleared. */
+  pinned: boolean;
 };
 
-const SearchExpandedContext = createContext<SearchExpandedContextValue | null>(null);
+const SearchQueryContext = createContext<SearchQueryContextValue | null>(null);
 
-/**
- * Shared expand/collapse state for the desktop header search — read by both
- * HeaderSearchBox (the icon/input itself) and DesktopNavLinks (the "Our
- * Mission"/"Community"/"Support Us" group, which hides while search is
- * expanded to give the growing input room). They live in different parts of
- * site-header.tsx's DOM tree, hence Context rather than local state.
- */
-export function SearchExpandedProvider({ children }: { children: ReactNode }) {
-  const [expanded, setExpanded] = useState(false);
-  const expand = useCallback(() => setExpanded(true), []);
-  const collapse = useCallback(() => setExpanded(false), []);
-  const toggle = useCallback(() => setExpanded((value) => !value), []);
+const DEFAULT_VALUE: SearchQueryContextValue = { query: "", setQuery: () => {}, pinned: false };
 
-  // ⌘K / Ctrl+K opens search from anywhere, matching the common command-
-  // palette-style shortcut convention even though this isn't a palette.
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setExpanded(true);
-      }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
-  return (
-    <SearchExpandedContext.Provider value={{ expanded, expand, collapse, toggle }}>
-      {children}
-    </SearchExpandedContext.Provider>
-  );
+export function SearchQueryProvider({ children }: { children: ReactNode }) {
+  const [query, setQuery] = useState("");
+  const value = useMemo(() => ({ query, setQuery, pinned: query.trim().length > 0 }), [query]);
+  return <SearchQueryContext.Provider value={value}>{children}</SearchQueryContext.Provider>;
 }
 
-export function useSearchExpanded() {
-  const context = useContext(SearchExpandedContext);
-  if (!context) throw new Error("useSearchExpanded must be used within a SearchExpandedProvider");
-  return context;
+/**
+ * Non-throwing on purpose (unlike a typical required-context hook): both
+ * ScrollHeader and SiteHeaderSkeleton render without a SearchQueryProvider
+ * above them (skeleton has no search UI at all, and ScrollHeader is the
+ * shared primitive both use), so this needs a safe default rather than an
+ * error when no provider is mounted.
+ */
+export function useSearchQuery(): SearchQueryContextValue {
+  return useContext(SearchQueryContext) ?? DEFAULT_VALUE;
 }

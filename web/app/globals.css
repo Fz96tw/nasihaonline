@@ -31,6 +31,11 @@
     --ring: 221 83% 53%;
     --radius: 0.625rem;
     --header-height: 92px;
+    /* Height of the scroll-revealed search row below the header (see
+       header-search-row.tsx) — 0 until that component's own effect sets it,
+       so pages that never mount it (signed-out, or before hydration) get a
+       sane default for anything composing it via calc(), e.g. member-sidebar.tsx. */
+    --search-row-height: 0px;
   }
 }
 
