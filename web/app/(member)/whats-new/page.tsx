@@ -6,7 +6,6 @@ import { getSessionUser } from "@/lib/auth";
 import { getFeedPage } from "@/lib/feed-server";
 import { FEED_TYPES, FEED_TYPE_LABELS, isFeedItemType } from "@/lib/feed";
 import { FeedList } from "@/components/feed/feed-list";
-import { FeedSearchForm } from "@/components/feed/feed-search-form";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -81,7 +80,6 @@ export default async function WhatsNewPage({
             </>
           )}
         </h1>
-        {!q && <FeedSearchForm activeType={activeType} q={q} />}
       </div>
 
       <div className="flex flex-wrap gap-2">

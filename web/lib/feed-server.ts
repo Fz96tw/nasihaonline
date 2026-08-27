@@ -169,29 +169,22 @@ export async function getFeedPage(params: {
   // null = search inactive, no id filter applied to that domain; [] = search
   // active but zero Meilisearch hits, so the domain's query below should
   // deliberately match nothing rather than falling through to the unfiltered
-  // browse behavior. Skipped entirely for a domain the caller doesn't want,
-  // same short-circuit `wants()` already uses elsewhere in this function.
+  // browse behavior. Deliberately NOT gated on wants(type) here (unlike the
+  // findMany calls below, which still are) — countsByType/totalCount need
+  // every domain's hit count regardless of the active type-filter pill, or
+  // selecting one pill would make every other type's count collapse to 0
+  // and vanish from the pill row, leaving no way back except "All".
   const [eventHitIds, libraryHitIds, forumHitIds, announcementHitIds, surveyHitIds, reviewHitIds] = !query
     ? [null, null, null, null, null, null]
     : await Promise.all([
-        wants("event") ? searchEventDocuments(query).then((hits) => hits.map((hit) => hit.id)) : Promise.resolve([]),
-        wants("library")
-          ? searchLibraryDocuments(query).then((hits) => hits.map((hit) => hit.id))
-          : Promise.resolve([]),
-        wants("forum_thread")
-          ? searchForumDocuments(query, { excludeForumSlug: COMMUNITY_FEEDBACK_FORUM_SLUG }).then((hits) =>
-              hits.map((hit) => hit.id),
-            )
-          : Promise.resolve([]),
-        wants("announcement")
-          ? searchAnnouncementDocuments(query).then((hits) => hits.map((hit) => hit.id))
-          : Promise.resolve([]),
-        wants("survey")
-          ? searchSurveyDocuments(query).then((hits) => hits.map((hit) => hit.id))
-          : Promise.resolve([]),
-        wants("peer_review")
-          ? searchReviewItemDocuments(query).then((hits) => hits.map((hit) => hit.id))
-          : Promise.resolve([]),
+        searchEventDocuments(query).then((hits) => hits.map((hit) => hit.id)),
+        searchLibraryDocuments(query).then((hits) => hits.map((hit) => hit.id)),
+        searchForumDocuments(query, { excludeForumSlug: COMMUNITY_FEEDBACK_FORUM_SLUG }).then((hits) =>
+          hits.map((hit) => hit.id),
+        ),
+        searchAnnouncementDocuments(query).then((hits) => hits.map((hit) => hit.id)),
+        searchSurveyDocuments(query).then((hits) => hits.map((hit) => hit.id)),
+        searchReviewItemDocuments(query).then((hits) => hits.map((hit) => hit.id)),
       ]);
 
   const [events, libraryItems, forumThreads, announcements, surveys, seekingReviewItems, inboxRaw] = await Promise.all([
@@ -444,7 +437,10 @@ export async function getFeedPage(params: {
     // — every other domain's search-mode bypass is intentionally skipped
     // here; getInboxList(viewerId) is already hard-scoped to the viewer's
     // own mailbox, and this branch must stay that way regardless of role.
-    !wants("inbox") || !query || !viewerId ? Promise.resolve([]) : getInboxList(viewerId),
+    // Deliberately NOT gated on wants("inbox") either, same reason as the
+    // hitIds block above — matchedInboxRaw below feeds countsByType.inbox,
+    // which needs the real count regardless of the active type-filter pill.
+    !query || !viewerId ? Promise.resolve([]) : getInboxList(viewerId),
   ]);
 
   // getInboxList has no cursor/take support (it's a full, already-sorted
@@ -457,7 +453,7 @@ export async function getFeedPage(params: {
   // unsliced/uncursored) rather than re-filtering inboxRaw twice.
   const matchedInboxRaw = query ? inboxRaw.filter((item) => matchesInboxSearch(item, query.toLowerCase())) : [];
 
-  const inboxItems: FeedItem[] = !query
+  const inboxItems: FeedItem[] = !query || !wants("inbox")
     ? []
     : matchedInboxRaw
         .filter((item) => !before || new Date(item.lastActivityAt) < before)

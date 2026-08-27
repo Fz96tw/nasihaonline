@@ -37,7 +37,7 @@ const FLIP_COOLDOWN_MS = 200;
  * (revealed, as at initial load), the moment the field is cleared.
  */
 export function HeaderSearchRow() {
-  const { query, setQuery, pinned } = useSearchQuery();
+  const { query, setQuery, pinned, setSearchRowVisible } = useSearchQuery();
   const router = useRouter();
   const searchParams = useSearchParams();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -56,6 +56,7 @@ export function HeaderSearchRow() {
     const root = document.documentElement;
     if (pinned) {
       root.style.setProperty("--search-row-height", `${ROW_HEIGHT_PX}px`);
+      setSearchRowVisible(true);
       return;
     }
 
@@ -66,6 +67,7 @@ export function HeaderSearchRow() {
 
     const apply = () => {
       root.style.setProperty("--search-row-height", revealed ? `${ROW_HEIGHT_PX}px` : "0px");
+      setSearchRowVisible(revealed);
     };
 
     const handleScroll = () => {
@@ -100,7 +102,7 @@ export function HeaderSearchRow() {
     apply();
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [pinned]);
+  }, [pinned, setSearchRowVisible]);
 
   function submit() {
     const trimmed = query.trim();
