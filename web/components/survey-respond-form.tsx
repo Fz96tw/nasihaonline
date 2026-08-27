@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { HighlightText } from "@/components/highlight-text";
 import type { InvitationForResponse } from "@/lib/surveys-server";
 
 const RATING_VALUES = ["1", "2", "3", "4", "5"];
@@ -21,9 +22,12 @@ const RATING_VALUES = ["1", "2", "3", "4", "5"];
 export function SurveyRespondForm({
   token,
   survey,
+  highlightQuery,
 }: {
   token: string;
   survey: InvitationForResponse;
+  /** Active search query when arriving from a search result (see lib/feed.ts's withFeedRef) — highlights every match in question prompts. */
+  highlightQuery?: string;
 }) {
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -87,7 +91,7 @@ export function SurveyRespondForm({
       {survey.questions.map((question) => (
         <div key={question.id} className="flex flex-col gap-2">
           <label className="font-medium">
-            {question.prompt}
+            <HighlightText text={question.prompt} query={highlightQuery} />
             {question.required && <span className="text-destructive"> *</span>}
           </label>
 

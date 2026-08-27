@@ -14,6 +14,7 @@ import { CancelEventButton } from "@/components/calendar/cancel-event-button";
 import { ResendNotifications } from "@/components/calendar/resend-notifications";
 import { RecordingRow } from "@/components/calendar/recording-row";
 import { AttendanceChecklist } from "@/components/calendar/attendance-checklist";
+import { HighlightText } from "@/components/highlight-text";
 import {
   EVENT_TYPE_LABELS,
   getEventAudienceBadge,
@@ -67,6 +68,7 @@ export function EventDetail({
   roster,
   attendanceChecklist,
   notificationBroadcasts,
+  highlightQuery,
 }: {
   event: MemberEvent;
   canEdit: boolean;
@@ -81,6 +83,8 @@ export function EventDetail({
   attendanceChecklist: AttendanceChecklistMember[] | null;
   /** Resend Notifications' history trail — non-null only for a community event when canEdit (host/admin), matching resendEventNotifications' own gate. */
   notificationBroadcasts: EventNotificationBroadcastItem[] | null;
+  /** Active search query when arriving from a search result (see lib/feed.ts's withFeedRef) — highlights every match in the title/description. */
+  highlightQuery?: string;
 }) {
   const [event, setEvent] = useState(initialEvent);
   const hasMounted = useHasMounted();
@@ -154,7 +158,9 @@ export function EventDetail({
             </Badge>
           ) : null}
         </div>
-        <h1 className="mb-1 text-3xl font-bold tracking-tight">{event.title}</h1>
+        <h1 className="mb-1 text-3xl font-bold tracking-tight">
+          <HighlightText text={event.title} query={highlightQuery} />
+        </h1>
         {hostProfile ? (
           <Link
             href={`/members/${hostProfile.id}`}
@@ -266,7 +272,9 @@ export function EventDetail({
       ) : null}
 
       {event.description ? (
-        <p className="whitespace-pre-line text-sm leading-relaxed">{event.description}</p>
+        <p className="whitespace-pre-line text-sm leading-relaxed">
+          <HighlightText text={event.description} query={highlightQuery} />
+        </p>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3">

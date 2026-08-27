@@ -31,6 +31,11 @@ export default async function MemberSurveyPage({
   if (!token) notFound();
 
   const ref = typeof searchParams.ref === "string" ? searchParams.ref : null;
+  const q = typeof searchParams.q === "string" ? searchParams.q : null;
   const target = `/surveys/respond/${token}`;
-  redirect(ref ? `${target}?ref=${ref}` : target);
+  const qs = new URLSearchParams();
+  if (ref) qs.set("ref", ref);
+  if (q) qs.set("q", q);
+  const query = qs.toString();
+  redirect(query ? `${target}?${query}` : target);
 }

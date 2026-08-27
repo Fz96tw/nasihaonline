@@ -50,11 +50,18 @@ export function findMentionedMembers(body: string, candidates: MentionCandidate[
 /**
  * Renders `body` with matched `@Full Name` mentions as a styled tag and
  * everything else run through linkifyText, same "plain text in, rich nodes
- * out" contract as linkifyText itself.
+ * out" contract as linkifyText itself. `highlightQuery` is forwarded to
+ * every linkifyText call so plain-text runs get search-match highlighting
+ * too (see linkifyText's own doc comment) — a mention tag itself is never
+ * highlighted, it's already visually distinct.
  */
-export function renderTextWithMentions(body: string, candidates: MentionCandidate[]): ReactNode {
+export function renderTextWithMentions(
+  body: string,
+  candidates: MentionCandidate[],
+  highlightQuery?: string,
+): ReactNode {
   const spans = findMentionSpans(body, candidates);
-  if (spans.length === 0) return linkifyText(body);
+  if (spans.length === 0) return linkifyText(body, highlightQuery);
 
   const parts: ReactNode[] = [];
   let lastIndex = 0;
@@ -62,7 +69,7 @@ export function renderTextWithMentions(body: string, candidates: MentionCandidat
 
   for (const span of spans) {
     if (span.start > lastIndex) {
-      parts.push(<Fragment key={key++}>{linkifyText(body.slice(lastIndex, span.start))}</Fragment>);
+      parts.push(<Fragment key={key++}>{linkifyText(body.slice(lastIndex, span.start), highlightQuery)}</Fragment>);
     }
     parts.push(
       <span key={key++} className="rounded bg-primary/10 px-1 py-0.5 font-medium text-primary">
@@ -73,7 +80,7 @@ export function renderTextWithMentions(body: string, candidates: MentionCandidat
   }
 
   if (lastIndex < body.length) {
-    parts.push(<Fragment key={key++}>{linkifyText(body.slice(lastIndex))}</Fragment>);
+    parts.push(<Fragment key={key++}>{linkifyText(body.slice(lastIndex), highlightQuery)}</Fragment>);
   }
 
   return parts;

@@ -24,6 +24,7 @@ import { VolunteerOffersPanel } from "@/components/review/volunteer-offers-panel
 import { ReviewLifecycleActions } from "@/components/review/review-lifecycle-actions";
 import { ReviewOfferButton } from "@/components/review/review-offer-button";
 import { SavedBanner } from "@/components/saved-banner";
+import { HighlightText } from "@/components/highlight-text";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
@@ -46,13 +47,20 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
  * an Offer-to-Review CTA instead of the full submission/comment thread,
  * since the material and discussion stay gated behind an accepted offer.
  */
-export default async function ReviewItemDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ReviewItemDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: { q?: string };
+}) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
   const { id } = await params;
   const item = await getReviewItemDetail(id, user);
   if (!item) notFound();
+  const q = searchParams.q?.trim() || undefined;
 
   if (!item.hasFullAccess) {
     return (
@@ -80,7 +88,9 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
           <Badge variant="neutral">{LEVEL_LABELS[item.level]}</Badge>
         </div>
 
-        <h1 className="mb-3 text-4xl font-extrabold tracking-tight">{item.title}</h1>
+        <h1 className="mb-3 text-4xl font-extrabold tracking-tight">
+          <HighlightText text={item.title} query={q} />
+        </h1>
 
         <div className="mb-8 flex items-center gap-3">
           <Avatar name={item.submitter.name ?? "Member"} src={item.submitter.avatarUrl} size="sm" />
@@ -90,7 +100,9 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
           </div>
         </div>
 
-        <p className="mb-8 text-base leading-relaxed text-muted-foreground">{item.description}</p>
+        <p className="mb-8 text-base leading-relaxed text-muted-foreground">
+          <HighlightText text={item.description} query={q} />
+        </p>
 
         <div className="rounded-lg border bg-accent/30 p-6">
           <p className="mb-4 text-sm text-muted-foreground">
@@ -98,7 +110,9 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
             review to get full access to the material and discussion once they accept.
           </p>
           {item.volunteerNote && (
-            <p className="mb-4 text-sm italic text-muted-foreground">Looking for: {item.volunteerNote}</p>
+            <p className="mb-4 text-sm italic text-muted-foreground">
+              Looking for: <HighlightText text={item.volunteerNote} query={q} />
+            </p>
           )}
           <ReviewOfferButton itemId={item.id} initialStatus={item.myOfferStatus} />
         </div>
@@ -170,7 +184,9 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
         )}
       </div>
 
-      <h1 className="mb-3 text-4xl font-extrabold tracking-tight">{item.title}</h1>
+      <h1 className="mb-3 text-4xl font-extrabold tracking-tight">
+        <HighlightText text={item.title} query={q} />
+      </h1>
 
       <div className="mb-8 flex items-center gap-3">
         <Avatar name={item.submitter.name ?? "Member"} src={item.submitter.avatarUrl} size="sm" />
@@ -181,11 +197,13 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
       </div>
 
       <p className={item.volunteerNote ? "mb-2 text-base leading-relaxed text-muted-foreground" : "mb-8 text-base leading-relaxed text-muted-foreground"}>
-        {item.description}
+        <HighlightText text={item.description} query={q} />
       </p>
 
       {item.volunteerNote && (
-        <p className="mb-8 text-sm italic text-muted-foreground">Looking for: {item.volunteerNote}</p>
+        <p className="mb-8 text-sm italic text-muted-foreground">
+          Looking for: <HighlightText text={item.volunteerNote} query={q} />
+        </p>
       )}
 
       <ResourcePreview
@@ -255,6 +273,7 @@ export default async function ReviewItemDetailPage({ params }: { params: Promise
           allowedMemberIds={allowedMemberIds}
           currentUserId={user.id}
           isPrivileged={isPrivileged}
+          highlightQuery={q}
         />
       </div>
     </main>

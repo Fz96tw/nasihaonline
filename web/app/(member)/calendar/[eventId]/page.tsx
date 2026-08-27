@@ -11,6 +11,7 @@ import { SavedBanner } from "@/components/saved-banner";
 import { EventDiscussionLink } from "@/components/calendar/event-discussion-link";
 import { ForumThreadView } from "@/components/forums/forum-thread-view";
 import { BackLink } from "@/components/back-link";
+import { HighlightText } from "@/components/highlight-text";
 import { FEED_TYPE_LABELS } from "@/lib/feed";
 import { EventVisibility, Role } from "@/lib/generated/prisma/enums";
 
@@ -32,13 +33,14 @@ export default async function EventDetailPage({
   searchParams,
 }: {
   params: { eventId: string };
-  searchParams: { occurrence?: string };
+  searchParams: { occurrence?: string; q?: string };
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
   const event = await getMemberEventById(user.id, params.eventId, searchParams.occurrence);
   if (!event) notFound();
+  const q = searchParams.q?.trim() || undefined;
 
   // A cancellation notification links straight here, so this can't 404 once
   // the organizer cancels (getMemberEventById deliberately doesn't filter
@@ -50,7 +52,9 @@ export default async function EventDetailPage({
         <BackLink fallbackHref="/calendar" />
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{FEED_TYPE_LABELS.event}</p>
-          <h1 className="mb-1 text-3xl font-bold tracking-tight">{event.title}</h1>
+          <h1 className="mb-1 text-3xl font-bold tracking-tight">
+            <HighlightText text={event.title} query={q} />
+          </h1>
           {event.hostName ? <p className="text-sm text-muted-foreground">Hosted by {event.hostName}</p> : null}
         </div>
         <div className="rounded-lg border bg-muted px-4 py-3 text-sm text-muted-foreground">
@@ -122,6 +126,7 @@ export default async function EventDetailPage({
         roster={roster}
         attendanceChecklist={attendanceChecklist}
         notificationBroadcasts={notificationBroadcasts}
+        highlightQuery={q}
       />
 
       {!event.forumThreadId && (
@@ -144,6 +149,7 @@ export default async function EventDetailPage({
             mentionableMembers={mentionableMembers}
             currentUserId={user.id}
             isPrivileged={user.role === Role.admin || user.role === Role.moderator}
+            highlightQuery={q}
           />
         </div>
       )}

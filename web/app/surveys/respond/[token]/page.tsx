@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getInvitationByToken } from "@/lib/surveys-server";
 import { SurveyRespondForm } from "@/components/survey-respond-form";
 import { BackLink } from "@/components/back-link";
+import { HighlightText } from "@/components/highlight-text";
 import { FEED_TYPE_LABELS } from "@/lib/feed";
 
 // Maps the ?ref=<source> marker /surveys/[id] forwards here to where "back"
@@ -24,12 +25,13 @@ export default async function SurveyRespondPage({
   searchParams,
 }: {
   params: { token: string };
-  searchParams: { ref?: string };
+  searchParams: { ref?: string; q?: string };
 }) {
   const invitation = await getInvitationByToken(params.token);
   if (!invitation) notFound();
 
   const backHref = searchParams.ref ? REF_BACK_TARGETS[searchParams.ref] : undefined;
+  const q = searchParams.q?.trim() || undefined;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-6 p-8">
@@ -49,9 +51,13 @@ export default async function SurveyRespondPage({
           />
         )}
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{FEED_TYPE_LABELS.survey}</p>
-        <h1 className="text-3xl font-bold tracking-tight">{invitation.surveyTitle}</h1>
+        <h1 className="text-3xl font-bold tracking-tight">
+          <HighlightText text={invitation.surveyTitle} query={q} />
+        </h1>
         {invitation.surveyDescription && (
-          <p className="mt-2 text-muted-foreground">{invitation.surveyDescription}</p>
+          <p className="mt-2 text-muted-foreground">
+            <HighlightText text={invitation.surveyDescription} query={q} />
+          </p>
         )}
       </div>
 
@@ -70,7 +76,7 @@ export default async function SurveyRespondPage({
           </p>
         </div>
       ) : (
-        <SurveyRespondForm token={params.token} survey={invitation} />
+        <SurveyRespondForm token={params.token} survey={invitation} highlightQuery={q} />
       )}
     </main>
   );

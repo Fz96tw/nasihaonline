@@ -19,6 +19,7 @@ import {
   getKnowledgeItemHeroImageUrl,
 } from "@/lib/storage";
 import { withFeedRef, type FeedItem, type FeedCursor } from "@/lib/feed";
+import { extractSnippet } from "@/lib/text-highlight";
 import { youtubeThumbnailUrl } from "@/lib/youtube";
 import {
   searchEventDocuments,
@@ -133,6 +134,11 @@ export async function getFeedPage(params: {
   const wants = (type: FeedItem["type"]) => !params.types || params.types.includes(type);
   const viewerId = params.viewerId;
   const query = params.q?.trim() || null;
+  // In search mode, center each item's excerpt on the actual match instead
+  // of always truncating from the start — falls back to a plain leading
+  // truncation when this particular field doesn't contain the query (the
+  // hit may have matched a different indexed field, e.g. author name).
+  const excerptOf = (text: string) => (query ? extractSnippet(text, query) : truncate(text));
   const isPrivileged = params.viewerRole === Role.admin || params.viewerRole === Role.moderator;
   // A restricted-visibility item's own creator now sees it in their own
   // feed too (confirmed with user — reverses the earlier "not new to them"
@@ -452,7 +458,7 @@ export async function getFeedPage(params: {
           return {
             ...base,
             title: `Meeting request: ${item.topic}`,
-            excerpt: latestBody ? truncate(latestBody) : "View this meeting request.",
+            excerpt: latestBody ? excerptOf(latestBody) : "View this meeting request.",
           };
         });
 
@@ -468,9 +474,9 @@ export async function getFeedPage(params: {
         event.visibility === EventVisibility.invited
           ? `${event.host.name ?? "The host"} has requested your attendance. Please RSVP.`
           : event.description
-            ? truncate(event.description)
+            ? excerptOf(event.description)
             : "No description provided.",
-      href: withFeedRef(`/calendar/${event.id}`),
+      href: withFeedRef(`/calendar/${event.id}`, query),
       timestamp: event.createdAt.toISOString(),
       author: authorOf(event.host),
       imageUrl: getEventHeroImageUrl(event.heroImageUrl),
@@ -490,8 +496,8 @@ export async function getFeedPage(params: {
       excerpt:
         item.visibility === KnowledgeVisibility.restricted
           ? `${item.contributor.name ?? "A member"} shared this with you.`
-          : truncate(item.description),
-      href: withFeedRef(`/library/${item.id}`),
+          : excerptOf(item.description),
+      href: withFeedRef(`/library/${item.id}`, query),
       timestamp: item.createdAt.toISOString(),
       author: authorOf(item.contributor),
       // A custom hero image always wins; a recorded_lecture with none set
@@ -515,7 +521,7 @@ export async function getFeedPage(params: {
         excerpt: isReply
           ? `Replied to a thread in ${thread.forum.name}`
           : `New thread in ${thread.forum.name}`,
-        href: withFeedRef(`/forums/${thread.forum.slug}/${thread.id}`),
+        href: withFeedRef(`/forums/${thread.forum.slug}/${thread.id}`, query),
         timestamp: thread.lastActivityAt.toISOString(),
         author: authorOf(latestPost?.author ?? thread.author),
         // Forum threads have no per-thread hero image (no upload UI, no
@@ -523,15 +529,17 @@ export async function getFeedPage(params: {
         // feed row still gets a thumbnail (see FeedRow's forum_thread layout).
         imageUrl: "/images/forum-thread.jpg",
         stats: { views: thread._count.views, comments: thread._count.posts - 1 },
-        replyExcerpt: isReply && latestPost ? truncate(latestPost.body) : undefined,
+        replyExcerpt: isReply && latestPost ? excerptOf(latestPost.body) : undefined,
       };
     }),
     ...announcements.map((announcement): FeedItem => ({
       type: "announcement",
       id: announcement.id,
       title: announcement.title,
-      excerpt: truncate(announcement.body),
-      href: `/whats-new/announcements/${announcement.id}`,
+      excerpt: excerptOf(announcement.body),
+      href: query
+        ? `/whats-new/announcements/${announcement.id}?q=${encodeURIComponent(query)}`
+        : `/whats-new/announcements/${announcement.id}`,
       // sentAt is never null here — the where clause above excludes drafts.
       timestamp: (announcement.sentAt as Date).toISOString(),
       author: BOARD_SENDER,
@@ -542,8 +550,8 @@ export async function getFeedPage(params: {
       type: "survey",
       id: survey.id,
       title: survey.title,
-      excerpt: survey.description ? truncate(survey.description) : "Share your feedback.",
-      href: withFeedRef(`/surveys/${survey.id}`),
+      excerpt: survey.description ? excerptOf(survey.description) : "Share your feedback.",
+      href: withFeedRef(`/surveys/${survey.id}`, query),
       // openedAt is never null here — the where clause above filters to status: open.
       timestamp: (survey.openedAt as Date).toISOString(),
       author: BOARD_SENDER,
@@ -564,8 +572,8 @@ export async function getFeedPage(params: {
         excerpt:
           !item.seekingReviewers && !isSubmitter
             ? `${item.submitter.name ?? "A member"} invited you to review this.`
-            : truncate(item.description),
-        href: withFeedRef(`/review-feedback/${item.id}`),
+            : excerptOf(item.description),
+        href: withFeedRef(`/review-feedback/${item.id}`, query),
         timestamp: item.lastActivityAt.toISOString(),
         author: authorOf(item.submitter),
         imageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl),

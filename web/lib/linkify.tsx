@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { HighlightText } from "@/components/highlight-text";
 
 // Matches, in priority order: a `![alt](url)` pasted-image token (see
 // PastedImage/lib/use-paste-image-upload.ts — checked first since it would
@@ -110,13 +111,24 @@ function renderLink(key: number, label: string, url: string, appOrigin: string |
  * URLs which are autolinked using the URL itself as the label. Bare
  * relative paths are left as plain text: matching only absolute URLs
  * avoids false positives on ordinary text like "see page 3/4".
+ *
+ * `highlightQuery` (a search-detail-page arrival, see lib/feed.ts's
+ * withFeedRef) wraps matching words in every plain-text run with <mark> —
+ * never inside a link/image/mention, only the ordinary text around them.
  */
-export function linkifyText(text: string): ReactNode {
+export function linkifyText(text: string, highlightQuery?: string): ReactNode {
   const appOrigin = getAppOrigin();
   const parts: ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let key = 0;
+
+  const renderPlain = (chunk: string, chunkKey: number) =>
+    highlightQuery ? (
+      <HighlightText key={chunkKey} text={chunk} query={highlightQuery} />
+    ) : (
+      <Fragment key={chunkKey}>{chunk}</Fragment>
+    );
 
   LINK_PATTERN.lastIndex = 0;
   while ((match = LINK_PATTERN.exec(text)) !== null) {
@@ -125,7 +137,7 @@ export function linkifyText(text: string): ReactNode {
 
     if (imageUrl !== undefined) {
       if (start > lastIndex) {
-        parts.push(<Fragment key={key++}>{text.slice(lastIndex, start)}</Fragment>);
+        parts.push(renderPlain(text.slice(lastIndex, start), key++));
       }
       const image = renderImage(key, imageAlt, imageUrl);
       // A hand-typed image token whose url isn't one of our own proxy
@@ -139,7 +151,7 @@ export function linkifyText(text: string): ReactNode {
 
     if (label && markdownUrl) {
       if (start > lastIndex) {
-        parts.push(<Fragment key={key++}>{text.slice(lastIndex, start)}</Fragment>);
+        parts.push(renderPlain(text.slice(lastIndex, start), key++));
       }
       parts.push(renderLink(key++, label, markdownUrl, appOrigin));
       lastIndex = start + rawMatch.length;
@@ -157,16 +169,16 @@ export function linkifyText(text: string): ReactNode {
     }
 
     if (start > lastIndex) {
-      parts.push(<Fragment key={key++}>{text.slice(lastIndex, start)}</Fragment>);
+      parts.push(renderPlain(text.slice(lastIndex, start), key++));
     }
 
     parts.push(renderLink(key++, url, url, appOrigin));
-    if (trailing) parts.push(<Fragment key={key++}>{trailing}</Fragment>);
+    if (trailing) parts.push(renderPlain(trailing, key++));
     lastIndex = start + rawUrl.length;
   }
 
   if (lastIndex < text.length) {
-    parts.push(<Fragment key={key++}>{text.slice(lastIndex)}</Fragment>);
+    parts.push(renderPlain(text.slice(lastIndex), key++));
   }
 
   return parts;

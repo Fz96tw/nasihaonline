@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Download, ExternalLink, Loader2 } from "luci
 import { Button } from "@/components/ui/button";
 import { KnowledgeContentType } from "@/lib/generated/prisma/enums";
 import { youtubeEmbedUrl } from "@/lib/youtube";
+import { splitHighlightSegments } from "@/lib/text-highlight";
 
 /** Friendly label for docs.google.com/drive.google.com links, whose path is a cryptic file ID rather than a filename. Returns null for non-Google URLs. */
 function googleWorkspaceLabel(url: string): string | null {
@@ -319,6 +320,65 @@ function PdfPreview({ url, fileName }: { url: string; fileName: string }) {
 }
 
 /**
+ * Walks `container`'s text nodes and wraps every search-query match in a
+ * <mark>, operating purely via textContent/createElement/createTextNode —
+ * never innerHTML — on text that's already safely in the DOM (post-
+ * dangerouslySetInnerHTML). A matched segment is always a substring of that
+ * already-rendered text, never the raw query string itself, so this can't
+ * turn a crafted search query into an injection: there's no code path from
+ * `query` to a `.innerHTML` assignment anywhere here.
+ */
+function highlightDomText(container: HTMLElement, query: string) {
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  const textNodes: Text[] = [];
+  let node: Node | null;
+  while ((node = walker.nextNode())) textNodes.push(node as Text);
+
+  for (const textNode of textNodes) {
+    const segments = splitHighlightSegments(textNode.textContent ?? "", query);
+    if (segments.length === 1 && !segments[0].matched) continue;
+
+    const fragment = document.createDocumentFragment();
+    for (const segment of segments) {
+      if (segment.matched) {
+        const mark = document.createElement("mark");
+        mark.className = "bg-yellow-200 text-inherit";
+        mark.textContent = segment.text;
+        fragment.appendChild(mark);
+      } else {
+        fragment.appendChild(document.createTextNode(segment.text));
+      }
+    }
+    textNode.parentNode?.replaceChild(fragment, textNode);
+  }
+}
+
+/**
+ * Renders a blog_post's sanitized HTML body, then (client-side, after
+ * mount) highlights every search-query match in it via highlightDomText.
+ * Keyed on highlightQuery so a query change fully remounts the container
+ * from the original `body` HTML before re-highlighting, rather than
+ * layering highlights on top of a previous pass's <mark>-mutated DOM.
+ */
+function BlogPostBody({ body, highlightQuery }: { body?: string | null; highlightQuery?: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!highlightQuery || !containerRef.current) return;
+    highlightDomText(containerRef.current, highlightQuery);
+  }, [highlightQuery, body]);
+
+  return (
+    <div
+      key={highlightQuery ?? ""}
+      ref={containerRef}
+      className="prose prose-sm max-w-none"
+      dangerouslySetInnerHTML={{ __html: body ?? "" }}
+    />
+  );
+}
+
+/**
  * Inline (non-modal) resource preview — PDF.js pager for document
  * attachments, YouTube embed for recorded lectures, or a link-out card for
  * an externalUrl (no iframe embed — doesn't depend on the linked resource's
@@ -333,6 +393,7 @@ export function ResourcePreview({
   externalUrl,
   attachment,
   body,
+  highlightQuery,
 }: {
   title: string;
   contentType: KnowledgeContentType;
@@ -340,12 +401,14 @@ export function ResourcePreview({
   externalUrl: string | null;
   attachment: { fileName: string; mimeType: string; url: string } | null;
   body?: string | null;
+  /** Active search query when arriving from a search result (see lib/feed.ts's withFeedRef) — highlights every match in a blog_post's body. */
+  highlightQuery?: string;
 }) {
   const isRecordedLecture = contentType === KnowledgeContentType.recorded_lecture;
   const embedUrl = isRecordedLecture && youtubeUrl ? youtubeEmbedUrl(youtubeUrl) : null;
 
   if (contentType === KnowledgeContentType.blog_post) {
-    return <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: body ?? "" }} />;
+    return <BlogPostBody body={body} highlightQuery={highlightQuery} />;
   }
 
   if (isRecordedLecture) {

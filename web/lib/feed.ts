@@ -66,9 +66,16 @@ export type FeedItem = {
 export const FEED_REF_PARAM = "ref";
 export const FEED_REF_VALUE = "whats-new";
 
-export function withFeedRef(href: string): string {
+/**
+ * `q` optionally carries the active search query along too, so the detail
+ * page reached from a search result can highlight every match on the page
+ * (see components/highlight-text.tsx) — not just show the "back to feed"
+ * link `ref` alone provides.
+ */
+export function withFeedRef(href: string, q?: string | null): string {
   const separator = href.includes("?") ? "&" : "?";
-  return `${href}${separator}${FEED_REF_PARAM}=${FEED_REF_VALUE}`;
+  const withRef = `${href}${separator}${FEED_REF_PARAM}=${FEED_REF_VALUE}`;
+  return q ? `${withRef}&q=${encodeURIComponent(q)}` : withRef;
 }
 
 export function isFromFeed(searchParams?: Record<string, string | string[] | undefined>): boolean {

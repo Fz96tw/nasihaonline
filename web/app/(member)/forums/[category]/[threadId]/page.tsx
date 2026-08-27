@@ -13,6 +13,7 @@ import { SavedBanner } from "@/components/saved-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
+import { HighlightText } from "@/components/highlight-text";
 import { CLINICAL_DISCUSSIONS_SLUG, getForumThreadAudienceBadge } from "@/lib/forums";
 import { FEED_TYPE_LABELS } from "@/lib/feed";
 import { ForumThreadVisibility, Role } from "@/lib/generated/prisma/enums";
@@ -31,11 +32,14 @@ export async function generateMetadata({
 /** /forums/[category]/[threadId] (§4.13) — thread detail with threaded replies. */
 export default async function ForumThreadPage({
   params,
+  searchParams,
 }: {
   params: { category: string; threadId: string };
+  searchParams: { q?: string };
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
+  const q = searchParams.q?.trim() || undefined;
 
   const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
   const thread = await getForumThreadDetail(params.category, params.threadId, user.id, isPrivileged);
@@ -75,7 +79,9 @@ export default async function ForumThreadPage({
           <div className="flex items-center gap-2">
             {thread.pinned && <Pin className="h-4 w-4 text-primary" />}
             {isRestricted && <Lock className="h-4 w-4 text-muted-foreground" />}
-            <h1 className="text-2xl font-bold tracking-tight">{thread.title}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">
+              <HighlightText text={thread.title} query={q} />
+            </h1>
             {isRestricted && <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>}
           </div>
           {thread.isEditable && (user.id === thread.authorId || isPrivileged) && (
@@ -103,6 +109,7 @@ export default async function ForumThreadPage({
         allowedMemberIds={restrictedMemberIds ?? undefined}
         currentUserId={user.id}
         isPrivileged={isPrivileged}
+        highlightQuery={q}
       />
 
       {isRestricted &&

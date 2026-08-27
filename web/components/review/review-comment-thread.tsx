@@ -91,6 +91,7 @@ function CommentNode({
   currentUserId,
   isPrivileged,
   onPosted,
+  highlightQuery,
 }: {
   comment: ReviewCommentNode;
   itemId: string;
@@ -99,6 +100,8 @@ function CommentNode({
   currentUserId: string;
   isPrivileged: boolean;
   onPosted: () => void;
+  /** Active search query when arriving from a search result (see lib/feed.ts's withFeedRef) — highlights every match in this comment's body. */
+  highlightQuery?: string;
 }) {
   const router = useRouter();
   const [replying, setReplying] = useState(false);
@@ -193,7 +196,7 @@ function CommentNode({
           </div>
         ) : (
           <p className={cn("whitespace-pre-wrap break-words text-sm", comment.removed && "italic text-muted-foreground")}>
-            {renderTextWithMentions(comment.body, mentionableMembers)}
+            {renderTextWithMentions(comment.body, mentionableMembers, highlightQuery)}
           </p>
         )}
         <div className="mt-2 flex items-center gap-3">
@@ -264,6 +267,7 @@ function CommentNode({
               currentUserId={currentUserId}
               isPrivileged={isPrivileged}
               onPosted={onPosted}
+              highlightQuery={highlightQuery}
             />
           ))}
         </div>
@@ -286,6 +290,7 @@ export function ReviewCommentThread({
   allowedMemberIds,
   currentUserId,
   isPrivileged,
+  highlightQuery,
 }: {
   itemId: string;
   comments: ReviewCommentNode[];
@@ -293,6 +298,8 @@ export function ReviewCommentThread({
   allowedMemberIds: string[];
   currentUserId: string;
   isPrivileged: boolean;
+  /** Active search query when arriving from a search result (see lib/feed.ts's withFeedRef) — highlights every match across every comment's body. */
+  highlightQuery?: string;
 }) {
   const router = useRouter();
 
@@ -308,6 +315,7 @@ export function ReviewCommentThread({
           currentUserId={currentUserId}
           isPrivileged={isPrivileged}
           onPosted={() => router.refresh()}
+          highlightQuery={highlightQuery}
         />
       ))}
 

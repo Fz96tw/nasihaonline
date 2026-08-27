@@ -22,6 +22,7 @@ import { LibraryViewCounter } from "@/components/library/library-view-counter";
 import { ManageLibraryInvitees } from "@/components/library/manage-invitees";
 import { ForumThreadView } from "@/components/forums/forum-thread-view";
 import { SavedBanner } from "@/components/saved-banner";
+import { HighlightText } from "@/components/highlight-text";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
@@ -43,13 +44,20 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
  * an on-demand link into the Library Discussions forum, since KnowledgeItem
  * has no body/comment model of its own.
  */
-export default async function LibraryItemDetailPage({ params }: { params: { id: string } }) {
+export default async function LibraryItemDetailPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { q?: string };
+}) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
   const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
   const item = await getPublishedKnowledgeItemById(params.id, user.id, isPrivileged);
   if (!item) notFound();
+  const q = searchParams.q?.trim() || undefined;
 
   const authorProfile = await getDirectoryMemberById(item.contributor.id);
   const canEdit = user.id === item.contributor.id || isPrivileged;
@@ -94,7 +102,9 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
         )}
       </div>
 
-      <h1 className="mb-3 text-4xl font-extrabold tracking-tight">{item.title}</h1>
+      <h1 className="mb-3 text-4xl font-extrabold tracking-tight">
+        <HighlightText text={item.title} query={q} />
+      </h1>
 
       <div className="mb-8 flex items-center justify-between gap-3">
         {authorProfile ? (
@@ -122,7 +132,9 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
       </div>
 
       {item.contentType !== KnowledgeContentType.blog_post && (
-        <p className="mb-8 whitespace-pre-wrap text-base leading-relaxed text-muted-foreground">{item.description}</p>
+        <p className="mb-8 whitespace-pre-wrap text-base leading-relaxed text-muted-foreground">
+          <HighlightText text={item.description} query={q} />
+        </p>
       )}
 
       <ResourcePreview
@@ -132,6 +144,7 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
         externalUrl={item.externalUrl}
         attachment={item.attachment}
         body={item.body}
+        highlightQuery={q}
       />
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -197,6 +210,7 @@ export default async function LibraryItemDetailPage({ params }: { params: { id: 
             mentionableMembers={mentionableMembers}
             currentUserId={user.id}
             isPrivileged={isPrivileged}
+            highlightQuery={q}
           />
         </div>
       )}

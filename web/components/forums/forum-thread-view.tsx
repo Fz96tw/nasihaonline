@@ -112,6 +112,7 @@ function PostNode({
   currentUserId,
   isPrivileged,
   onPosted,
+  highlightQuery,
 }: {
   post: ForumPostNode;
   threadId: string;
@@ -121,6 +122,8 @@ function PostNode({
   currentUserId: string;
   isPrivileged: boolean;
   onPosted: () => void;
+  /** Active search query when arriving from a search result (see lib/feed.ts's withFeedRef) — highlights every match in this post's body. */
+  highlightQuery?: string;
 }) {
   const router = useRouter();
   const [replying, setReplying] = useState(false);
@@ -264,7 +267,7 @@ function PostNode({
           </div>
         ) : (
           <p className={cn("whitespace-pre-wrap break-words text-sm", post.removed && "italic text-muted-foreground")}>
-            {renderTextWithMentions(post.body, mentionableMembers)}
+            {renderTextWithMentions(post.body, mentionableMembers, highlightQuery)}
           </p>
         )}
         <div className="mt-2 flex items-center gap-3">
@@ -352,6 +355,7 @@ function PostNode({
               currentUserId={currentUserId}
               isPrivileged={isPrivileged}
               onPosted={onPosted}
+              highlightQuery={highlightQuery}
             />
           ))}
         </div>
@@ -369,6 +373,7 @@ export function ForumThreadView({
   allowedMemberIds,
   currentUserId,
   isPrivileged,
+  highlightQuery,
 }: {
   threadId: string;
   posts: ForumPostNode[];
@@ -378,6 +383,8 @@ export function ForumThreadView({
   allowedMemberIds?: string[];
   currentUserId: string;
   isPrivileged: boolean;
+  /** Active search query when arriving from a search result (see lib/feed.ts's withFeedRef) — highlights every match across every post's body. */
+  highlightQuery?: string;
 }) {
   const router = useRouter();
 
@@ -394,6 +401,7 @@ export function ForumThreadView({
           currentUserId={currentUserId}
           isPrivileged={isPrivileged}
           onPosted={() => router.refresh()}
+          highlightQuery={highlightQuery}
         />
       ))}
 

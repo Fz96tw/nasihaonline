@@ -49,7 +49,7 @@ export function FeedList({
     <div className="flex flex-col">
       <ul className="flex flex-col divide-y">
         {items.map((item) => (
-          <FeedRow key={`${item.type}-${item.id}`} item={item} />
+          <FeedRow key={`${item.type}-${item.id}`} item={item} q={q} />
         ))}
       </ul>
       {hasMore && (

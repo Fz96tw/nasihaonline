@@ -6,9 +6,10 @@ import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ReviewOfferButton } from "@/components/review/review-offer-button";
+import { HighlightText } from "@/components/highlight-text";
 import { cn } from "@/lib/utils";
 
-export function FeedRow({ item }: { item: FeedItem }) {
+export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
   const subtitle = [item.author.titleSpecialty, item.author.countryRegion].filter(Boolean).join(", ");
   // Forum threads always carry the same static default image (no per-thread
   // upload), so instead of the full-width hero image other feed types render
@@ -55,7 +56,7 @@ export function FeedRow({ item }: { item: FeedItem }) {
                 <div className={cn(hasThreadImage && "relative z-10")}>
                   <div className="flex items-center gap-2">
                     <span className={cn("text-base font-semibold", hasThreadImage && "text-neutral-900")}>
-                      {item.title}
+                      <HighlightText text={item.title} query={q} />
                     </span>
                     {item.titleTier && (
                       <Badge variant={TIER_BADGE_VARIANT[item.titleTier]} className="flex-shrink-0">
@@ -69,7 +70,7 @@ export function FeedRow({ item }: { item: FeedItem }) {
                       hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
                     )}
                   >
-                    {item.excerpt}
+                    <HighlightText text={item.excerpt} query={q} />
                   </div>
                   {item.replyExcerpt && (
                     <div
@@ -78,7 +79,7 @@ export function FeedRow({ item }: { item: FeedItem }) {
                         hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
                       )}
                     >
-                      &ldquo;{item.replyExcerpt}&rdquo;
+                      &ldquo;<HighlightText text={item.replyExcerpt} query={q} />&rdquo;
                     </div>
                   )}
                   {item.volunteerNote && (
@@ -88,7 +89,7 @@ export function FeedRow({ item }: { item: FeedItem }) {
                         hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
                       )}
                     >
-                      Looking for: {item.volunteerNote}
+                      Looking for: <HighlightText text={item.volunteerNote} query={q} />
                     </div>
                   )}
                   {item.eventStartsAt && (
