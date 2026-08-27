@@ -32,7 +32,9 @@ export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
             <Avatar name={item.author.name ?? "NASIHA Member"} src={item.author.avatarUrl} size="sm" />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span className="truncate text-base font-medium">{item.author.name ?? "NASIHA Member"}</span>
+                <span className="truncate text-base font-medium">
+                  {item.author.name ? <HighlightText text={item.author.name} query={q} /> : "NASIHA Member"}
+                </span>
                 <Badge variant="neutral" className="flex-shrink-0">
                   {FEED_TYPE_LABELS[item.type]}
                 </Badge>

@@ -19,7 +19,7 @@ import {
   getKnowledgeItemHeroImageUrl,
 } from "@/lib/storage";
 import { withFeedRef, type FeedItem, type FeedCursor } from "@/lib/feed";
-import { extractSnippet } from "@/lib/text-highlight";
+import { extractSnippet, textContainsMatch } from "@/lib/text-highlight";
 import { youtubeThumbnailUrl } from "@/lib/youtube";
 import {
   searchEventDocuments,
@@ -39,6 +39,13 @@ import { matchesInboxSearch } from "@/lib/inbox";
 
 const DEFAULT_PAGE_SIZE = 20;
 const EXCERPT_LENGTH = 180;
+// In search mode, a forum thread's excerpt needs to come from whichever post
+// actually contains the match (Meilisearch's ForumSearchDocument.body
+// concatenates every post, but the feed row can only show one) — not
+// necessarily the latest one, which is all browse mode ever needs. Capped
+// rather than unbounded to keep a very long thread's search-mode query cost
+// bounded.
+const SEARCH_POST_SCAN_LIMIT = 30;
 
 const AUTHOR_SELECT = {
   name: true,
@@ -303,7 +310,7 @@ export async function getFeedPage(params: {
         posts: {
           select: { author: { select: AUTHOR_SELECT }, body: true },
           orderBy: { createdAt: "desc" },
-          take: 1,
+          take: query ? SEARCH_POST_SCAN_LIMIT : 1,
         },
         // posts includes the thread's own opening post, so replyCount below
         // subtracts one — same convention as toThreadListItem in forums-server.ts.
@@ -408,6 +415,12 @@ export async function getFeedPage(params: {
         // id, so the where clause just matches nothing instead of needing a
         // conditional select shape.
         volunteerOffers: { where: { userId: viewerId ?? "" }, select: { status: true } },
+        // Search mode only (take: 0 outside it — same "no query" cheapness
+        // as the forum posts fetch above): ReviewItemSearchDocument's
+        // commentsBody concatenates every comment, so a hit here can be a
+        // comment match with nothing in `description` to excerpt — fetch
+        // enough comments to find whichever one actually matched.
+        comments: { select: { body: true }, take: query ? SEARCH_POST_SCAN_LIMIT : 0 },
       },
       orderBy: { lastActivityAt: "desc" },
       take: pageSize,
@@ -514,6 +527,11 @@ export async function getFeedPage(params: {
       // thread's original creator.
       const isReply = thread.lastActivityAt.getTime() > thread.createdAt.getTime();
       const latestPost = thread.posts[0];
+      // In search mode, prefer whichever fetched post actually contains the
+      // match over always the latest — the latest post might not be why
+      // this thread matched at all (see SEARCH_POST_SCAN_LIMIT above).
+      const matchingPost = query ? thread.posts.find((post) => textContainsMatch(post.body, query)) : undefined;
+      const excerptPost = query ? (matchingPost ?? latestPost) : latestPost;
       return {
         type: "forum_thread",
         id: thread.id,
@@ -523,13 +541,17 @@ export async function getFeedPage(params: {
           : `New thread in ${thread.forum.name}`,
         href: withFeedRef(`/forums/${thread.forum.slug}/${thread.id}`, query),
         timestamp: thread.lastActivityAt.toISOString(),
-        author: authorOf(latestPost?.author ?? thread.author),
+        author: authorOf(excerptPost?.author ?? thread.author),
         // Forum threads have no per-thread hero image (no upload UI, no
         // schema column) — every thread shows the same static default so the
         // feed row still gets a thumbnail (see FeedRow's forum_thread layout).
         imageUrl: "/images/forum-thread.jpg",
         stats: { views: thread._count.views, comments: thread._count.posts - 1 },
-        replyExcerpt: isReply && latestPost ? excerptOf(latestPost.body) : undefined,
+        // Browse mode only ever shows this for a reply-bumped thread
+        // (unchanged); search mode always shows *some* post preview, since
+        // there's now a real excerptPost to source it from regardless of
+        // whether the thread was freshly created or bumped.
+        replyExcerpt: query ? (excerptPost ? excerptOf(excerptPost.body) : undefined) : isReply && latestPost ? excerptOf(latestPost.body) : undefined,
       };
     }),
     ...announcements.map((announcement): FeedItem => ({
@@ -559,6 +581,14 @@ export async function getFeedPage(params: {
     })),
     ...seekingReviewItems.map((item): FeedItem => {
       const isSubmitter = viewerId != null && item.submitterId === viewerId;
+      // Search mode: a hit here can be a comment match with nothing in
+      // `description` to excerpt (see the `comments` select above) — only
+      // reach for a comment once the description itself doesn't contain the
+      // match, so a real description match is never displaced by one.
+      const matchingComment =
+        query && !textContainsMatch(item.description, query)
+          ? item.comments.find((comment) => textContainsMatch(comment.body, query))
+          : undefined;
       return {
         type: "peer_review",
         id: item.id,
@@ -572,7 +602,9 @@ export async function getFeedPage(params: {
         excerpt:
           !item.seekingReviewers && !isSubmitter
             ? `${item.submitter.name ?? "A member"} invited you to review this.`
-            : excerptOf(item.description),
+            : matchingComment
+              ? excerptOf(matchingComment.body)
+              : excerptOf(item.description),
         href: withFeedRef(`/review-feedback/${item.id}`, query),
         timestamp: item.lastActivityAt.toISOString(),
         author: authorOf(item.submitter),

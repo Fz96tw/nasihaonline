@@ -26,6 +26,14 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** True when any query word appears in `text` — used to pick which of several candidate fields (e.g. which forum post) actually contains the match, before bothering to build a snippet from it. */
+export function textContainsMatch(text: string, query: string): boolean {
+  const words = queryWords(query);
+  if (words.length === 0) return false;
+  const pattern = new RegExp(words.map(escapeRegExp).join("|"), "i");
+  return pattern.test(text);
+}
+
 /**
  * Splits `text` into segments alternating matched/unmatched, for rendering
  * each query word highlighted wherever it appears (case-insensitive). Pass
@@ -41,10 +49,15 @@ export function splitHighlightSegments(text: string, query: string | undefined):
   // String.split with a capturing group interleaves matched substrings into
   // the result — odd indices are always the captured (matched) group here,
   // since `pattern` has exactly one capturing group around the alternation.
-  return parts.filter((part) => part.length > 0).map((part, index) => ({
-    text: part,
-    matched: index % 2 === 1,
-  }));
+  // Matched status MUST be computed from this original index before any
+  // filtering: text.split can produce an empty leading (or consecutive)
+  // string whenever a match sits at the very start of `text` (very common
+  // once extractSnippet already trims the window down to start near the
+  // match) — dropping that empty string first would shift every later
+  // segment's parity, silently swapping which one reads as "matched".
+  return parts
+    .map((part, index) => ({ text: part, matched: index % 2 === 1 }))
+    .filter((segment) => segment.text.length > 0);
 }
 
 const SNIPPET_WINDOW_CHARS = 160;
