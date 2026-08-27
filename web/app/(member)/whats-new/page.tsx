@@ -24,7 +24,7 @@ export default async function WhatsNewPage({
 
   const activeType = isFeedItemType(searchParams.type) ? searchParams.type : undefined;
   const q = searchParams.q?.trim() || undefined;
-  const { items, nextCursor, hasMore } = await getFeedPage({
+  const { items, nextCursor, hasMore, totalCount } = await getFeedPage({
     cursor: null,
     types: activeType ? [activeType] : undefined,
     viewerId: user.id,
@@ -63,7 +63,7 @@ export default async function WhatsNewPage({
       <div>
         <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
           {q ? (
-            `Search results for: "${q}"`
+            `${totalCount ?? 0} search result${totalCount === 1 ? "" : "s"} for: "${q}"`
           ) : (
             <>
               <Rss className="h-7 w-7" aria-hidden="true" />

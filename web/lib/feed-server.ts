@@ -135,7 +135,7 @@ export async function getFeedPage(params: {
    * feed's browse behavior, which is why it's gated on `query` being set.
    */
   q?: string;
-}): Promise<{ items: FeedItem[]; nextCursor: FeedCursor | null; hasMore: boolean }> {
+}): Promise<{ items: FeedItem[]; nextCursor: FeedCursor | null; hasMore: boolean; totalCount?: number }> {
   const pageSize = params.pageSize ?? DEFAULT_PAGE_SIZE;
   const before = params.cursor ? new Date(params.cursor.ts) : null;
   const wants = (type: FeedItem["type"]) => !params.types || params.types.includes(type);
@@ -444,10 +444,13 @@ export async function getFeedPage(params: {
   // are all applied here in JS instead. No re-sort needed — getInboxList
   // already returns items sorted desc by lastActivityAt, and filtering
   // preserves that order.
+  // Shared with totalCount below (see there for why this is computed
+  // unsliced/uncursored) rather than re-filtering inboxRaw twice.
+  const matchedInboxRaw = query ? inboxRaw.filter((item) => matchesInboxSearch(item, query.toLowerCase())) : [];
+
   const inboxItems: FeedItem[] = !query
     ? []
-    : inboxRaw
-        .filter((item) => matchesInboxSearch(item, query.toLowerCase()))
+    : matchedInboxRaw
         .filter((item) => !before || new Date(item.lastActivityAt) < before)
         .slice(0, pageSize)
         .map((item): FeedItem => {
@@ -629,7 +632,28 @@ export async function getFeedPage(params: {
   const last = items[items.length - 1];
   const nextCursor = hasMore && last ? { ts: last.timestamp, id: last.id } : null;
 
-  return { items, nextCursor, hasMore };
+  // Total match count for the page title ("N search results for ...") —
+  // summed from each domain's Meilisearch hit count (already computed
+  // above, before any Prisma query ran), not the length of `items`, which
+  // is capped at pageSize. `wants()`-excluded domains already contribute an
+  // empty hits array, so this naturally reflects the active type-filter
+  // pill without any extra branching here. This is a Meilisearch-hit count,
+  // not a Prisma-visibility-exact one — a restricted item the viewer can't
+  // actually see could inflate it slightly; deliberately not worth a full
+  // parallel count() per domain (several of which layer JS-side filtering
+  // Prisma can't express, e.g. isThreadVisible/matchesInboxSearch) for a
+  // number whose whole job is a rough "about this many" in a page heading.
+  const totalCount = query
+    ? (eventHitIds?.length ?? 0) +
+      (libraryHitIds?.length ?? 0) +
+      (forumHitIds?.length ?? 0) +
+      (announcementHitIds?.length ?? 0) +
+      (surveyHitIds?.length ?? 0) +
+      (reviewHitIds?.length ?? 0) +
+      matchedInboxRaw.length
+    : undefined;
+
+  return { items, nextCursor, hasMore, totalCount };
 }
 
 export type AnnouncementDetail = {

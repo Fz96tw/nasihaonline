@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { useSearchQuery } from "@/components/header-search-context";
 
-const ROW_HEIGHT_PX = 64;
+const ROW_HEIGHT_PX = 48;
 // Accumulated scroll distance (not per-event delta — a single scroll event
 // can fire with a tiny delta many times) needed in one direction before
 // flipping revealed state.
@@ -109,7 +109,7 @@ export function HeaderSearchRow() {
 
   return (
     <div className="sticky top-[var(--header-height)] z-40 h-[var(--search-row-height)] overflow-hidden border-b bg-background shadow-sm transition-[height] duration-300 ease-in-out">
-      <div className="flex h-16 items-center px-4 lg:px-8">
+      <div className="flex h-12 items-center px-4 lg:px-8">
         <form
           onSubmit={(event) => {
             event.preventDefault();
