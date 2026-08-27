@@ -1,0 +1,40 @@
+flowchart TB
+    Browser["<b>Browser</b><br/>(member / admin UI)"]
+
+    NPM["<b>nginx-proxy-manager</b><br/>(VPS, TLS termination)"]
+
+    App["<b>Next.js App</b><br/>(app)"]
+
+    SaaS["<b>External SaaS</b><br/>─────────────────────<br/>
+Clerk &lt;--&gt; verify session / webhooks<br/>
+Stripe &lt;--&gt; charges / webhook events<br/>
+Resend &lt;--&gt; send transactional email<br/>
+Google Cal / Meet API --&gt; OAuth + create event/Meet link"]
+
+    DataTier["<b>Data Tier</b><br/>─────────────────────<br/>
+Postgres &lt;-- SQL reads/writes<br/>
+Redis &lt;-- jobs, sessions, rate-limit cache<br/>
+Meilisearch &lt;-- search index/query<br/>
+MinIO (S3) &lt;-- object get/put: avatars, recordings"]
+
+    Worker["<b>Worker container</b><br/>(background jobs + Google<br/>Calendar recording-sync sweep)"]
+
+    Conferencing["<b>Conferencing</b><br/>─────────────────────<br/>
+Browser (participants) &lt;--&gt; WebRTC audio/video --&gt; LiveKit server<br/>
+LiveKit server --&gt; recording start/stop (RPC) --&gt; LiveKit Egress<br/>
+LiveKit Egress --&gt; recording file upload (S3 API) --&gt; MinIO above"]
+
+    Observability["<b>Observability (VPS host)</b><br/>─────────────────────<br/>
+node-exporter --&gt; scrape host metrics<br/>
+Prometheus --&gt; query metrics<br/>
+Grafana (dashboards)<br/>
+─────────────────────<br/>
+(separate stack; not wired into the app itself)"]
+
+    Browser -->|"HTTPS: pages, forms, API calls"| NPM
+    NPM -->|"HTTP: proxied requests"| App
+    App --> SaaS
+    SaaS --> DataTier
+    DataTier -->|"shares Postgres/Redis/Meilisearch above"| Worker
+    Worker -->|"App: create room / issue join token"| Conferencing
+    Conferencing ~~~ Observability

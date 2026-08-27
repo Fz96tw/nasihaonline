@@ -1,0 +1,25 @@
+                     +---------------------+
+                     |       Browser        |
+                     +----------+----------+
+                                | HTTPS
+                                v
+                     +---------------------+
+                     | nginx-proxy-manager   |
+                     +----------+----------+
+                                | proxied HTTP
+                                v
++------------------+  auth/email   +----------------------+  pay/calendar  +------------------+
+|  Clerk (auth)      |<----------->|                        |<------------>|  Stripe (payments) |
+|  Resend (email)    |             |     Next.js App          |             |  Google Cal/Meet   |
++------------------+             |       + Worker           |             +------------------+
+                                  +----+----------------+----+
+                                       |                |
+                          SQL/cache/   |                |  create room /
+                          search index |                |  join token
+                                       v                v
+                        +----------------------+   +----------------------+
+                        |  Postgres / Redis      |   |  LiveKit server        |
+                        |  MinIO / Meilisearch    |<--|  + Egress              |
+                        +----------------------+   |  (Browser <-> WebRTC)  |
+                           ^  recording upload      +----------------------+
+                           +-------------------------------+

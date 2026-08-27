@@ -1,0 +1,31 @@
+flowchart TB
+    Browser["<b>Browser</b><br/><i>member / admin UI</i>"]
+    NPM["<b>nginx-proxy-manager</b><br/><i>TLS termination & reverse proxy</i>"]
+    App["<b>Next.js App</b> + Worker<br/><i>app logic, API routes, background jobs</i>"]
+
+    subgraph LeftSaaS[" "]
+        direction TB
+        Clerk["<b>Clerk</b><br/><i>user sign-in / identity</i>"]
+        Resend["<b>Resend</b><br/><i>transactional email delivery</i>"]
+    end
+
+    subgraph RightSaaS[" "]
+        direction TB
+        Stripe["<b>Stripe</b><br/><i>donations</i>"]
+        Google["<b>Google Cal / Meet</b><br/><i>calendar events & Meet links</i>"]
+    end
+
+    DataTier["<b>Postgres</b> <i>— primary database</i><br/><b>Redis</b> <i>— cache, sessions, rate-limit</i><br/><b>MinIO</b> <i>— S3 object storage</i><br/><b>Meilisearch</b> <i>— full-text search</i>"]
+    Conferencing["<b>LiveKit server</b> <i>— WebRTC video/audio rooms</i><br/><b>Egress</b> <i>— records sessions to storage</i><br/>(Browser &lt;--&gt; WebRTC)"]
+
+    Browser -->|"HTTPS"| NPM
+    NPM -->|"proxied HTTP"| App
+
+    Clerk <-->|"auth"| App
+    Resend <-->|"email"| App
+    App <-->|"pay"| Stripe
+    App <-->|"calendar"| Google
+
+    App -->|"SQL / cache / search index"| DataTier
+    App -->|"Nasiha Video Conference"| Conferencing
+    Conferencing -->|"recording upload"| DataTier

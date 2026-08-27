@@ -1,0 +1,85 @@
++----------------------------------+
+|             Browser                |
+|       (member / admin UI)          |
++------------------+-----------------+
+                    |
+     HTTPS: pages, forms, API calls
+                    |
+                    v
++----------------------------------+
+|        nginx-proxy-manager         |
+|       (VPS, TLS termination)       |
++------------------+-----------------+
+                    |
+          HTTP: proxied requests
+                    |
+                    v
++----------------------------------+
+|            Next.js App             |
+|               (app)                |
++------------------+-----------------+
+                    |
+                    v
++----------------------------------+
+|           External SaaS            |
++------------------------------------+
+| Clerk       <-> verify session /   |
+|                 webhooks           |
+| Stripe      <-> charges / webhook  |
+|                 events             |
+| Resend      <-> send transactional |
+|                 email              |
+| Google Cal   -> OAuth + create     |
+| / Meet API      event/Meet link    |
++------------------+-----------------+
+                    |
+                    v
++----------------------------------+
+|             Data Tier              |
++------------------------------------+
+| Postgres     <- SQL reads/writes   |
+| Redis        <- jobs, sessions,    |
+|                 rate-limit cache   |
+| Meilisearch  <- search index/query |
+| MinIO (S3)   <- object get/put:    |
+|                 avatars, recordings|
++------------------+-----------------+
+                    ^
+        shares Postgres/Redis/
+           Meilisearch above
+                    |
++----------------------------------+
+|          Worker container          |
+|   (background jobs + Google        |
+|   Calendar recording-sync sweep)   |
++----------------------------------+
+
+                    |
+     App: create room / issue
+         join token
+                    v
++----------------------------------+
+|            Conferencing            |
++------------------------------------+
+| Browser (participants)             |
+|      <-> WebRTC audio/video   -->  |
+|          LiveKit server            |
+| LiveKit server                     |
+|       -> recording start/stop      |
+|          (RPC) --> LiveKit Egress  |
+| LiveKit Egress                     |
+|       -> recording file upload     |
+|          (S3 API) --> MinIO above  |
++----------------------------------+
+
++----------------------------------+
+|      Observability (VPS host)      |
++------------------------------------+
+| node-exporter                      |
+|     -> scrape host metrics         |
+| Prometheus                         |
+|     -> query metrics               |
+| Grafana (dashboards)               |
++----------------------------------+
+  (separate stack; not wired into
+   the app itself)
