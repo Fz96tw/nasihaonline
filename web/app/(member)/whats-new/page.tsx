@@ -24,7 +24,7 @@ export default async function WhatsNewPage({
 
   const activeType = isFeedItemType(searchParams.type) ? searchParams.type : undefined;
   const q = searchParams.q?.trim() || undefined;
-  const { items, nextCursor, hasMore, totalCount } = await getFeedPage({
+  const { items, nextCursor, hasMore, totalCount, countsByType } = await getFeedPage({
     cursor: null,
     types: activeType ? [activeType] : undefined,
     viewerId: user.id,
@@ -54,9 +54,19 @@ export default async function WhatsNewPage({
   // The Inbox pill only makes sense while a search is active (getFeedPage's
   // inbox branch never returns anything without a query) — hidden outside
   // search mode rather than left clickable into a dead, unexplained "0
-  // results" state. FEED_TYPES itself stays canonical/unfiltered everywhere
-  // else (feed-server.ts, the API route) — this only changes what renders here.
-  const visiblePillTypes = q ? FEED_TYPES : FEED_TYPES.filter((type) => type !== "inbox");
+  // results" state. In search mode, every pill is further narrowed to only
+  // those types with at least one match (via countsByType) — same "don't
+  // offer a dead click" rationale, extended to every type, not just Inbox —
+  // except the currently-active pill, kept visible even at zero results so
+  // there's still an obvious way back to "All". FEED_TYPES itself stays
+  // canonical/unfiltered everywhere else (feed-server.ts, the API route) —
+  // this only changes what renders here.
+  const visiblePillTypes = FEED_TYPES.filter((type) => {
+    if (type === "inbox" && !q) return false;
+    if (!countsByType) return true;
+    if (type === activeType) return true;
+    return (countsByType[type] ?? 0) > 0;
+  });
 
   return (
     <main className="mx-auto flex max-w-[720px] flex-col gap-6 px-[2px] py-8 sm:px-8">

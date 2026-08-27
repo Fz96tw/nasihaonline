@@ -18,7 +18,7 @@ import {
   getSurveyHeroImageUrl,
   getKnowledgeItemHeroImageUrl,
 } from "@/lib/storage";
-import { withFeedRef, type FeedItem, type FeedCursor } from "@/lib/feed";
+import { withFeedRef, type FeedItem, type FeedItemType, type FeedCursor } from "@/lib/feed";
 import { extractSnippet, textContainsMatch } from "@/lib/text-highlight";
 import { youtubeThumbnailUrl } from "@/lib/youtube";
 import {
@@ -136,7 +136,13 @@ export async function getFeedPage(params: {
    * feed's browse behavior, which is why it's gated on `query` being set.
    */
   q?: string;
-}): Promise<{ items: FeedItem[]; nextCursor: FeedCursor | null; hasMore: boolean; totalCount?: number }> {
+}): Promise<{
+  items: FeedItem[];
+  nextCursor: FeedCursor | null;
+  hasMore: boolean;
+  totalCount?: number;
+  countsByType?: Partial<Record<FeedItemType, number>>;
+}> {
   const pageSize = params.pageSize ?? DEFAULT_PAGE_SIZE;
   const before = params.cursor ? new Date(params.cursor.ts) : null;
   const wants = (type: FeedItem["type"]) => !params.types || params.types.includes(type);
@@ -646,17 +652,25 @@ export async function getFeedPage(params: {
   // parallel count() per domain (several of which layer JS-side filtering
   // Prisma can't express, e.g. isThreadVisible/matchesInboxSearch) for a
   // number whose whole job is a rough "about this many" in a page heading.
-  const totalCount = query
-    ? (eventHitIds?.length ?? 0) +
-      (libraryHitIds?.length ?? 0) +
-      (forumHitIds?.length ?? 0) +
-      (announcementHitIds?.length ?? 0) +
-      (surveyHitIds?.length ?? 0) +
-      (reviewHitIds?.length ?? 0) +
-      matchedInboxRaw.length
+  // Per-type breakdown of the same hit counts — lets the page hide a filter
+  // pill entirely when its type has zero matches, rather than leaving it
+  // clickable into a dead "nothing here" state.
+  const countsByType: Partial<Record<FeedItemType, number>> | undefined = query
+    ? {
+        event: eventHitIds?.length ?? 0,
+        library: libraryHitIds?.length ?? 0,
+        forum_thread: forumHitIds?.length ?? 0,
+        announcement: announcementHitIds?.length ?? 0,
+        survey: surveyHitIds?.length ?? 0,
+        peer_review: reviewHitIds?.length ?? 0,
+        inbox: matchedInboxRaw.length,
+      }
+    : undefined;
+  const totalCount = countsByType
+    ? Object.values(countsByType).reduce((sum, count) => sum + count, 0)
     : undefined;
 
-  return { items, nextCursor, hasMore, totalCount };
+  return { items, nextCursor, hasMore, totalCount, countsByType };
 }
 
 export type AnnouncementDetail = {
