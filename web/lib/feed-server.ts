@@ -34,6 +34,7 @@ import {
   EVENT_THREAD_ACCESS_SELECT,
   KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
 } from "@/lib/forums-server";
+import { COMMUNITY_FEEDBACK_FORUM_SLUG } from "@/lib/forums";
 import { getInboxList } from "@/lib/inbox-server";
 import { matchesInboxSearch } from "@/lib/inbox";
 
@@ -172,7 +173,9 @@ export async function getFeedPage(params: {
           ? searchLibraryDocuments(query).then((hits) => hits.map((hit) => hit.id))
           : Promise.resolve([]),
         wants("forum_thread")
-          ? searchForumDocuments(query).then((hits) => hits.map((hit) => hit.id))
+          ? searchForumDocuments(query, { excludeForumSlug: COMMUNITY_FEEDBACK_FORUM_SLUG }).then((hits) =>
+              hits.map((hit) => hit.id),
+            )
           : Promise.resolve([]),
         wants("announcement")
           ? searchAnnouncementDocuments(query).then((hits) => hits.map((hit) => hit.id))

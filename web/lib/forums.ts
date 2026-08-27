@@ -22,6 +22,15 @@ export const EVENTS_FORUM_SLUG = "events";
 // first time any member actually wants to discuss the resource.
 export const LIBRARY_FORUM_SLUG = "library-discussions";
 
+// Seeded forum slug for meta-discussion about the site itself (bug reports,
+// feature requests, dev/testing threads — e.g. "Page footer NASIHA
+// disclaimer updated") rather than genuine community content. Ordinary
+// browsing (What's New, the forum itself) is unaffected; this exists purely
+// so getFeedPage's search mode (lib/feed-server.ts) can exclude it from
+// results — a member searching the site shouldn't have to wade through
+// threads about the site's own nav bar or footer to find real content.
+export const COMMUNITY_FEEDBACK_FORUM_SLUG = "community-feedback";
+
 export type ForumCategory = {
   id: string;
   name: string;

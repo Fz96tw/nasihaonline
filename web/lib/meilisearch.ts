@@ -206,6 +206,13 @@ export async function ensureLibraryIndexConfigured(): Promise<void> {
   const index = getLibraryIndex();
   await index.updateSearchableAttributes(["title", "description", "contributorName", "categoryNames", "tagNames"]);
   await index.updateFilterableAttributes(["contentType", "level", "categorySlugs"]);
+  // Strict keyword matching, not fuzzy — Meilisearch's default typo
+  // tolerance (auto-correcting 1-2 character typos depending on word
+  // length) surfaced results the query didn't actually contain anywhere,
+  // which the highlight/snippet UI (lib/text-highlight.ts) can't explain
+  // since it only ever looks for the literal typed word. Every content
+  // index below disables it the same way, for the same reason.
+  await index.updateTypoTolerance({ enabled: false });
 }
 
 export async function upsertLibraryDocument(document: LibrarySearchDocument): Promise<void> {
@@ -240,6 +247,7 @@ export async function ensureForumsIndexConfigured(): Promise<void> {
   const index = getForumsIndex();
   await index.updateSearchableAttributes(["title", "body", "authorName", "forumName"]);
   await index.updateFilterableAttributes(["forumSlug"]);
+  await index.updateTypoTolerance({ enabled: false });
 }
 
 export async function upsertForumDocument(document: ForumSearchDocument): Promise<void> {
@@ -252,11 +260,16 @@ export async function deleteForumDocument(threadId: string): Promise<void> {
 
 export async function searchForumDocuments(
   query: string,
-  options: { forumSlug?: string; limit?: number } = {},
+  options: { forumSlug?: string; excludeForumSlug?: string; limit?: number } = {},
 ): Promise<ForumSearchDocument[]> {
+  const filters = [
+    options.forumSlug ? `forumSlug = "${options.forumSlug}"` : null,
+    options.excludeForumSlug ? `forumSlug != "${options.excludeForumSlug}"` : null,
+  ].filter((clause): clause is string => clause != null);
+
   const result = await getForumsIndex().search(query, {
     limit: options.limit ?? 50,
-    filter: options.forumSlug ? `forumSlug = "${options.forumSlug}"` : undefined,
+    filter: filters.length > 0 ? filters.join(" AND ") : undefined,
   });
   return result.hits;
 }
@@ -268,6 +281,7 @@ export async function ensureEventsIndexConfigured(): Promise<void> {
   const index = getEventsIndex();
   await index.updateSearchableAttributes(["title", "description", "hostName"]);
   await index.updateFilterableAttributes(["type"]);
+  await index.updateTypoTolerance({ enabled: false });
 }
 
 export async function upsertEventDocument(document: EventSearchDocument): Promise<void> {
@@ -295,6 +309,7 @@ export async function ensureAnnouncementsIndexConfigured(): Promise<void> {
   await client.createIndex(ANNOUNCEMENTS_INDEX_NAME, { primaryKey: "id" }).catch(() => undefined);
   const index = getAnnouncementsIndex();
   await index.updateSearchableAttributes(["title", "body"]);
+  await index.updateTypoTolerance({ enabled: false });
 }
 
 export async function upsertAnnouncementDocument(document: AnnouncementSearchDocument): Promise<void> {
@@ -320,6 +335,7 @@ export async function ensureSurveysIndexConfigured(): Promise<void> {
   const index = getSurveysIndex();
   await index.updateSearchableAttributes(["title", "description"]);
   await index.updateFilterableAttributes(["status"]);
+  await index.updateTypoTolerance({ enabled: false });
 }
 
 export async function upsertSurveyDocument(document: SurveySearchDocument): Promise<void> {
@@ -356,6 +372,7 @@ export async function ensureReviewItemsIndexConfigured(): Promise<void> {
     "commentsBody",
   ]);
   await index.updateFilterableAttributes(["contentType", "level"]);
+  await index.updateTypoTolerance({ enabled: false });
 }
 
 export async function upsertReviewItemDocument(document: ReviewItemSearchDocument): Promise<void> {
