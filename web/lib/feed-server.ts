@@ -473,13 +473,31 @@ export async function getFeedPage(params: {
             imageUrl: null,
           };
           if (item.kind === "message") {
-            return { ...base, title: item.subject ?? `Message from ${item.otherPartyName}`, excerpt: item.snippet };
+            // item.snippet is always just the latest message's preview —
+            // wrong once the actual match (matchesInboxSearch checked
+            // item.searchText, every message in the thread concatenated) is
+            // in an earlier message than that. This block only ever runs
+            // in search mode (see the !query guard above matchedInboxRaw),
+            // so excerptOf(query-aware) is always the right call here, not
+            // just a fallback.
+            return {
+              ...base,
+              title: item.subject ?? `Message from ${item.otherPartyName}`,
+              excerpt: excerptOf(item.searchText),
+            };
           }
+          // Same fix as the forum-thread branch above: prefer whichever
+          // negotiation step actually contains the match over always the
+          // latest, which might not be why this thread matched at all.
+          const matchingMessage = item.messages.find(
+            (message) => message.body && textContainsMatch(message.body, query),
+          );
           const latestBody = [...item.messages].reverse().find((message) => message.body)?.body ?? null;
+          const excerptSource = matchingMessage?.body ?? latestBody;
           return {
             ...base,
             title: `Meeting request: ${item.topic}`,
-            excerpt: latestBody ? excerptOf(latestBody) : "View this meeting request.",
+            excerpt: excerptSource ? excerptOf(excerptSource) : "View this meeting request.",
           };
         });
 
