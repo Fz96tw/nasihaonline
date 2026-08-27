@@ -98,14 +98,14 @@ Nasiha intends to operate internationally from the outset. Different countries h
 
 ## Legal Incorporation Checklist
 
-Nasiha will be incorporated in **Missouri** as a non-stock non-profit corporation. The steps and links below are Missouri-specific.
+Nasiha is incorporated in **Missouri** as a non-stock non-profit corporation, and 501(c)(3) status has been granted. The steps and links below are Missouri-specific; remaining Phase 2+ items are still tracked as they're completed.
 
-**Phase 1 — First 30 Days**
-- [ ] Search the Missouri Secretary of State business registry to confirm "Nasiha" is available: https://bsd.sos.mo.gov/
-- [ ] File Articles of Incorporation (non-stock corporation) with the Missouri Secretary of State via the same portal (~$25)
-- [ ] Apply for an Employer Identification Number (EIN) via IRS Form SS-4 (free) at https://sa.www4.irs.gov/modiein/individual/index.jsp — use the official IRS website only, not third-party services
-- [ ] Confirm three Board members in the roles of President, Treasurer, and Secretary (Uzma Khan as Founder & Board Member, Nadeem Haider and Nighat Abidi as Board Members)
-- [ ] Draft formal Bylaws (the Nasiha Charter serves as the basis — "Bylaws" is the legal term required for incorporation and the 501(c)(3) application)
+**Phase 1 — First 30 Days** ✅ Complete
+- [x] Search the Missouri Secretary of State business registry to confirm "Nasiha" is available: https://bsd.sos.mo.gov/
+- [x] File Articles of Incorporation (non-stock corporation) with the Missouri Secretary of State via the same portal (~$25)
+- [x] Apply for an Employer Identification Number (EIN) via IRS Form SS-4 (free) at https://sa.www4.irs.gov/modiein/individual/index.jsp — use the official IRS website only, not third-party services
+- [x] Confirm three Board members in the roles of President, Treasurer, and Secretary (Uzma Khan as Founder & Board Member, Nadeem Haider and Nighat Abidi as Board Members)
+- [x] Draft formal Bylaws (the Nasiha Charter serves as the basis — "Bylaws" is the legal term required for incorporation and the 501(c)(3) application)
 
 **Phase 2 — Months 1–3**
 - [ ] Establish a business checking account (requires two Board member signatures)
@@ -115,7 +115,7 @@ Nasiha will be incorporated in **Missouri** as a non-stock non-profit corporatio
 - [ ] Apply for Solicitation License if required in the city where Nasiha does business (~$15 — not required in Columbia, MO for nonprofits)
 
 **Phase 3 — Months 3–6**
-- [ ] Submit Federal 501(c)(3) application via IRS Form 1023 at https://www.pay.gov/public/form/start/62759871 (~$600) — requires Articles of Incorporation, EIN, list of three officers, Bylaws, and statement of Revenue and Expenses
+- [x] Submit Federal 501(c)(3) application via IRS Form 1023 at https://www.pay.gov/public/form/start/62759871 (~$600) — requires Articles of Incorporation, EIN, list of three officers, Bylaws, and statement of Revenue and Expenses — approved, 501(c)(3) status granted
 - [ ] Submit application for Missouri State Employment Insurance Program at https://labor.mo.gov/employers
 - [ ] Apply for Property Tax Exemption with local government if applicable — must be done before sourcing any property
 - [ ] Obtain general liability insurance and, if applicable, workers' compensation insurance
@@ -136,7 +136,7 @@ Nasiha will be incorporated in **Missouri** as a non-stock non-profit corporatio
 
 ## Action Items Before Launch
 
-- [ ] Engage a non-profit attorney to review the charter, advise on state of incorporation, and guide the 501(c)(3) process
+- [x] Engage a non-profit attorney to review the charter, advise on state of incorporation, and guide the 501(c)(3) process
 - [ ] Draft and publish a formal Privacy Policy
 - [ ] Add the standard medical disclaimer to all platform pages and communications
 - [ ] Establish a process for members to report concerns (Code of Conduct violations, misinformation, privacy breaches)

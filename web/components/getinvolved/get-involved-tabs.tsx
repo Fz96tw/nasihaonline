@@ -9,6 +9,7 @@ import { KnowledgeExchangeSection } from "@/components/home/knowledge-exchange-s
 import { JoinForm } from "@/components/join-form";
 import { TierPreviewStrip } from "@/components/join/tier-preview-strip";
 import { DonateForm } from "@/components/donate-form";
+import { DonateInfoBlurb } from "@/components/donate-info-blurb";
 import type { AdmissionPhase } from "@/lib/generated/prisma/enums";
 
 const TAB_VALUES = ["how-it-works", "join", "support"] as const;
@@ -96,11 +97,16 @@ export function GetInvolvedTabs({
               </p>
             </div>
           ) : (
-            <DonateForm
-              defaultName={defaultName}
-              defaultEmail={defaultEmail}
-              canceled={canceled}
-            />
+            <>
+              <div className="mb-8">
+                <DonateInfoBlurb />
+              </div>
+              <DonateForm
+                defaultName={defaultName}
+                defaultEmail={defaultEmail}
+                canceled={canceled}
+              />
+            </>
           )}
         </div>
       </TabsContent>

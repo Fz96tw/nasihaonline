@@ -103,7 +103,7 @@ This policy will be reviewed annually by the Board.
 
 In the founding cohort phase, Nasiha will operate on minimal resources — primarily the time and goodwill of its founding members. Before pursuing grants or partnerships, the Organization needs:
 
-- [ ] Non-profit registration and legal status established
+- [x] Non-profit registration and legal status established — 501(c)(3) incorporation complete
 - [ ] A bank account and basic financial infrastructure
 - [ ] A compelling one-page funding pitch summarizing the mission, model, and early traction
 - [ ] At least a few months of operating history and exchange activity to demonstrate proof of concept

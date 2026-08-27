@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
 import { DonateForm } from "@/components/donate-form";
+import { DonateInfoBlurb } from "@/components/donate-info-blurb";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 
 export const metadata: Metadata = {
@@ -43,20 +44,8 @@ export default async function DonatePage({
         </div>
       </section>
 
-      <div className="mx-auto max-w-xl px-8 pt-10 text-center text-sm leading-relaxed text-muted-foreground">
-        <p>
-          NASIHA is a registered 501(c)(3) nonprofit organization, and your donation is
-          tax-deductible to the fullest extent allowed by law. You&rsquo;ll receive a receipt
-          from Stripe for your records.
-        </p>
-        <p className="mt-4">
-          Donations fund the day-to-day costs of keeping NASIHA free and open to every
-          member — hosting and platform infrastructure, live events, and community programs
-          like mentorship, peer review, and outreach to bring in new contributors. We
-          maintain transparent financial records and operate within a budget approved by
-          our Board of Directors, so every gift goes directly toward strengthening the
-          community.
-        </p>
+      <div className="px-8 pt-10">
+        <DonateInfoBlurb />
       </div>
 
       <DonateForm
