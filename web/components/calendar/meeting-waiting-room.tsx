@@ -77,6 +77,7 @@ export function MeetingWaitingRoom({
   recordingStartEndpoint,
   recordingStopEndpoint,
   coHostsEndpoint,
+  kickEndpoint,
   chatEndpoint,
   backHref,
 }: {
@@ -90,6 +91,8 @@ export function MeetingWaitingRoom({
   recordingStopEndpoint: string;
   /** POST endpoint for granting/revoking co-host — Event-only (Recording Access initiative), null for a MeetingRequest, which has no co-host concept. */
   coHostsEndpoint?: string | null;
+  /** POST endpoint to force-disconnect a participant — Event (host/co-host) and MeetingRequest (sender/organizer only) both support this. */
+  kickEndpoint?: string | null;
   /** POST endpoint for archiving in-meeting chat into a discussion thread — null for a MeetingRequest, which has none. */
   chatEndpoint?: string | null;
   backHref: string;
@@ -282,6 +285,7 @@ export function MeetingWaitingRoom({
         recordingStartEndpoint={recordingStartEndpoint}
         recordingStopEndpoint={recordingStopEndpoint}
         coHostsEndpoint={coHostsEndpoint}
+        kickEndpoint={kickEndpoint}
         chatEndpoint={chatEndpoint}
         title={status.title}
         organizerName={status.organizerName}
@@ -295,6 +299,11 @@ export function MeetingWaitingRoom({
         // policy; Event always supplies a real boolean here, so this
         // fallback never applies there.
         isHostOrCoHost={status.isHostOrCoHost ?? true}
+        // Unlike isHostOrCoHost above, kicking must stay organizer-only for
+        // a MeetingRequest (no co-host concept there) — fall back to
+        // isOrganizer (always present) rather than the unrestricted `true`
+        // used for recording.
+        canKick={status.isHostOrCoHost ?? status.isOrganizer}
         backHref={backHref}
       />
     );

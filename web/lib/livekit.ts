@@ -201,6 +201,28 @@ export async function updateRoomMetadata(roomName: string, patch: Partial<RoomMe
   }
 }
 
+/**
+ * Force-disconnects one participant from a live room (host/co-host "kick" —
+ * the actual server-side primitive, since the client SDK has no such
+ * capability regardless of what a token grants, same as the roomAdmin note
+ * on mintLiveKitToken). Unlike createLiveKitRoom's "must never block the
+ * caller" posture, this is a direct, explicit host action with its own UI
+ * feedback, so a failure is reported back rather than only logged. LiveKit
+ * fires ParticipantDisconnected for the removed client, which is what
+ * actually drops them off the call and out of everyone else's roster.
+ */
+export async function removeLiveKitParticipant(roomName: string, identity: string): Promise<boolean> {
+  const roomService = getRoomServiceClient();
+  if (!roomService) return false;
+  try {
+    await roomService.removeParticipant(roomName, identity);
+    return true;
+  } catch (error) {
+    console.error("[livekit] Failed to remove participant", error);
+    return false;
+  }
+}
+
 /** Reads back the room's current metadata — used by the stop route to find which egress is active, and by clients' initial state, without trusting client input. */
 export async function getRoomMetadata(roomName: string): Promise<RoomMetadata | null> {
   const roomService = getRoomServiceClient();

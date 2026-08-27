@@ -148,6 +148,8 @@ export default async function MeetPage({
       : `/api/inbox/meeting-requests/${id}/meeting/recording/stop`;
   // Event-only (Recording Access initiative) — a MeetingRequest has no co-host concept.
   const coHostsEndpoint = kind === "event" ? `/api/events/${id}/meeting/co-hosts` : null;
+  const kickEndpoint =
+    kind === "event" ? `/api/events/${id}/meeting/kick` : `/api/inbox/meeting-requests/${id}/meeting/kick`;
   // A MeetingRequest has no discussion thread — its chat compiles into a
   // MeetingRequestMessage on the Inbox timeline instead of a ForumPost
   // (finalizeMeetingRequestChatTranscript, meeting-requests-server.ts).
@@ -165,6 +167,7 @@ export default async function MeetPage({
       recordingStartEndpoint={recordingStartEndpoint}
       recordingStopEndpoint={recordingStopEndpoint}
       coHostsEndpoint={coHostsEndpoint}
+      kickEndpoint={kickEndpoint}
       chatEndpoint={chatEndpoint}
       backHref={backHref}
     />

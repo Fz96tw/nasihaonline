@@ -487,14 +487,20 @@ function ParticipantRow({
   participant,
   viewerIsHostOrCoHost,
   coHostsEndpoint,
+  canKick,
+  kickEndpoint,
   onError,
 }: {
   participant: ParticipantSummary;
   viewerIsHostOrCoHost: boolean;
   coHostsEndpoint: string | null | undefined;
+  /** Whether the *viewer* may remove others — Event: host or co-host; MeetingRequest: sender/organizer only (see LiveKitMeetingScreen's doc comment on why this is separate from viewerIsHostOrCoHost). */
+  canKick: boolean;
+  kickEndpoint: string | null | undefined;
   onError: (message: string) => void;
 }) {
   const [pending, setPending] = useState(false);
+  const [kicking, setKicking] = useState(false);
 
   async function toggleCoHost(next: boolean) {
     if (!coHostsEndpoint) return;
@@ -518,29 +524,65 @@ function ParticipantRow({
     }
   }
 
+  async function kick() {
+    if (!kickEndpoint) return;
+    if (!window.confirm(`Remove ${participant.name} from the meeting?`)) return;
+    setKicking(true);
+    try {
+      const csrfToken = await getCsrfToken();
+      const res = await fetch(kickEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        body: JSON.stringify({ identity: participant.identity }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        onError(typeof payload?.error === "string" ? payload.error : "Couldn't remove that participant. Try again.");
+      }
+      // On success, no local update is needed here — LiveKit's own
+      // ParticipantDisconnected event (ParticipantActivityListener) and
+      // useParticipants() (ParticipantsListener) already update everyone's
+      // roster the same way an organic departure would.
+    } finally {
+      setKicking(false);
+    }
+  }
+
+  const showKick = canKick && kickEndpoint && !participant.isHost && !participant.isLocal;
+
   return (
     <li className="flex items-center justify-between gap-2 rounded-sm px-2 py-1 text-sm">
       <span className="truncate">
         {participant.name}
         {participant.isLocal && <span className="text-white/50"> (You)</span>}
       </span>
-      {participant.isHost ? (
-        <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white/70">Host</span>
-      ) : isGuestIdentity(participant.identity) ? null : viewerIsHostOrCoHost && coHostsEndpoint ? (
-        <label className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-white/70">
-          <input
-            type="checkbox"
-            checked={participant.isCoHost}
-            disabled={pending}
-            onChange={(e) => toggleCoHost(e.target.checked)}
-          />
-          Co-host
-        </label>
-      ) : participant.isCoHost ? (
-        <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white/70">
-          Co-host
-        </span>
-      ) : null}
+      <span className="flex shrink-0 items-center gap-2">
+        {participant.isHost ? (
+          <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white/70">Host</span>
+        ) : isGuestIdentity(participant.identity) ? null : viewerIsHostOrCoHost && coHostsEndpoint ? (
+          <label className="flex items-center gap-1.5 text-xs font-medium text-white/70">
+            <input
+              type="checkbox"
+              checked={participant.isCoHost}
+              disabled={pending}
+              onChange={(e) => toggleCoHost(e.target.checked)}
+            />
+            Co-host
+          </label>
+        ) : participant.isCoHost ? (
+          <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white/70">Co-host</span>
+        ) : null}
+        {showKick && (
+          <button
+            type="button"
+            onClick={kick}
+            disabled={kicking}
+            className="font-medium text-red-400 hover:text-red-300 disabled:opacity-50"
+          >
+            Remove
+          </button>
+        )}
+      </span>
     </li>
   );
 }
@@ -554,11 +596,15 @@ function ParticipantsControl({
   participants,
   viewerIsHostOrCoHost,
   coHostsEndpoint,
+  canKick,
+  kickEndpoint,
   onError,
 }: {
   participants: ParticipantSummary[];
   viewerIsHostOrCoHost: boolean;
   coHostsEndpoint: string | null | undefined;
+  canKick: boolean;
+  kickEndpoint: string | null | undefined;
   onError: (message: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -585,6 +631,8 @@ function ParticipantsControl({
                 participant={p}
                 viewerIsHostOrCoHost={viewerIsHostOrCoHost}
                 coHostsEndpoint={coHostsEndpoint}
+                canKick={canKick}
+                kickEndpoint={kickEndpoint}
                 onError={onError}
               />
             ))}
@@ -643,11 +691,13 @@ export function LiveKitMeetingScreen({
   recordingStartEndpoint,
   recordingStopEndpoint,
   coHostsEndpoint,
+  kickEndpoint,
   chatEndpoint,
   title,
   organizerName,
   hostId,
   isHostOrCoHost,
+  canKick,
   backHref,
 }: {
   tokenEndpoint: string;
@@ -656,6 +706,8 @@ export function LiveKitMeetingScreen({
   recordingStopEndpoint: string;
   /** POST endpoint for granting/revoking co-host — undefined/null for a MeetingRequest, which has no co-host concept (see TopLeftOverlay usage below). */
   coHostsEndpoint?: string | null;
+  /** POST endpoint to force-disconnect a participant — Event: host/co-host; MeetingRequest: sender/organizer only, both enforced server-side (see canKick). */
+  kickEndpoint?: string | null;
   /** POST endpoint for archiving this participant's own chat messages (LiveKit meeting chat archival) — null/undefined for a MeetingRequest, which has no discussion thread to archive into. */
   chatEndpoint?: string | null;
   title: string;
@@ -673,6 +725,16 @@ export function LiveKitMeetingScreen({
    * the Record button for every MeetingRequest participant).
    */
   isHostOrCoHost: boolean;
+  /**
+   * Whether the *viewer* is allowed to remove other participants. Kept
+   * distinct from isHostOrCoHost: for a MeetingRequest, isHostOrCoHost is
+   * deliberately true for both parties (unrestricted recording), but
+   * kicking must stay organizer-only there — meeting-waiting-room.tsx
+   * computes this as `status.isHostOrCoHost ?? status.isOrganizer`, which
+   * is the real per-viewer host-or-co-host boolean for an Event and falls
+   * back to sender-only for a MeetingRequest (no isHostOrCoHost field).
+   */
+  canKick: boolean;
   /** Where to navigate once the participant leaves the call (VideoConference's built-in Leave button, or a connection drop) — same destination the page's own BackLink uses. */
   backHref: string;
 }) {
@@ -748,6 +810,8 @@ export function LiveKitMeetingScreen({
           participants={participants}
           viewerIsHostOrCoHost={isHostOrCoHost}
           coHostsEndpoint={coHostsEndpoint}
+          canKick={canKick}
+          kickEndpoint={kickEndpoint}
           onError={pushToast}
         />
       </TopLeftOverlay>
