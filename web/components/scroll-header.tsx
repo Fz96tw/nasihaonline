@@ -1,16 +1,8 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { useSearchQuery } from "@/components/header-search-context";
 import { cn } from "@/lib/utils";
-
-// Two thresholds (instead of one) create a dead zone so scroll jitter near the
-// boundary (e.g. trackpad momentum/rubber-banding) can't flip the header back
-// and forth mid-transition.
-const COMPACT_THRESHOLD = 40;
-const EXPAND_THRESHOLD = 10;
-const HEADER_HEIGHT_EXPANDED = "92px";
-const HEADER_HEIGHT_COMPACT = "62px";
 
 export function ScrollHeader({
   children,
@@ -20,41 +12,12 @@ export function ScrollHeader({
   /** True when a HeaderSearchRow immediately follows this header — that row owns the bottom border/shadow instead (see below), so this one must not also draw its own. */
   hasSearchRow?: boolean;
 }) {
-  // Frozen at full height while a search is pinned (see header-search-
-  // context.tsx) — "the nav bar does not change size" while actively
-  // searching applies to this row too, not just the search row below it.
-  const { pinned, searchRowVisible } = useSearchQuery();
-
-  useEffect(() => {
-    const root = document.documentElement;
-    if (pinned) {
-      root.style.setProperty("--header-height", HEADER_HEIGHT_EXPANDED);
-      return;
-    }
-
-    let isCompact = window.scrollY > COMPACT_THRESHOLD;
-
-    const applyState = (compact: boolean) => {
-      isCompact = compact;
-      root.style.setProperty(
-        "--header-height",
-        compact ? HEADER_HEIGHT_COMPACT : HEADER_HEIGHT_EXPANDED,
-      );
-    };
-
-    const handleScroll = () => {
-      const y = window.scrollY;
-      if (!isCompact && y > COMPACT_THRESHOLD) {
-        applyState(true);
-      } else if (isCompact && y < EXPAND_THRESHOLD) {
-        applyState(false);
-      }
-    };
-
-    applyState(isCompact);
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [pinned]);
+  // Height used to grow at the top of the page and shrink once scrolled —
+  // deliberately removed (always the compact height now, set as
+  // globals.css's --header-height default; nothing here still varies it) —
+  // it read as the header getting unexpectedly taller right when landing
+  // back at the top, not as a helpful "more room" cue.
+  const { searchRowVisible } = useSearchQuery();
 
   return (
     <header
@@ -63,7 +26,7 @@ export function ScrollHeader({
         // items-center normally — but while the search row below is actually
         // showing, that centering is exactly what was reading as "too much
         // space between the menu labels and the search box": items-center
-        // splits this row's own extra height (92/62px box, much shorter
+        // splits this row's own height (still taller than its actual
         // content) evenly above AND below the content, so removing only the
         // bottom half of that isn't possible via padding alone. Flushing
         // content to the bottom instead collapses that bottom half to ~0,

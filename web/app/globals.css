@@ -30,7 +30,10 @@
     --input: 0 0% 90%;
     --ring: 221 83% 53%;
     --radius: 0.625rem;
-    --header-height: 92px;
+    /* Fixed — the header no longer grows near the top of the page and
+       shrinks once scrolled; ScrollHeader (scroll-header.tsx) doesn't set
+       this at all anymore, so this default is the only value it ever has. */
+    --header-height: 62px;
     /* Height of the scroll-revealed search row below the header (see
        header-search-row.tsx) — 0 until that component's own effect sets it,
        so pages that never mount it (signed-out, or before hydration) get a
