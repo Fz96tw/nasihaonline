@@ -1,5 +1,8 @@
+import { Maximize2 } from "lucide-react";
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
+
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 // Matches, in priority order: a `![alt](url)` pasted-image token (see
 // PastedImage/lib/use-paste-image-upload.ts — checked first since it would
@@ -44,14 +47,22 @@ export function countPastedImageTokens(text: string): number {
 function renderImage(key: number, alt: string, url: string): ReactNode | null {
   if (!IMAGE_PROXY_PREFIXES.some((prefix) => url.startsWith(prefix))) return null;
   return (
-    // eslint-disable-next-line @next/next/no-img-element -- same-origin proxy path, not a remote host next/image can allowlist (see components/ui/avatar.tsx).
-    <img
-      key={key}
-      src={url}
-      alt={alt}
-      loading="lazy"
-      className="my-1 block max-h-80 max-w-full rounded-md border object-contain"
-    />
+    <Dialog key={key}>
+      <DialogTrigger asChild>
+        <button type="button" className="group relative my-1 inline-block cursor-zoom-in">
+          {/* eslint-disable-next-line @next/next/no-img-element -- same-origin proxy path, not a remote host next/image can allowlist (see components/ui/avatar.tsx). */}
+          <img src={url} alt={alt} loading="lazy" className="block max-h-80 max-w-full rounded-md border object-contain" />
+          <span className="absolute bottom-1.5 right-1.5 rounded-md bg-black/60 p-1 text-white opacity-80 transition-opacity group-hover:opacity-100">
+            <Maximize2 className="h-3.5 w-3.5" />
+          </span>
+        </button>
+      </DialogTrigger>
+      <DialogContent className="max-w-[95vw] border-none bg-transparent p-0 shadow-none sm:rounded-lg">
+        <DialogTitle className="sr-only">{alt || "Image preview"}</DialogTitle>
+        {/* eslint-disable-next-line @next/next/no-img-element -- same-origin proxy path, not a remote host next/image can allowlist (see components/ui/avatar.tsx). */}
+        <img src={url} alt={alt} className="mx-auto max-h-[90vh] max-w-full rounded-md object-contain" />
+      </DialogContent>
+    </Dialog>
   );
 }
 
