@@ -158,13 +158,24 @@ export async function getFeedPage(params: {
   // feed too (confirmed with user — reverses the earlier "not new to them"
   // design), so this bypass applies unconditionally, browse or search.
   const ownerBypass = (ownerClause: Record<string, unknown> | null) => (ownerClause ? [ownerClause] : []);
-  // Admin/moderator "can view anything" bypass, search-mode only —
-  // unconditional `{}` matches every row (Prisma's empty-object filter is
-  // "no constraint"), same trick used for the id-filter shortcut above.
+  // Admin/moderator "can view anything" bypass, search-mode only.
   // Deliberately NOT extended to ordinary browsing: an admin's feed should
   // still only show their own new/relevant activity, not every restricted
   // item in the app.
-  const adminBypass = () => (query && isPrivileged ? [{}] : []);
+  //
+  // NOT implemented as an extra `{}` member appended to each domain's
+  // visibility OR array below (the original approach, and what every
+  // domain's comments used to describe) — confirmed via a standalone
+  // Prisma script that an OR array containing a literal empty object
+  // matches ZERO rows, not every row: `db.knowledgeItem.count({ where: {
+  // OR: [{}] } })` returned 0 against a table with 19 rows, both for
+  // count() and findMany(). That means this "bypass" silently matched
+  // nothing since it was written — an admin/moderator's search never
+  // actually surfaced restricted content their role should grant access
+  // to. Fixed by omitting the restrictive OR clause entirely when the
+  // bypass applies, via isPrivilegedSearchBypass below, instead of trying
+  // to construct an always-true OR member.
+  const isPrivilegedSearchBypass = Boolean(query && isPrivileged);
 
   // null = search inactive, no id filter applied to that domain; [] = search
   // active but zero Meilisearch hits, so the domain's query below should
@@ -187,19 +198,144 @@ export async function getFeedPage(params: {
         searchReviewItemDocuments(query).then((hits) => hits.map((hit) => hit.id)),
       ]);
 
-  const [events, libraryItems, forumThreads, announcements, surveys, seekingReviewItems, inboxRaw] = await Promise.all([
+  // Extracted so each domain's count() below (for countsByType/totalCount)
+  // shares the exact same where clause its findMany uses, rather than
+  // drifting out of sync with it over time.
+  const eventWhere = {
+    ...(before ? { createdAt: { lt: before } } : {}),
+    ...(eventHitIds ? { id: { in: eventHitIds } } : {}),
+    cancelledAt: null,
+    // Omitted entirely (not just an always-true OR member) when
+    // isPrivilegedSearchBypass — see its own comment above for why.
+    ...(isPrivilegedSearchBypass
+      ? {}
+      : {
+          OR: [
+            { visibility: EventVisibility.community },
+            ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
+            ...ownerBypass(viewerId ? { hostId: viewerId } : null),
+          ],
+        }),
+  };
+  const libraryWhere = {
+    // Ordinary browse only ever shows `published` — a `flagged` item
+    // shouldn't read as "fresh" activity while under moderation review even
+    // though it's still reachable via its own existing links. In search
+    // mode, widen to match syncKnowledgeItemToIndex's own index-eligibility
+    // (published or flagged) — the old header search found flagged items
+    // too, and this is a deliberate "find anything you can view" tool, not
+    // a "what's new" one.
+    status: query ? { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] } : KnowledgeStatus.published,
+    ...(before ? { createdAt: { lt: before } } : {}),
+    ...(libraryHitIds ? { id: { in: libraryHitIds } } : {}),
+    // Same restricted-audience shape as eventWhere above (Objective 04's
+    // read-path filter, mirrored here): a restricted item reaches an
+    // invited member's feed, and its own contributor's. Omitted entirely
+    // when isPrivilegedSearchBypass, same as eventWhere.
+    ...(isPrivilegedSearchBypass
+      ? {}
+      : {
+          OR: [
+            { visibility: KnowledgeVisibility.public },
+            ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
+            ...ownerBypass(viewerId ? { contributorId: viewerId } : null),
+          ],
+        }),
+  };
+  // eventId: null/knowledgeItemId: null excludes the Events forum's
+  // auto-created threads and the Library's on-demand discussion threads
+  // during ordinary browse (see the findMany call below for the full
+  // rationale). NOTE for countsByType/totalCount below: this where clause
+  // is NOT the full visibility check for a forum thread — isThreadVisible
+  // (applied as a JS filter after the findMany, since it also needs a
+  // thread's inherited event/library visibility) can still exclude a
+  // thread this where clause matches. db.forumThread.count(forumWhere)
+  // is therefore a slight over-count for this one domain, not exact like
+  // the others below — an accepted residual gap, not worth replicating
+  // isThreadVisible's logic in SQL for a page-heading number.
+  const forumWhere = {
+    ...(query ? {} : { eventId: null, knowledgeItemId: null }),
+    // lastActivityAt (bumped by every new reply, see createForumPost) is
+    // the sort/cursor field here rather than createdAt, so a thread with
+    // fresh activity resurfaces near the top instead of only ever
+    // appearing once at its original creation time.
+    ...(before ? { lastActivityAt: { lt: before } } : {}),
+    ...(forumHitIds ? { id: { in: forumHitIds } } : {}),
+    // Member-Initiated Restricted Forum Threads' (§4.13/§11.16) own
+    // per-viewer visibility filter — same shape as eventWhere/libraryWhere
+    // above, since a standalone thread can independently carry
+    // `visibility: invited`. Omitted entirely when isPrivilegedSearchBypass,
+    // same as eventWhere/libraryWhere.
+    ...(isPrivilegedSearchBypass
+      ? {}
+      : {
+          OR: [
+            { visibility: ForumThreadVisibility.community },
+            ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
+            ...ownerBypass(viewerId ? { authorId: viewerId } : null),
+          ],
+        }),
+  };
+  const announcementWhere = {
+    sentAt: { not: null },
+    retractedAt: null,
+    showInFeed: true,
+    ...(before ? { sentAt: { lt: before } } : {}),
+    ...(announcementHitIds ? { id: { in: announcementHitIds } } : {}),
+  };
+  const surveyWhere = {
+    // Ordinary browse only shows `open` — nothing actionable about a closed
+    // survey on the "what's new" feed. In search mode, widen to match
+    // syncSurveyToIndex's own index-eligibility (open or closed — no
+    // per-member visibility gate exists for Survey either way) — the old
+    // header search could find a closed survey too.
+    status: query ? { in: [SurveyStatus.open, SurveyStatus.closed] } : SurveyStatus.open,
+    audienceMembers: true,
+    ...(before ? { openedAt: { lt: before } } : {}),
+    ...(surveyHitIds ? { id: { in: surveyHitIds } } : {}),
+  };
+  const reviewWhere = {
+    // lastActivityAt (bumped by toggleSeekingReviewers whenever the
+    // audience changes, see review-server.ts) is the sort/cursor field here
+    // rather than createdAt, so an item whose audience was just
+    // opened/closed resurfaces near the top — same convention as forumWhere
+    // keying off its own lastActivityAt.
+    ...(before ? { lastActivityAt: { lt: before } } : {}),
+    ...(reviewHitIds ? { id: { in: reviewHitIds } } : {}),
+    // Omitted entirely when isPrivilegedSearchBypass, same as
+    // eventWhere/libraryWhere/forumWhere above.
+    ...(isPrivilegedSearchBypass
+      ? {}
+      : {
+          OR: [
+            // Ordinary browse eligibility, unchanged: open-call items are
+            // public to every member; invite-only items only ever reach the
+            // submitter or an invited reviewer's own feed, never a
+            // bystander's.
+            {
+              status: ReviewItemStatus.open,
+              OR: [
+                { seekingReviewers: true },
+                ...(viewerId ? [{ submitterId: viewerId }, { invitees: { some: { userId: viewerId } } }] : []),
+              ],
+            },
+            // Search-mode-only: the submitter/invitee "can view this at
+            // all" bypass canViewReviewItem already grants elsewhere,
+            // extended to a closed item too — the old header search could
+            // find a closed submission for its owner, this restores that.
+            ...(query && viewerId
+              ? [{ submitterId: viewerId }, { invitees: { some: { userId: viewerId } } }]
+              : []),
+          ],
+        }),
+  };
+
+  // Run alongside countsPromise below (not sequentially after) — both are
+  // independent, so awaiting them together via Promise.all(itemsPromise,
+  // countsPromise) halves the added latency of the extra count queries.
+  const itemsPromise = Promise.all([
     !wants("event") || eventHitIds?.length === 0 ? Promise.resolve([]) : db.event.findMany({
-      where: {
-        ...(before ? { createdAt: { lt: before } } : {}),
-        ...(eventHitIds ? { id: { in: eventHitIds } } : {}),
-        cancelledAt: null,
-        OR: [
-          { visibility: EventVisibility.community },
-          ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
-          ...ownerBypass(viewerId ? { hostId: viewerId } : null),
-          ...adminBypass(),
-        ],
-      },
+      where: eventWhere,
       select: {
         id: true,
         title: true,
@@ -227,27 +363,7 @@ export async function getFeedPage(params: {
       take: pageSize,
     }),
     !wants("library") || libraryHitIds?.length === 0 ? Promise.resolve([]) : db.knowledgeItem.findMany({
-      where: {
-        // Ordinary browse only ever shows `published` — a `flagged` item
-        // shouldn't read as "fresh" activity while under moderation review
-        // even though it's still reachable via its own existing links. In
-        // search mode, widen to match syncKnowledgeItemToIndex's own
-        // index-eligibility (published or flagged) — the old header search
-        // found flagged items too, and this is a deliberate "find anything
-        // you can view" tool, not a "what's new" one.
-        status: query ? { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] } : KnowledgeStatus.published,
-        ...(before ? { createdAt: { lt: before } } : {}),
-        ...(libraryHitIds ? { id: { in: libraryHitIds } } : {}),
-        // Same restricted-audience shape as the events branch above
-        // (Objective 04's read-path filter, mirrored here): a restricted
-        // item reaches an invited member's feed, and its own contributor's.
-        OR: [
-          { visibility: KnowledgeVisibility.public },
-          ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
-          ...ownerBypass(viewerId ? { contributorId: viewerId } : null),
-          ...adminBypass(),
-        ],
-      },
+      where: libraryWhere,
       select: {
         id: true,
         title: true,
@@ -284,21 +400,7 @@ export async function getFeedPage(params: {
       // §11.16) own per-viewer visibility filter — same shape as the
       // events/library branches above — since a standalone thread can now
       // independently carry `visibility: invited`.
-      where: {
-        ...(query ? {} : { eventId: null, knowledgeItemId: null }),
-        // lastActivityAt (bumped by every new reply, see createForumPost) is
-        // the sort/cursor field here rather than createdAt, so a thread with
-        // fresh activity resurfaces near the top instead of only ever
-        // appearing once at its original creation time.
-        ...(before ? { lastActivityAt: { lt: before } } : {}),
-        ...(forumHitIds ? { id: { in: forumHitIds } } : {}),
-        OR: [
-          { visibility: ForumThreadVisibility.community },
-          ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
-          ...ownerBypass(viewerId ? { authorId: viewerId } : null),
-          ...adminBypass(),
-        ],
-      },
+      where: forumWhere,
       select: {
         id: true,
         title: true,
@@ -328,13 +430,7 @@ export async function getFeedPage(params: {
       take: pageSize,
     }).then((threads) => threads.filter((thread) => isThreadVisible(thread, viewerId ?? undefined, isPrivileged))),
     !wants("announcement") || announcementHitIds?.length === 0 ? Promise.resolve([]) : db.announcement.findMany({
-      where: {
-        sentAt: { not: null },
-        retractedAt: null,
-        showInFeed: true,
-        ...(before ? { sentAt: { lt: before } } : {}),
-        ...(announcementHitIds ? { id: { in: announcementHitIds } } : {}),
-      },
+      where: announcementWhere,
       select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true, welcomeTier: true },
       orderBy: { sentAt: "desc" },
       take: pageSize,
@@ -346,18 +442,7 @@ export async function getFeedPage(params: {
     // filter. No author select needed — like Announcement, the real sending
     // admin is masked behind BOARD_SENDER on this member-facing surface.
     !wants("survey") || surveyHitIds?.length === 0 ? Promise.resolve([]) : db.survey.findMany({
-      where: {
-        // Ordinary browse only shows `open` — nothing actionable about a
-        // closed survey on the "what's new" feed. In search mode, widen to
-        // match syncSurveyToIndex's own index-eligibility (open or closed —
-        // no per-member visibility gate exists for Survey either way, see
-        // that function's comment) — the old header search could find a
-        // closed survey too.
-        status: query ? { in: [SurveyStatus.open, SurveyStatus.closed] } : SurveyStatus.open,
-        audienceMembers: true,
-        ...(before ? { openedAt: { lt: before } } : {}),
-        ...(surveyHitIds ? { id: { in: surveyHitIds } } : {}),
-      },
+      where: surveyWhere,
       select: { id: true, title: true, description: true, heroImageUrl: true, openedAt: true },
       orderBy: { openedAt: "desc" },
       take: pageSize,
@@ -372,37 +457,7 @@ export async function getFeedPage(params: {
     // behind canViewReviewItem/an accepted offer on the detail page, same as
     // the dashboard's "Members Seeking Reviewers" tab.
     !wants("peer_review") || reviewHitIds?.length === 0 ? Promise.resolve([]) : db.reviewItem.findMany({
-      where: {
-        // lastActivityAt (bumped by toggleSeekingReviewers whenever the
-        // audience changes, see review-server.ts) is the sort/cursor field
-        // here rather than createdAt, so an item whose audience was just
-        // opened/closed resurfaces near the top — same convention as the
-        // forumThreads branch above keying off its own lastActivityAt.
-        ...(before ? { lastActivityAt: { lt: before } } : {}),
-        ...(reviewHitIds ? { id: { in: reviewHitIds } } : {}),
-        OR: [
-          // Ordinary browse eligibility, unchanged: open-call items are
-          // public to every member; invite-only items only ever reach the
-          // submitter or an invited reviewer's own feed, never a bystander's.
-          {
-            status: ReviewItemStatus.open,
-            OR: [
-              { seekingReviewers: true },
-              ...(viewerId
-                ? [{ submitterId: viewerId }, { invitees: { some: { userId: viewerId } } }]
-                : []),
-            ],
-          },
-          // Search-mode-only: the submitter/invitee/admin "can view this at
-          // all" bypass canViewReviewItem already grants elsewhere, extended
-          // to a closed item too — the old header search could find a
-          // closed submission for its owner, this restores that.
-          ...(query && viewerId
-            ? [{ submitterId: viewerId }, { invitees: { some: { userId: viewerId } } }]
-            : []),
-          ...adminBypass(),
-        ],
-      },
+      where: reviewWhere,
       select: {
         id: true,
         title: true,
@@ -442,6 +497,32 @@ export async function getFeedPage(params: {
     // which needs the real count regardless of the active type-filter pill.
     !query || !viewerId ? Promise.resolve([]) : getInboxList(viewerId),
   ]);
+
+  // Accurate, permission-filtered counts for countsByType/totalCount below
+  // — deliberately real count() calls against each domain's exact where
+  // clause (shared with the findMany calls above via the *Where consts),
+  // not the raw Meilisearch hit-id length: a hit the viewer isn't actually
+  // authorized to see (restricted/invited content) would otherwise inflate
+  // the count while the rendered list stays empty for them. Skips the
+  // query entirely (0, no DB round-trip) whenever that domain's hit list is
+  // already empty. Unconditional on wants(type), same reason as the hitIds
+  // block above — every type's count is needed regardless of which filter
+  // pill is currently active, not just the one being fetched in full.
+  const countsPromise = !query
+    ? Promise.resolve([0, 0, 0, 0, 0, 0] as const)
+    : Promise.all([
+        eventHitIds?.length === 0 ? 0 : db.event.count({ where: eventWhere }),
+        libraryHitIds?.length === 0 ? 0 : db.knowledgeItem.count({ where: libraryWhere }),
+        forumHitIds?.length === 0 ? 0 : db.forumThread.count({ where: forumWhere }),
+        announcementHitIds?.length === 0 ? 0 : db.announcement.count({ where: announcementWhere }),
+        surveyHitIds?.length === 0 ? 0 : db.survey.count({ where: surveyWhere }),
+        reviewHitIds?.length === 0 ? 0 : db.reviewItem.count({ where: reviewWhere }),
+      ]);
+
+  const [
+    [events, libraryItems, forumThreads, announcements, surveys, seekingReviewItems, inboxRaw],
+    [eventCount, libraryCount, forumCount, announcementCount, surveyCount, reviewCount],
+  ] = await Promise.all([itemsPromise, countsPromise]);
 
   // getInboxList has no cursor/take support (it's a full, already-sorted
   // fetch of one member's own mailbox), so search-match, `before`-cursor
@@ -656,32 +737,36 @@ export async function getFeedPage(params: {
   const nextCursor = hasMore && last ? { ts: last.timestamp, id: last.id } : null;
 
   // Total match count for the page title ("N search results for ...") —
-  // summed from each domain's Meilisearch hit count (already computed
-  // above, before any Prisma query ran), not the length of `items`, which
-  // is capped at pageSize. `wants()`-excluded domains already contribute an
-  // empty hits array, so this naturally reflects the active type-filter
-  // pill without any extra branching here. This is a Meilisearch-hit count,
-  // not a Prisma-visibility-exact one — a restricted item the viewer can't
-  // actually see could inflate it slightly; deliberately not worth a full
-  // parallel count() per domain (several of which layer JS-side filtering
-  // Prisma can't express, e.g. isThreadVisible/matchesInboxSearch) for a
-  // number whose whole job is a rough "about this many" in a page heading.
-  // Per-type breakdown of the same hit counts — lets the page hide a filter
+  // summed from countsPromise's accurate, permission-filtered per-domain
+  // counts (matchedInboxRaw.length for inbox, already exact — see there),
+  // not the raw Meilisearch hit-id lengths and not the length of `items`,
+  // which is capped at pageSize. `wants()`-excluded domains' counts are
+  // still computed (see countsPromise above), so this naturally reflects
+  // the active type-filter pill without any extra branching here.
+  // Per-type breakdown of the same counts — lets the page hide a filter
   // pill entirely when its type has zero matches, rather than leaving it
   // clickable into a dead "nothing here" state.
   const countsByType: Partial<Record<FeedItemType, number>> | undefined = query
     ? {
-        event: eventHitIds?.length ?? 0,
-        library: libraryHitIds?.length ?? 0,
-        forum_thread: forumHitIds?.length ?? 0,
-        announcement: announcementHitIds?.length ?? 0,
-        survey: surveyHitIds?.length ?? 0,
-        peer_review: reviewHitIds?.length ?? 0,
+        event: eventCount,
+        library: libraryCount,
+        forum_thread: forumCount,
+        announcement: announcementCount,
+        survey: surveyCount,
+        peer_review: reviewCount,
         inbox: matchedInboxRaw.length,
       }
     : undefined;
+  // Sums only the currently-wanted types, NOT every entry in countsByType —
+  // that breakdown deliberately includes every type regardless of the
+  // active filter pill (so other pills stay visible/accurate), but the
+  // page-heading total must match what's actually on screen: with a
+  // specific pill selected, a match in some other, undisplayed type must
+  // not inflate this number.
   const totalCount = countsByType
-    ? Object.values(countsByType).reduce((sum, count) => sum + count, 0)
+    ? (Object.entries(countsByType) as [FeedItemType, number][])
+        .filter(([type]) => wants(type))
+        .reduce((sum, [, count]) => sum + count, 0)
     : undefined;
 
   return { items, nextCursor, hasMore, totalCount, countsByType };
