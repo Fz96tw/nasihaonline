@@ -12,12 +12,14 @@ import { EventDiscussionLink } from "@/components/calendar/event-discussion-link
 import { ForumThreadView } from "@/components/forums/forum-thread-view";
 import { BackLink } from "@/components/back-link";
 import { HighlightText } from "@/components/highlight-text";
+import { RestrictedAccessNotice } from "@/components/restricted-access-notice";
 import { FEED_TYPE_LABELS } from "@/lib/feed";
 import { EventVisibility, Role } from "@/lib/generated/prisma/enums";
 
 export async function generateMetadata({ params }: { params: { eventId: string } }): Promise<Metadata> {
   const user = await getSessionUser();
-  const event = user ? await getMemberEventById(user.id, params.eventId) : null;
+  const isPrivileged = user?.role === Role.admin || user?.role === Role.moderator;
+  const event = user ? await getMemberEventById(user.id, params.eventId, undefined, isPrivileged) : null;
   return { title: event ? `${event.title} — Calendar — NASIHA` : "Event unavailable — NASIHA" };
 }
 
@@ -38,7 +40,8 @@ export default async function EventDetailPage({
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const event = await getMemberEventById(user.id, params.eventId, searchParams.occurrence);
+  const isPrivileged = user.role === Role.admin || user.role === Role.moderator;
+  const event = await getMemberEventById(user.id, params.eventId, searchParams.occurrence, isPrivileged);
   if (!event) notFound();
   const q = searchParams.q?.trim() || undefined;
 
@@ -68,9 +71,10 @@ export default async function EventDetailPage({
   const canEdit = isHost || user.role === Role.admin;
   // Full invitee roster (Objective 02) — visible to every invited member,
   // not just the organizer, so it's fetched independently of `canEdit`.
-  // Only restricted events have one; reaching this point at all already
-  // means the viewer is the organizer or an invited member (getMemberEventById's
-  // own visibility gate), so no further permission check is needed here.
+  // Only restricted events have one; reaching this point at all means the
+  // viewer is the organizer, an invited member, or isPrivileged (admin/
+  // moderator, whose bypass getMemberEventById's own visibility gate now
+  // grants too) — so no further permission check is needed here.
   const isRestricted = event.visibility === EventVisibility.invited;
   // Attendance checklist (Objective 04) — host/admin only, and only once
   // the event has actually happened, same startsAt < now gate the admin
@@ -92,16 +96,14 @@ export default async function EventDetailPage({
     canEdit ? getEventNotificationBroadcasts(event.seriesId) : Promise.resolve(null),
   ]);
 
+  const isInvited = roster?.some((member) => member.userId === user.id) ?? false;
+  const isPrivilegedOverride = isPrivileged && isRestricted && !isHost && !isInvited;
+
   // Inert for an Events-forum thread specifically (isKnowledgeItemThreadVisible
   // short-circuits true when there's no linked KnowledgeItem), but passed
   // for consistency with every other getForumThreadDetail call site.
   const thread = event.forumThreadId
-    ? await getForumThreadDetail(
-        EVENTS_FORUM_SLUG,
-        event.forumThreadId,
-        user.id,
-        user.role === Role.admin || user.role === Role.moderator,
-      )
+    ? await getForumThreadDetail(EVENTS_FORUM_SLUG, event.forumThreadId, user.id, isPrivileged)
     : null;
   const mentionableMembers = thread ? await getMentionableMembers() : [];
 
@@ -109,6 +111,10 @@ export default async function EventDetailPage({
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
       <BackLink fallbackHref="/calendar" />
       <SavedBanner />
+
+      {isPrivilegedOverride && (
+        <RestrictedAccessNotice role={user.role} ownerName={event.hostName ?? "the host"} />
+      )}
 
       <EventDetail
         // Forces a full remount when navigating between occurrences of the

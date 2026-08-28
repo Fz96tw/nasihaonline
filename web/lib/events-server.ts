@@ -485,11 +485,16 @@ export async function getMemberEventById(
   userId: string,
   eventId: string,
   occurrenceStartIso?: string,
+  isPrivileged = false,
 ): Promise<MemberEvent | null> {
   const event = await db.event.findFirst({
     where: {
       id: eventId,
-      OR: [{ visibility: EventVisibility.community }, { hostId: userId }, { invitees: { some: { userId } } }],
+      ...(isPrivileged
+        ? {}
+        : {
+            OR: [{ visibility: EventVisibility.community }, { hostId: userId }, { invitees: { some: { userId } } }],
+          }),
     },
     select: {
       id: true,

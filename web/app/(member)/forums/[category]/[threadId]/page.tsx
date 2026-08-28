@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { HighlightText } from "@/components/highlight-text";
+import { RestrictedAccessNotice } from "@/components/restricted-access-notice";
 import { CLINICAL_DISCUSSIONS_SLUG, getForumThreadAudienceBadge } from "@/lib/forums";
 import { FEED_TYPE_LABELS } from "@/lib/feed";
 import { ForumThreadVisibility, Role } from "@/lib/generated/prisma/enums";
@@ -46,7 +47,10 @@ export default async function ForumThreadPage({
   if (!thread) notFound();
 
   const isRestricted = thread.visibility === ForumThreadVisibility.invited;
-  const canManageInvitees = isRestricted && (user.id === thread.authorId || isPrivileged);
+  const isAuthor = user.id === thread.authorId;
+  const isInvitee = thread.invitees.some((invitee) => invitee.userId === user.id);
+  const isPrivilegedOverride = isPrivileged && isRestricted && !isAuthor && !isInvitee;
+  const canManageInvitees = isRestricted && (isAuthor || isPrivileged);
   const audienceBadge = getForumThreadAudienceBadge(thread);
 
   // Member-Initiated Restricted Forum Threads (§4.13/§11.16) — a restricted
@@ -67,6 +71,11 @@ export default async function ForumThreadPage({
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
       <BackLink fallbackHref={`/forums/${thread.forum.slug}`} />
       <SavedBanner />
+
+      {isPrivilegedOverride && (
+        <RestrictedAccessNotice role={user.role} ownerName={thread.authorName ?? "the author"} />
+      )}
+
       <div>
         <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           <span>{FEED_TYPE_LABELS.forum_thread}</span>
@@ -84,7 +93,7 @@ export default async function ForumThreadPage({
             </h1>
             {isRestricted && <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>}
           </div>
-          {thread.isEditable && (user.id === thread.authorId || isPrivileged) && (
+          {thread.isEditable && (isAuthor || isPrivileged) && (
             <Button asChild variant="ghost" size="sm">
               <Link href={`/forums/${thread.forum.slug}/${thread.id}/edit`}>Edit</Link>
             </Button>

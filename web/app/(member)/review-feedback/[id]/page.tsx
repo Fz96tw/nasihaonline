@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Shield, UserCheck } from "lucide-react";
+import { UserCheck } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import {
   getReviewItemDetail,
@@ -25,6 +25,7 @@ import { ReviewLifecycleActions } from "@/components/review/review-lifecycle-act
 import { ReviewOfferButton } from "@/components/review/review-offer-button";
 import { SavedBanner } from "@/components/saved-banner";
 import { HighlightText } from "@/components/highlight-text";
+import { RestrictedAccessNotice } from "@/components/restricted-access-notice";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
@@ -148,13 +149,7 @@ export default async function ReviewItemDetailPage({
       <SavedBanner />
 
       {isPrivilegedOverride && (
-        <div className="mb-6 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/5 px-4 py-3 text-sm text-warning">
-          <Shield className="h-4 w-4 shrink-0" />
-          <span>
-            You&apos;re viewing this as a {user.role} — {item.submitter.name ?? "the submitter"} hasn&apos;t granted
-            you access directly.
-          </span>
-        </div>
+        <RestrictedAccessNotice role={user.role} ownerName={item.submitter.name ?? "the submitter"} />
       )}
 
       {!item.isSubmitter && item.isInvitee && (

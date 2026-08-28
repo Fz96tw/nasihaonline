@@ -23,6 +23,7 @@ import { ManageLibraryInvitees } from "@/components/library/manage-invitees";
 import { ForumThreadView } from "@/components/forums/forum-thread-view";
 import { SavedBanner } from "@/components/saved-banner";
 import { HighlightText } from "@/components/highlight-text";
+import { RestrictedAccessNotice } from "@/components/restricted-access-notice";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
@@ -63,6 +64,8 @@ export default async function LibraryItemDetailPage({
   const canEdit = user.id === item.contributor.id || isPrivileged;
   const isRestricted = item.visibility === KnowledgeVisibility.restricted;
   const roster = isRestricted ? await getKnowledgeItemRoster(item.id) : null;
+  const isInvited = roster?.some((member) => member.userId === user.id) ?? false;
+  const isPrivilegedOverride = isPrivileged && isRestricted && item.contributor.id !== user.id && !isInvited;
 
   const thread = item.forumThreadId
     ? await getForumThreadDetail(LIBRARY_FORUM_SLUG, item.forumThreadId, user.id, isPrivileged)
@@ -78,6 +81,10 @@ export default async function LibraryItemDetailPage({
     <main className="mx-auto max-w-3xl px-8 py-16">
       <BackLink fallbackHref="/library" className="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline" />
       <SavedBanner />
+
+      {isPrivilegedOverride && (
+        <RestrictedAccessNotice role={user.role} ownerName={item.contributor.name ?? "the contributor"} />
+      )}
 
       {heroImageUrl && (
         <div className="mb-6 flex h-72 w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
