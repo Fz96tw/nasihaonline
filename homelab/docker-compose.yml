@@ -95,6 +95,7 @@ services:
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3010}
       RESEND_API_KEY: ${RESEND_API_KEY}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-NASIHA <no-reply@mail.nasihaforyou.org>}
+      IS_TEST_ENVIRONMENT: ${IS_TEST_ENVIRONMENT:-false}
       MINIO_ENDPOINT: minio
       MINIO_PORT: "9000"
       MINIO_USE_SSL: "false"

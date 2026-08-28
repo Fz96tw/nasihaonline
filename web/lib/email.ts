@@ -1,5 +1,6 @@
-import { Resend } from "resend";
-import { Tier, ContactService, DonationFrequency } from "@/lib/generated/prisma/enums";
+import { Resend, type CreateEmailOptions, type CreateEmailResponse } from "resend";
+import { db } from "@/lib/db";
+import { Role, Tier, ContactService, DonationFrequency } from "@/lib/generated/prisma/enums";
 import type { MembershipApplicationModel } from "@/lib/generated/prisma/models/MembershipApplication";
 import type { DonationModel } from "@/lib/generated/prisma/models/Donation";
 import { TIER_LABELS } from "@/lib/validation/application-review";
@@ -11,6 +12,63 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "NASIHA <no-reply@mail.nasihaforyou.org>";
 const CONTACT_EMAIL = process.env.CONTACT_INBOX_EMAIL ?? "info@nasihaforyou.org";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
+
+// Set only on the test.nasihaforyou.org deployment (homelab/.env) — the VPS
+// deployment leaves this unset. Both share the same Clerk project and
+// Resend sender, so without a flag a real member has no way to tell a
+// test-triggered email from a real one.
+const IS_TEST_ENVIRONMENT = process.env.IS_TEST_ENVIRONMENT === "true";
+
+const TEST_BANNER_TEXT =
+  "*** TEST ENVIRONMENT — sent from NASIHA's test system, not the live site. Do not act on this as a real member/donor communication. ***\n\n";
+const TEST_BANNER_HTML =
+  `<div style="background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:12px 16px;margin-bottom:16px;border-radius:6px;font-family:sans-serif;font-size:14px;"><strong>TEST ENVIRONMENT</strong> — sent from NASIHA's test system, not the live site. Do not act on this as a real member/donor communication.</div>`;
+
+function extractAddress(recipient: string): string {
+  // Resend accepts either a bare address or "Name <email@domain>".
+  return (recipient.match(/<(.+)>/)?.[1] ?? recipient).toLowerCase();
+}
+
+/**
+ * test.nasihaforyou.org is only ever used by admins, but shares its Clerk
+ * project/DB shape with real members — a test action (e.g. approving a
+ * test application) would otherwise still email the real person. Anyone
+ * not resolving to an admin User row (including addresses with no User row
+ * at all, like an unregistered applicant) is treated as non-admin.
+ */
+async function allRecipientsAreAdmins(to: CreateEmailOptions["to"]): Promise<boolean> {
+  const addresses = (Array.isArray(to) ? to : [to]).map(extractAddress);
+  const admins = await db.user.findMany({
+    where: { email: { in: addresses }, role: Role.admin },
+    select: { email: true },
+  });
+  const adminAddresses = new Set(admins.map((admin) => admin.email.toLowerCase()));
+  return addresses.every((address) => adminAddresses.has(address));
+}
+
+/**
+ * Every outbound email goes through here instead of resend.emails.send
+ * directly, so IS_TEST_ENVIRONMENT can flag/gate the message without
+ * threading the check through each send function below. Callers already
+ * guard on `resend` being non-null before calling this.
+ */
+async function sendEmail(params: CreateEmailOptions): Promise<CreateEmailResponse> {
+  if (!IS_TEST_ENVIRONMENT) return resend!.emails.send(params);
+
+  if (!(await allRecipientsAreAdmins(params.to))) {
+    console.warn(
+      `[email] IS_TEST_ENVIRONMENT — skipping send to non-admin recipient(s): ${JSON.stringify(params.to)}`,
+    );
+    return { data: { id: "skipped-non-admin-test-recipient" }, error: null, headers: null };
+  }
+
+  return resend!.emails.send({
+    ...params,
+    subject: `[TEST] ${params.subject}`,
+    text: params.text ? TEST_BANNER_TEXT + params.text : params.text,
+    html: params.html ? TEST_BANNER_HTML + params.html : params.html,
+  } as CreateEmailOptions);
+}
 
 /**
  * Best-effort: a failed/unconfigured email send must not fail application
@@ -57,7 +115,7 @@ export async function sendApplicationConfirmationEmail(application: MembershipAp
     : "Thank you for applying to NASIHA.";
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: FROM_EMAIL,
       to,
       subject: "Your NASIHA membership application was received",
@@ -95,7 +153,7 @@ export async function sendDonationConfirmationEmail(donation: DonationModel) {
   const cadence = donation.frequency === DonationFrequency.recurring ? "monthly, recurring" : "one-time";
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: FROM_EMAIL,
       to,
       subject: "Thank you for your donation to NASIHA",
@@ -124,7 +182,7 @@ export async function sendDonationAdminAlertEmail(
   const donationsUrl = `${APP_URL}/admin/donations`;
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: FROM_EMAIL,
       to: admins.map((admin) => admin.email),
       subject: `[NASIHA] New donation received — ${amount}`,
@@ -168,7 +226,7 @@ export async function sendWelcomeEmail(
   const safeTierLabel = escapeHtml(TIER_LABELS[tier]);
 
   try {
-    const { error } = await resend.emails.send({
+    const { error } = await sendEmail({
       from: FROM_EMAIL,
       to,
       bcc: "nasihaforyou@gmail.com",
@@ -262,7 +320,7 @@ export async function sendEventRegistrationConfirmationEmail(
     `${APP_URL}/join`;
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: FROM_EMAIL,
       to,
       subject: `You're registered: ${event.title}`,
@@ -332,7 +390,7 @@ export async function sendEventRegistrationReminderEmail(
     : "We'll share the joining details closer to the event.";
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: FROM_EMAIL,
       to,
       subject: `Reminder: ${event.title}`,
@@ -394,7 +452,7 @@ export async function sendAnnouncementEmail(
     : "";
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: "NASIHA Board <no-reply@mail.nasihaforyou.org>",
       to,
       subject: announcement.title,
@@ -434,7 +492,7 @@ export async function sendSurveyInviteEmail(
     : "";
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: "NASIHA Board <no-reply@mail.nasihaforyou.org>",
       to,
       subject: `Survey: ${survey.title}`,
@@ -463,7 +521,7 @@ export async function sendInboxMessageEmail(
   }
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: FROM_EMAIL,
       to,
       subject: message.subject ? `New message: ${message.subject}` : `New message from ${message.senderName}`,
@@ -495,7 +553,7 @@ export async function sendMeetingRequestEmail(
   }
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: FROM_EMAIL,
       to,
       subject: request.subject,
@@ -530,7 +588,7 @@ export async function sendEventInviteEmail(
   const when = formatEventDateTime(event.startsAt, event.timezone);
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: FROM_EMAIL,
       to,
       subject: `You're invited: ${event.title}`,
@@ -578,7 +636,7 @@ export async function sendEventAnnouncementEmail(
     : `${event.hostName} scheduled a new event: "${event.title}" on ${when}.`;
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: FROM_EMAIL,
       to,
       subject: `${event.isReminder ? "Reminder" : "New event"}: ${event.title}`,
@@ -635,7 +693,7 @@ export async function sendRsvpConfirmationEmail(
     : "We'll share the joining details closer to the event.";
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: FROM_EMAIL,
       to,
       subject: `You're going: ${event.title}`,
@@ -675,7 +733,7 @@ export async function sendEventLifecycleEmail(
 
   try {
     const viewLine = event.link ? `\n\nView it here:\n${event.link}` : "";
-    await resend.emails.send({
+    await sendEmail({
       from: FROM_EMAIL,
       to,
       subject: event.subject,
@@ -708,7 +766,7 @@ export async function sendLibraryInviteEmail(
   }
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: FROM_EMAIL,
       to,
       subject: `You now have access: ${item.title}`,
@@ -738,7 +796,7 @@ export async function sendLibraryLifecycleEmail(
 
   try {
     const viewLine = item.link ? `\n\nView it here:\n${item.link}` : "";
-    await resend.emails.send({
+    await sendEmail({
       from: FROM_EMAIL,
       to,
       subject: item.subject,
@@ -765,7 +823,7 @@ export async function sendReviewInviteEmail(
   }
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: FROM_EMAIL,
       to,
       subject: `You've been invited to review: ${item.title}`,
@@ -789,7 +847,7 @@ export async function sendReviewLifecycleEmail(to: string, name: string, item: {
 
   try {
     const viewLine = item.link ? `\n\nView it here:\n${item.link}` : "";
-    await resend.emails.send({
+    await sendEmail({
       from: FROM_EMAIL,
       to,
       subject: item.subject,
@@ -817,7 +875,7 @@ export async function sendContactMessageEmail(message: {
     : "";
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: FROM_EMAIL,
       to: CONTACT_EMAIL,
       replyTo: message.email,
@@ -848,7 +906,7 @@ export async function sendContactMessageReplyEmail(to: string, originalSubject: 
   const contactUrl = `${APP_URL}/contact`;
   const footer = `\n\n---\nThis is a one-way message — please do not reply to this email. If you have another question, use our Contact Us page:\n${contactUrl}`;
 
-  await resend.emails.send({
+  await sendEmail({
     from: FROM_EMAIL,
     to,
     subject: `Re: ${originalSubject}`,
@@ -874,7 +932,7 @@ export async function sendCalendarIntegrationAlertEmail(
   if (!resend || admins.length === 0) return;
 
   try {
-    await resend.emails.send({
+    await sendEmail({
       from: FROM_EMAIL,
       to: admins.map((admin) => admin.email),
       subject: "[NASIHA] URGENT — Admin action required: Google Meet link generation failed",
