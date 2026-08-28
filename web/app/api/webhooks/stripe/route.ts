@@ -2,8 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
-import { DonationFrequency } from "@/lib/generated/prisma/enums";
+import { DonationFrequency, Role } from "@/lib/generated/prisma/enums";
 import { autoSubmitFriendApplication } from "@/lib/friend-application";
+import { sendDonationConfirmationEmail, sendDonationAdminAlertEmail } from "@/lib/email";
 
 /**
  * The only place a Donation row is ever created (PRD §4.14 AC3/AC6) — never
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
       const userId = metadata.userId?.trim();
 
       try {
-        await db.donation.create({
+        const donation = await db.donation.create({
           data: {
             donorName: metadata.donorName ?? "Anonymous",
             donorEmail: metadata.donorEmail ?? session.customer_email ?? "",
@@ -55,6 +56,17 @@ export async function POST(request: NextRequest) {
               typeof session.subscription === "string" ? session.subscription : null,
           },
         });
+
+        if (donation.donorEmail) {
+          await sendDonationConfirmationEmail(donation);
+        }
+
+        try {
+          const admins = await db.user.findMany({ where: { role: Role.admin }, select: { email: true, name: true } });
+          await sendDonationAdminAlertEmail(admins, donation);
+        } catch (error) {
+          console.error("[stripe webhook] Failed to send donation admin alert", error);
+        }
 
         // Only reached once per checkout session (a retried webhook delivery
         // for the same session hits the P2002 duplicate branch below and

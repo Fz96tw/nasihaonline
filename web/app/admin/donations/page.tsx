@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { markAllDonationsViewed } from "@/lib/donations-server";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +35,13 @@ export default async function AdminDonationsPage() {
   const donations = await db.donation.findMany({ orderBy: { createdAt: "desc" } });
   const totalCents = donations.reduce((sum, d) => sum + d.amountCents, 0);
 
+  // Captured before marking as viewed, so this visit's render still shows
+  // the "New" badge — the badge disappears on the *next* page load, not
+  // this one, since a donation needs no explicit per-row action the way
+  // applications/reports do (see lib/donations-server.ts).
+  const newDonationIds = new Set(donations.filter((d) => !d.viewedByAdminAt).map((d) => d.id));
+  await markAllDonationsViewed();
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 p-8">
       <div className="flex items-center justify-between">
@@ -57,6 +65,7 @@ export default async function AdminDonationsPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead></TableHead>
               <TableHead>Date</TableHead>
               <TableHead>Donor</TableHead>
               <TableHead>Amount</TableHead>
@@ -69,13 +78,16 @@ export default async function AdminDonationsPage() {
           <TableBody>
             {donations.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground">
+                <TableCell colSpan={8} className="text-center text-muted-foreground">
                   No donations yet.
                 </TableCell>
               </TableRow>
             )}
             {donations.map((donation) => (
               <TableRow key={donation.id}>
+                <TableCell>
+                  {newDonationIds.has(donation.id) && <Badge variant="warning">New</Badge>}
+                </TableCell>
                 <TableCell className="text-muted-foreground">
                   {donation.createdAt.toLocaleDateString()}
                 </TableCell>

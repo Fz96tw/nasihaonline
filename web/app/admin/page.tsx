@@ -9,6 +9,7 @@ import { getOpenConductReportCount } from "@/lib/conduct-server";
 import { getOpenPrivacyRequestCount } from "@/lib/privacy-server";
 import { getUnreadContactMessageCount } from "@/lib/contact-server";
 import { getPendingApplicationsCount } from "@/lib/admin-review-server";
+import { getNewDonationsCount } from "@/lib/donations-server";
 import { AdminPhaseForm } from "@/components/admin-phase-form";
 import { WelcomeAnnouncementSettingsForm } from "@/components/admin/welcome-announcement-settings-form";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -87,6 +88,8 @@ const ADMIN_SECTIONS = [
     href: "/admin/donations",
     title: "Donations",
     description: "Review donation records.",
+    countKey: "donations",
+    countLabel: "new",
     group: "Money",
   },
   {
@@ -166,6 +169,7 @@ export default async function AdminPage() {
     conductCount,
     privacyCount,
     contactCount,
+    donationsCount,
   ] = await Promise.all([
     getAdmissionPhase(),
     getWelcomeAnnouncementSettings(),
@@ -176,6 +180,7 @@ export default async function AdminPage() {
     getOpenConductReportCount(),
     getOpenPrivacyRequestCount(),
     getUnreadContactMessageCount(),
+    getNewDonationsCount(),
   ]);
 
   const counts: Record<string, number> = {
@@ -186,6 +191,7 @@ export default async function AdminPage() {
     conduct: conductCount,
     privacy: privacyCount,
     contact: contactCount,
+    donations: donationsCount,
   };
 
   const needsAttention = ADMIN_SECTIONS.filter(
@@ -253,7 +259,7 @@ export default async function AdminPage() {
                             </CardTitle>
                             {!!count && (
                               <Badge variant="warning" className="shrink-0 whitespace-nowrap">
-                                {count} pending
+                                {count} {"countLabel" in section ? section.countLabel : "pending"}
                               </Badge>
                             )}
                           </div>

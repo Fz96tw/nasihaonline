@@ -1,6 +1,7 @@
 import { Resend } from "resend";
-import { Tier, ContactService } from "@/lib/generated/prisma/enums";
+import { Tier, ContactService, DonationFrequency } from "@/lib/generated/prisma/enums";
 import type { MembershipApplicationModel } from "@/lib/generated/prisma/models/MembershipApplication";
+import type { DonationModel } from "@/lib/generated/prisma/models/Donation";
 import { TIER_LABELS } from "@/lib/validation/application-review";
 import { CONTACT_SERVICE_LABELS } from "@/lib/validation/contact";
 import { HOW_HEARD_LABELS } from "@/lib/validation/application";
@@ -20,9 +21,9 @@ function formatApplicationSummary(application: MembershipApplicationModel): stri
   const lines: Array<[string, string]> = [
     ["Name", `${application.firstName} ${application.lastName}`],
     ["Email", application.email],
-    ["Professional title / occupation", application.professionalTitle || "—"],
-    ["LinkedIn", application.linkedinUrl || "—"],
-    ["Requested tier", application.requestedTier ? TIER_LABELS[application.requestedTier] : "—"],
+    ["Professional title / occupation", application.professionalTitle || ""],
+    ["LinkedIn", application.linkedinUrl || ""],
+    ["Requested tier", application.requestedTier ? TIER_LABELS[application.requestedTier] : ""],
     ["Country / region", application.countryRegion],
     [
       "How did you hear about NASIHA?",
@@ -30,12 +31,18 @@ function formatApplicationSummary(application: MembershipApplicationModel): stri
         ? [HOW_HEARD_LABELS[application.howHeardSource], application.howHeardMemberName, application.howHeardOtherDetail]
             .filter(Boolean)
             .join(" — ")
-        : "—",
+        : "",
     ],
     ["Email updates opt-in", application.emailUpdatesOptIn ? "Yes" : "No"],
   ];
 
-  return lines.map(([label, value]) => `${label}: ${value}`).join("\n");
+  // sourcedFromDonation applications (lib/friend-application.ts) never
+  // collect most of these fields, so a blank line for each would just be
+  // noise in that donor's copy — skipped here rather than shown as "—".
+  return lines
+    .filter(([, value]) => value.trim() !== "")
+    .map(([label, value]) => `${label}: ${value}`)
+    .join("\n");
 }
 
 export async function sendApplicationConfirmationEmail(application: MembershipApplicationModel) {
@@ -45,15 +52,86 @@ export async function sendApplicationConfirmationEmail(application: MembershipAp
     return;
   }
 
+  const intro = application.sourcedFromDonation
+    ? "Thank you for your donation to NASIHA. Because you checked \"Also apply to become a Friend of NASIHA,\" that membership application was submitted automatically along with it."
+    : "Thank you for applying to NASIHA.";
+
   try {
     await resend.emails.send({
       from: FROM_EMAIL,
       to,
       subject: "Your NASIHA membership application was received",
-      text: `Hi ${application.firstName},\n\nThank you for applying to NASIHA. The Board will review your application and be in touch within 7 days.\n\n— The NASIHA Team\n\n---\nA copy of your submitted application:\n\n${formatApplicationSummary(application)}`,
+      text: `Hi ${application.firstName},\n\n${intro} The Board will review your application and be in touch within 7 days.\n\n— The NASIHA Team\n\n---\nA copy of your submitted application:\n\n${formatApplicationSummary(application)}`,
     });
   } catch (error) {
     console.error("[email] Failed to send application confirmation email", error);
+  }
+}
+
+/**
+ * Sent by the Stripe webhook right after a Donation row is created
+ * (app/api/webhooks/stripe/route.ts) — the donor's only receipt that a
+ * *donation*, specifically, went through. Separate from (and sent in
+ * addition to, when applicable) sendApplicationConfirmationEmail: a donor
+ * who also checks "Also apply to become a Friend of NASIHA" is doing two
+ * distinct things in one click (PRD §4.14) and should get a confirmation
+ * for each, since neither email mentions the other action.
+ */
+function formatDonationAmount(donation: DonationModel): string {
+  return (donation.amountCents / 100).toLocaleString("en-US", {
+    style: "currency",
+    currency: donation.currency.toUpperCase(),
+  });
+}
+
+export async function sendDonationConfirmationEmail(donation: DonationModel) {
+  const to = donation.donorEmail;
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping donation confirmation email to ${to}`);
+    return;
+  }
+
+  const amount = formatDonationAmount(donation);
+  const cadence = donation.frequency === DonationFrequency.recurring ? "monthly, recurring" : "one-time";
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to,
+      subject: "Thank you for your donation to NASIHA",
+      text: `Hi ${donation.donorName},\n\nThank you for your ${cadence} donation of ${amount} to NASIHA. Donations fund the day-to-day costs of keeping NASIHA free and open to every member — hosting and platform infrastructure, live events, and community programs like mentorship, peer review, and outreach to bring in new contributors. We maintain transparent financial records and operate within a budget approved by our Board of Directors, so every gift goes directly toward strengthening the community.\n\nNASIHA is a registered 501(c)(3) nonprofit organization, and your donation is tax-deductible to the fullest extent allowed by law. You'll receive a receipt from Stripe for your records.${donation.note ? `\n\nYour note: "${donation.note}"` : ""}\n\n— The NASIHA Team`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send donation confirmation email", error);
+  }
+}
+
+/**
+ * Fires for every successful donation charge — including each month of a
+ * recurring subscription, not just first-time donors — so the treasurer
+ * has real-time visibility instead of relying on someone checking
+ * /admin/donations. One email to every admin, same pattern as
+ * sendCalendarIntegrationAlertEmail.
+ */
+export async function sendDonationAdminAlertEmail(
+  admins: { email: string; name: string | null }[],
+  donation: DonationModel,
+) {
+  if (!resend || admins.length === 0) return;
+
+  const amount = formatDonationAmount(donation);
+  const cadence = donation.frequency === DonationFrequency.recurring ? "Recurring (monthly)" : "One-time";
+  const donationsUrl = `${APP_URL}/admin/donations`;
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: admins.map((admin) => admin.email),
+      subject: `[NASIHA] New donation received — ${amount}`,
+      text: `${donation.donorName} <${donation.donorEmail}> just donated ${amount} (${cadence}).\n\nPublic recognition consent: ${donation.recognitionConsent ? "Yes" : "No"}${donation.note ? `\nNote: "${donation.note}"` : ""}\n\nView all donations: ${donationsUrl}`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send donation admin alert email", error);
   }
 }
 

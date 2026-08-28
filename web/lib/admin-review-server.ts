@@ -6,6 +6,7 @@ import { getReviewQueueCount } from "@/lib/library-server";
 import { getOpenConductReportCount } from "@/lib/conduct-server";
 import { getOpenPrivacyRequestCount } from "@/lib/privacy-server";
 import { getUnreadContactMessageCount } from "@/lib/contact-server";
+import { getNewDonationsCount } from "@/lib/donations-server";
 
 /** Pending membership applications (submitted or under review) — shared so /admin and the nav shield can't drift. */
 export async function getPendingApplicationsCount(): Promise<number> {
@@ -16,7 +17,7 @@ export async function getPendingApplicationsCount(): Promise<number> {
 
 /** Sum of every pending-review count surfaced on /admin, used by the nav shield icon's badge. */
 export async function getPendingAdminReviewCount(): Promise<number> {
-  const [applications, content, ledger, libraryReview, conduct, privacy, contact] = await Promise.all([
+  const [applications, content, ledger, libraryReview, conduct, privacy, contact, donations] = await Promise.all([
     getPendingApplicationsCount(),
     getFlaggedContentCount(),
     getPendingLedgerCountForAdmin(),
@@ -24,7 +25,8 @@ export async function getPendingAdminReviewCount(): Promise<number> {
     getOpenConductReportCount(),
     getOpenPrivacyRequestCount(),
     getUnreadContactMessageCount(),
+    getNewDonationsCount(),
   ]);
 
-  return applications + content + ledger + libraryReview + conduct + privacy + contact;
+  return applications + content + ledger + libraryReview + conduct + privacy + contact + donations;
 }

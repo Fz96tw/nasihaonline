@@ -359,7 +359,9 @@ model Donation {
   stripeCheckoutSessionId String            @unique
   stripeSubscriptionId    String?
   createdAt               DateTime          @default(now())
+  viewedByAdminAt         DateTime?
 
+  @@index([viewedByAdminAt])
   @@map("donations")
 }
 
