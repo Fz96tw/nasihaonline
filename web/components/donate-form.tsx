@@ -47,6 +47,7 @@ export function DonateForm({
   showHeader?: boolean;
 }) {
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isOtherAmount, setIsOtherAmount] = useState(false);
 
   const form = useForm<DonationFormValues>({
     resolver: zodResolver(donationSchema),
@@ -143,29 +144,49 @@ export function DonateForm({
                     type="button"
                     variant="outline"
                     className={cn(
-                      Number(field.value) === preset &&
+                      !isOtherAmount &&
+                        Number(field.value) === preset &&
                         "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
                     )}
-                    onClick={() => field.onChange(preset)}
+                    onClick={() => {
+                      setIsOtherAmount(false);
+                      field.onChange(preset);
+                    }}
                   >
                     ${preset}
                   </Button>
                 ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    isOtherAmount &&
+                      "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
+                  )}
+                  onClick={() => {
+                    setIsOtherAmount(true);
+                    field.onChange(NaN);
+                  }}
+                >
+                  Other
+                </Button>
               </div>
-              <FormControl>
-                <Input
-                  type="number"
-                  min={1}
-                  step="1"
-                  inputMode="decimal"
-                  placeholder="Custom amount"
-                  name={field.name}
-                  ref={field.ref}
-                  onBlur={field.onBlur}
-                  value={field.value}
-                  onChange={(e) => field.onChange(e.target.valueAsNumber)}
-                />
-              </FormControl>
+              {isOtherAmount && (
+                <FormControl>
+                  <Input
+                    type="number"
+                    min={1}
+                    step="1"
+                    inputMode="decimal"
+                    placeholder="Enter the amount you would like to donate here"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={Number.isNaN(field.value) ? "" : field.value}
+                    onChange={(e) => field.onChange(e.target.valueAsNumber)}
+                  />
+                </FormControl>
+              )}
               <FormMessage />
             </FormItem>
           )}
