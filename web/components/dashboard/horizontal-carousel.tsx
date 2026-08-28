@@ -4,23 +4,29 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Dashboard renders a single Trending carousel, so one fixed key is enough.
-// Persisted (rather than kept in React state) because clicking a card
-// navigates away to a different route, which remounts this component —
-// sessionStorage survives that so returning via back link lands where you
-// left off instead of snapping back to the start.
-const SCROLL_POSITION_KEY = "trending-carousel-scroll-left";
-
 /**
- * Horizontal snap-scroll shell for the Trending category cards — same
- * markup at every breakpoint. Chevrons stay always-visible below sm (touch
- * has no hover state, so they're the scrollability hint there); at sm+ they
- * hover-reveal for mouse/trackpad users, since a plain mouse has no native
- * horizontal-scroll gesture. Each chevron disables itself once there's
- * nothing left to scroll to in that direction, instead of staying clickable
- * past the first/last card.
+ * Horizontal snap-scroll shell shared by the dashboard's "What's Trending"
+ * and "Your Schedule" carousels — same markup at every breakpoint. Chevrons
+ * stay always-visible below sm (touch has no hover state, so they're the
+ * scrollability hint there); at sm+ they hover-reveal for mouse/trackpad
+ * users, since a plain mouse has no native horizontal-scroll gesture. Each
+ * chevron disables itself once there's nothing left to scroll to in that
+ * direction, instead of staying clickable past the first/last item.
+ *
+ * `storageKey` must be unique per carousel instance on the page — scroll
+ * position is persisted to sessionStorage (rather than kept in React state)
+ * because clicking a card/link inside can navigate away to a different
+ * route, which remounts this component; sessionStorage survives that so
+ * returning via back link lands where you left off instead of snapping back
+ * to the start.
  */
-export function TrendingCarousel({ children }: { children: React.ReactNode }) {
+export function HorizontalCarousel({
+  children,
+  storageKey,
+}: {
+  children: React.ReactNode;
+  storageKey: string;
+}) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -32,9 +38,9 @@ export function TrendingCarousel({ children }: { children: React.ReactNode }) {
   useLayoutEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
-    const saved = Number(sessionStorage.getItem(SCROLL_POSITION_KEY));
+    const saved = Number(sessionStorage.getItem(storageKey));
     if (saved > 0) el.scrollTo({ left: saved, behavior: "instant" });
-  }, []);
+  }, [storageKey]);
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -44,7 +50,7 @@ export function TrendingCarousel({ children }: { children: React.ReactNode }) {
       if (!el) return;
       setCanScrollLeft(el.scrollLeft > 1);
       setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
-      sessionStorage.setItem(SCROLL_POSITION_KEY, String(el.scrollLeft));
+      sessionStorage.setItem(storageKey, String(el.scrollLeft));
     }
 
     updateScrollState();
@@ -54,13 +60,13 @@ export function TrendingCarousel({ children }: { children: React.ReactNode }) {
       el.removeEventListener("scroll", updateScrollState);
       window.removeEventListener("resize", updateScrollState);
     };
-  }, []);
+  }, [storageKey]);
 
-  function scrollByCard(direction: 1 | -1) {
+  function scrollByItem(direction: 1 | -1) {
     const el = scrollerRef.current;
     if (!el) return;
-    const card = el.querySelector<HTMLElement>("[data-trending-card]");
-    const amount = (card?.offsetWidth ?? 280) + 16;
+    const item = el.querySelector<HTMLElement>("[data-carousel-item]");
+    const amount = (item?.offsetWidth ?? 280) + 16;
     el.scrollBy({ left: direction * amount, behavior: "smooth" });
   }
 
@@ -75,7 +81,7 @@ export function TrendingCarousel({ children }: { children: React.ReactNode }) {
       <button
         type="button"
         aria-label="Scroll left"
-        onClick={() => scrollByCard(-1)}
+        onClick={() => scrollByItem(-1)}
         disabled={!canScrollLeft}
         className={cn(
           "absolute left-0 top-1/2 flex -translate-x-2 -translate-y-1/2 rounded-full border bg-background p-1.5 shadow-md transition-opacity",
@@ -87,7 +93,7 @@ export function TrendingCarousel({ children }: { children: React.ReactNode }) {
       <button
         type="button"
         aria-label="Scroll right"
-        onClick={() => scrollByCard(1)}
+        onClick={() => scrollByItem(1)}
         disabled={!canScrollRight}
         className={cn(
           "absolute right-0 top-1/2 flex -translate-y-1/2 translate-x-2 rounded-full border bg-background p-1.5 shadow-md transition-opacity",

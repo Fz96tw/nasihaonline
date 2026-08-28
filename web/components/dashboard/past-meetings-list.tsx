@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EVENT_TYPE_LABELS } from "@/lib/events";
@@ -39,9 +39,9 @@ export function PastMeetingsList({ items }: { items: AttendanceHistoryItem[] }) 
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
-        <CardTitle>Past Meetings</CardTitle>
+    <div>
+      <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-3">
+        <h3 className="text-lg font-semibold leading-none tracking-tight">Past Meetings</h3>
         <div className="flex items-center gap-1">
           {(["all", "event", "meeting"] as const).map((kind) => (
             <Button
@@ -55,8 +55,8 @@ export function PastMeetingsList({ items }: { items: AttendanceHistoryItem[] }) 
             </Button>
           ))}
         </div>
-      </CardHeader>
-      <CardContent>
+      </div>
+      <div>
         {filtered.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {filter === "all" ? "No past meetings yet." : `No past ${FILTER_LABEL[filter].toLowerCase()} yet.`}
@@ -80,10 +80,10 @@ export function PastMeetingsList({ items }: { items: AttendanceHistoryItem[] }) 
                         <Badge variant="neutral">{item.recordingPartCount} parts</Badge>
                       ) : null}
                     </div>
-                    <Link href={item.detailHref} className="block truncate font-medium hover:underline">
+                    <Link href={item.detailHref} className="block truncate text-sm font-medium hover:underline">
                       {item.title}
                     </Link>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {formatDate(item.startsAt)} · Hosted by {item.organizerName}
                     </p>
                   </div>
@@ -92,11 +92,15 @@ export function PastMeetingsList({ items }: { items: AttendanceHistoryItem[] }) 
                       <Link href={item.detailHref}>View recording</Link>
                     </Button>
                   ) : item.hasRecording && item.recordingWatchHref ? (
-                    <Button asChild size="sm" variant="outline" className="w-full flex-shrink-0 sm:w-auto">
-                      <a href={item.recordingWatchHref} target="_blank" rel="noopener noreferrer">
-                        Watch recording
-                      </a>
-                    </Button>
+                    <a
+                      href={item.recordingWatchHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex flex-shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline"
+                    >
+                      Watch recording
+                      <ArrowRight className="h-3 w-3" />
+                    </a>
                   ) : null}
                 </li>
               ))}
@@ -128,7 +132,7 @@ export function PastMeetingsList({ items }: { items: AttendanceHistoryItem[] }) 
             ) : null}
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

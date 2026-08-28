@@ -6,12 +6,12 @@ import { cn } from "@/lib/utils";
 
 /**
  * Horizontal snap-scroll shell for the mobile Stats row. Unlike
- * TrendingCarousel's hover-revealed chevrons, these stay permanently
+ * HorizontalCarousel's hover-revealed chevrons, these stay permanently
  * visible below sm — there's no separate desktop scroll state to hint at
  * here, since sm+ drops the scroller entirely for the static 3-column grid
  * (hence the buttons being sm:hidden rather than hover-gated). Each chevron
  * still disables itself once there's nothing left to scroll to in that
- * direction, same as TrendingCarousel.
+ * direction, same as HorizontalCarousel.
  */
 export function StatsScroller({ children }: { children: React.ReactNode }) {
   const scrollerRef = useRef<HTMLDivElement>(null);

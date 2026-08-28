@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Flame } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingCarousel } from "@/components/dashboard/trending-carousel";
+import { HorizontalCarousel } from "@/components/dashboard/horizontal-carousel";
 import { getTrendingAnnouncements } from "@/lib/announcements-server";
 import { getTrendingSurveys } from "@/lib/surveys-server";
 import { getTrendingEvents } from "@/lib/events-server";
@@ -110,9 +110,9 @@ export async function TrendingSection({
         <Flame className="h-5 w-5 text-warning" />
         What&apos;s Trending
       </h2>
-      <TrendingCarousel>
+      <HorizontalCarousel storageKey="trending-carousel-scroll-left">
         {categories.map((category) => (
-          <Card key={category.key} data-trending-card className="w-[80vw] max-w-xs shrink-0 snap-start sm:w-72">
+          <Card key={category.key} data-carousel-item className="w-[80vw] max-w-xs shrink-0 snap-start sm:w-72">
             <CardHeader>
               <CardTitle className="text-base">{category.label}</CardTitle>
             </CardHeader>
@@ -130,7 +130,7 @@ export async function TrendingSection({
             </CardContent>
           </Card>
         ))}
-      </TrendingCarousel>
+      </HorizontalCarousel>
     </section>
   );
 }

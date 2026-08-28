@@ -34,7 +34,7 @@ export function ScrollHeader({
         // padding between the two — items-center is restored the instant
         // the search row goes away, since content should stay vertically
         // centered in the ordinary one-row header.
-        hasSearchRow && searchRowVisible ? "items-end pb-2" : "items-center",
+        hasSearchRow && searchRowVisible ? "items-end pb-[0.3rem]" : "items-center",
         // When a HeaderSearchRow follows, IT owns the bottom border/shadow
         // instead, at whatever its *current* height is (0 or expanded).
         // Without this, two independent bottom borders stack whenever the
