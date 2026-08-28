@@ -39,13 +39,15 @@ export default async function DonatePage({
         <div className="relative mx-auto max-w-[580px]">
           <h1 className="mb-3 text-[2.5rem] font-extrabold leading-[1.1] tracking-[-.02em] [text-shadow:0_2px_16px_rgba(0,10,40,.55)] md:text-[3.5rem]">Support Us</h1>
           <p className="text-xl leading-[1.6] opacity-[.88] [text-shadow:0_1px_10px_rgba(0,10,40,.6)] md:text-2xl">
-            Your donation goes directly to NASIHA — separate from the Knowledge Hours exchange between members.
+            NASIHA is a registered 501(c)(3) nonprofit organization, and your donation is
+            tax-deductible to the fullest extent allowed by law. You&rsquo;ll receive a receipt
+            from Stripe for your records.
           </p>
         </div>
       </section>
 
-      <div className="px-8 pt-10">
-        <DonateInfoBlurb />
+      <div className="pt-10">
+        <DonateInfoBlurb showTaxDeductibleIntro={false} />
       </div>
 
       <DonateForm

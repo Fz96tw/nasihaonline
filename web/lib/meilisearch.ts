@@ -211,7 +211,13 @@ export async function ensureLibraryIndexConfigured(): Promise<void> {
   // length) surfaced results the query didn't actually contain anywhere,
   // which the highlight/snippet UI (lib/text-highlight.ts) can't explain
   // since it only ever looks for the literal typed word. Every content
-  // index below disables it the same way, for the same reason.
+  // index below disables it the same way, for the same reason. The
+  // matchingStrategy: "all" passed at each search() call site below is
+  // the other half of "strict" — Meilisearch's default ("last") drops
+  // query words from the end and returns partial matches when no
+  // document contains every word (e.g. "non-profit" tokenizes to
+  // ["non","profit"], and without "all" a doc containing only "non"
+  // still matched).
   await index.updateTypoTolerance({ enabled: false });
 }
 
@@ -236,6 +242,7 @@ export async function searchLibraryDocuments(
   const result = await getLibraryIndex().search(query, {
     limit: options.limit ?? 50,
     filter: filters.length > 0 ? filters.join(" AND ") : undefined,
+    matchingStrategy: "all",
   });
   return result.hits;
 }
@@ -265,6 +272,7 @@ export async function searchForumDocuments(
   const result = await getForumsIndex().search(query, {
     limit: options.limit ?? 50,
     filter: options.forumSlug ? `forumSlug = "${options.forumSlug}"` : undefined,
+    matchingStrategy: "all",
   });
   return result.hits;
 }
@@ -294,6 +302,7 @@ export async function searchEventDocuments(
   const result = await getEventsIndex().search(query, {
     limit: options.limit ?? 50,
     filter: options.type ? `type = "${options.type}"` : undefined,
+    matchingStrategy: "all",
   });
   return result.hits;
 }
@@ -319,7 +328,7 @@ export async function searchAnnouncementDocuments(
   query: string,
   limit = 50,
 ): Promise<AnnouncementSearchDocument[]> {
-  const result = await getAnnouncementsIndex().search(query, { limit });
+  const result = await getAnnouncementsIndex().search(query, { limit, matchingStrategy: "all" });
   return result.hits;
 }
 
@@ -348,6 +357,7 @@ export async function searchSurveyDocuments(
   const result = await getSurveysIndex().search(query, {
     limit: options.limit ?? 50,
     filter: options.status ? `status = "${options.status}"` : undefined,
+    matchingStrategy: "all",
   });
   return result.hits;
 }
@@ -390,6 +400,7 @@ export async function searchReviewItemDocuments(
   const result = await getReviewItemsIndex().search(query, {
     limit: options.limit ?? 50,
     filter: filters.length > 0 ? filters.join(" AND ") : undefined,
+    matchingStrategy: "all",
   });
   return result.hits;
 }
