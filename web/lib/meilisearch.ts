@@ -260,16 +260,11 @@ export async function deleteForumDocument(threadId: string): Promise<void> {
 
 export async function searchForumDocuments(
   query: string,
-  options: { forumSlug?: string; excludeForumSlug?: string; limit?: number } = {},
+  options: { forumSlug?: string; limit?: number } = {},
 ): Promise<ForumSearchDocument[]> {
-  const filters = [
-    options.forumSlug ? `forumSlug = "${options.forumSlug}"` : null,
-    options.excludeForumSlug ? `forumSlug != "${options.excludeForumSlug}"` : null,
-  ].filter((clause): clause is string => clause != null);
-
   const result = await getForumsIndex().search(query, {
     limit: options.limit ?? 50,
-    filter: filters.length > 0 ? filters.join(" AND ") : undefined,
+    filter: options.forumSlug ? `forumSlug = "${options.forumSlug}"` : undefined,
   });
   return result.hits;
 }
