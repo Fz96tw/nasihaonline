@@ -587,8 +587,12 @@ export async function getFeedPage(params: {
       // Restricted events only ever reach a viewer who is the organizer or
       // an invited member (the where clause above), so this framing is
       // always correct for whoever sees it — no per-viewer branching needed.
+      // Search mode is the one exception: the RSVP framing carries no hint
+      // of why this event matched the query, so a search hit shows the
+      // actual (highlightable) description instead — the viewer is already
+      // authorized to see it, same as clicking through would show them.
       excerpt:
-        event.visibility === EventVisibility.invited
+        event.visibility === EventVisibility.invited && !query
           ? `${event.host.name ?? "The host"} has requested your attendance. Please RSVP.`
           : event.description
             ? excerptOf(event.description)
@@ -609,9 +613,10 @@ export async function getFeedPage(params: {
       // Restricted items only ever reach a viewer who is an invited member
       // (the where clause above), so this framing is always correct for
       // whoever sees it — no per-viewer branching needed, same rationale as
-      // the events branch's excerpt swap.
+      // the events branch's excerpt swap. Search mode exception: see the
+      // matching comment on the events branch above.
       excerpt:
-        item.visibility === KnowledgeVisibility.restricted
+        item.visibility === KnowledgeVisibility.restricted && !query
           ? `${item.contributor.name ?? "A member"} shared this with you.`
           : excerptOf(item.description),
       href: withFeedRef(`/library/${item.id}`, query),
@@ -702,9 +707,12 @@ export async function getFeedPage(params: {
         // an invitation rather than the plain description, same framing
         // swap as the restricted events/library branches above. The
         // submitter still sees their own plain description, same as an
-        // open-call item.
+        // open-call item. Search mode exception: see the matching comment
+        // on the events branch above — the invite line hides which comment
+        // actually matched, so a search hit falls through to the same
+        // matchingComment/description excerpt an open-call item gets.
         excerpt:
-          !item.seekingReviewers && !isSubmitter
+          !item.seekingReviewers && !isSubmitter && !query
             ? `${item.submitter.name ?? "A member"} invited you to review this.`
             : matchingComment
               ? excerptOf(matchingComment.body)
