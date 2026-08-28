@@ -1,4 +1,4 @@
-// Client-safe types/merge logic for the dashboard's "Past Meetings" section —
+// Client-safe types/merge logic for the dashboard's "Attendance History" section —
 // combines past community Events (getMemberEvents) with past 1:1
 // MeetingRequests (getPastMeetingsForUser) into one shape so the widget can
 // render, filter, and paginate them as a single list instead of two.
