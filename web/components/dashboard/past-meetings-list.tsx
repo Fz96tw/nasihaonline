@@ -22,21 +22,46 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+type RecencyBucket = "yesterday" | "thisWeek" | "older";
+
+function startOfLocalDay(date: Date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 /**
- * Local-date comparison — must run client-side since the server's timezone
+ * Local-date bucketing — must run client-side since the server's timezone
  * (UTC) isn't the visitor's, same rationale as ScheduleAgenda's
- * formatDateHeading. Deliberately "yesterday", not "today": an event/meeting
+ * scheduleBucketOf. "Yesterday" is deliberate, not "today": an event/meeting
  * from earlier today that already ended still appears in Your Schedule's own
  * "Today" group (both getDashboardUpcomingEvents and getUpcomingMeetingsForUser
  * filter by start-of-day, not `now`), so grouping today's past items under a
  * second "Today" heading here would just duplicate that label for the same
- * item across two widgets.
+ * item across two widgets. "This week" runs from the most recent Sunday
+ * (local calendar week, JS's own Date.getDay() convention) through two days
+ * ago — everything before that calendar week is "Last week and older".
  */
-function isYesterday(iso: string) {
-  const yesterday = new Date();
+function recencyBucketOf(iso: string): RecencyBucket {
+  const today = startOfLocalDay(new Date());
+  const date = startOfLocalDay(new Date(iso));
+
+  const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  return new Date(iso).toDateString() === yesterday.toDateString();
+  if (date.getTime() === yesterday.getTime()) return "yesterday";
+
+  const startOfThisWeek = new Date(today);
+  startOfThisWeek.setDate(startOfThisWeek.getDate() - today.getDay());
+  if (date.getTime() >= startOfThisWeek.getTime()) return "thisWeek";
+
+  return "older";
 }
+
+const RECENCY_BUCKETS: { key: RecencyBucket; label: string }[] = [
+  { key: "yesterday", label: "Yesterday" },
+  { key: "thisWeek", label: "This Week" },
+  { key: "older", label: "Last Week and Older" },
+];
 
 function PastMeetingRow({ item }: { item: AttendanceHistoryItem }) {
   return (
@@ -90,14 +115,16 @@ export function PastMeetingsList({ items }: { items: AttendanceHistoryItem[] }) 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount - 1);
   const paged = filtered.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
-  // Yesterday gets its own heading, same convention as ScheduleAgenda's
-  // upcoming list (which uses "Today"/"Tomorrow") — see isYesterday's comment
-  // for why this list starts one day later than that one. Everything else
-  // (today's already-ended items, or anything older) is just one flat list
-  // in date order below it — each row already carries its own date as its
-  // first line, so a per-day heading for older rows would be redundant.
-  const yesterdayItems = paged.filter((item) => isYesterday(item.startsAt));
-  const otherItems = paged.filter((item) => !isYesterday(item.startsAt));
+  // Grouped the same way Your Schedule buckets upcoming items (Today/This
+  // Week/Next Week and Later) — see recencyBucketOf's comment for why this
+  // starts at "Yesterday" rather than "Today". Within each bucket, items stay
+  // in the already-sorted date-descending order; each row also carries its
+  // own date as its first line, so there's no need for a heading per
+  // individual day.
+  const recencyGroups = RECENCY_BUCKETS.map((bucket) => ({
+    bucket,
+    items: paged.filter((item) => recencyBucketOf(item.startsAt) === bucket.key),
+  })).filter((group) => group.items.length > 0);
 
   function handleFilterChange(next: FilterKind) {
     setFilter(next);
@@ -125,21 +152,18 @@ export function PastMeetingsList({ items }: { items: AttendanceHistoryItem[] }) 
           </p>
         ) : (
           <>
-            {yesterdayItems.length > 0 ? (
-              <div className="mb-1">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Yesterday</p>
+            {recencyGroups.map(({ bucket, items: groupItems }) => (
+              <div key={bucket.key} className="mb-1 last:mb-0">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {bucket.label}
+                </p>
                 <ul>
-                  {yesterdayItems.map((item) => (
+                  {groupItems.map((item) => (
                     <PastMeetingRow key={`${item.kind}-${item.id}`} item={item} />
                   ))}
                 </ul>
               </div>
-            ) : null}
-            <ul>
-              {otherItems.map((item) => (
-                <PastMeetingRow key={`${item.kind}-${item.id}`} item={item} />
-              ))}
-            </ul>
+            ))}
             {pageCount > 1 ? (
               <div className="mt-4 flex items-center justify-between">
                 <Button

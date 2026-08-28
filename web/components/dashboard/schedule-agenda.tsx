@@ -16,36 +16,55 @@ export type ScheduleItem = {
   joinLabel: string;
 };
 
+type ScheduleBucket = "today" | "thisWeek" | "later";
+
+function startOfLocalDay(date: Date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/**
+ * Bucketing must run client-side because the server process's timezone
+ * (UTC) isn't the visitor's local timezone. Mirrors the past-attendance
+ * widget's recencyBucketOf, pointed the other direction: "This Week" runs
+ * through the end of the current local calendar week (Saturday, JS's own
+ * Date.getDay() convention); everything from next Sunday on is "Next Week
+ * and Later".
+ */
+function scheduleBucketOf(iso: string): ScheduleBucket {
+  const today = startOfLocalDay(new Date());
+  const date = startOfLocalDay(new Date(iso));
+  if (date.getTime() === today.getTime()) return "today";
+  const startOfNextWeek = new Date(today);
+  startOfNextWeek.setDate(startOfNextWeek.getDate() + (7 - today.getDay()));
+  if (date.getTime() < startOfNextWeek.getTime()) return "thisWeek";
+  return "later";
+}
+
+const SCHEDULE_BUCKETS: { key: ScheduleBucket; label: string }[] = [
+  { key: "today", label: "Today" },
+  { key: "thisWeek", label: "This Week" },
+  { key: "later", label: "Next Week and Later" },
+];
+
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
-function formatDateHeading(iso: string) {
-  const date = new Date(iso);
-  const today = new Date();
-  if (date.toDateString() === today.toDateString()) return "Today";
-  const tomorrow = new Date(today);
-  tomorrow.setDate(today.getDate() + 1);
-  if (date.toDateString() === tomorrow.toDateString()) return "Tomorrow";
-  return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+/** Today's items need only a time — the group heading already says "Today". Anything in a multi-day bucket needs its own date too, since the heading no longer pins it to one day. */
+function formatWhen(iso: string, bucket: ScheduleBucket) {
+  const time = formatTime(iso);
+  if (bucket === "today") return time;
+  const datePart = new Date(iso).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  return `${datePart} · ${time}`;
 }
 
-/**
- * Formats and groups schedule items by local date in the browser — this must
- * run client-side because the server process's timezone (UTC) isn't the
- * visitor's local timezone.
- */
 export function ScheduleAgenda({ items }: { items: ScheduleItem[] }) {
-  const groups: { heading: string; items: ScheduleItem[] }[] = [];
-  for (const item of items) {
-    const heading = formatDateHeading(item.dateTime);
-    const lastGroup = groups[groups.length - 1];
-    if (lastGroup?.heading === heading) {
-      lastGroup.items.push(item);
-    } else {
-      groups.push({ heading, items: [item] });
-    }
-  }
+  const groups = SCHEDULE_BUCKETS.map((bucket) => ({
+    bucket,
+    items: items.filter((item) => scheduleBucketOf(item.dateTime) === bucket.key),
+  })).filter((group) => group.items.length > 0);
 
   if (groups.length === 0) {
     return (
@@ -57,13 +76,11 @@ export function ScheduleAgenda({ items }: { items: ScheduleItem[] }) {
 
   return (
     <div className="flex flex-col divide-y divide-border">
-      {groups.map((group) => (
-        <div key={group.heading} className="pb-4 pt-4 first:pt-0 last:pb-0">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {group.heading}
-          </p>
+      {groups.map(({ bucket, items: groupItems }) => (
+        <div key={bucket.key} className="pb-4 pt-4 first:pt-0 last:pb-0">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{bucket.label}</p>
           <ul className="flex flex-col gap-3">
-            {group.items.map((item) => (
+            {groupItems.map((item) => (
               <li
                 key={item.id}
                 className="flex items-start justify-between gap-2 border-b pb-3 last:border-b-0 last:pb-0"
@@ -73,7 +90,7 @@ export function ScheduleAgenda({ items }: { items: ScheduleItem[] }) {
                     {item.title}
                   </Link>
                   <p className="text-xs text-muted-foreground">
-                    {formatTime(item.dateTime)}
+                    {formatWhen(item.dateTime, bucket.key)}
                     {item.detail ? ` · ${item.detail}` : ""}
                   </p>
                   {item.joinUrl ? (
