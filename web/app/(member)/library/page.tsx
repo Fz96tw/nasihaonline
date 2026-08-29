@@ -27,11 +27,11 @@ const selectClasses =
   "h-10 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 const LIBRARY_SORT_COOKIE = "library_sort";
-// Shared with /calendar (COMMUNITY_FILTER_COOKIE there) — same literal
-// value so a pill picked on either page persists when landing on the
-// other with no explicit ?community= param, mirroring LIBRARY_SORT_COOKIE's
-// own cookie-fallback pattern.
-const COMMUNITY_FILTER_COOKIE = "community_filter";
+// Library-only, independent of /calendar's own CALENDAR_COMMUNITY_FILTER_COOKIE
+// (confirmed with user: each page remembers its own last pick rather than
+// syncing to one shared value) — same cookie-fallback pattern as
+// LIBRARY_SORT_COOKIE above.
+const COMMUNITY_FILTER_COOKIE = "library_community_filter";
 
 const SORT_OPTIONS: { value: LibrarySort; label: string; icon: ReactNode }[] = [
   { value: "recent", label: "Most recent", icon: <Clock className="h-4 w-4" /> },

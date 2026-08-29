@@ -19,11 +19,11 @@ export const metadata: Metadata = {
   title: "Calendar — NASIHA",
 };
 
-// Shared with /library (COMMUNITY_FILTER_COOKIE there) — same literal value
-// so a pill picked on either page persists when landing on the other with
-// no explicit ?community= param, mirroring LIBRARY_SORT_COOKIE's own
-// cookie-fallback pattern.
-const COMMUNITY_FILTER_COOKIE = "community_filter";
+// Calendar-only, independent of /library's own COMMUNITY_FILTER_COOKIE
+// (confirmed with user: each page remembers its own last pick rather than
+// syncing to one shared value) — same cookie-fallback pattern as
+// LIBRARY_SORT_COOKIE.
+const COMMUNITY_FILTER_COOKIE = "calendar_community_filter";
 
 /**
  * Community-only filter match, mirroring Peer Review's own
