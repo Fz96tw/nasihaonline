@@ -274,7 +274,7 @@ export function InboxPanel({
               thread={thread}
               isLoading={threadLoading}
               onBack={() => setSelectedId(null)}
-              onReplySent={refresh}
+              onThreadChanged={refresh}
             />
           )}
         </div>

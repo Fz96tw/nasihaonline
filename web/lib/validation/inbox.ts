@@ -24,3 +24,10 @@ export const sendMessageSchema = z
   });
 
 export type SendMessageValues = z.infer<typeof sendMessageSchema>;
+
+/** PATCH /api/inbox/messages/:id body shape — body-only edit, same constraint as sendMessageSchema's body. */
+export const editMessageSchema = z.object({
+  body: z.string().trim().min(1, "Message can't be empty").max(5000),
+});
+
+export type EditMessageValues = z.infer<typeof editMessageSchema>;

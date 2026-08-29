@@ -832,6 +832,10 @@ model InboxMessage {
 
   readAt    DateTime?
   createdAt DateTime  @default(now())
+  // Set when the sender edits this message's body (sender-only, within a
+  // 15-minute window of createdAt — enforced in editInboxMessage, not here,
+  // same "app-enforced, not a DB constraint" pattern as ForumPost.editedAt).
+  editedAt  DateTime?
 
   // Images pasted into this message's body — see PastedImage.
   pastedImages PastedImage[]

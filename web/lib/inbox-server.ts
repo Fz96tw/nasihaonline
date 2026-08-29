@@ -148,7 +148,7 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
 }
 
 export class InboxAccessError extends Error {
-  constructor(public readonly status: 403 | 404, message: string) {
+  constructor(public readonly status: 400 | 403 | 404 | 410, message: string) {
     super(message);
   }
 }
@@ -264,9 +264,57 @@ export async function getThreadForUser(rootId: string, userId: string): Promise<
       senderAvatarUrl: getProfileAvatarUrl(message.sender.profile?.avatarUrl ?? null),
       body: message.body,
       createdAt: message.createdAt.toISOString(),
+      editedAt: message.editedAt?.toISOString() ?? null,
       isOwn: message.senderId === userId,
     })),
   };
+}
+
+/** Sender-only edit window (§4.7 edit objective) — unlike ForumPost's unlimited author-edit, Inbox has no moderator/admin authority over private messages, so a short window bounds how long history can be rewritten after the recipient may have already read it. */
+const EDIT_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * PATCH /api/inbox/messages/:id — editing a message the caller sent
+ * (thread root or reply, same InboxMessage row shape either way), within
+ * EDIT_WINDOW_MS of when it was sent. Silent — no notification/email is
+ * sent for an edit (unlike sendMessage), so a typo fix doesn't spam the
+ * recipient. Mirrors updateForumPost's re-run of linkPastedImages so
+ * removing a pasted image from the edited body unlinks and deletes it.
+ */
+export async function editInboxMessage(
+  messageId: string,
+  actingUserId: string,
+  body: string,
+): Promise<{ id: string; threadId: string; editedAt: string }> {
+  const message = await db.inboxMessage.findUnique({
+    where: { id: messageId },
+    select: { id: true, senderId: true, parentId: true, createdAt: true },
+  });
+  if (!message) throw new InboxAccessError(404, "Message not found.");
+  if (message.senderId !== actingUserId) {
+    throw new InboxAccessError(403, "Only the sender can edit this message.");
+  }
+  if (Date.now() - message.createdAt.getTime() > EDIT_WINDOW_MS) {
+    throw new InboxAccessError(410, "This message can no longer be edited — the 15-minute edit window has passed.");
+  }
+
+  if (countPastedImageReferences(body, PastedImageOwnerType.inbox_message) > MAX_PASTED_IMAGES_PER_BODY) {
+    throw new InboxAccessError(400, `A message can reference at most ${MAX_PASTED_IMAGES_PER_BODY} pasted images.`);
+  }
+
+  const updated = await db.inboxMessage.update({
+    where: { id: messageId },
+    data: { body, editedAt: new Date() },
+    select: { id: true, parentId: true, editedAt: true },
+  });
+  await linkPastedImages({
+    ownerType: PastedImageOwnerType.inbox_message,
+    ownerId: updated.id,
+    uploaderId: actingUserId,
+    body,
+  });
+
+  return { id: updated.id, threadId: updated.parentId ?? updated.id, editedAt: updated.editedAt!.toISOString() };
 }
 
 /**

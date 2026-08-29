@@ -102,6 +102,8 @@ export type InboxThreadMessage = {
   senderAvatarUrl: string | null;
   body: string;
   createdAt: string;
+  /** Set once the sender edits this message within the 15-minute edit window — powers the "(edited)" indicator. */
+  editedAt: string | null;
   /** True if this message was sent by the current viewer. */
   isOwn: boolean;
 };
