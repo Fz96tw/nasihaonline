@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 export type CommunityFilterSelection = "mine" | "all" | (string & {});
@@ -10,12 +11,17 @@ export type CommunityFilterSelection = "mine" | "all" | (string & {});
  * Replaces the two-step Community -> Category chip design
  * (community-category-filter.tsx) for a consumer that doesn't need
  * category-level filtering because every item card already shows its own
- * category badges (the Peer Review dashboard) — swapped in after user
- * feedback that the two-tier design's identically-styled rows read as
- * confusing rather than as a clear community/category hierarchy.
+ * category badges — swapped in after user feedback that the two-tier
+ * design's identically-styled rows read as confusing rather than as a
+ * clear community/category hierarchy.
  *
- * Local-state only (no href/nav mode) — its one consumer (ReviewDashboardTabs)
- * already filters already-loaded client data with no URL round trip.
+ * Two interaction modes, discriminated by which callback is passed:
+ * `onSelect` for local-state filtering of already-loaded client data (Peer
+ * Review's dashboard, no URL round trip), or `buildHref` for a
+ * server-driven, shareable-URL page (Library's browse page, consistent
+ * with its other filters — content type, level, sort, search — which all
+ * navigate via `?param=`). Passing both is not meaningful; `buildHref`
+ * wins if both are somehow provided.
  */
 export function CommunityFilterPills({
   communities,
@@ -23,14 +29,17 @@ export function CommunityFilterPills({
   followsAllCommunities,
   selected,
   onSelect,
+  buildHref,
   counts,
 }: {
   communities: { id: string; name: string }[];
   myCommunityIds: string[];
   followsAllCommunities: boolean;
   selected: CommunityFilterSelection;
-  onSelect: (selection: CommunityFilterSelection) => void;
-  /** Item count per pill (keyed by "mine"/"all"/communityId) for whichever list is currently in view — e.g. the active dashboard tab. Omit to render plain pills with no count. */
+  onSelect?: (selection: CommunityFilterSelection) => void;
+  /** Nav mode — builds the href for each pill instead of firing a client-state callback. */
+  buildHref?: (selection: CommunityFilterSelection) => string;
+  /** Item count per pill (keyed by "mine"/"all"/communityId) for whichever list is currently in view — e.g. the active dashboard tab, or the full unfiltered browse result. Omit to render plain pills with no count. */
   counts?: Map<string, number>;
 }) {
   const myIdSet = new Set(followsAllCommunities ? communities.map((c) => c.id) : myCommunityIds);
@@ -52,34 +61,32 @@ export function CommunityFilterPills({
     );
   }
 
+  function Pill({ selection, label }: { selection: CommunityFilterSelection; label: string }) {
+    const active = selected === selection;
+    const className = chipClasses(active, counts?.get(selection) === 0);
+    const content = (
+      <>
+        {label}
+        <Count value={counts?.get(selection)} active={active} />
+      </>
+    );
+    return buildHref ? (
+      <Link href={buildHref(selection)} scroll={false} className={className}>
+        {content}
+      </Link>
+    ) : (
+      <button type="button" onClick={() => onSelect?.(selection)} className={className}>
+        {content}
+      </button>
+    );
+  }
+
   return (
     <div className="flex flex-wrap gap-2">
-      <button
-        type="button"
-        onClick={() => onSelect("mine")}
-        className={chipClasses(selected === "mine", counts?.get("mine") === 0)}
-      >
-        My Communities
-        <Count value={counts?.get("mine")} active={selected === "mine"} />
-      </button>
-      <button
-        type="button"
-        onClick={() => onSelect("all")}
-        className={chipClasses(selected === "all", counts?.get("all") === 0)}
-      >
-        All Communities
-        <Count value={counts?.get("all")} active={selected === "all"} />
-      </button>
+      <Pill selection="mine" label="My Communities" />
+      <Pill selection="all" label="All Communities" />
       {otherCommunities.map((community) => (
-        <button
-          key={community.id}
-          type="button"
-          onClick={() => onSelect(community.id)}
-          className={chipClasses(selected === community.id, counts?.get(community.id) === 0)}
-        >
-          {community.name}
-          <Count value={counts?.get(community.id)} active={selected === community.id} />
-        </button>
+        <Pill key={community.id} selection={community.id} label={community.name} />
       ))}
     </div>
   );

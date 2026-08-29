@@ -35,7 +35,6 @@ import { sendLibraryInviteEmail, sendLibraryLifecycleEmail } from "@/lib/email";
 import {
   excerptFromHtml,
   type KnowledgeCategoryOption,
-  type KnowledgeCategoryWithCount,
   type KnowledgeItemDetail,
   type KnowledgeItemForEdit,
   type KnowledgeItemRosterMember,
@@ -190,16 +189,22 @@ export async function getKnowledgeCategories(): Promise<KnowledgeCategoryOption[
 }
 
 /**
- * Same category list as getKnowledgeCategories, with a per-category count of
- * published/flagged items visible to this user — powers the /library filter
- * chips' item-count hint. Kept separate since the submit/edit forms that
- * call getKnowledgeCategories have no userId/visibility context to scope
- * counts by, and don't need one.
+ * Powers /library's CommunityFilterPills item-count hints ("mine"/"all"/
+ * one per other community) — same visibility-scoped counting as
+ * getKnowledgeCategoriesWithCounts, but against the direct
+ * KnowledgeItemCommunity relation (standardization objective) rather than
+ * derived through categories, and pre-shaped into the
+ * "mine"/"all"/communityId keying CommunityFilterPills' `counts` prop
+ * expects. "all" is every visible item once each (not a sum of per-
+ * community counts, which would double-count an item tagged to more than
+ * one community); "mine" is every visible item tagged to at least one of
+ * the member's own communities.
  */
-export async function getKnowledgeCategoriesWithCounts(params: {
+export async function getLibraryCommunityCounts(params: {
   userId: string;
   isPrivileged: boolean;
-}): Promise<KnowledgeCategoryWithCount[]> {
+  myCommunityIds: string[];
+}): Promise<Map<string, number>> {
   const visibleStatuses = [KnowledgeStatus.published, KnowledgeStatus.flagged];
   const visibilityFilter = params.isPrivileged
     ? {}
@@ -210,18 +215,27 @@ export async function getKnowledgeCategoriesWithCounts(params: {
           { invitees: { some: { userId: params.userId } } },
         ],
       };
+  const baseWhere = { status: { in: visibleStatuses }, ...visibilityFilter };
 
-  const [categories, counts] = await Promise.all([
-    db.knowledgeCategory.findMany({ orderBy: { name: "asc" } }),
-    db.knowledgeItemCategory.groupBy({
-      by: ["categoryId"],
-      where: { knowledgeItem: { status: { in: visibleStatuses }, ...visibilityFilter } },
+  const [total, mine, perCommunity] = await Promise.all([
+    db.knowledgeItem.count({ where: baseWhere }),
+    params.myCommunityIds.length > 0
+      ? db.knowledgeItem.count({
+          where: { ...baseWhere, communities: { some: { communityId: { in: params.myCommunityIds } } } },
+        })
+      : Promise.resolve(0),
+    db.knowledgeItemCommunity.groupBy({
+      by: ["communityId"],
+      where: { knowledgeItem: baseWhere },
       _count: { _all: true },
     }),
   ]);
 
-  const countByCategory = new Map(counts.map((row) => [row.categoryId, row._count._all]));
-  return categories.map((category) => ({ ...category, count: countByCategory.get(category.id) ?? 0 }));
+  const counts = new Map<string, number>();
+  counts.set("all", total);
+  counts.set("mine", mine);
+  for (const row of perCommunity) counts.set(row.communityId, row._count._all);
+  return counts;
 }
 
 export async function getKnowledgeTags(): Promise<KnowledgeTagOption[]> {

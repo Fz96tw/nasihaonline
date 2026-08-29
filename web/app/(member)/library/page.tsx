@@ -5,14 +5,14 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Clock, Eye, MessageSquare } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
-import { getKnowledgeCategoriesWithCounts, getPublishedKnowledgeItems } from "@/lib/library-server";
+import { getLibraryCommunityCounts, getPublishedKnowledgeItems } from "@/lib/library-server";
 import { getAllCommunities, getDefaultCommunityFilter, getOrCreateProfile } from "@/lib/profile-server";
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS } from "@/lib/library";
 import type { LibrarySort } from "@/lib/library";
 import { KnowledgeContentType, KnowledgeLevel, Role } from "@/lib/generated/prisma/enums";
 import { LibraryItemCard } from "@/components/library/library-item-card";
 import { BackToFeedLink } from "@/components/feed/back-to-feed-link";
-import { CommunityCategoryFilter } from "@/components/shared/community-category-filter";
+import { CommunityFilterPills, type CommunityFilterSelection } from "@/components/shared/community-filter-pills";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
@@ -57,7 +57,7 @@ export default async function LibraryPage({
   searchParams,
 }: {
   searchParams: {
-    category?: string;
+    /** "all" for explicitly unfiltered, a community slug for a specific pick, or absent (defaults to "mine" — the member's own communities). */
     community?: string;
     type?: string;
     level?: string;
@@ -82,25 +82,34 @@ export default async function LibraryPage({
 
   const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
 
-  const [profile, communities, categories] = await Promise.all([
-    getOrCreateProfile(user.id),
-    getAllCommunities(),
-    getKnowledgeCategoriesWithCounts({ userId: user.id, isPrivileged }),
-  ]);
-  const selectedCommunity = communities.find((c) => c.slug === searchParams.community) ?? null;
-  const selectedCategory = categories.find((c) => c.slug === searchParams.category) ?? null;
-  const communityIds = getDefaultCommunityFilter(profile, selectedCommunity?.id);
+  const [profile, communities] = await Promise.all([getOrCreateProfile(user.id), getAllCommunities()]);
+  const myCommunityIds = profile.communities.map((c) => c.community.id);
 
-  const items = await getPublishedKnowledgeItems({
-    categorySlug: searchParams.category,
-    communityIds,
-    contentType,
-    level,
-    q: searchParams.q,
-    sort,
-    userId: user.id,
-    isPrivileged,
-  });
+  // Flat, single-tier pill selection (My Communities / All Communities /
+  // one pill per community), matching the Peer Review dashboard's
+  // CommunityFilterPills — replaces the two-step Community -> Category
+  // chip design now that every card already shows its own category
+  // badges, same rationale Peer Review's switch documented. "all" is an
+  // explicit override; a real community slug picks that one; absent means
+  // "mine" (the member's own communities, or unfiltered if they follow
+  // all — see getDefaultCommunityFilter).
+  const explicitCommunity = communities.find((c) => c.slug === searchParams.community);
+  const isAll = searchParams.community === "all";
+  const selected: CommunityFilterSelection = isAll ? "all" : explicitCommunity ? explicitCommunity.id : "mine";
+  const communityIds = isAll ? undefined : getDefaultCommunityFilter(profile, explicitCommunity?.id);
+
+  const [items, communityCounts] = await Promise.all([
+    getPublishedKnowledgeItems({
+      communityIds,
+      contentType,
+      level,
+      q: searchParams.q,
+      sort,
+      userId: user.id,
+      isPrivileged,
+    }),
+    getLibraryCommunityCounts({ userId: user.id, isPrivileged, myCommunityIds }),
+  ]);
 
   const canEditAny = isPrivileged;
 
@@ -131,31 +140,31 @@ export default async function LibraryPage({
           </div>
         </div>
 
-        <CommunityCategoryFilter
+        <CommunityFilterPills
           communities={communities}
-          categories={categories}
-          selectedCommunityId={selectedCommunity?.id ?? null}
-          selectedCategoryId={selectedCategory?.id ?? null}
-          categoryCounts={new Map(categories.map((category) => [category.id, category.count]))}
-          buildHref={(next) => {
+          myCommunityIds={myCommunityIds}
+          followsAllCommunities={profile.followsAllCommunities}
+          selected={selected}
+          counts={communityCounts}
+          buildHref={(selection) => {
             const params = new URLSearchParams();
             if (searchParams.type) params.set("type", searchParams.type);
             if (searchParams.level) params.set("level", searchParams.level);
             if (searchParams.q) params.set("q", searchParams.q);
             if (searchParams.ref) params.set("ref", searchParams.ref);
-            const communitySlug = next.communityId
-              ? communities.find((c) => c.id === next.communityId)?.slug
-              : undefined;
-            if (communitySlug) params.set("community", communitySlug);
-            const categorySlug = next.categoryId ? categories.find((c) => c.id === next.categoryId)?.slug : undefined;
-            if (categorySlug) params.set("category", categorySlug);
+            if (selection === "all") {
+              params.set("community", "all");
+            } else if (selection !== "mine") {
+              const slug = communities.find((c) => c.id === selection)?.slug;
+              if (slug) params.set("community", slug);
+            }
+            // selection === "mine" sets no community param — that's the implicit default.
             const qs = params.toString();
             return qs ? `/library?${qs}` : "/library";
           }}
         />
 
         <form action="/library" method="get" className="flex flex-wrap items-end gap-3">
-          {searchParams.category && <input type="hidden" name="category" value={searchParams.category} />}
           {searchParams.community && <input type="hidden" name="community" value={searchParams.community} />}
 
           <div className="flex flex-col gap-1.5">
@@ -205,7 +214,6 @@ export default async function LibraryPage({
                 href={buildSortHref(
                   "/library",
                   {
-                    category: searchParams.category,
                     community: searchParams.community,
                     type: searchParams.type,
                     level: searchParams.level,
@@ -231,7 +239,7 @@ export default async function LibraryPage({
 
         {items.length === 0 ? (
           <p className="rounded-[10px] border p-8 text-center text-muted-foreground">
-            {searchParams.q || searchParams.category || searchParams.community || contentType || level
+            {searchParams.q || searchParams.community || contentType || level
               ? "No resources match your filters."
               : "No resources have been published yet — check back soon."}
           </p>

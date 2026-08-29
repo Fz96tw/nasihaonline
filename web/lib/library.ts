@@ -39,8 +39,6 @@ export type KnowledgeCategoryOption = {
   communityId: string;
 };
 
-export type KnowledgeCategoryWithCount = KnowledgeCategoryOption & { count: number };
-
 export type KnowledgeTagOption = {
   id: string;
   name: string;
