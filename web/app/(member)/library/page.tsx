@@ -12,7 +12,8 @@ import type { LibrarySort } from "@/lib/library";
 import { KnowledgeContentType, KnowledgeLevel, Role } from "@/lib/generated/prisma/enums";
 import { LibraryItemCard } from "@/components/library/library-item-card";
 import { BackToFeedLink } from "@/components/feed/back-to-feed-link";
-import { CommunityFilterPills, type CommunityFilterSelection } from "@/components/shared/community-filter-pills";
+import { CommunityFilterPillsNav } from "@/components/shared/community-filter-pills-nav";
+import type { CommunityFilterSelection } from "@/components/shared/community-filter-pills";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
@@ -140,7 +141,7 @@ export default async function LibraryPage({
           </div>
         </div>
 
-        <CommunityFilterPills
+        <CommunityFilterPillsNav
           communities={communities}
           myCommunityIds={myCommunityIds}
           followsAllCommunities={profile.followsAllCommunities}
