@@ -7,6 +7,7 @@ import { getFeedPage } from "@/lib/feed-server";
 import { FEED_TYPES, FEED_TYPE_LABELS, isFeedItemType } from "@/lib/feed";
 import { FeedList } from "@/components/feed/feed-list";
 import { cn } from "@/lib/utils";
+import { getMemberCommunityIdsForFiltering, getOrCreateProfile } from "@/lib/profile-server";
 
 export const metadata: Metadata = {
   title: "What's New — NASIHA",
@@ -16,19 +17,23 @@ export const metadata: Metadata = {
 export default async function WhatsNewPage({
   searchParams,
 }: {
-  searchParams: { type?: string; q?: string };
+  searchParams: { type?: string; q?: string; myCommunities?: string };
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
   const activeType = isFeedItemType(searchParams.type) ? searchParams.type : undefined;
   const q = searchParams.q?.trim() || undefined;
+  const myCommunities = searchParams.myCommunities === "1";
+  const profile = await getOrCreateProfile(user.id);
+  const communityIds = getMemberCommunityIdsForFiltering(profile, myCommunities);
   const { items, nextCursor, hasMore, totalCount, countsByType } = await getFeedPage({
     cursor: null,
     types: activeType ? [activeType] : undefined,
     viewerId: user.id,
     viewerRole: user.role,
     q,
+    communityIds,
   });
 
   const filterLinkClasses = (isActive: boolean) =>
@@ -39,13 +44,15 @@ export default async function WhatsNewPage({
         : "border-input text-muted-foreground hover:bg-accent/50 hover:text-foreground",
     );
 
-  // Preserves the active search query across a type-pill click (and vice
-  // versa) — the pills and the search form filter the same feed together,
-  // not as two separate, mutually-clearing views.
+  // Preserves the active search query and myCommunities toggle across a
+  // type-pill click (and vice versa) — the pills, the search form, and the
+  // communities checkbox all filter the same feed together, not as
+  // separate, mutually-clearing views.
   const filterHref = (type?: string) => {
     const params = new URLSearchParams();
     if (type) params.set("type", type);
     if (q) params.set("q", q);
+    if (myCommunities) params.set("myCommunities", "1");
     const qs = params.toString();
     return qs ? `/whats-new?${qs}` : "/whats-new";
   };
@@ -95,12 +102,13 @@ export default async function WhatsNewPage({
 
       <div className="rounded-[10px] border">
         <FeedList
-          key={`${activeType ?? "all"}-${q ?? ""}`}
+          key={`${activeType ?? "all"}-${q ?? ""}-${myCommunities}`}
           initialItems={items}
           initialCursor={nextCursor}
           initialHasMore={hasMore}
           activeType={activeType}
           q={q}
+          myCommunities={myCommunities}
         />
       </div>
     </main>

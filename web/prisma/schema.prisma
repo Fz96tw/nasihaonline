@@ -81,13 +81,13 @@ model User {
   // Events (§4.6) — hostId is required and un-cascaded on delete, same
   // convention as ContributionEvent.actorId, since a host's past events
   // are historical record even if their account is later removed.
-  hostedEvents     Event[]        @relation("EventHost")
-  eventRsvps       RSVP[]         @relation("EventRsvp")
-  eventAttendances Attendance[]   @relation("EventAttendance")
-  eventInvitations EventInvitee[] @relation("EventInvitee")
+  hostedEvents                    Event[]                      @relation("EventHost")
+  eventRsvps                      RSVP[]                       @relation("EventRsvp")
+  eventAttendances                Attendance[]                 @relation("EventAttendance")
+  eventInvitations                EventInvitee[]               @relation("EventInvitee")
   // Recording Access initiative — members the host has designated as
   // co-host, able to start/stop recording and manage further co-hosts.
-  eventCoHostOf    EventCoHost[]  @relation("EventCoHost")
+  eventCoHostOf                   EventCoHost[]                @relation("EventCoHost")
   // Resend Notifications (event detail page) — who triggered each member-wide
   // broadcast, not just the automatic one at createEvent() time.
   eventNotificationBroadcastsSent EventNotificationBroadcast[] @relation("EventNotificationBroadcastSentBy")
@@ -198,6 +198,15 @@ model Profile {
   // only until now; also editable here since availability changes over time.
   availability          ApplicationAvailability[] @default([])
   skills                ProfileSkill[]
+  // Community-based-categorization initiative, objective 2. Separate from
+  // interestAreas (which only supplies the one-time onboarding suggestion,
+  // see getSuggestedCommunityIds): communities is independently editable
+  // afterward. followsAllCommunities makes "ALL communities" a real,
+  // forward-compatible choice — a member who picks it sees any community
+  // added in the future too, without new ProfileCommunity rows each time.
+  // Mutually exclusive in practice with a non-empty `communities`.
+  communities           ProfileCommunity[]
+  followsAllCommunities Boolean                   @default(false)
   // Directory visibility prefs (§4.3/§4.5/§9) — enforced server-side in
   // lib/members-server.ts, not just hidden client-side.
   listInDirectory       Boolean                   @default(true)
@@ -775,7 +784,7 @@ model MeetingRequest {
   // initiative) — consulted by resolveMeetingRequest() on acceptance to
   // decide which platform to create the room/link on. Defaults to
   // google_meet, preserving today's only behavior for existing rows.
-  meetingPlatform                 MeetingPlatform           @default(google_meet)
+  meetingPlatform                 MeetingPlatform             @default(google_meet)
   // Set instead of meetingUrl/googleEventId when meetingPlatform is
   // livekit — non-null is the authoritative signal that this meeting is
   // LiveKit-backed, read by the in-app meeting page and recording webhook.
@@ -1101,32 +1110,32 @@ model Event {
   createdAt                       DateTime        @default(now())
   updatedAt                       DateTime        @updatedAt
 
-  recurrence    EventRecurrence?
-  rsvps         RSVP[]
-  attendances   Attendance[]
-  registrations EventRegistration[]
+  recurrence             EventRecurrence?
+  rsvps                  RSVP[]
+  attendances            Attendance[]
+  registrations          EventRegistration[]
   // Only populated for visibility = invited — who was asked, distinct from
   // RSVP (who responded). Supports add/remove after creation (a later
   // objective), not just bulk-insert at createEvent() time.
-  invitees      EventInvitee[]
+  invitees               EventInvitee[]
   // Recording Access initiative — separate from `invitees`: co-hosts must
   // work for community/open events too, which have no EventInvitee rows.
   // Assigned by the host at scheduling time; the host or an existing
   // co-host can also grant/revoke it live during the meeting.
-  coHosts       EventCoHost[]
+  coHosts                EventCoHost[]
   // Optional discussion thread in the seeded "Events" forum (EVENTS_FORUM_SLUG,
   // lib/forums.ts), opted into at creation time. The FK lives on ForumThread
   // (below) rather than here so createEvent can create the Event first and
   // still know its id when posting the thread's linking first post.
-  forumThread   ForumThread?
+  forumThread            ForumThread?
   // Unique-visitor count for the event detail page's eye-icon (mirrors
   // ThreadView) — events are member-only like forums, so this dedupes on
   // real userId rather than an opaque viewer key like PostView does.
-  views         EventView[]
+  views                  EventView[]
   // Every meeting held over an auto-generated Meet link is recorded by
   // default (lib/google-calendar.ts) — one row per occurrence, since a
   // recurring event reuses the same Meet space/link across every session.
-  recordings    EventRecording[]
+  recordings             EventRecording[]
   // Resend Notifications — the audit trail of every member-wide broadcast
   // for this event (the automatic one at creation, plus any manual resend
   // the organizer/admin triggers from the event detail page).
@@ -1135,8 +1144,8 @@ model Event {
   // meeting is live (EventChatMessage), compiled into a single ForumPost
   // per occurrence when the room ends and linked back via
   // EventChatTranscript so the event page can jump straight to it.
-  chatMessages    EventChatMessage[]
-  chatTranscripts EventChatTranscript[]
+  chatMessages           EventChatMessage[]
+  chatTranscripts        EventChatTranscript[]
 
   @@index([startsAt])
   @@map("events")
@@ -1182,43 +1191,43 @@ model EventNotificationBroadcast {
 // one-row-per-occurrence guarantee still holds; it's just enforced by
 // meeting-recordings-sync.ts's own existence check instead of the DB.
 model EventRecording {
-  id             String          @id @default(cuid())
-  eventId        String
-  event          Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  occurrenceDate DateTime
-  origin         RecordingOrigin @default(meet)
+  id              String          @id @default(cuid())
+  eventId         String
+  event           Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  occurrenceDate  DateTime
+  origin          RecordingOrigin @default(meet)
   // --- meet origin only ---
   // Drive playback link. The recording's Drive fileId
   // (Recording.driveDestination.file, distinct from recordingUrl's
   // playback link) is needed to actually delete the file via the Drive API
   // when the host removes a recording, not just unlink it.
-  recordingUrl   String?
-  driveFileId    String?
+  recordingUrl    String?
+  driveFileId     String?
   // --- livekit origin only ---
   // MinIO object key for this segment (not a URL — see the streaming
   // route's doc comment in app/api/events/[id]/recording/[recordingId]/route.ts
   // for why a stored URL/presigned-URL would be wrong here).
-  objectKey      String?
+  objectKey       String?
   // LiveKit's egress id for this segment — unique (Postgres allows
   // unlimited NULLs on a unique nullable column, so meet-origin rows with
   // no egressId don't collide with each other), lets the egress_ended
   // webhook be replay-safe (upsert on egressId instead of blindly
   // inserting a duplicate row on a redelivered webhook).
-  egressId       String?         @unique
+  egressId        String?         @unique
   // When this segment's egress actually started — the ordering key for
   // "Part 1"/"Part 2" grouping, since createdAt only reflects when the
   // webhook happened to arrive.
-  startedAt      DateTime?
+  startedAt       DateTime?
   // Set by the egress_ended webhook when LiveKit reports EGRESS_FAILED/
   // EGRESS_ABORTED/no file result — distinguishes "still processing"
   // (objectKey null, failedAt null) from "genuinely failed" (failedAt
   // set), so the UI never shows a permanently-stuck processing indicator.
-  failedAt       DateTime?
+  failedAt        DateTime?
   // From the egress_ended webhook's FileInfo.duration (nanoseconds on the
   // wire, converted to seconds). Null until the webhook lands, same as
   // objectKey — a pending/failed segment has no duration yet.
   durationSeconds Int?
-  createdAt      DateTime        @default(now())
+  createdAt       DateTime        @default(now())
 
   @@index([eventId, occurrenceDate])
   @@map("event_recordings")
@@ -1233,20 +1242,20 @@ model EventRecording {
 // finalization hasn't run yet (or the event has no forumThreadId, in which
 // case rows are still cleared but nothing gets posted).
 model EventChatMessage {
-  id      String @id @default(cuid())
-  eventId String
-  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  id               String   @id @default(cuid())
+  eventId          String
+  event            Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   // LiveKit's own per-message id (ReceivedChatMessage.id) — the dedupe key
   // that makes a retried/re-effect-fired POST an idempotent no-op.
   livekitMessageId String
   // Display-name snapshot at send time, not a live User join — a guest
   // attendee has no User row at all, and even a member's name could change
   // later; the transcript should read as it did at meeting time either way.
-  authorName   String
-  authorUserId String?
-  body         String
-  sentAt       DateTime
-  createdAt    DateTime @default(now())
+  authorName       String
+  authorUserId     String?
+  body             String
+  sentAt           DateTime
+  createdAt        DateTime @default(now())
 
   @@unique([eventId, livekitMessageId])
   @@index([eventId])
@@ -1522,18 +1531,34 @@ enum KnowledgeVisibility {
 // Top-level topic grouping every KnowledgeCategory belongs to (§4.9 /
 // community-based-categorization initiative) — lets browse/filter UIs
 // present a two-step Community → Category picker instead of a flat
-// ~22-item category list. Forum/Event/Profile link to this in later
-// objectives of the same initiative; this model intentionally only
-// carries the KnowledgeCategory relation for now.
+// ~22-item category list. Forum/Event link to this in later objectives
+// of the same initiative.
 model Community {
   id         String              @id @default(cuid())
   name       String              @unique
   slug       String              @unique
   categories KnowledgeCategory[]
+  profiles   ProfileCommunity[]
   createdAt  DateTime            @default(now())
   updatedAt  DateTime            @updatedAt
 
   @@map("communities")
+}
+
+// Explicit, persistent member↔community membership (community-based-
+// categorization initiative, objective 2) — drives default filtering on
+// browse pages. Independent of Profile.interestAreas after onboarding:
+// interestAreas only supplies the one-time suggested default below.
+model ProfileCommunity {
+  profileId   String
+  profile     Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  communityId String
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@id([profileId, communityId])
+  @@index([communityId])
+  @@map("profile_communities")
 }
 
 model KnowledgeCategory {

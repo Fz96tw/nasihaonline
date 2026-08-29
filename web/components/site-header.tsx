@@ -99,7 +99,12 @@ export async function SiteHeader() {
           />
         </div>
       </ScrollHeader>
-      {user && <HeaderSearchRow />}
+      {user && profile && (
+        <HeaderSearchRow
+          communities={profile.communities.map((c) => ({ id: c.community.id, name: c.community.name }))}
+          followsAllCommunities={profile.followsAllCommunities}
+        />
+      )}
     </SearchQueryProvider>
   );
 }

@@ -24,16 +24,29 @@ export default async function MemberLayout({ children }: { children: React.React
   // ever" signal to send a brand-new member to the /welcome splash instead
   // of straight to /profile.
   const isFirstSignIn = !!user && !user.welcomeAnnouncementSentAt;
+  // Fetched once and reused for both gates below — needsCommunitySelection
+  // applies to every member (including ones grandfathered past
+  // needsOnboarding), so it can't reuse that flag's early-out.
+  const profile = user ? await getOrCreateProfile(user.id) : null;
   // requiresProfileOnboarding is false for every member grandfathered in
-  // from before the /join field-reduction (§3.1) — skip the Profile lookup
-  // entirely for them rather than gating on completeness they were never
+  // from before the /join field-reduction (§3.1) — skip the completeness
+  // check entirely for them rather than gating on fields they were never
   // asked to backfill.
-  const needsOnboarding =
-    !!user && user.requiresProfileOnboarding && !isProfileComplete(await getOrCreateProfile(user.id));
+  const needsOnboarding = !!user && user.requiresProfileOnboarding && !!profile && !isProfileComplete(profile);
+  // The flag (not just an empty row count) distinguishes "explicitly chose
+  // ALL" from "hasn't chosen yet" — without it this would re-prompt an ALL
+  // member forever. Independent of needsOnboarding, so pre-launch members
+  // grandfathered past that gate are still naturally caught by this one.
+  const needsCommunitySelection =
+    !!user && !!profile && !profile.followsAllCommunities && profile.communities.length === 0;
 
   return (
     <QueryProvider>
-      <ProfileCompletionGate needsOnboarding={needsOnboarding} isFirstSignIn={isFirstSignIn} />
+      <ProfileCompletionGate
+        needsOnboarding={needsOnboarding}
+        isFirstSignIn={isFirstSignIn}
+        needsCommunitySelection={needsCommunitySelection}
+      />
       <div className="flex flex-1">
         <MemberSidebar
           isAdmin={user?.role === "admin"}

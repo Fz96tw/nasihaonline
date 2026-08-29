@@ -13,24 +13,39 @@ import { usePathname, useRouter } from "next/navigation";
  * not just the first. `isFirstSignIn` only distinguishes *where* to send
  * them the very first time (the celebratory /welcome splash, outside this
  * route group) from every later incomplete visit (straight to /profile).
+ *
+ * `needsCommunitySelection` (community-based-categorization initiative,
+ * objective 2) is a second, independent gate checked only once the first
+ * one is satisfied — profile onboarding takes priority so the two never
+ * race for the same redirect. Same "recomputed every nav" behavior means a
+ * pre-launch member with zero ProfileCommunity rows is naturally caught by
+ * it on their next visit, no separate backfill needed.
+ *
  * Renders nothing — pathname isn't knowable in the server layout that
- * computes these two booleans, so the redirect happens here on the client
+ * computes these booleans, so the redirect happens here on the client
  * instead.
  */
 export function ProfileCompletionGate({
   needsOnboarding,
   isFirstSignIn,
+  needsCommunitySelection,
 }: {
   needsOnboarding: boolean;
   isFirstSignIn: boolean;
+  needsCommunitySelection: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
 
   useEffect(() => {
-    if (!needsOnboarding || pathname === "/profile") return;
-    router.replace(isFirstSignIn ? "/welcome" : "/profile");
-  }, [needsOnboarding, isFirstSignIn, pathname, router]);
+    if (needsOnboarding) {
+      if (pathname !== "/profile") router.replace(isFirstSignIn ? "/welcome" : "/profile");
+      return;
+    }
+    if (needsCommunitySelection && pathname !== "/welcome/communities") {
+      router.replace("/welcome/communities");
+    }
+  }, [needsOnboarding, isFirstSignIn, needsCommunitySelection, pathname, router]);
 
   return null;
 }

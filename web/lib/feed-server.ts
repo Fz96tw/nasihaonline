@@ -135,6 +135,17 @@ export async function getFeedPage(params: {
    * feed's browse behavior, which is why it's gated on `query` being set.
    */
   q?: string;
+  /**
+   * Community-based-categorization initiative, objective 2's "Search only
+   * my communities" checkbox. Only the Library domain (KnowledgeItem, via
+   * KnowledgeCategory.communityId) can actually be scoped by this today —
+   * Events/Forum/Announcements/Survey/ReviewItem don't carry community tags
+   * yet (later objectives in the same initiative), so they're deliberately
+   * left unfiltered here rather than made to disappear entirely, matching
+   * the "untagged content stays universal" rule those objectives use
+   * elsewhere. Omit/undefined to leave every domain unfiltered.
+   */
+  communityIds?: string[];
 }): Promise<{
   items: FeedItem[];
   nextCursor: FeedCursor | null;
@@ -225,6 +236,9 @@ export async function getFeedPage(params: {
     status: query ? { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] } : KnowledgeStatus.published,
     ...(before ? { createdAt: { lt: before } } : {}),
     ...(libraryHitIds ? { id: { in: libraryHitIds } } : {}),
+    ...(params.communityIds?.length
+      ? { categories: { some: { category: { communityId: { in: params.communityIds } } } } }
+      : {}),
     // Same restricted-audience shape as eventWhere above (Objective 04's
     // read-path filter, mirrored here): a restricted item reaches an
     // invited member's feed, and its own contributor's. Omitted entirely
