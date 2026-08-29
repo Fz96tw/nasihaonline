@@ -5,8 +5,11 @@ import { getSessionUser } from "@/lib/auth";
 import { getMemberEvents } from "@/lib/events-server";
 import { EVENT_SUBMISSION_TIERS } from "@/lib/events";
 import { getPastMeetingsForUser, getUpcomingMeetingsForUser } from "@/lib/meeting-requests-server";
+import { getAllCommunities, getOrCreateProfile } from "@/lib/profile-server";
 import { CalendarView } from "@/components/calendar/calendar-view";
 import { BackToFeedLink } from "@/components/feed/back-to-feed-link";
+import { CommunityFilterPillsNav } from "@/components/shared/community-filter-pills-nav";
+import type { CommunityFilterSelection } from "@/components/shared/community-filter-pills";
 import { isFromFeed } from "@/lib/feed";
 import { Button } from "@/components/ui/button";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
@@ -15,22 +18,85 @@ export const metadata: Metadata = {
   title: "Calendar — NASIHA",
 };
 
-export default async function CalendarPage({ searchParams }: { searchParams: { ref?: string; mine?: string } }) {
+/**
+ * Community-only filter match, mirroring Peer Review's own
+ * matchesCommunityFilter — but with one deliberate addition: an event
+ * with zero tagged communities (every pre-existing event, per objective
+ * 5's grandfathering) matches every pill, not just "All Communities",
+ * same "universal match" rule the original community-based-categorization
+ * plan specified for Forum's community-less threads. Without this, picking
+ * a specific community pill would hide every legacy event.
+ */
+function matchesCommunityFilter(
+  eventCommunities: { id: string }[],
+  selection: CommunityFilterSelection,
+  myCommunityIds: string[],
+): boolean {
+  if (selection === "all") return true;
+  if (eventCommunities.length === 0) return true;
+  const targetIds = selection === "mine" ? myCommunityIds : [selection];
+  return eventCommunities.some((c) => targetIds.includes(c.id));
+}
+
+/**
+ * Per-pill item counts against the mine-toggle-filtered but community-
+ * unfiltered list — same "counts reflect the active tab, not the
+ * community-filtered subset" convention as Peer Review's
+ * computeCommunityCounts.
+ */
+function computeCommunityCounts(
+  events: { communities: { id: string }[] }[],
+  communities: { id: string }[],
+  myCommunityIds: string[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  counts.set("all", events.length);
+  counts.set("mine", events.filter((event) => matchesCommunityFilter(event.communities, "mine", myCommunityIds)).length);
+  for (const community of communities) {
+    counts.set(
+      community.id,
+      events.filter((event) => matchesCommunityFilter(event.communities, community.id, myCommunityIds)).length,
+    );
+  }
+  return counts;
+}
+
+export default async function CalendarPage({
+  searchParams,
+}: {
+  searchParams: { ref?: string; mine?: string; community?: string };
+}) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const [allEvents, meetings, pastMeetings] = await Promise.all([
+  const [allEvents, meetings, pastMeetings, profile, communities] = await Promise.all([
     getMemberEvents(user.id),
     getUpcomingMeetingsForUser(user.id),
     getPastMeetingsForUser(user.id),
+    getOrCreateProfile(user.id),
+    getAllCommunities(),
   ]);
   const canSubmitEvent = Boolean(user.tier && EVENT_SUBMISSION_TIERS.includes(user.tier));
   const mine = searchParams.mine === "1";
-  const events = mine ? allEvents.filter((event) => event.hostId === user.id) : allEvents;
+  const mineFilteredEvents = mine ? allEvents.filter((event) => event.hostId === user.id) : allEvents;
+
+  const myCommunityIds = profile.communities.map((c) => c.community.id);
+  const explicitCommunity = communities.find((c) => c.slug === searchParams.community);
+  const isAllCommunities = searchParams.community === "all";
+  const selectedCommunity: CommunityFilterSelection = isAllCommunities
+    ? "all"
+    : explicitCommunity
+      ? explicitCommunity.id
+      : "mine";
+  const events = mineFilteredEvents.filter((event) =>
+    matchesCommunityFilter(event.communities, selectedCommunity, myCommunityIds),
+  );
+  const communityCounts = computeCommunityCounts(mineFilteredEvents, communities, myCommunityIds);
 
   const mineHref = (() => {
     const qs = new URLSearchParams();
     if (searchParams.ref) qs.set("ref", searchParams.ref);
+    if (searchParams.community) qs.set("community", searchParams.community);
     if (!mine) qs.set("mine", "1");
     const query = qs.toString();
     return `/calendar${query ? `?${query}` : ""}`;
@@ -64,6 +130,28 @@ export default async function CalendarPage({ searchParams }: { searchParams: { r
             </Button>
           )}
         </div>
+
+        <CommunityFilterPillsNav
+          communities={communities}
+          myCommunityIds={myCommunityIds}
+          followsAllCommunities={profile.followsAllCommunities}
+          selected={selectedCommunity}
+          counts={communityCounts}
+          buildHref={(selection) => {
+            const params = new URLSearchParams();
+            if (searchParams.ref) params.set("ref", searchParams.ref);
+            if (mine) params.set("mine", "1");
+            if (selection === "all") {
+              params.set("community", "all");
+            } else if (selection !== "mine") {
+              const slug = communities.find((c) => c.id === selection)?.slug;
+              if (slug) params.set("community", slug);
+            }
+            // selection === "mine" sets no community param — that's the implicit default.
+            const qs = params.toString();
+            return qs ? `/calendar?${qs}` : "/calendar";
+          }}
+        />
 
         <CalendarView
           events={events}
