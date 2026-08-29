@@ -27,6 +27,11 @@ const selectClasses =
   "h-10 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 const LIBRARY_SORT_COOKIE = "library_sort";
+// Shared with /calendar (COMMUNITY_FILTER_COOKIE there) — same literal
+// value so a pill picked on either page persists when landing on the
+// other with no explicit ?community= param, mirroring LIBRARY_SORT_COOKIE's
+// own cookie-fallback pattern.
+const COMMUNITY_FILTER_COOKIE = "community_filter";
 
 const SORT_OPTIONS: { value: LibrarySort; label: string; icon: ReactNode }[] = [
   { value: "recent", label: "Most recent", icon: <Clock className="h-4 w-4" /> },
@@ -94,8 +99,9 @@ export default async function LibraryPage({
   // explicit override; a real community slug picks that one; absent means
   // "mine" (the member's own communities, or unfiltered if they follow
   // all — see getDefaultCommunityFilter).
-  const explicitCommunity = communities.find((c) => c.slug === searchParams.community);
-  const isAll = searchParams.community === "all";
+  const requestedCommunity = searchParams.community ?? cookies().get(COMMUNITY_FILTER_COOKIE)?.value;
+  const explicitCommunity = communities.find((c) => c.slug === requestedCommunity);
+  const isAll = requestedCommunity === "all";
   const selected: CommunityFilterSelection = isAll ? "all" : explicitCommunity ? explicitCommunity.id : "mine";
   const communityIds = isAll ? undefined : getDefaultCommunityFilter(profile, explicitCommunity?.id);
 
@@ -147,6 +153,7 @@ export default async function LibraryPage({
           followsAllCommunities={profile.followsAllCommunities}
           selected={selected}
           counts={communityCounts}
+          cookieName={COMMUNITY_FILTER_COOKIE}
           buildHref={(selection) => {
             const params = new URLSearchParams();
             if (searchParams.type) params.set("type", searchParams.type);

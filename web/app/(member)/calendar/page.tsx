@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getMemberEvents } from "@/lib/events-server";
@@ -17,6 +18,12 @@ import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 export const metadata: Metadata = {
   title: "Calendar — NASIHA",
 };
+
+// Shared with /library (COMMUNITY_FILTER_COOKIE there) — same literal value
+// so a pill picked on either page persists when landing on the other with
+// no explicit ?community= param, mirroring LIBRARY_SORT_COOKIE's own
+// cookie-fallback pattern.
+const COMMUNITY_FILTER_COOKIE = "community_filter";
 
 /**
  * Community-only filter match, mirroring Peer Review's own
@@ -81,8 +88,9 @@ export default async function CalendarPage({
   const mineFilteredEvents = mine ? allEvents.filter((event) => event.hostId === user.id) : allEvents;
 
   const myCommunityIds = profile.communities.map((c) => c.community.id);
-  const explicitCommunity = communities.find((c) => c.slug === searchParams.community);
-  const isAllCommunities = searchParams.community === "all";
+  const requestedCommunity = searchParams.community ?? cookies().get(COMMUNITY_FILTER_COOKIE)?.value;
+  const explicitCommunity = communities.find((c) => c.slug === requestedCommunity);
+  const isAllCommunities = requestedCommunity === "all";
   const selectedCommunity: CommunityFilterSelection = isAllCommunities
     ? "all"
     : explicitCommunity
@@ -137,6 +145,7 @@ export default async function CalendarPage({
           followsAllCommunities={profile.followsAllCommunities}
           selected={selectedCommunity}
           counts={communityCounts}
+          cookieName={COMMUNITY_FILTER_COOKIE}
           buildHref={(selection) => {
             const params = new URLSearchParams();
             if (searchParams.ref) params.set("ref", searchParams.ref);
