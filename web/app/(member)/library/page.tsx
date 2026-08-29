@@ -88,6 +88,7 @@ export default async function LibraryPage({
     getKnowledgeCategoriesWithCounts({ userId: user.id, isPrivileged }),
   ]);
   const selectedCommunity = communities.find((c) => c.slug === searchParams.community) ?? null;
+  const selectedCategory = categories.find((c) => c.slug === searchParams.category) ?? null;
   const communityIds = getDefaultCommunityFilter(profile, selectedCommunity?.id);
 
   const items = await getPublishedKnowledgeItems({
@@ -134,7 +135,7 @@ export default async function LibraryPage({
           communities={communities}
           categories={categories}
           selectedCommunityId={selectedCommunity?.id ?? null}
-          selectedCategorySlug={searchParams.category ?? null}
+          selectedCategoryId={selectedCategory?.id ?? null}
           categoryCounts={new Map(categories.map((category) => [category.id, category.count]))}
           buildHref={(next) => {
             const params = new URLSearchParams();
@@ -146,7 +147,8 @@ export default async function LibraryPage({
               ? communities.find((c) => c.id === next.communityId)?.slug
               : undefined;
             if (communitySlug) params.set("community", communitySlug);
-            if (next.categorySlug) params.set("category", next.categorySlug);
+            const categorySlug = next.categoryId ? categories.find((c) => c.id === next.categoryId)?.slug : undefined;
+            if (categorySlug) params.set("category", categorySlug);
             const qs = params.toString();
             return qs ? `/library?${qs}` : "/library";
           }}

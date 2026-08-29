@@ -5,8 +5,20 @@ import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { MySubmissionCard, SharedReviewCard, SeekingReviewersCard } from "@/components/review/review-item-card";
-import type { MyReviewSubmission, SeekingReviewersItem, SharedReviewItem } from "@/lib/review";
+import { CommunityCategoryFilter } from "@/components/shared/community-category-filter";
+import type { MyReviewSubmission, SeekingReviewersItem, SharedReviewItem, ReviewCategoryOption } from "@/lib/review";
 import { ReviewItemStatus } from "@/lib/generated/prisma/enums";
+
+/** Matches an item if no filter is active, a specific category is picked and the item carries it, or a whole community is picked and the item carries any category under it. */
+function matchesCommunityFilter(
+  categories: { id: string; communityId: string }[],
+  selectedCommunityId: string | null,
+  selectedCategoryId: string | null,
+): boolean {
+  if (selectedCategoryId) return categories.some((c) => c.id === selectedCategoryId);
+  if (selectedCommunityId) return categories.some((c) => c.communityId === selectedCommunityId);
+  return true;
+}
 
 /**
  * The /review-feedback dashboard's 3 tabs — My Submissions (personal),
@@ -20,20 +32,51 @@ export function ReviewDashboardTabs({
   mySubmissions,
   sharedWithMe,
   seekingReviewers,
+  communities,
+  categories,
   currentUserId,
 }: {
   mySubmissions: MyReviewSubmission[];
   sharedWithMe: SharedReviewItem[];
   seekingReviewers: SeekingReviewersItem[];
+  communities: { id: string; name: string }[];
+  categories: ReviewCategoryOption[];
   currentUserId: string;
 }) {
   const [tab, setTab] = useState("mine");
+  // Local state, not URL params — the tabs' own selection isn't URL-driven
+  // either (community-based-categorization initiative, objective 4).
+  const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
-  const openSubmissionsCount = mySubmissions.filter((item) => item.status === ReviewItemStatus.open).length;
-  const sharedWithMeCount = sharedWithMe.length;
+  const filteredMySubmissions = mySubmissions.filter((item) =>
+    matchesCommunityFilter(item.categories, selectedCommunityId, selectedCategoryId),
+  );
+  const filteredSharedWithMe = sharedWithMe.filter((item) =>
+    matchesCommunityFilter(item.categories, selectedCommunityId, selectedCategoryId),
+  );
+  const filteredSeekingReviewers = seekingReviewers.filter((item) =>
+    matchesCommunityFilter(item.categories, selectedCommunityId, selectedCategoryId),
+  );
+
+  const openSubmissionsCount = filteredMySubmissions.filter((item) => item.status === ReviewItemStatus.open).length;
+  const sharedWithMeCount = filteredSharedWithMe.length;
 
   return (
     <Tabs value={tab} onValueChange={setTab}>
+      <div className="mb-4">
+        <CommunityCategoryFilter
+          communities={communities}
+          categories={categories}
+          selectedCommunityId={selectedCommunityId}
+          selectedCategoryId={selectedCategoryId}
+          onSelectCommunity={(id) => {
+            setSelectedCommunityId(id);
+            setSelectedCategoryId(null);
+          }}
+          onSelectCategory={setSelectedCategoryId}
+        />
+      </div>
       <TabsList
         className="h-auto w-full items-end justify-start gap-1 overflow-x-auto overflow-y-hidden rounded-none bg-transparent p-0 [-ms-overflow-style:none] [scrollbar-width:none] [touch-action:pan-x] [&::-webkit-scrollbar]:hidden"
       >
@@ -66,9 +109,13 @@ export function ReviewDashboardTabs({
                 <Link href="/review-feedback/new">Submit your first item</Link>
               </Button>
             </div>
+          ) : filteredMySubmissions.length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              No submissions match the selected community/category.
+            </p>
           ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {mySubmissions.map((item) => (
+              {filteredMySubmissions.map((item) => (
                 <MySubmissionCard key={item.id} item={item} />
               ))}
             </div>
@@ -80,9 +127,13 @@ export function ReviewDashboardTabs({
             <div className="py-12 text-center">
               <p className="text-sm text-muted-foreground">No one has invited you to review anything yet.</p>
             </div>
+          ) : filteredSharedWithMe.length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              No shared items match the selected community/category.
+            </p>
           ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {sharedWithMe.map((item) => (
+              {filteredSharedWithMe.map((item) => (
                 <SharedReviewCard key={item.id} item={item} />
               ))}
             </div>
@@ -94,9 +145,13 @@ export function ReviewDashboardTabs({
             <div className="py-12 text-center">
               <p className="text-sm text-muted-foreground">No open calls for reviewers right now.</p>
             </div>
+          ) : filteredSeekingReviewers.length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              No open calls match the selected community/category.
+            </p>
           ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {seekingReviewers.map((item) => (
+              {filteredSeekingReviewers.map((item) => (
                 <SeekingReviewersCard key={item.id} item={item} currentUserId={currentUserId} />
               ))}
             </div>

@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { getMySubmissions, getSharedWithMe, getSeekingReviewersFeed } from "@/lib/review-server";
+import { getMySubmissions, getSharedWithMe, getSeekingReviewersFeed, getReviewCategories } from "@/lib/review-server";
+import { getAllCommunities } from "@/lib/profile-server";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Button } from "@/components/ui/button";
 import { ReviewDashboardTabs } from "@/components/review/review-dashboard-tabs";
@@ -21,10 +22,12 @@ export default async function ReviewFeedbackPage() {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const [mySubmissions, sharedWithMe, seekingReviewers] = await Promise.all([
+  const [mySubmissions, sharedWithMe, seekingReviewers, communities, categories] = await Promise.all([
     getMySubmissions(user.id),
     getSharedWithMe(user.id),
     getSeekingReviewersFeed(user.id),
+    getAllCommunities(),
+    getReviewCategories(),
   ]);
 
   return (
@@ -53,6 +56,8 @@ export default async function ReviewFeedbackPage() {
           mySubmissions={mySubmissions}
           sharedWithMe={sharedWithMe}
           seekingReviewers={seekingReviewers}
+          communities={communities}
+          categories={categories}
           currentUserId={user.id}
         />
       </section>

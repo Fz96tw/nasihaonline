@@ -48,13 +48,21 @@ export type ReviewItemRosterMember = {
   hasCommented: boolean;
 };
 
+/**
+ * Widened from a plain {name} — the /review-feedback dashboard's
+ * community/category filter (community-based-categorization initiative,
+ * objective 4) needs id/communityId to match against, not just a display
+ * name.
+ */
+type ReviewItemCategoryRef = { id: string; name: string; communityId: string };
+
 /** /review-feedback "My Submissions" tab card. */
 export type MyReviewSubmission = {
   id: string;
   title: string;
   contentType: KnowledgeContentType;
   status: ReviewItemStatus;
-  categories: { name: string }[];
+  categories: ReviewItemCategoryRef[];
   invitees: { name: string | null; avatarUrl: string | null }[];
   commentCount: number;
   /** Pending (not yet accepted/declined/withdrawn) volunteer offers awaiting this submitter's response. */
@@ -68,7 +76,7 @@ export type SharedReviewItem = {
   id: string;
   title: string;
   contentType: KnowledgeContentType;
-  categories: { name: string }[];
+  categories: ReviewItemCategoryRef[];
   submitter: { id: string; name: string | null; avatarUrl: string | null };
   commentCount: number;
   createdAt: string;
@@ -94,7 +102,7 @@ export type SeekingReviewersItem = {
   contentType: KnowledgeContentType;
   level: KnowledgeLevel;
   volunteerNote: string | null;
-  categories: { name: string }[];
+  categories: ReviewItemCategoryRef[];
   submitter: { id: string; name: string | null; avatarUrl: string | null };
   createdAt: string;
   volunteerCount: number;
