@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CategoryCheckboxField } from "@/components/shared/category-checkbox-field";
 import {
   Form,
   FormControl,
@@ -77,12 +78,14 @@ const VISIBILITY_LABELS: Record<KnowledgeVisibility, string> = {
  */
 export function SubmitResourceForm({
   categories,
+  communities,
   tags,
   existingItem,
   currentUserId,
   initialContentType,
 }: {
   categories: KnowledgeCategoryOption[];
+  communities: { id: string; name: string }[];
   tags: KnowledgeTagOption[];
   existingItem?: KnowledgeItemForEdit;
   /** Current user's id — excludes them from the invitee picker's suggestions (create mode only). */
@@ -328,26 +331,12 @@ export function SubmitResourceForm({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Categories</FormLabel>
-              <div className="flex flex-wrap gap-4">
-                {categories.map((category) => {
-                  const checked = field.value.includes(category.id);
-                  return (
-                    <label key={category.id} className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={(c) =>
-                          field.onChange(
-                            c === true
-                              ? [...field.value, category.id]
-                              : field.value.filter((id) => id !== category.id),
-                          )
-                        }
-                      />
-                      {category.name}
-                    </label>
-                  );
-                })}
-              </div>
+              <CategoryCheckboxField
+                categories={categories}
+                communities={communities}
+                value={field.value}
+                onChange={field.onChange}
+              />
               <FormMessage />
             </FormItem>
           )}

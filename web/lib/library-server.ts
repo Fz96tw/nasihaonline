@@ -708,16 +708,29 @@ export async function getPublishedKnowledgeItems(params: {
   contentType?: KnowledgeContentType;
   level?: KnowledgeLevel;
   categorySlug?: string;
+  /**
+   * Community-based-categorization initiative, objective 3. Applied on top
+   * of categorySlug (redundant but harmless when both are set — a specific
+   * category already implies its community) — see
+   * getDefaultCommunityFilter in lib/profile-server.ts for how callers
+   * derive this (explicit ?community= selection, or the member's own
+   * communities as the default when neither is picked).
+   */
+  communityIds?: string[];
   q?: string;
   sort?: LibrarySort;
   userId: string;
   isPrivileged: boolean;
 }): Promise<LibraryCard[]> {
   const visibleStatuses = [KnowledgeStatus.published, KnowledgeStatus.flagged];
+  const communityFilter = params.communityIds?.length
+    ? { categories: { some: { category: { communityId: { in: params.communityIds } } } } }
+    : {};
   const filters = {
     ...(params.contentType ? { contentType: params.contentType } : {}),
     ...(params.level ? { level: params.level } : {}),
     ...(params.categorySlug ? { categories: { some: { category: { slug: params.categorySlug } } } } : {}),
+    ...communityFilter,
   };
   const visibilityFilter = params.isPrivileged
     ? {}
@@ -739,7 +752,12 @@ export async function getPublishedKnowledgeItems(params: {
     if (hits.length === 0) return [];
 
     const items = await db.knowledgeItem.findMany({
-      where: { id: { in: hits.map((hit) => hit.id) }, status: { in: visibleStatuses }, ...visibilityFilter },
+      where: {
+        id: { in: hits.map((hit) => hit.id) },
+        status: { in: visibleStatuses },
+        ...communityFilter,
+        ...visibilityFilter,
+      },
       select: LIBRARY_CARD_SELECT,
     });
     const byId = new Map(items.map((item) => [item.id, item]));
@@ -785,6 +803,9 @@ export async function getPublishedKnowledgeItemById(
     },
     select: {
       ...LIBRARY_CARD_SELECT,
+      // Overrides LIBRARY_CARD_SELECT's plain {name, slug} categories
+      // select — only the detail page needs each category's Community too.
+      categories: { select: { category: { select: { name: true, slug: true, community: { select: { name: true } } } } } },
       body: true,
       deidentificationConfirmed: true,
       tags: { select: { tag: { select: { name: true, slug: true } } } },
@@ -797,6 +818,11 @@ export async function getPublishedKnowledgeItemById(
 
   return {
     ...toLibraryCard(item),
+    categories: item.categories.map(({ category }) => ({
+      name: category.name,
+      slug: category.slug,
+      communityName: category.community.name,
+    })),
     body: item.body,
     deidentificationConfirmed: item.deidentificationConfirmed,
     tags: item.tags.map(({ tag }) => tag),

@@ -30,6 +30,7 @@ export type ReviewCategoryOption = {
   id: string;
   name: string;
   slug: string;
+  communityId: string;
 };
 
 export type ReviewTagOption = {
@@ -110,7 +111,10 @@ export type ReviewItemDetail = {
   status: ReviewItemStatus;
   seekingReviewers: boolean;
   volunteerNote: string | null;
-  categories: { name: string; slug: string }[];
+  // Widened from the plain {name, slug} used elsewhere in this file — the
+  // detail page also surfaces which Community each category belongs to
+  // (community-based-categorization initiative, objective 3).
+  categories: { name: string; slug: string; communityName: string }[];
   tags: { name: string; slug: string }[];
   submitter: { id: string; name: string | null; avatarUrl: string | null };
   createdAt: string;

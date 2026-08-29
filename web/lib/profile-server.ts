@@ -76,6 +76,26 @@ export function getMemberCommunityIdsForFiltering(
 }
 
 /**
+ * Community-based-categorization initiative, objective 3's "default filter
+ * state": a browse page with no explicit community selection scopes to the
+ * union of the member's own communities instead of showing everything or
+ * nothing — unless they follow all communities, or explicitly picked one,
+ * in which case that wins outright. Signed-out visitors (profile null, e.g.
+ * the public /events page) always get unfiltered. Implemented once here so
+ * every consuming page (Library now, Events/Forum in their own objectives)
+ * shares the exact same rule rather than each re-deriving it.
+ */
+export function getDefaultCommunityFilter(
+  profile: Pick<ProfileWithSkills, "followsAllCommunities" | "communities"> | null,
+  explicitCommunityId?: string | null,
+): string[] | undefined {
+  if (explicitCommunityId) return [explicitCommunityId];
+  if (!profile || profile.followsAllCommunities) return undefined;
+  const ids = profile.communities.map((c) => c.community.id);
+  return ids.length > 0 ? ids : undefined;
+}
+
+/**
  * One-time onboarding suggestion only (community-based-categorization
  * initiative) — maps a member's existing interestAreas onto the community
  * their matching KnowledgeCategory belongs to (INTEREST_AREA_LABELS values

@@ -762,7 +762,7 @@ export async function getReviewItemDetail(itemId: string, actingUser: UserModel)
       deidentificationConfirmed: true,
       publishedKnowledgeItemId: true,
       publishedKnowledgeItem: { select: { status: true } },
-      categories: { select: { category: { select: { name: true, slug: true } } } },
+      categories: { select: { category: { select: { name: true, slug: true, community: { select: { name: true } } } } } },
       tags: { select: { tag: { select: { name: true, slug: true } } } },
       attachments: { select: { fileName: true, mimeType: true, objectKey: true }, take: 1 },
       invitees: { select: { userId: true } },
@@ -791,7 +791,11 @@ export async function getReviewItemDetail(itemId: string, actingUser: UserModel)
     status: item.status,
     seekingReviewers: item.seekingReviewers,
     volunteerNote: item.volunteerNote,
-    categories: item.categories.map(({ category }) => category),
+    categories: item.categories.map(({ category }) => ({
+      name: category.name,
+      slug: category.slug,
+      communityName: category.community.name,
+    })),
     tags: item.tags.map(({ tag }) => tag),
     submitter: {
       id: item.submitter.id,

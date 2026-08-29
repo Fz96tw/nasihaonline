@@ -36,6 +36,7 @@ export type KnowledgeCategoryOption = {
   id: string;
   name: string;
   slug: string;
+  communityId: string;
 };
 
 export type KnowledgeCategoryWithCount = KnowledgeCategoryOption & { count: number };
@@ -97,7 +98,11 @@ export type LibrarySort = "recent" | "viewed" | "commented";
  * started; forumReplyCount excludes the auto-authored opening post, same
  * derivation as MemberEvent.forumReplyCount).
  */
-export type KnowledgeItemDetail = LibraryCard & {
+export type KnowledgeItemDetail = Omit<LibraryCard, "categories"> & {
+  // Widened from LibraryCard's plain {name, slug} — the detail page also
+  // surfaces which Community each category belongs to (community-based-
+  // categorization initiative, objective 3), unlike the browse-grid card.
+  categories: { name: string; slug: string; communityName: string }[];
   tags: { name: string; slug: string }[];
   deidentificationConfirmed: boolean;
   forumThreadId: string | null;

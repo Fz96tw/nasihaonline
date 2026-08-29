@@ -6,56 +6,21 @@ import { redirect } from "next/navigation";
 import { Clock, Eye, MessageSquare } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getKnowledgeCategoriesWithCounts, getPublishedKnowledgeItems } from "@/lib/library-server";
+import { getAllCommunities, getDefaultCommunityFilter, getOrCreateProfile } from "@/lib/profile-server";
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS } from "@/lib/library";
 import type { LibrarySort } from "@/lib/library";
 import { KnowledgeContentType, KnowledgeLevel, Role } from "@/lib/generated/prisma/enums";
 import { LibraryItemCard } from "@/components/library/library-item-card";
 import { BackToFeedLink } from "@/components/feed/back-to-feed-link";
+import { CommunityCategoryFilter } from "@/components/shared/community-category-filter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { SortButton } from "@/components/forums/sort-button";
 
 export const metadata: Metadata = {
   title: "Knowledge Library — NASIHA",
 };
-
-function CategoryChip({
-  href,
-  active,
-  count,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  count?: number;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      scroll={false}
-      className={cn(
-        "rounded-full px-3 py-1 text-sm font-medium transition-colors",
-        active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70",
-        count === 0 && !active && "opacity-50",
-      )}
-    >
-      {children}
-      {!!count && (
-        <span
-          className={cn(
-            "ml-1 text-[0.65rem] tabular-nums",
-            active ? "text-primary-foreground/70" : "text-muted-foreground/70",
-          )}
-        >
-          {count}
-        </span>
-      )}
-    </Link>
-  );
-}
 
 const selectClasses =
   "h-10 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
@@ -91,7 +56,15 @@ function buildSortHref(base: string, params: Record<string, string | undefined>,
 export default async function LibraryPage({
   searchParams,
 }: {
-  searchParams: { category?: string; type?: string; level?: string; q?: string; ref?: string; sort?: string };
+  searchParams: {
+    category?: string;
+    community?: string;
+    type?: string;
+    level?: string;
+    q?: string;
+    ref?: string;
+    sort?: string;
+  };
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
@@ -109,18 +82,24 @@ export default async function LibraryPage({
 
   const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
 
-  const [items, categories] = await Promise.all([
-    getPublishedKnowledgeItems({
-      categorySlug: searchParams.category,
-      contentType,
-      level,
-      q: searchParams.q,
-      sort,
-      userId: user.id,
-      isPrivileged,
-    }),
+  const [profile, communities, categories] = await Promise.all([
+    getOrCreateProfile(user.id),
+    getAllCommunities(),
     getKnowledgeCategoriesWithCounts({ userId: user.id, isPrivileged }),
   ]);
+  const selectedCommunity = communities.find((c) => c.slug === searchParams.community) ?? null;
+  const communityIds = getDefaultCommunityFilter(profile, selectedCommunity?.id);
+
+  const items = await getPublishedKnowledgeItems({
+    categorySlug: searchParams.category,
+    communityIds,
+    contentType,
+    level,
+    q: searchParams.q,
+    sort,
+    userId: user.id,
+    isPrivileged,
+  });
 
   const canEditAny = isPrivileged;
 
@@ -151,24 +130,31 @@ export default async function LibraryPage({
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <CategoryChip href="/library" active={!searchParams.category}>
-            All specialties
-          </CategoryChip>
-          {categories.map((category) => (
-            <CategoryChip
-              key={category.id}
-              href={`/library?category=${category.slug}`}
-              active={searchParams.category === category.slug}
-              count={category.count}
-            >
-              {category.name}
-            </CategoryChip>
-          ))}
-        </div>
+        <CommunityCategoryFilter
+          communities={communities}
+          categories={categories}
+          selectedCommunityId={selectedCommunity?.id ?? null}
+          selectedCategorySlug={searchParams.category ?? null}
+          categoryCounts={new Map(categories.map((category) => [category.id, category.count]))}
+          buildHref={(next) => {
+            const params = new URLSearchParams();
+            if (searchParams.type) params.set("type", searchParams.type);
+            if (searchParams.level) params.set("level", searchParams.level);
+            if (searchParams.q) params.set("q", searchParams.q);
+            if (searchParams.ref) params.set("ref", searchParams.ref);
+            const communitySlug = next.communityId
+              ? communities.find((c) => c.id === next.communityId)?.slug
+              : undefined;
+            if (communitySlug) params.set("community", communitySlug);
+            if (next.categorySlug) params.set("category", next.categorySlug);
+            const qs = params.toString();
+            return qs ? `/library?${qs}` : "/library";
+          }}
+        />
 
         <form action="/library" method="get" className="flex flex-wrap items-end gap-3">
           {searchParams.category && <input type="hidden" name="category" value={searchParams.category} />}
+          {searchParams.community && <input type="hidden" name="community" value={searchParams.community} />}
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="type" className="text-sm font-medium">
@@ -218,6 +204,7 @@ export default async function LibraryPage({
                   "/library",
                   {
                     category: searchParams.category,
+                    community: searchParams.community,
                     type: searchParams.type,
                     level: searchParams.level,
                     q: searchParams.q,
@@ -242,7 +229,7 @@ export default async function LibraryPage({
 
         {items.length === 0 ? (
           <p className="rounded-[10px] border p-8 text-center text-muted-foreground">
-            {searchParams.q || searchParams.category || contentType || level
+            {searchParams.q || searchParams.category || searchParams.community || contentType || level
               ? "No resources match your filters."
               : "No resources have been published yet — check back soon."}
           </p>

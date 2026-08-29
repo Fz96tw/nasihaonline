@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getReviewItemForEdit, getReviewCategories, getReviewTags } from "@/lib/review-server";
+import { getAllCommunities } from "@/lib/profile-server";
 import { SubmitReviewItemForm } from "@/components/review/submit-review-item-form";
 import { Role, ReviewItemStatus } from "@/lib/generated/prisma/enums";
 
@@ -31,7 +32,11 @@ export default async function EditReviewItemPage({ params }: { params: Promise<{
   const isSubmitter = item.submitterId === user.id;
   if (!isPrivileged && !isSubmitter) notFound();
 
-  const [categories, tags] = await Promise.all([getReviewCategories(), getReviewTags()]);
+  const [categories, tags, communities] = await Promise.all([
+    getReviewCategories(),
+    getReviewTags(),
+    getAllCommunities(),
+  ]);
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-8 p-8">
@@ -40,7 +45,7 @@ export default async function EditReviewItemPage({ params }: { params: Promise<{
         <p className="text-muted-foreground">{STATUS_NOTE[item.status]}</p>
       </div>
 
-      <SubmitReviewItemForm categories={categories} tags={tags} existingItem={item} />
+      <SubmitReviewItemForm categories={categories} communities={communities} tags={tags} existingItem={item} />
     </main>
   );
 }
