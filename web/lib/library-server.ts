@@ -116,6 +116,7 @@ const LIBRARY_CARD_SELECT = {
   heroImageUrl: true,
   externalUrl: true,
   categories: { select: { category: { select: { name: true, slug: true } } } },
+  communities: { select: { community: { select: { id: true, name: true, slug: true } } } },
   contributor: { select: { id: true, name: true } },
   attachments: { select: { fileName: true, mimeType: true, objectKey: true }, take: 1 },
   _count: { select: { views: true } },
@@ -135,6 +136,7 @@ function toLibraryCard(item: {
   heroImageUrl: string | null;
   externalUrl: string | null;
   categories: { category: { name: string; slug: string } }[];
+  communities: { community: { id: string; name: string; slug: string } }[];
   contributor: { id: string; name: string | null };
   attachments: { fileName: string; mimeType: string; objectKey: string }[];
   _count: { views: number };
@@ -149,6 +151,7 @@ function toLibraryCard(item: {
     status: item.status,
     visibility: item.visibility,
     categories: item.categories.map(({ category }) => category),
+    communities: item.communities.map(({ community }) => community),
     contributor: item.contributor,
     createdAt: item.createdAt.toISOString(),
     youtubeUrl: item.youtubeUrl,
@@ -263,6 +266,9 @@ export async function createKnowledgeItem(
     body: string | null;
     contentType: KnowledgeContentType;
     level: KnowledgeLevel;
+    /** Required, multi-select top-level classification (standardized onto Events' EventCommunity shape). */
+    communityIds: string[];
+    /** Optional, scoped in the UI to the chosen communities above. */
     categoryIds: string[];
     tagIds: string[];
     youtubeUrl: string | null;
@@ -380,6 +386,7 @@ export async function createKnowledgeItem(
       licenseConsented: true,
       status: KnowledgeStatus.pending_review,
       visibility: input.visibility,
+      communities: { create: input.communityIds.map((communityId) => ({ communityId })) },
       categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
       tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
       attachments: attachment ? { create: [attachment] } : undefined,
@@ -418,6 +425,7 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
       contentType: true,
       level: true,
       status: true,
+      communities: { select: { communityId: true } },
       categories: { select: { categoryId: true } },
       youtubeUrl: true,
       heroImageUrl: true,
@@ -438,6 +446,7 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
     contentType: item.contentType,
     level: item.level,
     status: item.status,
+    communityIds: item.communities.map(({ communityId }) => communityId),
     categoryIds: item.categories.map(({ categoryId }) => categoryId),
     tagIds: item.tags.map(({ tagId }) => tagId),
     youtubeUrl: item.youtubeUrl,
@@ -471,6 +480,8 @@ export async function updateKnowledgeItem(
     body: string | null;
     contentType: KnowledgeContentType;
     level: KnowledgeLevel;
+    /** Required, multi-select — genuinely editable here, unlike visibility/invitedUserIds which stay create-only. */
+    communityIds: string[];
     categoryIds: string[];
     tagIds: string[];
     youtubeUrl: string | null;
@@ -575,6 +586,7 @@ export async function updateKnowledgeItem(
   const updated = await db.$transaction(async (tx) => {
     await tx.knowledgeItemTag.deleteMany({ where: { knowledgeItemId: item.id } });
     await tx.knowledgeItemCategory.deleteMany({ where: { knowledgeItemId: item.id } });
+    await tx.knowledgeItemCommunity.deleteMany({ where: { knowledgeItemId: item.id } });
     if (dropsExistingAttachment) {
       await tx.knowledgeAttachment.delete({ where: { id: existingAttachment!.id } });
     }
@@ -591,6 +603,7 @@ export async function updateKnowledgeItem(
         externalUrl: requiresAttachmentOrLink ? input.externalUrl : null,
         deidentificationConfirmed: input.deidentificationConfirmed,
         status: nextStatus,
+        communities: { create: input.communityIds.map((communityId) => ({ communityId })) },
         categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
         tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
         attachments: newAttachment ? { create: [newAttachment] } : undefined,
@@ -723,8 +736,12 @@ export async function getPublishedKnowledgeItems(params: {
   isPrivileged: boolean;
 }): Promise<LibraryCard[]> {
   const visibleStatuses = [KnowledgeStatus.published, KnowledgeStatus.flagged];
+  // Queries the direct KnowledgeItemCommunity relation (standardization
+  // objective) rather than deriving through categories — categories are now
+  // optional, so an item tagged with a community but zero categories would
+  // otherwise be unfindable by this filter.
   const communityFilter = params.communityIds?.length
-    ? { categories: { some: { category: { communityId: { in: params.communityIds } } } } }
+    ? { communities: { some: { communityId: { in: params.communityIds } } } }
     : {};
   const filters = {
     ...(params.contentType ? { contentType: params.contentType } : {}),

@@ -1579,6 +1579,7 @@ model Community {
   categories KnowledgeCategory[]
   profiles   ProfileCommunity[]
   events     EventCommunity[]
+  knowledgeItems KnowledgeItemCommunity[]
   createdAt  DateTime            @default(now())
   updatedAt  DateTime            @updatedAt
 
@@ -1629,6 +1630,21 @@ model KnowledgeItemCategory {
   @@id([knowledgeItemId, categoryId])
   @@index([categoryId])
   @@map("knowledge_item_categories")
+}
+
+// Required, multi-select Community tag for a KnowledgeItem — mirrors
+// EventCommunity exactly (community-based-categorization initiative,
+// standardization objective). Backfilled for every pre-existing item from
+// the union of its categories' communities in this model's own migration.
+model KnowledgeItemCommunity {
+  knowledgeItemId String
+  knowledgeItem   KnowledgeItem @relation(fields: [knowledgeItemId], references: [id], onDelete: Cascade)
+  communityId     String
+  community       Community     @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@id([knowledgeItemId, communityId])
+  @@index([communityId])
+  @@map("knowledge_item_communities")
 }
 
 model KnowledgeTag {
@@ -1696,6 +1712,13 @@ model KnowledgeItem {
   updatedAt                 DateTime             @updatedAt
 
   categories              KnowledgeItemCategory[]
+  // Required, multi-select top-level classification (standardized onto
+  // Events' EventCommunity shape) — unlike `categories` above (now
+  // optional), every item has at least one row here. Every pre-existing
+  // item was backfilled from the union of its (already-required)
+  // categories' communities at migration time, so there is no "zero
+  // communities" legacy state the way Events had.
+  communities             KnowledgeItemCommunity[]
   tags                    KnowledgeItemTag[]
   attachments             KnowledgeAttachment[]
   // On-demand discussion thread in the Research & Resources forum (§4.9),

@@ -44,6 +44,7 @@ const DEFAULT_VALUES: CreateKnowledgeItemValues = {
   body: null,
   contentType: "" as KnowledgeContentType,
   level: "" as KnowledgeLevel,
+  communityIds: [],
   categoryIds: [],
   tagIds: [],
   youtubeUrl: null,
@@ -116,6 +117,9 @@ export function SubmitResourceForm({
           body: existingItem.body,
           contentType: existingItem.contentType,
           level: existingItem.level,
+          // Genuinely editable, like categoryIds below (unlike visibility/
+          // invitedUserIds, which stay create-only).
+          communityIds: existingItem.communityIds,
           categoryIds: existingItem.categoryIds,
           tagIds: existingItem.tagIds,
           youtubeUrl: existingItem.youtubeUrl,
@@ -140,6 +144,7 @@ export function SubmitResourceForm({
   const isBlogPost = contentType === KnowledgeContentType.blog_post;
   const visibility = form.watch("visibility");
   const isRestricted = visibility === KnowledgeVisibility.restricted;
+  const selectedCommunityIds = form.watch("communityIds");
 
   async function onSubmit(values: CreateKnowledgeItemValues) {
     setSubmitting(true);
@@ -152,6 +157,9 @@ export function SubmitResourceForm({
       if (isBlogPost && values.body) formData.append("body", values.body);
       formData.append("contentType", values.contentType);
       formData.append("level", values.level);
+      // Genuinely editable — sent unconditionally, unlike visibility/
+      // invitedUserIds below which are create-only.
+      values.communityIds.forEach((communityId) => formData.append("communityIds", communityId));
       values.categoryIds.forEach((categoryId) => formData.append("categoryIds", categoryId));
       values.tagIds.forEach((tagId) => formData.append("tagIds", tagId));
       if (isRecordedLecture && values.youtubeUrl) formData.append("youtubeUrl", values.youtubeUrl);
@@ -333,20 +341,53 @@ export function SubmitResourceForm({
 
         <FormField
           control={form.control}
-          name="categoryIds"
+          name="communityIds"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Categories</FormLabel>
-              <CategoryCheckboxField
-                categories={categories}
-                communities={communities}
-                value={field.value}
-                onChange={field.onChange}
-              />
+              <FormLabel>Communities</FormLabel>
+              <FormControl>
+                <div className="flex flex-wrap gap-4 rounded-md border p-3">
+                  {communities.map((community) => (
+                    <label key={community.id} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={field.value.includes(community.id)}
+                        onCheckedChange={(checked) =>
+                          field.onChange(
+                            checked
+                              ? [...field.value, community.id]
+                              : field.value.filter((id) => id !== community.id),
+                          )
+                        }
+                      />
+                      {community.name}
+                    </label>
+                  ))}
+                </div>
+              </FormControl>
+              <FormDescription>Select at least one community this resource belongs to.</FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
+
+        {selectedCommunityIds.length > 0 && (
+          <FormField
+            control={form.control}
+            name="categoryIds"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Categories (optional)</FormLabel>
+                <CategoryCheckboxField
+                  categories={categories.filter((category) => selectedCommunityIds.includes(category.communityId))}
+                  communities={communities.filter((community) => selectedCommunityIds.includes(community.id))}
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         {tags.length > 0 && (
           <FormField

@@ -41,6 +41,11 @@ export function LibraryItemCard({ item, canEdit }: { item: LibraryCardData; canE
       )}
       <CardHeader>
         <div className="flex flex-wrap items-center gap-2">
+          {item.communities.map((community) => (
+            <Badge key={community.id} variant="info" className="w-fit">
+              {community.name}
+            </Badge>
+          ))}
           {item.categories.map((category) => (
             <Badge key={category.slug} variant="info" className="w-fit">
               {category.name}

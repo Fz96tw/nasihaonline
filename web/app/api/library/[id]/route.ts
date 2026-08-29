@@ -26,6 +26,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     body: formData.get("body") || null,
     contentType: formData.get("contentType"),
     level: formData.get("level"),
+    communityIds: formData.getAll("communityIds"),
     categoryIds: formData.getAll("categoryIds"),
     tagIds: formData.getAll("tagIds"),
     youtubeUrl: formData.get("youtubeUrl") || null,
