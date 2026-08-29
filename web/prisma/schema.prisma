@@ -1505,15 +1505,35 @@ enum KnowledgeVisibility {
   restricted
 }
 
+// Top-level topic grouping every KnowledgeCategory belongs to (§4.9 /
+// community-based-categorization initiative) — lets browse/filter UIs
+// present a two-step Community → Category picker instead of a flat
+// ~22-item category list. Forum/Event/Profile link to this in later
+// objectives of the same initiative; this model intentionally only
+// carries the KnowledgeCategory relation for now.
+model Community {
+  id         String              @id @default(cuid())
+  name       String              @unique
+  slug       String              @unique
+  categories KnowledgeCategory[]
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@map("communities")
+}
+
 model KnowledgeCategory {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  slug      String   @unique
-  createdAt DateTime @default(now())
+  id          String    @id @default(cuid())
+  name        String    @unique
+  slug        String    @unique
+  communityId String
+  community   Community @relation(fields: [communityId], references: [id])
+  createdAt   DateTime  @default(now())
 
   items       KnowledgeItemCategory[]
   reviewItems ReviewItemCategory[]
 
+  @@index([communityId])
   @@map("knowledge_categories")
 }
 

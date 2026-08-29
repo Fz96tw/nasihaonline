@@ -313,6 +313,52 @@ async function seedEvents() {
 const KNOWLEDGE_CATEGORIES = Object.values(INTEREST_AREA_LABELS);
 const KNOWLEDGE_TAGS = ["guidelines", "review-article", "recorded-lecture", "case-study"];
 
+// Community-based-categorization initiative: the 6 top-level communities
+// every KnowledgeCategory belongs to.
+const COMMUNITIES: { name: string; slug: string }[] = [
+  { name: "Healthcare & Clinical", slug: "healthcare-clinical" },
+  { name: "Science & Research", slug: "science-research" },
+  { name: "Business & Finance", slug: "business-finance" },
+  { name: "Technology & Data", slug: "technology-data" },
+  { name: "Education & Humanities", slug: "education-humanities" },
+  { name: "Arts, Culture & Lifestyle", slug: "arts-culture-lifestyle" },
+];
+
+// Single source of truth for which Community each KnowledgeCategory belongs
+// to — mirrored exactly in migration 20260829174455_add_community_taxonomy's
+// backfill SQL, so a fresh environment's seed and the production backfill
+// agree. Every INTEREST_AREA_LABELS value must appear here exactly once.
+const CATEGORY_COMMUNITY_MAP: Record<string, string> = {
+  Healthcare: "Healthcare & Clinical",
+  "Health & Wellness": "Healthcare & Clinical",
+  "Health-tech": "Healthcare & Clinical",
+  "Clinical Research": "Healthcare & Clinical",
+  "Basic Science Research": "Science & Research",
+  Biotechnology: "Science & Research",
+  "Science & Philosophy": "Science & Research",
+  "Sustainability & Environment": "Science & Research",
+  Business: "Business & Finance",
+  "Finance & Investing": "Business & Finance",
+  "Marketing & Sales": "Business & Finance",
+  "Leadership & Management": "Business & Finance",
+  "Tech & Development": "Technology & Data",
+  "Data & Analytics": "Technology & Data",
+  "E-Learning": "Technology & Data",
+  Education: "Education & Humanities",
+  History: "Education & Humanities",
+  "Literature & Writing": "Education & Humanities",
+  "Arts & Crafts": "Arts, Culture & Lifestyle",
+  Music: "Arts, Culture & Lifestyle",
+  "Culinary Arts": "Arts, Culture & Lifestyle",
+  "Travel & Culture": "Arts, Culture & Lifestyle",
+};
+
+for (const name of KNOWLEDGE_CATEGORIES) {
+  if (!CATEGORY_COMMUNITY_MAP[name]) {
+    throw new Error(`CATEGORY_COMMUNITY_MAP is missing an entry for knowledge category "${name}".`);
+  }
+}
+
 // Six member-browsable forum categories from Member_Communications.md's
 // table, plus two on-demand forums (Events Discussion, Library Discussions)
 // that don't appear in the /forums index — see getForumCategories in
@@ -407,12 +453,24 @@ const SAMPLE_KNOWLEDGE_ITEMS: {
 ];
 
 async function seedKnowledgeLibrary() {
-  const categoriesByName = new Map<string, { id: string }>();
-  for (const name of KNOWLEDGE_CATEGORIES) {
-    const category = await db.knowledgeCategory.upsert({
+  const communitiesByName = new Map<string, { id: string }>();
+  for (const { name, slug } of COMMUNITIES) {
+    const community = await db.community.upsert({
       where: { name },
       update: {},
-      create: { name, slug: slugify(name) },
+      create: { name, slug },
+    });
+    communitiesByName.set(name, community);
+  }
+  console.log(`Seeded ${COMMUNITIES.length} communities.`);
+
+  const categoriesByName = new Map<string, { id: string }>();
+  for (const name of KNOWLEDGE_CATEGORIES) {
+    const communityId = communitiesByName.get(CATEGORY_COMMUNITY_MAP[name])!.id;
+    const category = await db.knowledgeCategory.upsert({
+      where: { name },
+      update: { communityId },
+      create: { name, slug: slugify(name), communityId },
     });
     categoriesByName.set(name, category);
   }
