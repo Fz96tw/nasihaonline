@@ -647,6 +647,7 @@ export async function deleteKnowledgeItem(itemId: string, actingUser: UserModel)
     where: { id: itemId },
     select: {
       id: true,
+      title: true,
       contributorId: true,
       heroImageUrl: true,
       attachments: { select: { objectKey: true } },
@@ -660,6 +661,13 @@ export async function deleteKnowledgeItem(itemId: string, actingUser: UserModel)
     throw new KnowledgeItemError(403, "Only the submitter or a Library Steward/admin can delete this resource.");
   }
 
+  // Unlike resolveFlaggedKnowledgeItem's "remove" (a status flip, row kept),
+  // this is a hard delete — the row won't exist to join against afterward,
+  // so the log entry is the only surviving record this item ever existed.
+  // Logged for every caller, not just self-deletes: a privileged delete of
+  // someone else's item had zero audit trail before this too.
+  const isSelfDelete = item.contributorId === actingUser.id;
+
   await db.$transaction(async (tx) => {
     if (item.forumThread) {
       await tx.forumThread.delete({ where: { id: item.forumThread.id } });
@@ -670,6 +678,16 @@ export async function deleteKnowledgeItem(itemId: string, actingUser: UserModel)
       data: { publishedKnowledgeItemId: null },
     });
     await tx.knowledgeItem.delete({ where: { id: item.id } });
+    await recordAdminAction(
+      {
+        actorId: actingUser.id,
+        action: isSelfDelete ? "content.self_deleted" : "content.deleted",
+        entityType: "KnowledgeItem",
+        entityId: item.id,
+        metadata: { title: item.title, contributorId: item.contributorId },
+      },
+      tx,
+    );
   });
 
   for (const attachment of item.attachments) {

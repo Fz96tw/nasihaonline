@@ -7,6 +7,8 @@ export const ADMIN_ACTION_LABELS: Record<string, string> = {
   "privacy.fulfilled": "Fulfilled a privacy data request",
   "content.dismissed": "Dismissed a content flag",
   "content.removed": "Removed flagged content",
+  "content.self_deleted": "Deleted their own library item",
+  "content.deleted": "Deleted a library item",
   "contact_message.read": "Marked a contact message as read",
   "contact_message.replied": "Replied to a contact message",
   "ledger.confirmed": "Confirmed knowledge hours",
