@@ -15,6 +15,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { type MeetingRequestListItem, type MeetingRequestMessageItem } from "@/lib/inbox";
 import { MEETING_REQUEST_STATUS_BADGE_VARIANT, MEETING_REQUEST_STATUS_LABELS } from "@/lib/meeting-requests";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { DATETIME_LOCAL_STEP_SECONDS, snapDatetimeLocalValue } from "@/lib/datetime-input";
 import { linkifyText } from "@/lib/linkify";
 import { getLocalTimeZoneAbbreviation } from "@/lib/timezone";
 import { useHasMounted } from "@/lib/use-has-mounted";
@@ -183,7 +184,15 @@ function RescheduleForm({
                 <FormItem>
                   <div className="flex items-center gap-2">
                     <FormControl>
-                      <Input type="datetime-local" {...field} />
+                      <Input
+                        type="datetime-local"
+                        step={DATETIME_LOCAL_STEP_SECONDS}
+                        {...field}
+                        onBlur={(event) => {
+                          field.onChange(snapDatetimeLocalValue(event.target.value));
+                          field.onBlur();
+                        }}
+                      />
                     </FormControl>
                     {fields.length > 1 && (
                       <Button
@@ -348,7 +357,15 @@ function EditRequestForm({
                 <FormItem>
                   <div className="flex items-center gap-2">
                     <FormControl>
-                      <Input type="datetime-local" {...field} />
+                      <Input
+                        type="datetime-local"
+                        step={DATETIME_LOCAL_STEP_SECONDS}
+                        {...field}
+                        onBlur={(event) => {
+                          field.onChange(snapDatetimeLocalValue(event.target.value));
+                          field.onBlur();
+                        }}
+                      />
                     </FormControl>
                     {fields.length > 1 && (
                       <Button

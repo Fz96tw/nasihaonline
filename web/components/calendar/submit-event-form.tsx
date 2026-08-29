@@ -39,6 +39,7 @@ import {
 import { EventType, EventVisibility, RecurrenceFrequency } from "@/lib/generated/prisma/enums";
 import { EVENT_TYPE_LABELS } from "@/lib/events";
 import { createEventSchema, updateEventSchema, type CreateEventValues } from "@/lib/validation/event";
+import { DATETIME_LOCAL_STEP_SECONDS, snapDatetimeLocalValue } from "@/lib/datetime-input";
 import { describeRecurrence } from "@/lib/recurrence";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { InviteePicker } from "@/components/members/invitee-picker";
@@ -453,7 +454,15 @@ export function SubmitEventForm({
               <FormItem>
                 <FormLabel>Starts</FormLabel>
                 <FormControl>
-                  <Input type="datetime-local" {...field} />
+                  <Input
+                    type="datetime-local"
+                    step={DATETIME_LOCAL_STEP_SECONDS}
+                    {...field}
+                    onBlur={(event) => {
+                      field.onChange(snapDatetimeLocalValue(event.target.value));
+                      field.onBlur();
+                    }}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -469,8 +478,13 @@ export function SubmitEventForm({
                 <FormControl>
                   <Input
                     type="datetime-local"
+                    step={DATETIME_LOCAL_STEP_SECONDS}
                     value={field.value ?? ""}
                     onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
+                    onBlur={(e) => {
+                      if (e.target.value) field.onChange(snapDatetimeLocalValue(e.target.value));
+                      field.onBlur();
+                    }}
                   />
                 </FormControl>
                 <FormMessage />

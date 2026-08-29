@@ -19,6 +19,7 @@ import {
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { DATETIME_LOCAL_STEP_SECONDS, snapDatetimeLocalValue } from "@/lib/datetime-input";
 import { getLocalTimeZoneAbbreviation } from "@/lib/timezone";
 import { useHasMounted } from "@/lib/use-has-mounted";
 
@@ -167,7 +168,15 @@ export function RequestMeetingDialog({
                       <FormItem>
                         <div className="flex items-center gap-2">
                           <FormControl>
-                            <Input type="datetime-local" {...field} />
+                            <Input
+                              type="datetime-local"
+                              step={DATETIME_LOCAL_STEP_SECONDS}
+                              {...field}
+                              onBlur={(event) => {
+                                field.onChange(snapDatetimeLocalValue(event.target.value));
+                                field.onBlur();
+                              }}
+                            />
                           </FormControl>
                           {fields.length > 1 && (
                             <Button
