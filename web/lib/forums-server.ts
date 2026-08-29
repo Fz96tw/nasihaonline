@@ -160,12 +160,14 @@ export type OwnThreadAccess = {
   visibility: ForumThreadVisibility;
   authorId: string;
   invitees: { userId: string }[];
+  removed: boolean;
 };
 
 export const OWN_THREAD_ACCESS_SELECT = {
   visibility: true,
   authorId: true,
   invitees: { select: { userId: true } },
+  removed: true,
 } as const;
 
 function isOwnThreadVisible(thread: OwnThreadAccess, viewerId: string | undefined, isPrivileged: boolean): boolean {
@@ -180,6 +182,11 @@ export function isThreadVisible(
   viewerId: string | undefined,
   isPrivileged: boolean,
 ): boolean {
+  // deleteForumThread's soft-delete — unconditional, no isPrivileged bypass,
+  // same "gone for everyone including moderators" rule as a removed
+  // ForumPost's body placeholder (the AdminActionLog entry it writes is the
+  // only surviving trail, not continued read access through this path).
+  if (thread.removed) return false;
   return (
     isEventThreadVisible(thread.event, viewerId) &&
     isKnowledgeItemThreadVisible(thread.knowledgeItem, viewerId, isPrivileged) &&
@@ -331,6 +338,7 @@ export async function getForumThreadDetail(
       eventId: true,
       knowledgeItemId: true,
       visibility: true,
+      removed: true,
       invitees: {
         select: { userId: true, user: { select: { name: true, profile: { select: { avatarUrl: true } } } } },
         orderBy: { createdAt: "asc" },
@@ -407,6 +415,59 @@ export async function getForumThreadDetail(
     invitees,
     isEditable: !thread.eventId && !thread.knowledgeItemId,
   };
+}
+
+/**
+ * DELETE /api/forums/threads/:threadId — the thread's author (or a
+ * moderator/admin) removing a standalone thread directly, mirroring
+ * deleteForumPost's direct self-serve shape rather than ForumPost's
+ * separate flag/resolve moderation queue (no review step needed here since
+ * only the author or an already-privileged actor can reach this at all).
+ * Soft delete (`removed: true`) — the row and its posts are kept (so other
+ * members' replies aren't destroyed), but isThreadVisible then hides it
+ * from every read path for every viewer, moderators included; the
+ * AdminActionLog entry recorded in the same transaction is the only
+ * surviving trail. Rejected for a thread carrying an eventId/
+ * knowledgeItemId — same 400 as updateForumThread, since that thread's
+ * lifecycle is fully owned elsewhere (an Event's thread has no delete path
+ * at all yet; a Knowledge Library item's thread is hard-deleted as one step
+ * of deleteKnowledgeItem's own cascade, never through this route).
+ */
+export async function deleteForumThread(
+  threadId: string,
+  actingUserId: string,
+  isPrivileged: boolean,
+): Promise<{ id: string }> {
+  const thread = await db.forumThread.findUnique({
+    where: { id: threadId },
+    select: { id: true, title: true, authorId: true, eventId: true, knowledgeItemId: true, removed: true },
+  });
+  if (!thread) throw new ForumError(404, "Thread not found.");
+  if (thread.eventId || thread.knowledgeItemId) {
+    throw new ForumError(400, "This thread is managed automatically and can't be deleted here.");
+  }
+  if (thread.removed) throw new ForumError(400, "This thread has already been removed.");
+  if (!isPrivileged && actingUserId !== thread.authorId) {
+    throw new ForumError(403, "Only the thread's author or a moderator/admin can delete it.");
+  }
+
+  const isSelfDelete = actingUserId === thread.authorId;
+
+  await db.$transaction(async (tx) => {
+    await tx.forumThread.update({ where: { id: threadId }, data: { removed: true } });
+    await recordAdminAction(
+      {
+        actorId: actingUserId,
+        action: isSelfDelete ? "content.thread_self_deleted" : "content.thread_deleted",
+        entityType: "ForumThread",
+        entityId: threadId,
+        metadata: { title: thread.title, authorId: thread.authorId },
+      },
+      tx,
+    );
+  });
+
+  return { id: threadId };
 }
 
 /**
@@ -674,6 +735,7 @@ export async function updateForumThread(
       visibility: true,
       eventId: true,
       knowledgeItemId: true,
+      removed: true,
       forum: { select: { slug: true } },
     },
   });
@@ -681,6 +743,7 @@ export async function updateForumThread(
   if (thread.eventId || thread.knowledgeItemId) {
     throw new ForumError(400, "This thread's title and audience are managed automatically and can't be edited here.");
   }
+  if (thread.removed) throw new ForumError(400, "This thread has been removed and can't be edited.");
   if (!isPrivileged && actingUserId !== thread.authorId) {
     throw new ForumError(403, "Only the thread's author or a moderator/admin can edit it.");
   }
@@ -996,11 +1059,13 @@ export async function updateForumThreadInvitees(
       title: true,
       authorId: true,
       visibility: true,
+      removed: true,
       forum: { select: { slug: true } },
       _count: { select: { invitees: true } },
     },
   });
   if (!thread) throw new ForumError(404, "Thread not found.");
+  if (thread.removed) throw new ForumError(400, "This thread has been removed.");
   if (thread.visibility !== ForumThreadVisibility.invited) {
     throw new ForumError(400, "Only a restricted thread has an invited list.");
   }
@@ -1187,6 +1252,11 @@ export async function getTrendingForumThreads(
   const threads = await db.forumThread.findMany({
     where: {
       id: { in: grouped.map((group) => group.threadId) },
+      // Unconditional, unlike every other gate below — deleteForumThread's
+      // soft-delete hides a thread from isPrivileged too (isThreadVisible's
+      // same rule), so this dashboard-wide surface shouldn't surface it
+      // just because the viewer is an admin/moderator.
+      removed: false,
       ...(isPrivileged
         ? {}
         : {

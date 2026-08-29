@@ -6,6 +6,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getForumThreadDetail } from "@/lib/forums-server";
 import { getMentionableMembers } from "@/lib/members-server";
 import { ForumThreadView } from "@/components/forums/forum-thread-view";
+import { DeleteForumThreadButton } from "@/components/forums/delete-forum-thread-button";
 import { ManageThreadInvitees } from "@/components/forums/manage-thread-invitees";
 import { ThreadViewCounter } from "@/components/forums/thread-view-counter";
 import { BackLink } from "@/components/back-link";
@@ -94,9 +95,12 @@ export default async function ForumThreadPage({
             {isRestricted && <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>}
           </div>
           {thread.isEditable && (isAuthor || isPrivileged) && (
-            <Button asChild variant="ghost" size="sm">
-              <Link href={`/forums/${thread.forum.slug}/${thread.id}/edit`}>Edit</Link>
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button asChild variant="ghost" size="sm">
+                <Link href={`/forums/${thread.forum.slug}/${thread.id}/edit`}>Edit</Link>
+              </Button>
+              <DeleteForumThreadButton threadId={thread.id} forumSlug={thread.forum.slug} title={thread.title} />
+            </div>
           )}
         </div>
         <div className="flex items-center justify-between gap-3">

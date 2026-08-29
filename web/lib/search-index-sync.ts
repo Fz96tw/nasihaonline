@@ -118,7 +118,10 @@ export async function syncKnowledgeItemToIndex(knowledgeItemId: string): Promise
  * KnowledgeItem) — per-viewer authorization for a restricted thread is
  * enforced at query time by getFeedPage (lib/feed-server.ts) (via
  * lib/forums-server.ts's isThreadVisible), not by excluding it here. The
- * only "not eligible" case is the thread no longer existing.
+ * "not eligible" cases are the thread no longer existing, or deleteForumThread
+ * having soft-removed it — the row still exists then, but isThreadVisible
+ * hides it from every viewer, so it's just as ineligible for search as if
+ * the row were gone.
  */
 export async function syncForumThreadToIndex(threadId: string): Promise<void> {
   const thread = await db.forumThread.findUnique({
@@ -126,13 +129,14 @@ export async function syncForumThreadToIndex(threadId: string): Promise<void> {
     select: {
       id: true,
       title: true,
+      removed: true,
       author: { select: { name: true } },
       forum: { select: { name: true, slug: true } },
       posts: { select: { body: true }, orderBy: { createdAt: "asc" } },
     },
   });
 
-  if (!thread) {
+  if (!thread || thread.removed) {
     await deleteForumDocument(threadId);
     return;
   }

@@ -9,6 +9,8 @@ export const ADMIN_ACTION_LABELS: Record<string, string> = {
   "content.removed": "Removed flagged content",
   "content.self_deleted": "Deleted their own library item",
   "content.deleted": "Deleted a library item",
+  "content.thread_self_deleted": "Deleted their own forum thread",
+  "content.thread_deleted": "Deleted a forum thread",
   "contact_message.read": "Marked a contact message as read",
   "contact_message.replied": "Replied to a contact message",
   "ledger.confirmed": "Confirmed knowledge hours",
@@ -31,6 +33,7 @@ const ENTITY_HREF: Record<string, (entityId: string | null) => string> = {
   PostComment: () => "/admin/content",
   KnowledgeItem: () => "/admin/content",
   ForumPost: () => "/admin/content",
+  ForumThread: () => "/admin/content",
 };
 
 export function adminActionEntityHref(entityType: string, entityId: string | null): string | null {

@@ -251,6 +251,11 @@ export async function getFeedPage(params: {
   // the others below — an accepted residual gap, not worth replicating
   // isThreadVisible's logic in SQL for a page-heading number.
   const forumWhere = {
+    // Unconditional — deleteForumThread's soft-delete hides a thread from
+    // every viewer (isThreadVisible's rule), so it shouldn't count here
+    // either, unlike the restricted-visibility gates below which stay
+    // approximate/over-counting per the note above.
+    removed: false,
     ...(query ? {} : { eventId: null, knowledgeItemId: null }),
     // lastActivityAt (bumped by every new reply, see createForumPost) is
     // the sort/cursor field here rather than createdAt, so a thread with
@@ -417,8 +422,11 @@ export async function getFeedPage(params: {
         // subtracts one — same convention as toThreadListItem in forums-server.ts.
         _count: { select: { posts: true, views: true } },
         // Only needed for the isThreadVisible filter below — never rendered.
+        // (removed is already excluded by forumWhere above; selected only
+        // to satisfy isThreadVisible's OwnThreadAccess type.)
         visibility: true,
         authorId: true,
+        removed: true,
         invitees: { select: { userId: true } },
         event: EVENT_THREAD_ACCESS_SELECT,
         knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,

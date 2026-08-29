@@ -1968,6 +1968,16 @@ model ForumThread {
   // instead of only ever appearing once at its original creation time.
   lastActivityAt DateTime              @default(now())
 
+  // Set by deleteForumThread (the author, or a moderator/admin, self-serve
+  // removing a standalone thread) — same "row kept, everyone loses access"
+  // shape as ForumPost.removed, but unconditional rather than swapping in a
+  // placeholder: isThreadVisible treats a removed thread as invisible to
+  // every viewer (author and moderators included), since unlike a nested
+  // post there's no surrounding container to render a placeholder inside.
+  // Always false for a thread with an eventId/knowledgeItemId — its
+  // lifecycle belongs to events-server.ts/library-server.ts, never this.
+  removed Boolean @default(false)
+
   posts    ForumPost[]
   views    ThreadView[]
   invitees ForumThreadInvitee[]
