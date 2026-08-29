@@ -27,6 +27,26 @@ function matchesCommunityFilter(
 }
 
 /**
+ * Per-pill item counts against the *unfiltered* list for whichever tab is
+ * active — counting against the already-community-filtered list would
+ * collapse every count to either 0 or the current total, which defeats
+ * the point of showing them (how many items would each other pill reveal).
+ */
+function computeCommunityCounts(
+  items: { categories: { communityId: string }[] }[],
+  communities: { id: string }[],
+  myCommunityIds: string[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  counts.set("all", items.length);
+  counts.set("mine", items.filter((item) => matchesCommunityFilter(item.categories, "mine", myCommunityIds)).length);
+  for (const community of communities) {
+    counts.set(community.id, items.filter((item) => matchesCommunityFilter(item.categories, community.id, myCommunityIds)).length);
+  }
+  return counts;
+}
+
+/**
  * The /review-feedback dashboard's 3 tabs — My Submissions (personal),
  * Shared With Me (personal), Members Seeking Reviewers (community-wide).
  * Styled like GetInvolvedTabs for visual consistency with the rest of the
@@ -73,6 +93,9 @@ export function ReviewDashboardTabs({
   const openSubmissionsCount = filteredMySubmissions.filter((item) => item.status === ReviewItemStatus.open).length;
   const sharedWithMeCount = filteredSharedWithMe.length;
 
+  const activeTabItems = tab === "mine" ? mySubmissions : tab === "shared" ? sharedWithMe : seekingReviewers;
+  const communityCounts = computeCommunityCounts(activeTabItems, communities, myCommunityIds);
+
   return (
     <Tabs value={tab} onValueChange={setTab}>
       <div className="mb-4">
@@ -82,6 +105,7 @@ export function ReviewDashboardTabs({
           followsAllCommunities={followsAllCommunities}
           selected={selected}
           onSelect={setSelected}
+          counts={communityCounts}
         />
       </div>
       <TabsList
