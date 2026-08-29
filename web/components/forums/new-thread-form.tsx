@@ -15,6 +15,8 @@ import { getCsrfToken } from "@/lib/csrf-client";
 import { InviteePicker } from "@/components/members/invitee-picker";
 import { ForumThreadVisibility } from "@/lib/generated/prisma/enums";
 import { usePasteImageUpload } from "@/lib/use-paste-image-upload";
+import { CategoryCheckboxField } from "@/components/shared/category-checkbox-field";
+import type { KnowledgeCategoryOption } from "@/lib/library";
 
 const DEFAULT_VALUES: CreateForumThreadValues = {
   title: "",
@@ -22,6 +24,7 @@ const DEFAULT_VALUES: CreateForumThreadValues = {
   deidentificationConfirmed: false,
   visibility: ForumThreadVisibility.community,
   invitedUserIds: [],
+  categoryIds: [],
 };
 
 /**
@@ -93,11 +96,15 @@ export function NewThreadForm({
   forumSlug,
   requireDeidentification,
   currentUserId,
+  categories,
+  communities,
 }: {
   forumId: string;
   forumSlug: string;
   requireDeidentification: boolean;
   currentUserId: string;
+  categories: KnowledgeCategoryOption[];
+  communities: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -219,6 +226,23 @@ export function NewThreadForm({
               <FormControl>
                 <ThreadBodyField field={field} onImageUploadStateChange={setImageUploading} />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="categoryIds"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Topics (optional)</FormLabel>
+              <CategoryCheckboxField
+                categories={categories}
+                communities={communities}
+                value={field.value}
+                onChange={field.onChange}
+              />
               <FormMessage />
             </FormItem>
           )}

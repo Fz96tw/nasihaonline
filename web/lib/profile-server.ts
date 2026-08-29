@@ -95,6 +95,31 @@ export function getDefaultCommunityFilter(
   return ids.length > 0 ? ids : undefined;
 }
 
+export type MemberCommunityContext = { communityIds: string[]; followsAllCommunities: boolean };
+
+/**
+ * Lean per-viewer lookup for access-control gating helpers (Events'
+ * isEventVisibleToMember, Forum's isForumAccessibleToMember) — deliberately
+ * not ProfileWithSkills above, which eagerly joins Skill and full Community
+ * rows this only needs ids from. `null` for a signed-out visitor (no
+ * userId) or the rare pre-onboarding profile-less user. Lives here (not in
+ * events-server.ts, where it originated) so forums-server.ts can import it
+ * too without a circular dependency — events-server.ts already imports
+ * createForumPost from forums-server.ts.
+ */
+export async function getMemberCommunityContext(userId: string | null): Promise<MemberCommunityContext | null> {
+  if (!userId) return null;
+  const profile = await db.profile.findUnique({
+    where: { userId },
+    select: { followsAllCommunities: true, communities: { select: { communityId: true } } },
+  });
+  if (!profile) return null;
+  return {
+    communityIds: profile.communities.map((c) => c.communityId),
+    followsAllCommunities: profile.followsAllCommunities,
+  };
+}
+
 /**
  * One-time onboarding suggestion only (community-based-categorization
  * initiative) — maps a member's existing interestAreas onto the community

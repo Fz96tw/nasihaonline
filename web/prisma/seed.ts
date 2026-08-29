@@ -570,6 +570,39 @@ async function seedForums() {
   }
   console.log(`Seeded ${FORUMS.length} forums.`);
 
+  // Community-based-categorization initiative, objective 6 — one new Forum
+  // per KnowledgeCategory (e.g. "Health-tech", "Clinical Research"),
+  // additive alongside (never replacing) the FORUMS above. Community-level
+  // access is derived transitively via category.communityId, not a direct
+  // Forum.communityId — an earlier revision of this objective seeded one
+  // Forum per Community instead (6, later corrected to 8 once verified
+  // live); reverted per product decision to seed per-Category instead, so
+  // e.g. selecting the "Healthcare" community pill on /forums reveals its
+  // individual category forums (Healthcare, Health & Wellness, Health-tech,
+  // Clinical Research, Health & Fitness) rather than one combined tile.
+  // Dynamic off the live KnowledgeCategory table rather than a hardcoded
+  // count/list — 35 today; hardcoding would silently drift out of sync
+  // with future taxonomy changes (the same lesson as the stale "6
+  // communities" number above). Name matches the Category's own name
+  // directly (verified no collision with any FORUMS entry above).
+  const categories = await db.knowledgeCategory.findMany({ orderBy: { name: "asc" } });
+  for (let index = 0; index < categories.length; index++) {
+    const category = categories[index];
+    const forum = await db.forum.upsert({
+      where: { name: category.name },
+      update: { categoryId: category.id },
+      create: {
+        name: category.name,
+        slug: slugify(category.name),
+        description: `Discussion for ${category.name}.`,
+        displayOrder: FORUMS.length + 100 + index,
+        categoryId: category.id,
+      },
+    });
+    forumsByName.set(category.name, forum);
+  }
+  console.log(`Seeded ${categories.length} category forums.`);
+
   if (!SEED_SAMPLE_DATA) {
     console.log("SEED_SAMPLE_DATA=false — skipping sample forum threads.");
     return;

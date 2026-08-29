@@ -26,6 +26,7 @@ import type {
 } from "@/lib/events";
 import { EVENTS_FORUM_SLUG } from "@/lib/forums";
 import { DIRECTORY_TIERS } from "@/lib/members";
+import { getMemberCommunityContext, type MemberCommunityContext } from "@/lib/profile-server";
 import {
   cancelMeetingCalendarEvent,
   createLiveKitMeetingCalendarEvent,
@@ -183,26 +184,11 @@ function recurringSeriesStillActiveOrUpcoming(now: Date): Prisma.EventWhereInput
 
 // ===== Community-based-categorization initiative, objective 5 — event visibility gating =====
 
-type MemberCommunityContext = { communityIds: string[]; followsAllCommunities: boolean };
-
-/**
- * Lean per-viewer lookup for the gating helpers below — deliberately not
- * ProfileWithSkills (lib/profile-server.ts), which eagerly joins Skill and
- * full Community rows this only needs ids from. `null` for a signed-out
- * visitor (no userId) or the rare pre-onboarding profile-less user.
- */
-export async function getMemberCommunityContext(userId: string | null): Promise<MemberCommunityContext | null> {
-  if (!userId) return null;
-  const profile = await db.profile.findUnique({
-    where: { userId },
-    select: { followsAllCommunities: true, communities: { select: { communityId: true } } },
-  });
-  if (!profile) return null;
-  return {
-    communityIds: profile.communities.map((c) => c.communityId),
-    followsAllCommunities: profile.followsAllCommunities,
-  };
-}
+// Re-exported so existing importers (feed-server.ts) keep working —
+// getMemberCommunityContext now lives in lib/profile-server.ts (shared with
+// forums-server.ts, which would otherwise circularly import this file, since
+// events-server.ts already imports createForumPost from forums-server.ts).
+export { getMemberCommunityContext, type MemberCommunityContext };
 
 // Reused by every query that needs to render community/category badges
 // (PublicEvent.communities/categories) — a single shared select shape

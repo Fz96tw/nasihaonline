@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { SortButton } from "@/components/forums/sort-button";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Forums — NASIHA",
@@ -48,7 +49,7 @@ export default async function ForumCategoryPage({
   searchParams,
 }: {
   params: { category: string };
-  searchParams: { q?: string; sort?: string; mine?: string };
+  searchParams: { q?: string; sort?: string; mine?: string; topic?: string };
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
@@ -61,8 +62,19 @@ export default async function ForumCategoryPage({
   const requestedSort = isThreadSort(searchParams.sort) ? searchParams.sort : cookies().get(THREAD_SORT_COOKIE)?.value;
   const sort: ThreadSort = isThreadSort(requestedSort) ? requestedSort : "recent";
   const mine = searchParams.mine === "1";
+
+  // community-based-categorization initiative, objective 6 — "Filter by
+  // topic" chip row, options derived from the topics actually present on
+  // this forum's already-loaded threads (no extra query, matching how few
+  // distinct topics a single forum's threads realistically carry).
+  const availableTopics = Array.from(
+    new Map(result.threads.flatMap((thread) => thread.categories).map((topic) => [topic.id, topic])).values(),
+  ).sort((a, b) => a.name.localeCompare(b.name));
+  const selectedTopic = availableTopics.find((topic) => topic.slug === searchParams.topic) ?? null;
+
   const threads = [...result.threads]
     .filter((thread) => !mine || thread.authorId === user.id)
+    .filter((thread) => !selectedTopic || thread.categories.some((c) => c.id === selectedTopic.id))
     .sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
       if (sort === "newest") return b.createdAt.localeCompare(a.createdAt);
@@ -75,6 +87,7 @@ export default async function ForumCategoryPage({
     if (searchParams.q) qs.set("q", searchParams.q);
     if (value !== "recent") qs.set("sort", value);
     if (mine) qs.set("mine", "1");
+    if (searchParams.topic) qs.set("topic", searchParams.topic);
     const query = qs.toString();
     return `/forums/${forum.slug}${query ? `?${query}` : ""}`;
   };
@@ -84,9 +97,20 @@ export default async function ForumCategoryPage({
     if (searchParams.q) qs.set("q", searchParams.q);
     if (searchParams.sort) qs.set("sort", searchParams.sort);
     if (!mine) qs.set("mine", "1");
+    if (searchParams.topic) qs.set("topic", searchParams.topic);
     const query = qs.toString();
     return `/forums/${forum.slug}${query ? `?${query}` : ""}`;
   })();
+
+  const topicHref = (slug: string | null) => {
+    const qs = new URLSearchParams();
+    if (searchParams.q) qs.set("q", searchParams.q);
+    if (searchParams.sort) qs.set("sort", searchParams.sort);
+    if (mine) qs.set("mine", "1");
+    if (slug) qs.set("topic", slug);
+    const query = qs.toString();
+    return `/forums/${forum.slug}${query ? `?${query}` : ""}`;
+  };
 
   return (
     <main className="mx-auto flex max-w-[1120px] flex-col gap-6 p-8">
@@ -110,6 +134,37 @@ export default async function ForumCategoryPage({
           </Button>
         </div>
       </div>
+
+      {availableTopics.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-sm text-muted-foreground">Filter by topic:</span>
+          <Link
+            href={topicHref(null)}
+            scroll={false}
+            className={cn(
+              "rounded-full px-3 py-1 text-sm font-medium transition-colors",
+              !selectedTopic ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70",
+            )}
+          >
+            All Topics
+          </Link>
+          {availableTopics.map((topic) => (
+            <Link
+              key={topic.id}
+              href={topicHref(topic.slug)}
+              scroll={false}
+              className={cn(
+                "rounded-full px-3 py-1 text-sm font-medium transition-colors",
+                selectedTopic?.id === topic.id
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/70",
+              )}
+            >
+              {topic.name}
+            </Link>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <form action={`/forums/${forum.slug}`} method="get" className="flex max-w-sm gap-2">
@@ -143,8 +198,8 @@ export default async function ForumCategoryPage({
 
       {threads.length === 0 ? (
         <p className="rounded-[10px] border p-8 text-center text-muted-foreground">
-          {searchParams.q
-            ? "No threads match your search."
+          {searchParams.q || selectedTopic
+            ? "No threads match your filters."
             : mine
               ? "You haven't started any threads in this forum yet."
               : "No threads yet — start the conversation."}
@@ -164,6 +219,11 @@ export default async function ForumCategoryPage({
                     <Lock className="h-3.5 w-3.5 text-muted-foreground" />
                   )}
                   <span className="font-medium">{thread.title}</span>
+                  {thread.categories.map((topic) => (
+                    <Badge key={topic.id} variant="info">
+                      {topic.name}
+                    </Badge>
+                  ))}
                 </div>
                 <span className="text-xs text-muted-foreground">
                   {thread.authorName ?? "A member"} · {formatDate(thread.createdAt)}

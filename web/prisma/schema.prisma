@@ -1610,9 +1610,13 @@ model KnowledgeCategory {
   community   Community @relation(fields: [communityId], references: [id])
   createdAt   DateTime  @default(now())
 
-  items       KnowledgeItemCategory[]
-  reviewItems ReviewItemCategory[]
-  events      EventCategory[]
+  items        KnowledgeItemCategory[]
+  reviewItems  ReviewItemCategory[]
+  events       EventCategory[]
+  forumThreads ForumThreadCategory[]
+  // The new, seeded-one-per-Category forums (community-based-categorization
+  // initiative, objective 6) — one Forum per Category, not per Community.
+  forums       Forum[]
 
   @@index([communityId])
   @@map("knowledge_categories")
@@ -2034,6 +2038,19 @@ model Forum {
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  // Community-based-categorization initiative, objective 6 — set only for
+  // the new, seeded-one-per-KnowledgeCategory forums (e.g. "Health-tech",
+  // "Clinical Research"); null (untouched) for every pre-existing forum,
+  // which stays visible/accessible to everyone regardless of community
+  // membership. Non-null is what makes a forum's threads subject to
+  // isForumAccessibleToMember's gating (forums-server.ts) — community
+  // access is derived transitively via category.communityId, not stored
+  // directly on Forum (an earlier revision of this objective did store
+  // Forum.communityId directly, one row per Community rather than per
+  // Category — reverted per product decision, see the objective's own
+  // revision history).
+  categoryId   String?
+  category     KnowledgeCategory? @relation(fields: [categoryId], references: [id])
 
   threads ForumThread[]
   follows ForumFollow[]
@@ -2101,9 +2118,16 @@ model ForumThread {
   // lifecycle belongs to events-server.ts/library-server.ts, never this.
   removed Boolean @default(false)
 
-  posts    ForumPost[]
-  views    ThreadView[]
-  invitees ForumThreadInvitee[]
+  posts      ForumPost[]
+  views      ThreadView[]
+  invitees   ForumThreadInvitee[]
+  // Optional, multi-select "Topics" (community-based-categorization
+  // initiative, objective 6) — deliberately labeled "Topics" not
+  // "Category" in the UI, since Forum/[category] already means something
+  // different in this domain's routes/vocabulary. No minimum, unlike
+  // Event/KnowledgeItem's required community tag — the thread's forum
+  // already doubles as the required top-level classification.
+  categories ForumThreadCategory[]
 
   // Set only for the auto-created thread behind an Event's optional
   // "create a discussion thread" checkbox (§4.6) — null for every
@@ -2122,6 +2146,20 @@ model ForumThread {
   @@index([forumId])
   @@index([authorId])
   @@map("forum_threads")
+}
+
+// Optional "Topics" tag for a ForumThread (community-based-categorization
+// initiative, objective 6) — same join-table shape as EventCategory/
+// KnowledgeItemCategory, no minimum count.
+model ForumThreadCategory {
+  forumThreadId String
+  forumThread   ForumThread       @relation(fields: [forumThreadId], references: [id], onDelete: Cascade)
+  categoryId    String
+  category      KnowledgeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([forumThreadId, categoryId])
+  @@index([categoryId])
+  @@map("forum_thread_categories")
 }
 
 // Invite list for a member-initiated restricted ForumThread

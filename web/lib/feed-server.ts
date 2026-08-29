@@ -215,6 +215,13 @@ export async function getFeedPage(params: {
   // Skipped when isPrivilegedSearchBypass already omits the whole OR clause
   // below.
   const eventMember = isPrivilegedSearchBypass ? null : await getMemberCommunityContext(viewerId);
+  // Community-based-categorization initiative, objective 6 — same idea as
+  // eventMember above, for isThreadVisible's new isForumAccessibleToMember
+  // check (a thread posted in one of the community-linked forums). Unlike
+  // eventMember this isn't gated on isPrivilegedSearchBypass: forum threads'
+  // visibility filter runs post-fetch (isThreadVisible below), not as a
+  // where-clause OR member the bypass needs to omit for query efficiency.
+  const forumMember = await getMemberCommunityContext(viewerId);
 
   // Extracted so each domain's count() below (for countsByType/totalCount)
   // shares the exact same where clause its findMany uses, rather than
@@ -433,7 +440,7 @@ export async function getFeedPage(params: {
         createdAt: true,
         lastActivityAt: true,
         author: { select: AUTHOR_SELECT },
-        forum: { select: { name: true, slug: true } },
+        forum: { select: { name: true, slug: true, category: { select: { communityId: true } } } },
         // Latest post's author + body — a bump from a reply should credit
         // the replier (not the thread creator) and show what they wrote.
         // Falls back to `author` above when the thread has no posts yet.
@@ -457,7 +464,7 @@ export async function getFeedPage(params: {
       },
       orderBy: { lastActivityAt: "desc" },
       take: pageSize,
-    }).then((threads) => threads.filter((thread) => isThreadVisible(thread, viewerId ?? undefined, isPrivileged))),
+    }).then((threads) => threads.filter((thread) => isThreadVisible(thread, viewerId ?? undefined, isPrivileged, forumMember))),
     !wants("announcement") || announcementHitIds?.length === 0 ? Promise.resolve([]) : db.announcement.findMany({
       where: announcementWhere,
       select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true, welcomeTier: true },

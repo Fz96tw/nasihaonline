@@ -16,6 +16,7 @@ import { getProfileAvatarUrl } from "@/lib/storage";
 import { findMentionedMembers } from "@/lib/mentions";
 import { DIRECTORY_TIERS } from "@/lib/members";
 import { CLINICAL_DISCUSSIONS_SLUG, EVENTS_FORUM_SLUG, LIBRARY_FORUM_SLUG } from "@/lib/forums";
+import { getMemberCommunityContext, type MemberCommunityContext } from "@/lib/profile-server";
 import { countPastedImageReferences, linkPastedImages, MAX_PASTED_IMAGES_PER_BODY } from "@/lib/pasted-images-server";
 import type {
   ForumCategory,
@@ -52,7 +53,7 @@ export class ForumError extends Error {
  * "most recent" sort buttons on the page have something to sort by without
  * a denormalized column on Forum itself.
  */
-export async function getForumCategories(): Promise<ForumCategory[]> {
+export async function getForumCategories(userId?: string, isPrivileged = false): Promise<ForumCategory[]> {
   const forums = await db.forum.findMany({
     where: { active: true, slug: { notIn: [EVENTS_FORUM_SLUG, LIBRARY_FORUM_SLUG] } },
     select: {
@@ -60,6 +61,7 @@ export async function getForumCategories(): Promise<ForumCategory[]> {
       name: true,
       slug: true,
       description: true,
+      category: { select: { communityId: true } },
       _count: { select: { threads: true } },
       threads: {
         select: {
@@ -71,7 +73,14 @@ export async function getForumCategories(): Promise<ForumCategory[]> {
     orderBy: { displayOrder: "asc" },
   });
 
-  return forums.map((forum) => {
+  // Community-based-categorization initiative, objective 6 — a non-member
+  // of a category-forum's parent community doesn't even see its tile, same
+  // hard boundary getForumBySlug enforces at the page level. Every
+  // pre-existing (untouched) forum (categoryId null) is exempt.
+  const member = await getMemberCommunityContext(userId ?? null);
+  const accessibleForums = forums.filter((forum) => isForumAccessibleToMember(forum, member, isPrivileged));
+
+  return accessibleForums.map((forum) => {
     const postCount = forum.threads.reduce((sum, thread) => sum + thread._count.posts, 0);
     const lastActivityAt = forum.threads.reduce<Date | null>((latest, thread) => {
       const postDate = thread.posts[0]?.createdAt;
@@ -87,6 +96,7 @@ export async function getForumCategories(): Promise<ForumCategory[]> {
       threadCount: forum._count.threads,
       postCount,
       lastActivityAt: lastActivityAt ? lastActivityAt.toISOString() : null,
+      communityId: forum.category?.communityId ?? null,
     };
   });
 }
@@ -177,10 +187,43 @@ function isOwnThreadVisible(thread: OwnThreadAccess, viewerId: string | undefine
   return thread.authorId === viewerId || thread.invitees.some((invitee) => invitee.userId === viewerId);
 }
 
+// Community-based-categorization initiative, objective 6 — a forum with
+// categoryId set (one of the new, seeded-one-per-KnowledgeCategory forums,
+// e.g. "Health-tech") is accessible only to members of that category's
+// community, or followsAllCommunities, or a moderator/admin — access is
+// derived transitively via category.communityId, not stored directly on
+// Forum (an earlier revision of this objective stored Forum.communityId
+// directly, one row per Community rather than per Category; reverted per
+// product decision — see the objective's own revision history). Every
+// pre-existing (untouched) forum has categoryId null and is exempt
+// entirely — universally accessible, per the existing "generic forums
+// apply to all communities" decision. This is a hard, blanket gate: a
+// non-member can't reach the forum page at all, not just some threads
+// inside it — orthogonal to (and ANDed with, not either/or against) a
+// thread's own `invited`-visibility restriction below, which still applies
+// independently within an already-accessible forum.
+export type ForumCommunityAccess = { category: { communityId: string } | null };
+
+export const FORUM_COMMUNITY_ACCESS_SELECT = { select: { category: { select: { communityId: true } } } } as const;
+
+export function isForumAccessibleToMember(
+  forum: ForumCommunityAccess,
+  member: MemberCommunityContext | null,
+  isPrivileged: boolean,
+): boolean {
+  const communityId = forum.category?.communityId ?? null;
+  if (!communityId) return true;
+  if (isPrivileged) return true;
+  if (!member) return false;
+  if (member.followsAllCommunities) return true;
+  return member.communityIds.includes(communityId);
+}
+
 export function isThreadVisible(
-  thread: { event: EventThreadAccess; knowledgeItem: KnowledgeItemThreadAccess } & OwnThreadAccess,
+  thread: { event: EventThreadAccess; knowledgeItem: KnowledgeItemThreadAccess; forum: ForumCommunityAccess } & OwnThreadAccess,
   viewerId: string | undefined,
   isPrivileged: boolean,
+  member: MemberCommunityContext | null,
 ): boolean {
   // deleteForumThread's soft-delete — unconditional, no isPrivileged bypass,
   // same "gone for everyone including moderators" rule as a removed
@@ -188,6 +231,7 @@ export function isThreadVisible(
   // only surviving trail, not continued read access through this path).
   if (thread.removed) return false;
   return (
+    isForumAccessibleToMember(thread.forum, member, isPrivileged) &&
     isEventThreadVisible(thread.event, viewerId) &&
     isKnowledgeItemThreadVisible(thread.knowledgeItem, viewerId, isPrivileged) &&
     isOwnThreadVisible(thread, viewerId, isPrivileged)
@@ -204,6 +248,8 @@ const THREAD_LIST_SELECT = {
   _count: { select: { posts: true, views: true } },
   event: EVENT_THREAD_ACCESS_SELECT,
   knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
+  forum: FORUM_COMMUNITY_ACCESS_SELECT,
+  categories: { select: { category: { select: { id: true, name: true, slug: true } } } },
   ...OWN_THREAD_ACCESS_SELECT,
 } as const;
 
@@ -217,6 +263,7 @@ function toThreadListItem(thread: {
   posts: { createdAt: Date }[];
   _count: { posts: number; views: number };
   visibility: ForumThreadVisibility;
+  categories: { category: { id: string; name: string; slug: string } }[];
 }): ForumThreadListItem {
   return {
     id: thread.id,
@@ -229,6 +276,7 @@ function toThreadListItem(thread: {
     viewCount: thread._count.views,
     lastActivityAt: (thread.posts[0]?.createdAt ?? thread.createdAt).toISOString(),
     visibility: thread.visibility,
+    categories: thread.categories.map((c) => c.category),
   };
 }
 
@@ -252,9 +300,24 @@ export async function getForumBySlug(
 ): Promise<{ forum: ForumCategory; threads: ForumThreadListItem[]; isFollowing: boolean } | null> {
   const forum = await db.forum.findUnique({
     where: { slug },
-    select: { id: true, name: true, slug: true, description: true, active: true, _count: { select: { threads: true } } },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      description: true,
+      active: true,
+      category: { select: { communityId: true } },
+      _count: { select: { threads: true } },
+    },
   });
   if (!forum || !forum.active) return null;
+
+  // Community-based-categorization initiative, objective 6 — a hard,
+  // blanket gate: a non-member of this forum's community can't reach the
+  // forum page at all (404 upstream), not just have its threads filtered
+  // out one by one below.
+  const member = await getMemberCommunityContext(userId ?? null);
+  if (!isForumAccessibleToMember(forum, member, isPrivileged)) return null;
 
   const isFollowing = userId
     ? (await db.forumFollow.findUnique({ where: { forumId_userId: { forumId: forum.id, userId } } })) != null
@@ -266,6 +329,7 @@ export async function getForumBySlug(
     slug: forum.slug,
     description: forum.description,
     threadCount: forum._count.threads,
+    communityId: forum.category?.communityId ?? null,
   };
 
   if (q?.trim()) {
@@ -276,7 +340,7 @@ export async function getForumBySlug(
       where: { id: { in: hits.map((hit) => hit.id) } },
       select: THREAD_LIST_SELECT,
     });
-    const visibleThreads = threads.filter((thread) => isThreadVisible(thread, userId, isPrivileged));
+    const visibleThreads = threads.filter((thread) => isThreadVisible(thread, userId, isPrivileged, member));
     const byId = new Map(visibleThreads.map((thread) => [thread.id, thread]));
     return {
       forum: forumCategory,
@@ -296,7 +360,7 @@ export async function getForumBySlug(
     select: THREAD_LIST_SELECT,
   });
   const items = threads
-    .filter((thread) => isThreadVisible(thread, userId, isPrivileged))
+    .filter((thread) => isThreadVisible(thread, userId, isPrivileged, member))
     .map(toThreadListItem)
     .sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
@@ -332,13 +396,14 @@ export async function getForumThreadDetail(
       authorId: true,
       createdAt: true,
       author: { select: { name: true } },
-      forum: { select: { id: true, name: true, slug: true } },
+      forum: { select: { id: true, name: true, slug: true, category: { select: { communityId: true } } } },
       event: EVENT_THREAD_ACCESS_SELECT,
       knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
       eventId: true,
       knowledgeItemId: true,
       visibility: true,
       removed: true,
+      categories: { select: { category: { select: { id: true, name: true, slug: true } } } },
       invitees: {
         select: { userId: true, user: { select: { name: true, profile: { select: { avatarUrl: true } } } } },
         orderBy: { createdAt: "asc" },
@@ -361,7 +426,8 @@ export async function getForumThreadDetail(
     },
   });
   if (!thread || thread.forum.slug !== forumSlug) return null;
-  if (!isThreadVisible(thread, viewerId, isPrivileged)) return null;
+  const member = await getMemberCommunityContext(viewerId ?? null);
+  if (!isThreadVisible(thread, viewerId, isPrivileged, member)) return null;
 
   const authorProfiles = await getDirectoryMembersByIds(Array.from(new Set(thread.posts.map((post) => post.authorId))));
 
@@ -409,11 +475,12 @@ export async function getForumThreadDetail(
     createdAt: thread.createdAt.toISOString(),
     replyCount: thread._count.posts - 1,
     viewCount: thread._count.views,
-    forum: thread.forum,
+    forum: { id: thread.forum.id, name: thread.forum.name, slug: thread.forum.slug },
     posts: roots,
     visibility: thread.visibility,
     invitees,
     isEditable: !thread.eventId && !thread.knowledgeItemId,
+    categories: thread.categories.map((c) => c.category),
   };
 }
 
@@ -495,7 +562,7 @@ export async function getMemberForumThreads(
       thread: {
         select: {
           title: true,
-          forum: { select: { slug: true, name: true } },
+          forum: { select: { slug: true, name: true, category: { select: { communityId: true } } } },
           event: EVENT_THREAD_ACCESS_SELECT,
           knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
           ...OWN_THREAD_ACCESS_SELECT,
@@ -505,12 +572,13 @@ export async function getMemberForumThreads(
     orderBy: { createdAt: "desc" },
   });
 
+  const member = await getMemberCommunityContext(viewerId);
   const seenThreadIds = new Set<string>();
   const threads: MemberForumThread[] = [];
   for (const post of posts) {
     if (seenThreadIds.has(post.threadId)) continue;
     seenThreadIds.add(post.threadId);
-    if (!isThreadVisible(post.thread, viewerId, isPrivileged)) continue;
+    if (!isThreadVisible(post.thread, viewerId, isPrivileged, member)) continue;
     threads.push({
       id: post.threadId,
       title: post.thread.title,
@@ -547,10 +615,12 @@ export async function recordThreadView(threadId: string, userId: string, isPrivi
       id: true,
       event: EVENT_THREAD_ACCESS_SELECT,
       knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
+      forum: FORUM_COMMUNITY_ACCESS_SELECT,
       ...OWN_THREAD_ACCESS_SELECT,
     },
   });
-  if (!thread || !isThreadVisible(thread, userId, isPrivileged)) throw new ForumError(404, "Thread not found.");
+  const member = await getMemberCommunityContext(userId);
+  if (!thread || !isThreadVisible(thread, userId, isPrivileged, member)) throw new ForumError(404, "Thread not found.");
 
   await db.threadView.createMany({ data: { threadId, userId }, skipDuplicates: true });
   return getThreadViewCount(threadId);
@@ -615,10 +685,24 @@ export async function createForumThread(
     deidentificationConfirmed: boolean;
     visibility: ForumThreadVisibility;
     invitedUserIds: string[];
+    /** Optional, multi-select "Topics" (community-based-categorization initiative, objective 6) — no minimum. */
+    categoryIds: string[];
   },
+  isPrivileged = false,
 ): Promise<{ id: string }> {
-  const forum = await db.forum.findUnique({ where: { id: forumId }, select: { id: true, slug: true, active: true } });
+  const forum = await db.forum.findUnique({
+    where: { id: forumId },
+    select: { id: true, slug: true, active: true, category: { select: { communityId: true } } },
+  });
   if (!forum || !forum.active) throw new ForumError(404, "Forum not found.");
+  // Community-based-categorization initiative, objective 6 — same
+  // "Forum not found" 404 (not 403) as the check above, preserving the
+  // privacy convention every other restricted-content check in this
+  // codebase already uses: a non-member posting into a guessed forumId
+  // can't even confirm the forum exists. isPrivileged (moderator/admin)
+  // bypasses, same convention as every other domain's create/read gate.
+  const member = await getMemberCommunityContext(authorId);
+  if (!isForumAccessibleToMember(forum, member, isPrivileged)) throw new ForumError(404, "Forum not found.");
 
   const isClinicalDiscussions = forum.slug === CLINICAL_DISCUSSIONS_SLUG;
   if (isClinicalDiscussions && !input.deidentificationConfirmed) {
@@ -662,6 +746,7 @@ export async function createForumThread(
           },
         },
         ...(invitees.length > 0 ? { invitees: { create: invitees.map((user) => ({ userId: user.id })) } } : {}),
+        categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
       },
       select: { id: true, title: true, posts: { select: { id: true } } },
     });
@@ -828,14 +913,15 @@ export async function createForumPost(
       id: true,
       title: true,
       forumId: true,
-      forum: { select: { slug: true } },
+      forum: { select: { slug: true, category: { select: { communityId: true } } } },
       event: EVENT_THREAD_ACCESS_SELECT,
       knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
       ...OWN_THREAD_ACCESS_SELECT,
     },
   });
   if (!thread) throw new ForumError(404, "Thread not found.");
-  if (!isThreadVisible(thread, authorId, isPrivileged)) throw new ForumError(404, "Thread not found.");
+  const member = await getMemberCommunityContext(authorId);
+  if (!isThreadVisible(thread, authorId, isPrivileged, member)) throw new ForumError(404, "Thread not found.");
 
   if (input.parentId) {
     const parent = await db.forumPost.findUnique({ where: { id: input.parentId }, select: { threadId: true } });

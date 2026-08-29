@@ -33,6 +33,11 @@ export const createForumThreadSchema = z
     deidentificationConfirmed: z.boolean(),
     visibility: z.nativeEnum(ForumThreadVisibility),
     invitedUserIds: z.array(z.string()),
+    // Optional, multi-select "Topics" (community-based-categorization
+    // initiative, objective 6) — no minimum, unlike Event/KnowledgeItem's
+    // required community tag; the thread's forum already doubles as the
+    // required top-level classification.
+    categoryIds: z.array(z.string()),
   })
   .superRefine(requireRestrictedThreadInvariants);
 
