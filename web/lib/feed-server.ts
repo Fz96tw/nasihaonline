@@ -605,6 +605,7 @@ export async function getFeedPage(params: {
       forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : undefined,
       eventStartsAt: event.startsAt.toISOString(),
       eventViewCount: event._count.views,
+      isRestricted: event.visibility === EventVisibility.invited,
     })),
     ...libraryItems.map((item): FeedItem => ({
       type: "library",
@@ -661,6 +662,7 @@ export async function getFeedPage(params: {
         // there's now a real excerptPost to source it from regardless of
         // whether the thread was freshly created or bumped.
         replyExcerpt: query ? (excerptPost ? excerptOf(excerptPost.body) : undefined) : isReply && latestPost ? excerptOf(latestPost.body) : undefined,
+        isRestricted: thread.visibility === ForumThreadVisibility.invited,
       };
     }),
     ...announcements.map((announcement): FeedItem => ({

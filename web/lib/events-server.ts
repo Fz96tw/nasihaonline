@@ -55,7 +55,6 @@ import {
   getEventHeroImageUrl,
   getMeetingMessageImageUrl,
   getProfileAvatarUrl,
-  RESTRICTED_EVENT_DEFAULT_HERO_KEY,
   uploadEventHeroImage,
   uploadMeetingMessageImage,
   UploadValidationError,
@@ -819,6 +818,7 @@ export async function getEventsHostedByMember(hostId: string, viewerId: string):
       startsAt: true,
       open: true,
       heroImageUrl: true,
+      visibility: true,
       cancelledAt: true,
       createdAt: true,
     },
@@ -1308,8 +1308,6 @@ export async function createEvent(
       }
       throw error;
     }
-  } else if (isRestricted) {
-    heroImageUrl = RESTRICTED_EVENT_DEFAULT_HERO_KEY;
   }
 
   let meetingOrganizerMessageImageKey: string | null = null;

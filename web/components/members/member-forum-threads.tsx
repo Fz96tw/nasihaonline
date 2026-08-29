@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { Lock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatTimestamp } from "@/lib/format-date";
 import type { MemberForumThread } from "@/lib/forums";
+import { ForumThreadVisibility } from "@/lib/generated/prisma/enums";
 
 /** /members/[memberId]'s Forums tab (§4.5) — the distinct threads this member has posted or replied in, newest activity first. Divided list, same convention as MemberHostedEvents, not one card per thread. */
 export function MemberForumThreads({ threads }: { threads: MemberForumThread[] }) {
@@ -19,9 +21,12 @@ export function MemberForumThreads({ threads }: { threads: MemberForumThread[] }
             >
               <Link
                 href={`/forums/${thread.forumSlug}/${thread.id}`}
-                className="min-w-0 truncate font-medium hover:underline"
+                className="flex min-w-0 items-center gap-1.5 truncate font-medium hover:underline"
               >
-                {thread.title}
+                {thread.visibility === ForumThreadVisibility.invited && (
+                  <Lock className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" aria-label="Restricted thread" />
+                )}
+                <span className="truncate">{thread.title}</span>
               </Link>
               <div className="flex flex-shrink-0 items-center gap-2 text-xs text-muted-foreground">
                 <span>{thread.forumName}</span>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Eye, Hand, MessageSquare, Users } from "lucide-react";
+import { Eye, Hand, Lock, MessageSquare, Users } from "lucide-react";
 import { type FeedItem, FEED_TYPE_LABELS } from "@/lib/feed";
 import { formatRelativeTime, formatTimestamp } from "@/lib/format-date";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
@@ -57,6 +57,15 @@ export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
                 )}
                 <div className={cn(hasThreadImage && "relative z-10")}>
                   <div className="flex items-center gap-2">
+                    {item.isRestricted && (
+                      <Lock
+                        className={cn(
+                          "h-4 w-4 flex-shrink-0",
+                          hasThreadImage ? "text-neutral-900" : "text-muted-foreground",
+                        )}
+                        aria-label="Restricted event"
+                      />
+                    )}
                     <span className={cn("text-base font-semibold", hasThreadImage && "text-neutral-900")}>
                       <HighlightText text={item.title} query={q} />
                     </span>

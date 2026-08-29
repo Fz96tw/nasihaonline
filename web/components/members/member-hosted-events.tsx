@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { Lock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EVENT_TYPE_LABELS, type MemberHostedEvent } from "@/lib/events";
+import { EventVisibility } from "@/lib/generated/prisma/enums";
 
 function formatEventDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
@@ -31,8 +33,14 @@ export function MemberHostedEvents({ events }: { events: MemberHostedEvent[] }) 
                     <img src={event.heroImageUrl} alt="" className="h-full w-full object-cover" />
                   </Link>
                 )}
-                <Link href={`/calendar/${event.id}`} className="min-w-0 truncate font-medium hover:underline">
-                  {event.title}
+                <Link
+                  href={`/calendar/${event.id}`}
+                  className="flex min-w-0 items-center gap-1.5 truncate font-medium hover:underline"
+                >
+                  {event.visibility === EventVisibility.invited && (
+                    <Lock className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" aria-label="Restricted event" />
+                  )}
+                  <span className="truncate">{event.title}</span>
                 </Link>
               </div>
               <div className="flex flex-shrink-0 items-center gap-2 text-xs text-muted-foreground">

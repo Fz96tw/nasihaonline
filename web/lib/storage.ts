@@ -298,21 +298,14 @@ export async function uploadEventHeroImage(file: File): Promise<string> {
   return key;
 }
 
-// Sentinel stored on Event.heroImageUrl (in place of a real MinIO object
-// key) for a restricted event created without a hero image upload — lets
-// every existing getEventHeroImageUrl caller pick up the fallback for free
-// instead of threading `visibility` through each read path.
-export const RESTRICTED_EVENT_DEFAULT_HERO_KEY = "default:restricted-event";
-
 export function getEventHeroImageUrl(key: string | null): string | null {
   if (!key) return null;
-  if (key === RESTRICTED_EVENT_DEFAULT_HERO_KEY) return "/images/restricted-event.jpg";
   return `/api/events/hero/${key}`;
 }
 
 /** Called when an edit replaces an event's existing hero image. */
 export async function deleteEventHeroImage(key: string | null): Promise<void> {
-  if (!key || key === RESTRICTED_EVENT_DEFAULT_HERO_KEY) return;
+  if (!key) return;
   await ensureBucket(BUCKET_ATTACHMENTS);
   const minio = getClient();
   await minio.removeObject(BUCKET_ATTACHMENTS, key).catch(() => undefined);
@@ -358,9 +351,8 @@ export async function uploadSurveyHeroImage(file: File): Promise<string> {
   return key;
 }
 
-// Same sentinel approach as RESTRICTED_EVENT_DEFAULT_HERO_KEY — stored on
-// Survey.heroImageUrl in place of a real MinIO object key when a survey is
-// created without a cover image upload, so every existing
+// Sentinel stored on Survey.heroImageUrl in place of a real MinIO object key
+// when a survey is created without a cover image upload, so every existing
 // getSurveyHeroImageUrl caller picks up the fallback for free.
 export const DEFAULT_SURVEY_HERO_KEY = "default:quick-survey";
 

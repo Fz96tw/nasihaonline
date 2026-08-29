@@ -93,6 +93,7 @@ export type MemberForumThread = {
   lastPostAt: string;
   /** True when this member (userId, not viewerId) authored the thread itself, not just a reply in it — used by /my-posts to label "Started" vs "Replied". */
   startedByMember: boolean;
+  visibility: ForumThreadVisibility;
 };
 
 export type ForumThreadDetail = {

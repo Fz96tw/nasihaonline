@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Pencil, Users, Video } from "lucide-react";
+import { Lock, Pencil, Users, Video } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -158,7 +158,10 @@ export function EventDetail({
             </Badge>
           ) : null}
         </div>
-        <h1 className="mb-1 text-3xl font-bold tracking-tight">
+        <h1 className="mb-1 flex items-center gap-2 text-3xl font-bold tracking-tight">
+          {event.visibility === EventVisibility.invited && (
+            <Lock className="h-6 w-6 flex-shrink-0 text-muted-foreground" aria-label="Restricted event" />
+          )}
           <HighlightText text={event.title} query={highlightQuery} />
         </h1>
         {hostProfile ? (

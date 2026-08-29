@@ -58,6 +58,8 @@ export type FeedItem = {
   volunteerNote?: string | null;
   /** Only "forum_thread" items bumped up by a fresh reply (rather than freshly created) carry this — a truncated snippet of that reply's body, so the feed row shows what was actually said rather than just a "new activity" label. Undefined for a freshly created thread or every other type. */
   replyExcerpt?: string;
+  /** "event" and "forum_thread" items carry this — true when the underlying Event/ForumThread's visibility is `invited` (restricted), driving FeedRow's lock-icon title prefix. Undefined for every other type. */
+  isRestricted?: boolean;
 };
 
 // Marks a feed row's href so the page it lands on (blog post, forum thread,

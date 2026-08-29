@@ -457,6 +457,7 @@ export async function getMemberForumThreads(
       forumName: post.thread.forum.name,
       lastPostAt: post.createdAt.toISOString(),
       startedByMember: post.thread.authorId === userId,
+      visibility: post.thread.visibility,
     });
   }
   return threads;

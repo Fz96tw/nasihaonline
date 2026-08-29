@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Lock } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RsvpButton } from "@/components/calendar/rsvp-button";
 import { RegisterButton } from "@/components/events/register-button";
 import { EVENT_TYPE_LABELS, getEventAudienceBadge, type EventWithRsvp } from "@/lib/events";
+import { EventVisibility } from "@/lib/generated/prisma/enums";
 import { useHasMounted } from "@/lib/use-has-mounted";
 
 function formatEventDate(iso: string) {
@@ -68,7 +70,12 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
               </Badge>
             ) : null}
           </div>
-          <CardTitle className="text-xl">{event.title}</CardTitle>
+          <CardTitle className="flex items-center gap-1.5 text-xl">
+            {event.visibility === EventVisibility.invited && (
+              <Lock className="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-label="Restricted event" />
+            )}
+            {event.title}
+          </CardTitle>
           <p className="text-sm text-muted-foreground">
             {hasMounted ? formatEventDate(event.startsAt) : null}
           </p>

@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Users } from "lucide-react";
+import { Lock, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { RsvpButton } from "@/components/calendar/rsvp-button";
 import { AddToCalendarButton } from "@/components/calendar/add-to-calendar-button";
 import { EVENT_TYPE_LABELS, getEventAudienceBadge, type MemberEvent } from "@/lib/events";
+import { EventVisibility } from "@/lib/generated/prisma/enums";
 import { useHasMounted } from "@/lib/use-has-mounted";
 
 function formatEventDateTime(iso: string) {
@@ -75,8 +76,14 @@ export function EventListItem({
               {attendeeCount}
             </span>
           </div>
-          <Link href={eventDetailHref(event)} className="block truncate font-medium hover:underline">
-            {event.title}
+          <Link
+            href={eventDetailHref(event)}
+            className="flex min-w-0 items-center gap-1.5 truncate font-medium hover:underline"
+          >
+            {event.visibility === EventVisibility.invited && (
+              <Lock className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" aria-label="Restricted event" />
+            )}
+            <span className="truncate">{event.title}</span>
           </Link>
           {event.hostName ? (
             <p className="text-sm text-muted-foreground">Hosted by {event.hostName}</p>
