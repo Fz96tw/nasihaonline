@@ -975,6 +975,7 @@ enum EventType {
   student_event
   roundtable
   lecture
+  group_meeting
 }
 
 enum RecurrenceFrequency {

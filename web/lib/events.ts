@@ -15,6 +15,7 @@ export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   [EventType.student_event]: "Student Event",
   [EventType.roundtable]: "Roundtable",
   [EventType.lecture]: "Lecture",
+  [EventType.group_meeting]: "Group Meeting",
 };
 
 // The public /events listing (§4.5's unauthenticated route) — deliberately
