@@ -80,7 +80,7 @@ const SKILLS: string[] = [
   // Music
   "Music Performance",
   "Music Production",
-  // Science & Philosophy
+  // Science
   "Science Communication",
   "Philosophy",
   // Sustainability & Environment
@@ -313,44 +313,59 @@ async function seedEvents() {
 const KNOWLEDGE_CATEGORIES = Object.values(INTEREST_AREA_LABELS);
 const KNOWLEDGE_TAGS = ["guidelines", "review-article", "recorded-lecture", "case-study"];
 
-// Community-based-categorization initiative: the 6 top-level communities
+// Community-based-categorization initiative: the 8 top-level communities
 // every KnowledgeCategory belongs to.
 const COMMUNITIES: { name: string; slug: string }[] = [
-  { name: "Healthcare & Clinical", slug: "healthcare-clinical" },
-  { name: "Science & Research", slug: "science-research" },
+  { name: "Healthcare", slug: "healthcare" },
+  { name: "Sciences", slug: "sciences" },
   { name: "Business & Finance", slug: "business-finance" },
-  { name: "Technology & Data", slug: "technology-data" },
-  { name: "Education & Humanities", slug: "education-humanities" },
+  { name: "Technology", slug: "technology" },
+  { name: "Education & Career", slug: "education-career" },
+  { name: "Humanities", slug: "humanities" },
   { name: "Arts, Culture & Lifestyle", slug: "arts-culture-lifestyle" },
+  { name: "Nature & Outdoor", slug: "nature-outdoor" },
 ];
 
 // Single source of truth for which Community each KnowledgeCategory belongs
-// to — mirrored exactly in migration 20260829174455_add_community_taxonomy's
-// backfill SQL, so a fresh environment's seed and the production backfill
-// agree. Every INTEREST_AREA_LABELS value must appear here exactly once.
+// to — mirrored exactly in migration 20260829180000_expand_to_8_communities's
+// SQL, so a fresh environment's seed and the production migration agree.
+// Every INTEREST_AREA_LABELS value must appear here exactly once.
 const CATEGORY_COMMUNITY_MAP: Record<string, string> = {
-  Healthcare: "Healthcare & Clinical",
-  "Health & Wellness": "Healthcare & Clinical",
-  "Health-tech": "Healthcare & Clinical",
-  "Clinical Research": "Healthcare & Clinical",
-  "Basic Science Research": "Science & Research",
-  Biotechnology: "Science & Research",
-  "Science & Philosophy": "Science & Research",
-  "Sustainability & Environment": "Science & Research",
+  Healthcare: "Healthcare",
+  "Health & Wellness": "Healthcare",
+  "Health-tech": "Healthcare",
+  "Clinical Research": "Healthcare",
+  "Health & Fitness": "Healthcare",
+  "Basic Science Research": "Sciences",
+  Biotechnology: "Sciences",
+  Science: "Sciences",
+  "Sustainability & Environment": "Sciences",
+  Engineering: "Sciences",
+  "Psychology & Sociology": "Sciences",
   Business: "Business & Finance",
   "Finance & Investing": "Business & Finance",
   "Marketing & Sales": "Business & Finance",
   "Leadership & Management": "Business & Finance",
-  "Tech & Development": "Technology & Data",
-  "Data & Analytics": "Technology & Data",
-  "E-Learning": "Technology & Data",
-  Education: "Education & Humanities",
-  History: "Education & Humanities",
-  "Literature & Writing": "Education & Humanities",
+  "Tech & Development": "Technology",
+  "Data & Analytics": "Technology",
+  "E-Learning": "Technology",
+  Education: "Education & Career",
+  "Career Development": "Education & Career",
+  History: "Humanities",
+  "Literature & Writing": "Humanities",
+  Law: "Humanities",
+  Philosophy: "Humanities",
   "Arts & Crafts": "Arts, Culture & Lifestyle",
   Music: "Arts, Culture & Lifestyle",
   "Culinary Arts": "Arts, Culture & Lifestyle",
   "Travel & Culture": "Arts, Culture & Lifestyle",
+  DIY: "Arts, Culture & Lifestyle",
+  "Home Improvement & Decor": "Arts, Culture & Lifestyle",
+  Architecture: "Arts, Culture & Lifestyle",
+  Photography: "Arts, Culture & Lifestyle",
+  "Camping & Hiking": "Nature & Outdoor",
+  Fishing: "Nature & Outdoor",
+  "Nature & Wildlife": "Nature & Outdoor",
 };
 
 for (const name of KNOWLEDGE_CATEGORIES) {

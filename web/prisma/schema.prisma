@@ -290,12 +290,26 @@ enum InterestArea {
   leadership_management
   literature_writing
   marketing_sales
-  science_philosophy
+  science
   sustainability_environment
   tech_development
   travel_culture
   music
   history
+  // Added for the 8-community taxonomy expansion (community-based-categorization initiative).
+  health_fitness
+  engineering
+  psychology_sociology
+  career_development
+  law
+  philosophy
+  diy
+  home_improvement_decor
+  architecture
+  photography
+  camping_hiking
+  fishing
+  nature_wildlife
 }
 
 enum ApplicationStatus {
