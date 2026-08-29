@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { SiteHeader, SiteHeaderSkeleton } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { OverlayCleanup } from "@/components/overlay-cleanup";
+import { SessionExpiryGuard } from "@/components/session-expiry-guard";
 
 const montserrat = Montserrat({ subsets: ["latin"], variable: "--font-sans" });
 const mulish = Mulish({ subsets: ["latin"], variable: "--font-heading" });
@@ -32,6 +33,7 @@ export default function RootLayout({
       <html lang="en" className={cn("font-sans", montserrat.variable, mulish.variable)}>
         <body className="flex min-h-screen flex-col antialiased">
           <OverlayCleanup />
+          <SessionExpiryGuard />
           <Suspense fallback={<SiteHeaderSkeleton />}>
             <SiteHeader />
           </Suspense>

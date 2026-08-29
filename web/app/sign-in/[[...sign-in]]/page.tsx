@@ -16,13 +16,24 @@ import { getSessionUser } from "@/lib/auth";
  * window.location.pathname *after* the redirect and probes the wrong path.
  * Hash routing skips that check entirely (it only runs for routing="path").
  */
-export default async function SignInPage() {
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ session_expired?: string }>;
+}) {
   const user = await getSessionUser();
   if (user?.suspended) redirect("/account-suspended");
   if (user) redirect("/whats-new");
 
+  const { session_expired: sessionExpired } = await searchParams;
+
   return (
-    <main className="flex min-h-screen items-center justify-center p-8">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
+      {sessionExpired && (
+        <div className="w-full max-w-sm rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+          Your session has expired. Please sign in again.
+        </div>
+      )}
       <SignIn routing="hash" />
     </main>
   );

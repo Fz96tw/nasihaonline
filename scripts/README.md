@@ -1,3 +1,26 @@
+# Deploying to production
+
+```bash
+./scripts/deploy-vps.sh
+```
+
+Builds the app/worker image from the current git `HEAD`, pushes it to Docker
+Hub (`fz96tw/nasihaonline-app`/`-worker`, tagged both `latest` and the short
+git SHA), then pulls and recreates `app`/`worker` on the VPS
+(`nasihaforyou.org`). Refuses to run with uncommitted changes, so the
+deployed image always traces back to a real commit. Ends with a health check
+against the live site.
+
+There's no equivalent script for `test.nasihaforyou.org` (homelab) — that
+deployment rebuilds from its own local checkout, so `cd homelab && docker
+compose up -d --build app worker` (after `git pull` if needed) already *is*
+its whole deploy step. Verify a change there first, then run the script
+above to promote it to the VPS.
+
+This is a manual, deliberate promotion step, not a CI/CD pipeline — nothing
+runs on push. Requires `docker login` (Docker Hub) and the VPS SSH alias
+already configured.
+
 # Backup / restore scripts
 
 Backs up Postgres and MinIO from the docker-compose stack (`postgres`, `minio`
