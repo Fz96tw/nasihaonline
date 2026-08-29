@@ -69,6 +69,16 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
                 Repeats
               </Badge>
             ) : null}
+            {event.communities.map((community) => (
+              <Badge key={community.id} variant="info">
+                {community.name}
+              </Badge>
+            ))}
+            {event.categories.map((category) => (
+              <Badge key={category.id} variant="info">
+                {category.name}
+              </Badge>
+            ))}
           </div>
           <CardTitle className="flex items-center gap-1.5 text-xl">
             {event.visibility === EventVisibility.invited && (

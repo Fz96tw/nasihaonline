@@ -45,6 +45,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     meetLinkSource: formData.get("meetLinkSource") || "manual",
     deidentificationConfirmed: formData.get("deidentificationConfirmed") === "true",
     timezone: formData.get("timezone") || null,
+    communityIds: formData.getAll("communityIds"),
+    categoryIds: formData.getAll("categoryIds"),
     recurrence,
   });
   if (!parsed.success) {

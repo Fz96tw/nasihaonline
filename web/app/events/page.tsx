@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
-import { getEventsForViewer } from "@/lib/events-server";
+import { getEventsForViewer, getEventCategories } from "@/lib/events-server";
+import { getAllCommunities, getDefaultCommunityFilter, getOrCreateProfile } from "@/lib/profile-server";
 import { EventCard } from "@/components/events/event-card";
+import { CommunityCategoryFilter } from "@/components/shared/community-category-filter";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Reveal } from "@/components/home/reveal";
 
@@ -9,10 +11,27 @@ export const metadata: Metadata = {
   title: "Events — NASIHA",
 };
 
-export default async function EventsPage() {
+export default async function EventsPage({
+  searchParams,
+}: {
+  searchParams: { community?: string; category?: string };
+}) {
   const user = await getSessionUser();
-  const events = await getEventsForViewer(user?.id ?? null);
   const isSignedIn = Boolean(user);
+
+  const [profile, communities, categories] = await Promise.all([
+    user ? getOrCreateProfile(user.id) : null,
+    getAllCommunities(),
+    getEventCategories(),
+  ]);
+  const selectedCommunity = communities.find((c) => c.slug === searchParams.community) ?? null;
+  const selectedCategory = categories.find((c) => c.slug === searchParams.category) ?? null;
+  const communityIds = getDefaultCommunityFilter(profile, selectedCommunity?.id);
+
+  const events = await getEventsForViewer(user?.id ?? null, {
+    communityIds,
+    categorySlug: searchParams.category,
+  });
 
   return (
     <main className="min-h-screen">
@@ -27,9 +46,31 @@ export default async function EventsPage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-[1120px] px-8 py-16">
+      <section className="mx-auto flex max-w-[1120px] flex-col gap-6 px-8 py-16">
+        <CommunityCategoryFilter
+          communities={communities}
+          categories={categories}
+          selectedCommunityId={selectedCommunity?.id ?? null}
+          selectedCategoryId={selectedCategory?.id ?? null}
+          buildHref={(next) => {
+            const params = new URLSearchParams();
+            const communitySlug = next.communityId
+              ? communities.find((c) => c.id === next.communityId)?.slug
+              : undefined;
+            if (communitySlug) params.set("community", communitySlug);
+            const categorySlug = next.categoryId ? categories.find((c) => c.id === next.categoryId)?.slug : undefined;
+            if (categorySlug) params.set("category", categorySlug);
+            const qs = params.toString();
+            return qs ? `/events?${qs}` : "/events";
+          }}
+        />
+
         {events.length === 0 ? (
-          <p className="text-center text-muted-foreground">No upcoming events right now — check back soon.</p>
+          <p className="text-center text-muted-foreground">
+            {searchParams.community || searchParams.category
+              ? "No events match your filters."
+              : "No upcoming events right now — check back soon."}
+          </p>
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {events.map((event, index) => (

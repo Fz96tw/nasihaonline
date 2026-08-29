@@ -1146,9 +1146,48 @@ model Event {
   // EventChatTranscript so the event page can jump straight to it.
   chatMessages           EventChatMessage[]
   chatTranscripts        EventChatTranscript[]
+  // Community-based-categorization initiative, objective 5 — required,
+  // multi-select (an event can apply to more than one community), unlike
+  // KnowledgeItem/ReviewItem's single-visibility-plus-categories shape.
+  // Zero rows (every event that predates this) is the grandfathered
+  // "visible to everyone" state — see isEventVisibleToMember.
+  communities             EventCommunity[]
+  // Optional, fine-grained, scoped in the UI to whichever community/
+  // communities are selected above.
+  categories              EventCategory[]
 
   @@index([startsAt])
   @@map("events")
+}
+
+// Required multi-select Community tag (community-based-categorization
+// initiative, objective 5) — an event with zero rows is grandfathered as
+// visible to everyone (see isEventVisibleToMember, events-server.ts);
+// tagging with ≥1 community scopes `visibility: community` to members of
+// those communities (or followsAllCommunities) going forward.
+model EventCommunity {
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  communityId String
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, communityId])
+  @@index([communityId])
+  @@map("event_communities")
+}
+
+// Optional fine-grained category tag, scoped to the event's tagged
+// communities — same join-table shape as KnowledgeItemCategory/
+// ReviewItemCategory.
+model EventCategory {
+  eventId    String
+  event      Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   KnowledgeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, categoryId])
+  @@index([categoryId])
+  @@map("event_categories")
 }
 
 // Audit trail for member-wide event broadcasts (Resend Notifications,
@@ -1539,6 +1578,7 @@ model Community {
   slug       String              @unique
   categories KnowledgeCategory[]
   profiles   ProfileCommunity[]
+  events     EventCommunity[]
   createdAt  DateTime            @default(now())
   updatedAt  DateTime            @updatedAt
 
@@ -1571,6 +1611,7 @@ model KnowledgeCategory {
 
   items       KnowledgeItemCategory[]
   reviewItems ReviewItemCategory[]
+  events      EventCategory[]
 
   @@index([communityId])
   @@map("knowledge_categories")

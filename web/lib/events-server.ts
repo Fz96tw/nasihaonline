@@ -14,6 +14,7 @@ import type { Prisma } from "@/lib/generated/prisma/client";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import type {
   DashboardUpcomingEvent,
+  EventCategoryOption,
   EventNotificationBroadcastItem,
   EventRegistrationAttendee,
   EventRosterMember,
@@ -180,17 +181,151 @@ function recurringSeriesStillActiveOrUpcoming(now: Date): Prisma.EventWhereInput
   };
 }
 
+// ===== Community-based-categorization initiative, objective 5 — event visibility gating =====
+
+type MemberCommunityContext = { communityIds: string[]; followsAllCommunities: boolean };
+
+/**
+ * Lean per-viewer lookup for the gating helpers below — deliberately not
+ * ProfileWithSkills (lib/profile-server.ts), which eagerly joins Skill and
+ * full Community rows this only needs ids from. `null` for a signed-out
+ * visitor (no userId) or the rare pre-onboarding profile-less user.
+ */
+export async function getMemberCommunityContext(userId: string | null): Promise<MemberCommunityContext | null> {
+  if (!userId) return null;
+  const profile = await db.profile.findUnique({
+    where: { userId },
+    select: { followsAllCommunities: true, communities: { select: { communityId: true } } },
+  });
+  if (!profile) return null;
+  return {
+    communityIds: profile.communities.map((c) => c.communityId),
+    followsAllCommunities: profile.followsAllCommunities,
+  };
+}
+
+// Reused by every query that needs to render community/category badges
+// (PublicEvent.communities/categories) — a single shared select shape
+// rather than each call site inventing its own subset, since gating
+// (isEventVisibleToMember below) also needs the community ids out of it.
+const EVENT_COMMUNITIES_CATEGORIES_SELECT = {
+  communities: { select: { community: { select: { id: true, name: true, slug: true } } } },
+  categories: { select: { category: { select: { id: true, name: true, slug: true } } } },
+} as const;
+
+type EventWithCommunitiesCategories = {
+  communities: { community: { id: string; name: string; slug: string } }[];
+  categories: { category: { id: string; name: string; slug: string } }[];
+};
+
+function toEventBadges(event: EventWithCommunitiesCategories): {
+  communities: { id: string; name: string; slug: string }[];
+  categories: { id: string; name: string; slug: string }[];
+} {
+  return {
+    communities: event.communities.map((c) => c.community),
+    categories: event.categories.map((c) => c.category),
+  };
+}
+
+/**
+ * Object-level predicate for an already-loaded event: does `visibility:
+ * community` grant this member visibility? Callers OR this in alongside
+ * their own host/invitee checks, same style as the pre-existing
+ * `event.visibility === EventVisibility.community` boolean expressions this
+ * replaces. An event with zero tagged communities is grandfathered visible
+ * to everyone (every event that predates this objective); once tagged,
+ * visibility narrows to members whose own communities intersect, or who
+ * follow all. A signed-out visitor (`member === null`) never matches a
+ * tagged event.
+ */
+export function isEventVisibleToMember(
+  event: { visibility: EventVisibility; communities: { community: { id: string } }[] },
+  member: MemberCommunityContext | null,
+): boolean {
+  if (event.visibility !== EventVisibility.community) return false;
+  if (event.communities.length === 0) return true;
+  if (!member) return false;
+  if (member.followsAllCommunities) return true;
+  const communityIds = event.communities.map((c) => c.community.id);
+  return communityIds.some((id) => member.communityIds.includes(id));
+}
+
+/**
+ * Query-level counterpart to isEventVisibleToMember — spread alongside
+ * `visibility: EventVisibility.community` in a where clause's OR branch
+ * (never used standalone, since it says nothing about `invited` events).
+ * `{}` for a member who follows all communities (no extra restriction);
+ * otherwise matches an untagged (grandfathered) event OR one tagged with a
+ * community the member belongs to.
+ */
+export function communityVisibilityWhere(member: MemberCommunityContext | null): Prisma.EventWhereInput {
+  if (member?.followsAllCommunities) return {};
+  const memberCommunityIds = member?.communityIds ?? [];
+  return {
+    OR: [
+      { communities: { none: {} } },
+      ...(memberCommunityIds.length > 0 ? [{ communities: { some: { communityId: { in: memberCommunityIds } } } }] : []),
+    ],
+  };
+}
+
+/**
+ * Shared recipient resolution for a community event's member-wide
+ * notification broadcast (createEvent's automatic send, and
+ * resendEventNotifications' manual one below) — replaces two copies of the
+ * same "every active member" query. `communityIds` empty (legacy/untagged
+ * event) keeps the pre-existing "everyone" behavior; tagged narrows to
+ * members whose profile follows all communities or belongs to one of the
+ * tagged ones.
+ */
+async function getCommunityEventRecipients(
+  communityIds: string[],
+  excludeUserId: string,
+): Promise<{ id: string; email: string; name: string | null }[]> {
+  return db.user.findMany({
+    where: {
+      role: { in: [Role.member, Role.moderator, Role.admin] },
+      tier: { not: null },
+      id: { not: excludeUserId },
+      ...(communityIds.length > 0
+        ? {
+            profile: {
+              OR: [{ followsAllCommunities: true }, { communities: { some: { communityId: { in: communityIds } } } }],
+            },
+          }
+        : {}),
+    },
+    select: { id: true, email: true, name: true },
+  });
+}
+
+export async function getEventCategories(): Promise<EventCategoryOption[]> {
+  return db.knowledgeCategory.findMany({ orderBy: { name: "asc" } });
+}
+
 // The server-side enforcement point for public event visibility (§4.6):
 // meetingUrl and deidentificationConfirmed are never selected here, so no
 // caller of this function — page or API route — can leak them to an
 // unauthenticated visitor by accident. Member-only fields (RSVP state, the
 // gated meeting link) are added by a later objective's own query, not this
-// one.
+// one. Signed-out visitor (no member context) only ever sees a legacy,
+// untagged event — communityVisibilityWhere(null) reduces to
+// `{communities:{none:{}}}`.
 export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
   const now = new Date();
   const rangeEnd = new Date(now.getTime() + 6 * MONTH_MS);
   const events = await db.event.findMany({
-    where: { visibility: EventVisibility.community, cancelledAt: null, ...recurringSeriesStillActiveOrUpcoming(now) },
+    where: {
+      visibility: EventVisibility.community,
+      cancelledAt: null,
+      // AND'd explicitly rather than spread side by side — both
+      // communityVisibilityWhere and recurringSeriesStillActiveOrUpcoming
+      // return their own top-level OR, and spreading two OR-bearing
+      // fragments into the same object silently drops the first (the
+      // second's key wins).
+      AND: [communityVisibilityWhere(null), recurringSeriesStillActiveOrUpcoming(now)],
+    },
     select: {
       id: true,
       title: true,
@@ -202,6 +337,7 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
       heroImageUrl: true,
       host: { select: { name: true } },
       recurrence: { select: RECURRENCE_SELECT },
+      ...EVENT_COMMUNITIES_CATEGORIES_SELECT,
     },
     orderBy: { startsAt: "asc" },
   });
@@ -217,6 +353,7 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
       startsAt: event.occurrenceStart.toISOString(),
       endsAt: event.occurrenceEnd?.toISOString() ?? null,
       open: event.open,
+      ...toEventBadges(event),
       heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
       hostName: event.host.name,
       seriesId: event.id,
@@ -237,7 +374,7 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
 // resolves.
 export async function getPublicEventById(eventId: string): Promise<PublicEvent | null> {
   const event = await db.event.findFirst({
-    where: { id: eventId, visibility: EventVisibility.community, cancelledAt: null },
+    where: { id: eventId, visibility: EventVisibility.community, cancelledAt: null, ...communityVisibilityWhere(null) },
     select: {
       id: true,
       title: true,
@@ -249,6 +386,7 @@ export async function getPublicEventById(eventId: string): Promise<PublicEvent |
       heroImageUrl: true,
       host: { select: { name: true } },
       recurrence: { select: RECURRENCE_SELECT },
+      ...EVENT_COMMUNITIES_CATEGORIES_SELECT,
     },
   });
   if (!event) return null;
@@ -261,6 +399,7 @@ export async function getPublicEventById(eventId: string): Promise<PublicEvent |
     startsAt: event.startsAt.toISOString(),
     endsAt: event.endsAt?.toISOString() ?? null,
     open: event.open,
+    ...toEventBadges(event),
     heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
     hostName: event.host.name,
     seriesId: event.id,
@@ -274,17 +413,29 @@ export async function getPublicEventById(eventId: string): Promise<PublicEvent |
 // is viewing the public listing rather than /calendar) can't see it — plus
 // this viewer's own RSVP state, so the "Join to RSVP" CTA can drive an
 // actual RSVP toggle for members-only events. userId null (no session)
-// always yields rsvped: false.
-export async function getEventsForViewer(userId: string | null): Promise<EventWithRsvp[]> {
+// always yields rsvped: false. `communityIds`/`categorySlug` are the
+// CommunityCategoryFilter's browse filter (community-based-categorization
+// initiative, objective 5) — separate from (and applied on top of) the
+// visibility gate below: a member always sees every event they're allowed
+// to see, this just narrows which of those are returned.
+export async function getEventsForViewer(
+  userId: string | null,
+  filterParams?: { communityIds?: string[]; categorySlug?: string },
+): Promise<EventWithRsvp[]> {
   const now = new Date();
   const rangeEnd = new Date(now.getTime() + 6 * MONTH_MS);
+  const member = await getMemberCommunityContext(userId);
   const events = await db.event.findMany({
     where: {
       cancelledAt: null,
+      ...(filterParams?.categorySlug ? { categories: { some: { category: { slug: filterParams.categorySlug } } } } : {}),
+      ...(filterParams?.communityIds?.length
+        ? { communities: { some: { communityId: { in: filterParams.communityIds } } } }
+        : {}),
       AND: [
         {
           OR: [
-            { visibility: EventVisibility.community },
+            { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
             ...(userId ? [{ hostId: userId }, { invitees: { some: { userId } } }] : []),
           ],
         },
@@ -304,6 +455,7 @@ export async function getEventsForViewer(userId: string | null): Promise<EventWi
       host: { select: { name: true } },
       rsvps: userId ? { where: { userId, status: RSVPStatus.going }, select: { id: true } } : false,
       recurrence: { select: RECURRENCE_SELECT },
+      ...EVENT_COMMUNITIES_CATEGORIES_SELECT,
     },
     orderBy: { startsAt: "asc" },
   });
@@ -319,6 +471,7 @@ export async function getEventsForViewer(userId: string | null): Promise<EventWi
       startsAt: event.occurrenceStart.toISOString(),
       endsAt: event.occurrenceEnd?.toISOString() ?? null,
       open: event.open,
+      ...toEventBadges(event),
       heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
       hostName: event.host.name,
       rsvped: userId ? event.rsvps.length > 0 : false,
@@ -371,10 +524,15 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
   const now = new Date();
   const rangeStart = new Date(now.getTime() - 6 * MONTH_MS);
   const rangeEnd = new Date(now.getTime() + 6 * MONTH_MS);
+  const member = await getMemberCommunityContext(userId);
   const events = await db.event.findMany({
     where: {
       cancelledAt: null,
-      OR: [{ visibility: EventVisibility.community }, { hostId: userId }, { invitees: { some: { userId } } }],
+      OR: [
+        { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
+        { hostId: userId },
+        { invitees: { some: { userId } } },
+      ],
     },
     select: {
       id: true,
@@ -397,6 +555,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
       recordings: {
         select: { id: true, occurrenceDate: true, origin: true, objectKey: true, recordingUrl: true, startedAt: true },
       },
+      ...EVENT_COMMUNITIES_CATEGORIES_SELECT,
       // Going RSVPs (members) plus EventRegistrations (non-members) — same
       // merge as getEventEngagementForAdmin's attendee/interest count.
       _count: {
@@ -439,6 +598,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
         startsAt: event.occurrenceStart.toISOString(),
         endsAt: event.occurrenceEnd?.toISOString() ?? null,
         open: event.open,
+        ...toEventBadges(event),
         heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
         hostId: event.hostId,
         hostName: event.host.name,
@@ -486,13 +646,18 @@ export async function getMemberEventById(
   occurrenceStartIso?: string,
   isPrivileged = false,
 ): Promise<MemberEvent | null> {
+  const member = await getMemberCommunityContext(userId);
   const event = await db.event.findFirst({
     where: {
       id: eventId,
       ...(isPrivileged
         ? {}
         : {
-            OR: [{ visibility: EventVisibility.community }, { hostId: userId }, { invitees: { some: { userId } } }],
+            OR: [
+              { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
+              { hostId: userId },
+              { invitees: { some: { userId } } },
+            ],
           }),
     },
     select: {
@@ -515,6 +680,7 @@ export async function getMemberEventById(
       invitees: { where: { userId }, select: { userId: true } },
       rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
       recurrence: { select: RECURRENCE_SELECT },
+      ...EVENT_COMMUNITIES_CATEGORIES_SELECT,
       recordings: {
         select: {
           occurrenceDate: true,
@@ -586,7 +752,7 @@ export async function getMemberEventById(
   const canViewRecording =
     rsvped ||
     event.hostId === userId ||
-    event.visibility === EventVisibility.community ||
+    isEventVisibleToMember(event, member) ||
     (event.visibility === EventVisibility.invited && event.invitees.length > 0);
   const recordingLink = canViewRecording
     ? resolveEventRecordingLink(event.id, occurrenceRecordings)
@@ -599,6 +765,7 @@ export async function getMemberEventById(
     startsAt: occurrenceStart.toISOString(),
     endsAt: occurrenceEnd?.toISOString() ?? null,
     open: event.open,
+    ...toEventBadges(event),
     heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
     hostId: event.hostId,
     hostName: event.host.name,
@@ -650,22 +817,26 @@ export async function getMemberEventById(
  * rather than 403s for the same reason getForumThreadDetail does.
  */
 export async function startEventDiscussion(eventId: string, starterId: string): Promise<{ threadId: string }> {
-  const event = await db.event.findUnique({
-    where: { id: eventId },
-    select: {
-      id: true,
-      title: true,
-      visibility: true,
-      hostId: true,
-      cancelledAt: true,
-      forumThread: { select: { id: true } },
-      invitees: { select: { userId: true } },
-    },
-  });
+  const [event, member] = await Promise.all([
+    db.event.findUnique({
+      where: { id: eventId },
+      select: {
+        id: true,
+        title: true,
+        visibility: true,
+        hostId: true,
+        cancelledAt: true,
+        forumThread: { select: { id: true } },
+        invitees: { select: { userId: true } },
+        communities: { select: { community: { select: { id: true } } } },
+      },
+    }),
+    getMemberCommunityContext(starterId),
+  ]);
   if (!event) throw new EventError(404, "Event not found.");
 
   const canView =
-    event.visibility === EventVisibility.community ||
+    isEventVisibleToMember(event, member) ||
     event.hostId === starterId ||
     event.invitees.some((invitee) => invitee.userId === starterId);
   if (!canView) throw new EventError(404, "Event not found.");
@@ -761,6 +932,7 @@ export async function getTrendingEvents(
   });
   if (grouped.length === 0) return [];
 
+  const member = isPrivileged ? null : await getMemberCommunityContext(userId);
   const events = await db.event.findMany({
     where: {
       id: { in: grouped.map((group) => group.eventId) },
@@ -771,7 +943,7 @@ export async function getTrendingEvents(
             OR: [
               { hostId: userId },
               { invitees: { some: { userId } } },
-              { visibility: EventVisibility.community },
+              { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
             ],
           }),
     },
@@ -802,11 +974,12 @@ export async function getTrendingEvents(
  * invited, same as any other member.
  */
 export async function getEventsHostedByMember(hostId: string, viewerId: string): Promise<MemberHostedEvent[]> {
+  const member = await getMemberCommunityContext(viewerId);
   const events = await db.event.findMany({
     where: {
       hostId,
       OR: [
-        { visibility: EventVisibility.community },
+        { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
         { hostId: viewerId },
         { invitees: { some: { userId: viewerId } } },
       ],
@@ -895,6 +1068,7 @@ export async function getDashboardUpcomingEvents(
   // is generous headroom for `limit` to have candidates even if the next
   // few weeks are sparse.
   const rangeEnd = new Date(startOfToday.getTime() + 3 * MONTH_MS);
+  const member = await getMemberCommunityContext(userId);
 
   const events = await db.event.findMany({
     where: {
@@ -911,7 +1085,13 @@ export async function getDashboardUpcomingEvents(
             { invitees: { some: { userId } } },
             {
               visibility: EventVisibility.community,
-              OR: [{ open: true }, { rsvps: { some: { userId, status: RSVPStatus.going } } }],
+              // AND'd rather than spread alongside the literal OR two lines
+              // below — see getPublicUpcomingEvents' identical note on why
+              // two OR-bearing fragments can't share one object.
+              AND: [
+                communityVisibilityWhere(member),
+                { OR: [{ open: true }, { rsvps: { some: { userId, status: RSVPStatus.going } } }] },
+              ],
             },
           ],
         },
@@ -1183,6 +1363,10 @@ export async function createEvent(
     invitedUserIds: string[];
     /** Recording Access initiative — members granted co-host (recording start/stop, managing further co-hosts) from creation. Optional, any visibility — unlike invitedUserIds. */
     coHostUserIds: string[];
+    /** Community-based-categorization initiative, objective 5 — required, multi-select. */
+    communityIds: string[];
+    /** Optional, scoped in the UI to the chosen communities above. */
+    categoryIds: string[];
     meetLinkSource: "auto" | "manual" | "livekit";
     /** Optional waiting-room greeting shown to attendees on /meet/event/[id] before Start (meeting-join-experience). */
     meetingOrganizerMessage: string | null;
@@ -1288,14 +1472,12 @@ export async function createEvent(
   // A community event has no invitee list of its own — its "audience" is
   // every member, discovered via RSVP after the fact — so it's announced to
   // everyone instead, same recipient query as
-  // announcements-server.ts's board_announcement broadcast. The host is
-  // excluded — they don't need a notification about the event they just
-  // scheduled.
+  // announcements-server.ts's board_announcement broadcast (further scoped
+  // to the tagged communities, if any — getCommunityEventRecipients). The
+  // host is excluded — they don't need a notification about the event they
+  // just scheduled.
   const publicEventRecipients = !isRestricted
-    ? await db.user.findMany({
-        where: { role: { in: [Role.member, Role.moderator, Role.admin] }, tier: { not: null }, id: { not: hostId } },
-        select: { id: true, email: true, name: true },
-      })
+    ? await getCommunityEventRecipients(input.communityIds, hostId)
     : [];
 
   let heroImageUrl: string | null = null;
@@ -1398,6 +1580,8 @@ export async function createEvent(
         deidentificationConfirmed: input.deidentificationConfirmed,
         meetingOrganizerMessage: input.meetingOrganizerMessage,
         meetingOrganizerMessageImageKey,
+        communities: { create: input.communityIds.map((communityId) => ({ communityId })) },
+        categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
       },
       select: { id: true },
     });
@@ -1506,6 +1690,7 @@ export async function resendEventNotifications(
       livekitRoomName: true,
       hostId: true,
       cancelledAt: true,
+      communities: { select: { communityId: true } },
     },
   });
   if (!event) throw new EventError(404, "Event not found.");
@@ -1530,10 +1715,10 @@ export async function resendEventNotifications(
           select: { user: { select: { id: true, email: true, name: true } } },
         })
       ).map((invitee) => invitee.user)
-    : await db.user.findMany({
-        where: { role: { in: [Role.member, Role.moderator, Role.admin] }, tier: { not: null }, id: { not: event.hostId } },
-        select: { id: true, email: true, name: true },
-      });
+    : await getCommunityEventRecipients(
+        event.communities.map((c) => c.communityId),
+        event.hostId,
+      );
 
   // A "truly public" event — open registration on top of community
   // visibility — also has anonymous EventRegistration guests: no User
@@ -1658,6 +1843,8 @@ export async function getEventForEdit(eventId: string) {
       meetingOrganizerMessage: true,
       meetingOrganizerMessageImageKey: true,
       recurrence: { select: RECURRENCE_SELECT },
+      communities: { select: { communityId: true } },
+      categories: { select: { categoryId: true } },
     },
   });
   if (!event) return null;
@@ -1683,6 +1870,8 @@ export async function getEventForEdit(eventId: string) {
     visibility: event.visibility,
     deidentificationConfirmed: event.deidentificationConfirmed,
     hostId: event.hostId,
+    communityIds: event.communities.map((c) => c.communityId),
+    categoryIds: event.categories.map((c) => c.categoryId),
     meetingOrganizerMessage: event.meetingOrganizerMessage,
     meetingOrganizerMessageImageUrl: getMeetingMessageImageUrl(event.meetingOrganizerMessageImageKey),
     recurrence: event.recurrence
@@ -1722,6 +1911,9 @@ export async function updateEvent(
     /** Optional waiting-room greeting shown to attendees on /meet/event/[id] before Start (meeting-join-experience). */
     meetingOrganizerMessage: string | null;
     meetingOrganizerMessageImage: File | null;
+    /** Community-based-categorization initiative, objective 5 — unlike invitedUserIds/coHostUserIds, genuinely editable here (not create-only). */
+    communityIds: string[];
+    categoryIds: string[];
     recurrence: {
       frequency: RecurrenceFrequency;
       interval: number;
@@ -1908,6 +2100,10 @@ export async function updateEvent(
   }
 
   const updated = await db.$transaction(async (tx) => {
+    // Delete-then-recreate, same pattern as updateKnowledgeItem
+    // (library-server.ts) — simpler than diffing the old/new tag sets.
+    await tx.eventCommunity.deleteMany({ where: { eventId: event.id } });
+    await tx.eventCategory.deleteMany({ where: { eventId: event.id } });
     const result = await tx.event.update({
       where: { id: event.id },
       data: {
@@ -1925,6 +2121,8 @@ export async function updateEvent(
         deidentificationConfirmed: input.deidentificationConfirmed,
         meetingOrganizerMessage: input.meetingOrganizerMessage,
         meetingOrganizerMessageImageKey,
+        communities: { create: input.communityIds.map((communityId) => ({ communityId })) },
+        categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
       },
       select: { id: true },
     });
@@ -2371,6 +2569,7 @@ export async function rsvpToEvent(
       livekitRoomName: true,
       hostId: true,
       visibility: true,
+      communities: { select: { community: { select: { id: true } } } },
     },
   });
   if (!event) throw new EventError(404, "Event not found.");
@@ -2385,6 +2584,18 @@ export async function rsvpToEvent(
   if (isRestricted && userId !== event.hostId && actingUser.role !== Role.admin) {
     const invited = await db.eventInvitee.findUnique({ where: { eventId_userId: { eventId, userId } } });
     if (!invited) throw new EventError(403, "You're not invited to this event.");
+  }
+
+  // Same belt-and-suspenders rationale as the restricted-event check above,
+  // for community-based-categorization initiative, objective 5's gating: a
+  // member outside a tagged event's communities can't see it via any
+  // listing/detail query, but this is the enforcement point against a
+  // guessed eventId reaching the RSVP action directly.
+  if (!isRestricted && userId !== event.hostId && actingUser.role !== Role.admin) {
+    const member = await getMemberCommunityContext(userId);
+    if (!isEventVisibleToMember(event, member)) {
+      throw new EventError(404, "Event not found.");
+    }
   }
 
   const existing = await db.rSVP.findUnique({
@@ -2729,6 +2940,7 @@ export async function getEventMeetingStatus(
       open: true,
       visibility: true,
       cancelledAt: true,
+      communities: { select: { community: { select: { id: true } } } },
     },
   });
   if (!event || event.cancelledAt) throw new EventError(404, "Event not found.");
@@ -2750,8 +2962,9 @@ export async function getEventMeetingStatus(
     }
     guestName = `${registration.name} (${registration.email})`;
   } else if (!isHost) {
+    const member = await getMemberCommunityContext(userId);
     const visible =
-      event.visibility === EventVisibility.community ||
+      isEventVisibleToMember(event, member) ||
       (await db.eventInvitee.findUnique({ where: { eventId_userId: { eventId, userId } } })) !== null;
     if (!visible) throw new EventError(404, "Event not found.");
 
@@ -3011,6 +3224,7 @@ export async function getEventRecordingObjectKey(
   actingUser: UserModel,
 ): Promise<string> {
   const isAdmin = actingUser.role === Role.admin;
+  const member = isAdmin ? null : await getMemberCommunityContext(actingUser.id);
   const event = await db.event.findFirst({
     where: {
       id: eventId,
@@ -3018,7 +3232,7 @@ export async function getEventRecordingObjectKey(
         ? {}
         : {
             OR: [
-              { visibility: EventVisibility.community },
+              { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
               { hostId: actingUser.id },
               { invitees: { some: { userId: actingUser.id } } },
             ],
@@ -3029,6 +3243,7 @@ export async function getEventRecordingObjectKey(
       visibility: true,
       invitees: { where: { userId: actingUser.id }, select: { userId: true } },
       rsvps: { where: { userId: actingUser.id, status: RSVPStatus.going }, select: { id: true } },
+      communities: { select: { community: { select: { id: true } } } },
     },
   });
   if (!event) throw new EventError(404, "Event not found.");
@@ -3044,7 +3259,7 @@ export async function getEventRecordingObjectKey(
     // community event is public to every member by definition, so its
     // recording is too — RSVP isn't required there either.
     const invitedToRestrictedEvent = event.visibility === EventVisibility.invited && event.invitees.length > 0;
-    const isCommunityEvent = event.visibility === EventVisibility.community;
+    const isCommunityEvent = isEventVisibleToMember(event, member);
     if (!isHost && !rsvped && !invitedToRestrictedEvent && !isCommunityEvent) {
       throw new EventError(403, "RSVP to this event to view its recording.");
     }
@@ -3071,16 +3286,22 @@ export async function getEventMeetRecordingDownloadUrl(
   occurrenceDate: Date,
   userId: string,
 ): Promise<string> {
+  const member = await getMemberCommunityContext(userId);
   const event = await db.event.findFirst({
     where: {
       id: eventId,
-      OR: [{ visibility: EventVisibility.community }, { hostId: userId }, { invitees: { some: { userId } } }],
+      OR: [
+        { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
+        { hostId: userId },
+        { invitees: { some: { userId } } },
+      ],
     },
     select: {
       hostId: true,
       visibility: true,
       invitees: { where: { userId }, select: { userId: true } },
       rsvps: { where: { userId, status: RSVPStatus.going }, select: { id: true } },
+      communities: { select: { community: { select: { id: true } } } },
     },
   });
   if (!event) throw new EventError(404, "Event not found.");
@@ -3089,7 +3310,7 @@ export async function getEventMeetRecordingDownloadUrl(
   const rsvped = event.rsvps.length > 0;
   // Same rationale as getEventRecordingObjectKey's identical check above.
   const invitedToRestrictedEvent = event.visibility === EventVisibility.invited && event.invitees.length > 0;
-  const isCommunityEvent = event.visibility === EventVisibility.community;
+  const isCommunityEvent = isEventVisibleToMember(event, member);
   if (!isHost && !rsvped && !invitedToRestrictedEvent && !isCommunityEvent) {
     throw new EventError(403, "RSVP to this event to view its recording.");
   }

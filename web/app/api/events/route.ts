@@ -88,6 +88,8 @@ export async function POST(request: Request) {
     visibility: formData.get("visibility") || "community",
     invitedUserIds,
     coHostUserIds,
+    communityIds: formData.getAll("communityIds"),
+    categoryIds: formData.getAll("categoryIds"),
     meetLinkSource: formData.get("meetLinkSource") || "manual",
     recurrence,
   });

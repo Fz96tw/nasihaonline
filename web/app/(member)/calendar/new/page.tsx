@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { EVENT_SUBMISSION_TIERS } from "@/lib/events";
+import { getEventCategories } from "@/lib/events-server";
+import { getAllCommunities } from "@/lib/profile-server";
 import { SubmitEventForm } from "@/components/calendar/submit-event-form";
 
 export const metadata: Metadata = {
@@ -17,6 +19,8 @@ export default async function NewEventPage() {
   if (!user) redirect("/sign-in");
   if (!user.tier || !EVENT_SUBMISSION_TIERS.includes(user.tier)) redirect("/calendar");
 
+  const [communities, categories] = await Promise.all([getAllCommunities(), getEventCategories()]);
+
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-8 p-8">
       <div>
@@ -26,7 +30,7 @@ export default async function NewEventPage() {
         </p>
       </div>
 
-      <SubmitEventForm currentUserId={user.id} />
+      <SubmitEventForm currentUserId={user.id} communities={communities} categories={categories} />
     </main>
   );
 }

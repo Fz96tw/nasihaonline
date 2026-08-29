@@ -34,6 +34,7 @@ import {
   EVENT_THREAD_ACCESS_SELECT,
   KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
 } from "@/lib/forums-server";
+import { communityVisibilityWhere, getMemberCommunityContext } from "@/lib/events-server";
 import { getInboxList } from "@/lib/inbox-server";
 import { matchesInboxSearch } from "@/lib/inbox";
 
@@ -206,6 +207,15 @@ export async function getFeedPage(params: {
         searchReviewItemDocuments(query).then((hits) => hits.map((hit) => hit.id)),
       ]);
 
+  // Community-based-categorization initiative, objective 5's access-control
+  // change: `visibility: community` no longer means "every member" once an
+  // event is tagged — functionally the same "is this event visible to this
+  // viewer" gate events-server.ts's read paths apply, just re-derived here
+  // (this feed query is Prisma-native, not a call through those functions).
+  // Skipped when isPrivilegedSearchBypass already omits the whole OR clause
+  // below.
+  const eventMember = isPrivilegedSearchBypass ? null : await getMemberCommunityContext(viewerId);
+
   // Extracted so each domain's count() below (for countsByType/totalCount)
   // shares the exact same where clause its findMany uses, rather than
   // drifting out of sync with it over time.
@@ -219,7 +229,7 @@ export async function getFeedPage(params: {
       ? {}
       : {
           OR: [
-            { visibility: EventVisibility.community },
+            { visibility: EventVisibility.community, ...communityVisibilityWhere(eventMember) },
             ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
             ...ownerBypass(viewerId ? { hostId: viewerId } : null),
           ],
