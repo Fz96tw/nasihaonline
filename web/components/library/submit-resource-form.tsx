@@ -32,6 +32,12 @@ import { getCsrfToken } from "@/lib/csrf-client";
 import { InviteePicker } from "@/components/members/invitee-picker";
 import { TiptapEditor } from "@/components/library/tiptap-editor";
 
+// Mirrors ALLOWED_DOCUMENT_MIME_TYPES in lib/storage.ts (uploadKnowledgeDocument,
+// shared by Library and Peer Review) — a browser accept hint only, the
+// server re-validates regardless.
+const DOCUMENT_ACCEPT =
+  "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,image/jpeg,image/png,image/webp,image/gif,image/bmp";
+
 const DEFAULT_VALUES: CreateKnowledgeItemValues = {
   title: "",
   description: "",
@@ -455,9 +461,13 @@ export function SubmitResourceForm({
                 <input
                   id="resource-file"
                   type="file"
+                  accept={DOCUMENT_ACCEPT}
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                   className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
                 />
+                <p className="text-xs text-muted-foreground">
+                  PDF, Word, PowerPoint, plain text, or image (JPEG/PNG/WebP/GIF/BMP) — up to 20MB.
+                </p>
                 {existingItem?.attachment && (
                   <p className="text-xs text-muted-foreground">Choose a new file to replace the current one.</p>
                 )}

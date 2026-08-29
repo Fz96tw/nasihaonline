@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { getMySubmissions, getSharedWithMe, getSeekingReviewersFeed, getReviewCategories } from "@/lib/review-server";
-import { getAllCommunities } from "@/lib/profile-server";
+import { getMySubmissions, getSharedWithMe, getSeekingReviewersFeed } from "@/lib/review-server";
+import { getAllCommunities, getOrCreateProfile } from "@/lib/profile-server";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Button } from "@/components/ui/button";
 import { ReviewDashboardTabs } from "@/components/review/review-dashboard-tabs";
@@ -22,12 +22,12 @@ export default async function ReviewFeedbackPage() {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const [mySubmissions, sharedWithMe, seekingReviewers, communities, categories] = await Promise.all([
+  const [mySubmissions, sharedWithMe, seekingReviewers, communities, profile] = await Promise.all([
     getMySubmissions(user.id),
     getSharedWithMe(user.id),
     getSeekingReviewersFeed(user.id),
     getAllCommunities(),
-    getReviewCategories(),
+    getOrCreateProfile(user.id),
   ]);
 
   return (
@@ -57,7 +57,8 @@ export default async function ReviewFeedbackPage() {
           sharedWithMe={sharedWithMe}
           seekingReviewers={seekingReviewers}
           communities={communities}
-          categories={categories}
+          myCommunityIds={profile.communities.map((c) => c.community.id)}
+          followsAllCommunities={profile.followsAllCommunities}
           currentUserId={user.id}
         />
       </section>

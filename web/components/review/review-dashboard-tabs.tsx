@@ -5,19 +5,25 @@ import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { MySubmissionCard, SharedReviewCard, SeekingReviewersCard } from "@/components/review/review-item-card";
-import { CommunityCategoryFilter } from "@/components/shared/community-category-filter";
-import type { MyReviewSubmission, SeekingReviewersItem, SharedReviewItem, ReviewCategoryOption } from "@/lib/review";
+import { CommunityFilterPills, type CommunityFilterSelection } from "@/components/shared/community-filter-pills";
+import type { MyReviewSubmission, SeekingReviewersItem, SharedReviewItem } from "@/lib/review";
 import { ReviewItemStatus } from "@/lib/generated/prisma/enums";
 
-/** Matches an item if no filter is active, a specific category is picked and the item carries it, or a whole community is picked and the item carries any category under it. */
+/**
+ * Community-only filter match — no category tier (each card already shows
+ * its own category badges, so a second filter level would be redundant).
+ * "all" always matches; "mine" matches any item with >=1 category under
+ * one of the member's own communities; a specific community id matches
+ * only items with >=1 category under that one community.
+ */
 function matchesCommunityFilter(
-  categories: { id: string; communityId: string }[],
-  selectedCommunityId: string | null,
-  selectedCategoryId: string | null,
+  categories: { communityId: string }[],
+  selection: CommunityFilterSelection,
+  myCommunityIds: string[],
 ): boolean {
-  if (selectedCategoryId) return categories.some((c) => c.id === selectedCategoryId);
-  if (selectedCommunityId) return categories.some((c) => c.communityId === selectedCommunityId);
-  return true;
+  if (selection === "all") return true;
+  const targetIds = selection === "mine" ? myCommunityIds : [selection];
+  return categories.some((c) => targetIds.includes(c.communityId));
 }
 
 /**
@@ -33,30 +39,35 @@ export function ReviewDashboardTabs({
   sharedWithMe,
   seekingReviewers,
   communities,
-  categories,
+  myCommunityIds,
+  followsAllCommunities,
   currentUserId,
 }: {
   mySubmissions: MyReviewSubmission[];
   sharedWithMe: SharedReviewItem[];
   seekingReviewers: SeekingReviewersItem[];
   communities: { id: string; name: string }[];
-  categories: ReviewCategoryOption[];
+  myCommunityIds: string[];
+  followsAllCommunities: boolean;
   currentUserId: string;
 }) {
   const [tab, setTab] = useState("mine");
   // Local state, not URL params — the tabs' own selection isn't URL-driven
-  // either (community-based-categorization initiative, objective 4).
-  const [selectedCommunityId, setSelectedCommunityId] = useState<string | null>(null);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  // either. Defaults to "all" (unfiltered) rather than the member's own
+  // communities — unlike Library's browse filter, this dashboard already
+  // only ever shows the viewer's own personal/relevant items, so
+  // pre-narrowing it by community on load would risk hiding something
+  // they already expect to see.
+  const [selected, setSelected] = useState<CommunityFilterSelection>("all");
 
   const filteredMySubmissions = mySubmissions.filter((item) =>
-    matchesCommunityFilter(item.categories, selectedCommunityId, selectedCategoryId),
+    matchesCommunityFilter(item.categories, selected, myCommunityIds),
   );
   const filteredSharedWithMe = sharedWithMe.filter((item) =>
-    matchesCommunityFilter(item.categories, selectedCommunityId, selectedCategoryId),
+    matchesCommunityFilter(item.categories, selected, myCommunityIds),
   );
   const filteredSeekingReviewers = seekingReviewers.filter((item) =>
-    matchesCommunityFilter(item.categories, selectedCommunityId, selectedCategoryId),
+    matchesCommunityFilter(item.categories, selected, myCommunityIds),
   );
 
   const openSubmissionsCount = filteredMySubmissions.filter((item) => item.status === ReviewItemStatus.open).length;
@@ -65,16 +76,12 @@ export function ReviewDashboardTabs({
   return (
     <Tabs value={tab} onValueChange={setTab}>
       <div className="mb-4">
-        <CommunityCategoryFilter
+        <CommunityFilterPills
           communities={communities}
-          categories={categories}
-          selectedCommunityId={selectedCommunityId}
-          selectedCategoryId={selectedCategoryId}
-          onSelectCommunity={(id) => {
-            setSelectedCommunityId(id);
-            setSelectedCategoryId(null);
-          }}
-          onSelectCategory={setSelectedCategoryId}
+          myCommunityIds={myCommunityIds}
+          followsAllCommunities={followsAllCommunities}
+          selected={selected}
+          onSelect={setSelected}
         />
       </div>
       <TabsList
@@ -111,7 +118,7 @@ export function ReviewDashboardTabs({
             </div>
           ) : filteredMySubmissions.length === 0 ? (
             <p className="py-12 text-center text-sm text-muted-foreground">
-              No submissions match the selected community/category.
+              No submissions in this community.
             </p>
           ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -129,7 +136,7 @@ export function ReviewDashboardTabs({
             </div>
           ) : filteredSharedWithMe.length === 0 ? (
             <p className="py-12 text-center text-sm text-muted-foreground">
-              No shared items match the selected community/category.
+              No shared items in this community.
             </p>
           ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -147,7 +154,7 @@ export function ReviewDashboardTabs({
             </div>
           ) : filteredSeekingReviewers.length === 0 ? (
             <p className="py-12 text-center text-sm text-muted-foreground">
-              No open calls match the selected community/category.
+              No open calls in this community.
             </p>
           ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
