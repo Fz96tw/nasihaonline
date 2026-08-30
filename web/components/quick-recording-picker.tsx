@@ -53,13 +53,19 @@ function formatDate(iso: string): string {
  * caller somehow resume/select mid-creation — inserting a video a composer
  * is currently drafting has to wait until that new recording is actually
  * done, which is why this navigates away rather than resolving a callback.
+ * Set `allowRecordNew={false}` in a context with a live draft (e.g. a forum
+ * post/reply body) to hide that option — navigating away would silently
+ * lose whatever the member had typed, with no way back into the same
+ * compose session once the new recording finishes.
  */
 export function QuickRecordingPicker({
   onSelect,
   triggerLabel = "Insert a video…",
+  allowRecordNew = true,
 }: {
   onSelect: (recording: QuickRecordingListItem) => void;
   triggerLabel?: string;
+  allowRecordNew?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -118,18 +124,22 @@ export function QuickRecordingPicker({
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
         <Command>
           <CommandList>
-            <CommandGroup>
-              <CommandItem
-                value="record-a-new-video-instead"
-                disabled={startingNew}
-                onSelect={recordNewInstead}
-                className="font-medium text-primary"
-              >
-                <Video className="h-4 w-4" />
-                {startingNew ? "Starting…" : "Record a new video instead"}
-              </CommandItem>
-            </CommandGroup>
-            <CommandSeparator />
+            {allowRecordNew && (
+              <>
+                <CommandGroup>
+                  <CommandItem
+                    value="record-a-new-video-instead"
+                    disabled={startingNew}
+                    onSelect={recordNewInstead}
+                    className="font-medium text-primary"
+                  >
+                    <Video className="h-4 w-4" />
+                    {startingNew ? "Starting…" : "Record a new video instead"}
+                  </CommandItem>
+                </CommandGroup>
+                <CommandSeparator />
+              </>
+            )}
             <CommandGroup heading="Past recordings">
               {loading ? (
                 <div className="px-3 py-4 text-center text-sm text-muted-foreground">Loading…</div>

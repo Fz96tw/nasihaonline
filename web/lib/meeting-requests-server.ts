@@ -1103,7 +1103,7 @@ export async function getMeetingRequestMeetingStatus(
  */
 export async function attachLiveKitMeetingRequestRecordingSegment(
   roomName: string,
-  segment: { egressId: string; objectKey: string | null; startedAt: Date; durationSeconds?: number },
+  segment: { egressId: string; objectKey: string | null; startedAt: Date; durationSeconds?: number; sizeBytes?: number },
 ): Promise<boolean> {
   const meetingRequest = await db.meetingRequest.findFirst({
     where: { livekitRoomName: roomName },
@@ -1117,7 +1117,12 @@ export async function attachLiveKitMeetingRequestRecordingSegment(
     // Same two-phase-write rationale as attachLiveKitEventRecordingSegment.
     update:
       segment.objectKey !== null
-        ? { objectKey: segment.objectKey, startedAt: segment.startedAt, durationSeconds: segment.durationSeconds }
+        ? {
+            objectKey: segment.objectKey,
+            startedAt: segment.startedAt,
+            durationSeconds: segment.durationSeconds,
+            sizeBytes: segment.sizeBytes,
+          }
         : {},
   });
   return true;

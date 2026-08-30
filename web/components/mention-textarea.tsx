@@ -142,7 +142,7 @@ export function MentionTextarea({
     <div className="relative">
       {videoPickerEnabled && (
         <div className="mb-2">
-          <QuickRecordingPicker onSelect={insertVideo} triggerLabel="Insert a video…" />
+          <QuickRecordingPicker onSelect={insertVideo} triggerLabel="Insert a video…" allowRecordNew={false} />
         </div>
       )}
       <Textarea

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useForm, type ControllerRenderProps } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -27,21 +27,6 @@ const DEFAULT_VALUES: CreateForumThreadValues = {
   invitedUserIds: [],
   categoryIds: [],
 };
-
-/**
- * Parses the `?video={meetingRequestId}:{recordingId}` param the quick-
- * recording "done" page's Share CTA navigates here with (see
- * ShareToForumDialog's onSelect) into the same `![video](...)` token format
- * linkSharedRecording's SHARED_VIDEO_TOKEN_PATTERN/RECORDING_PROXY_URL_PATTERN
- * expects. Malformed/missing params degrade to an empty body rather than
- * throwing — this is just a prefill convenience, not a required input.
- */
-function buildVideoTokenFromParam(videoParam: string | null): string {
-  if (!videoParam) return "";
-  const [meetingRequestId, recordingId] = videoParam.split(":");
-  if (!meetingRequestId || !recordingId) return "";
-  return `![video](/api/inbox/meeting-requests/${meetingRequestId}/recording/${recordingId})`;
-}
 
 /**
  * The "Post" body Textarea, split out so usePasteImageUpload (a hook) is
@@ -82,7 +67,7 @@ function ThreadBodyField({
   return (
     <>
       <div className="mb-2">
-        <QuickRecordingPicker onSelect={insertVideo} triggerLabel="Insert a video…" />
+        <QuickRecordingPicker onSelect={insertVideo} triggerLabel="Insert a video…" allowRecordNew={false} />
       </div>
       <Textarea
         rows={6}
@@ -134,7 +119,6 @@ export function NewThreadForm({
   myCommunityIds: string[];
 }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
@@ -147,7 +131,7 @@ export function NewThreadForm({
 
   const form = useForm<CreateForumThreadValues>({
     resolver: zodResolver(createForumThreadSchema),
-    defaultValues: { ...DEFAULT_VALUES, body: buildVideoTokenFromParam(searchParams.get("video")) },
+    defaultValues: DEFAULT_VALUES,
     mode: "onTouched",
   });
 

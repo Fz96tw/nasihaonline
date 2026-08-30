@@ -29,6 +29,7 @@ export type QuickRecordingListItem = {
   topic: string;
   createdAt: string;
   durationSeconds: number | null;
+  sizeBytes: number | null;
   ready: boolean;
   failed: boolean;
   shared: { label: string; href: string } | null;
@@ -39,6 +40,19 @@ function formatDate(iso: string): string {
   const datePart = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const timePart = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   return `${datePart}, ${timePart}`;
+}
+
+/** No existing byte-formatting convention elsewhere in the app (file sizes aren't shown anywhere else yet) — a small local helper, same as formatDate above. */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB"];
+  let value = bytes / 1024;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(1)} ${units[unitIndex]}`;
 }
 
 function QuickRecordingRow({
@@ -129,6 +143,7 @@ function QuickRecordingRow({
           <span className="text-xs text-muted-foreground">
             {formatDate(recording.createdAt)}
             {recording.durationSeconds != null && ` · ${formatDurationMinutes(recording.durationSeconds)}`}
+            {recording.sizeBytes != null && ` · ${formatBytes(recording.sizeBytes)}`}
           </span>
           {recording.shared && (
             <Link href={recording.shared.href} className="w-fit text-xs text-primary underline-offset-4 hover:underline">
@@ -170,7 +185,7 @@ function QuickRecordingRow({
           controls
           preload="metadata"
           src={`/api/inbox/meeting-requests/${recording.meetingRequestId}/recording/${recording.id}`}
-          className="max-h-56 w-full rounded-md border"
+          className="max-h-56 max-w-full rounded-md border"
         />
       )}
 

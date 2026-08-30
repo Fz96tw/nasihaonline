@@ -1370,6 +1370,16 @@ model MeetingRequestRecording {
   failedAt         DateTime?
   // Same semantics as EventRecording.durationSeconds — see its comment.
   durationSeconds  Int?
+  // File size in bytes, read from the egress_ended webhook's FileInfo
+  // payload (LiveKit reports it directly — no MinIO stat call needed). Int
+  // (not BigInt, unlike every other numeric field in this schema — avoids
+  // BigInt's JSON-serialization friction) — comfortably covers a quick
+  // recording, which is capped at SiteSettings.quickRecordingMaxDurationSeconds
+  // (default 30s) well under the ~2GB ceiling this implies. Nullable for the
+  // same reason as durationSeconds: absent until the webhook fills it in,
+  // and permanently null for any recording finalized before this field
+  // existed.
+  sizeBytes        Int?
   createdAt        DateTime       @default(now())
 
   // Quick video sharing (shared-infrastructure objective) — a ready quick

@@ -354,6 +354,7 @@ export type QuickRecordingListItem = {
   topic: string;
   createdAt: string;
   durationSeconds: number | null;
+  sizeBytes: number | null;
   ready: boolean;
   failed: boolean;
   shared: SharedRecordingLink | null;
@@ -365,6 +366,7 @@ const RECORDING_LIST_SELECT = {
   objectKey: true,
   failedAt: true,
   durationSeconds: true,
+  sizeBytes: true,
   createdAt: true,
   ownerType: true,
   forumPostId: true,
@@ -379,6 +381,7 @@ type RecordingListRow = {
   objectKey: string | null;
   failedAt: Date | null;
   durationSeconds: number | null;
+  sizeBytes: number | null;
   createdAt: Date;
   ownerType: RecordingOwnerType | null;
   forumPostId: string | null;
@@ -395,6 +398,7 @@ async function toQuickRecordingListItems(rows: RecordingListRow[]): Promise<Quic
       topic: row.meetingRequest.topic,
       createdAt: row.createdAt.toISOString(),
       durationSeconds: row.durationSeconds,
+      sizeBytes: row.sizeBytes,
       ready: row.objectKey !== null,
       failed: row.failedAt !== null,
       shared: await resolveSharedRecordingLink(row, row.meetingRequest.senderId),
