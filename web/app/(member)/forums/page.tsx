@@ -159,21 +159,25 @@ export default async function ForumsPage({
     return 0; // "featured" — keep displayOrder as returned by getForumCategories
   });
 
-  // Generic (untouched) forums always render flat, same as before this
-  // objective. Category-linked forums group under a collapsible section per
-  // parent Community — a flat 35-tile grid under "All Communities" reads as
-  // a wall of cards otherwise; grouping keeps it legible at the higher
-  // forum count this objective introduced. Sort still applies *within* each
-  // group; communities themselves stay in getAllCommunities' own fixed
-  // display order. Defaults open (defaultValue = every group present) so
-  // the category tiles are visible without an extra click.
-  const genericForums = sortedForums.filter((forum) => forum.communityId === null);
-  const communityGroups = communities
-    .map((community) => ({
-      community,
-      forums: sortedForums.filter((forum) => forum.communityId === community.id),
-    }))
-    .filter((group) => group.forums.length > 0);
+  // Grouping only applies under "Featured order" (the default, inherently
+  // organizational sort) — a flat 35-tile grid under "All Communities"
+  // reads as a wall of cards otherwise, and grouping keeps it legible.
+  // Picking an explicit ranking sort (A–Z/Recent/Active) flattens back to
+  // one globally-sorted list instead: grouping would make the sort read as
+  // "top N within each community" rather than a real overall ranking,
+  // which defeats the point of picking one (confirmed with user). Defaults
+  // open (defaultValue = every group present) so the category tiles are
+  // visible without an extra click.
+  const isGrouped = sort === "featured";
+  const genericForums = isGrouped ? sortedForums.filter((forum) => forum.communityId === null) : sortedForums;
+  const communityGroups = isGrouped
+    ? communities
+        .map((community) => ({
+          community,
+          forums: sortedForums.filter((forum) => forum.communityId === community.id),
+        }))
+        .filter((group) => group.forums.length > 0)
+    : [];
 
   return (
     <main className="min-h-screen">
