@@ -30,32 +30,32 @@ const COMMUNITY_FILTER_COOKIE = "forums_community_filter";
 /**
  * community-based-categorization initiative, objective 6 — which forum
  * tiles the current pill selection shows. A generic (untouched) forum
- * always matches "mine" or a specific community pill, same "universal"
- * rule Calendar/Events use for community-less content — but never a bare
- * "other" selection, which shows nothing until a specific community pill
- * underneath it is picked (two-level filter, no more unfiltered "All
- * Communities" state, confirmed with user). This is purely a display
- * narrowing *within* the already-access-filtered list getForumCategories
- * returns — it never un-hides a forum the viewer can't access.
+ * always matches every selection, same "universal" rule Calendar/Events
+ * use for community-less content. A bare "other" selection is the
+ * aggregate of every community the member ISN'T part of (mirrors "mine"
+ * being the aggregate of every community they are), not a single specific
+ * id. This is purely a display narrowing *within* the already-access-
+ * filtered list getForumCategories returns — it never un-hides a forum
+ * the viewer can't access.
  */
 function matchesCommunityFilter(
   communityId: string | null,
   selection: CommunityFilterSelection,
   myCommunityIds: string[],
 ): boolean {
-  if (selection === "other") return false;
   if (communityId === null) return true;
-  const targetIds = selection === "mine" ? myCommunityIds : [selection];
-  return targetIds.includes(communityId);
+  if (selection === "mine") return myCommunityIds.includes(communityId);
+  if (selection === "other") return !myCommunityIds.includes(communityId);
+  return communityId === selection;
 }
 
 /**
  * Pill counts show total threads across the matching forums, not the
  * number of matching forums — a member scanning pills cares how much
  * discussion is in a community, not how many forum categories it happens
- * to be split into. "other" is informational only (the tab itself shows
- * nothing until a specific pill is picked) — every thread in a forum
- * that doesn't already match "mine".
+ * to be split into. "other" is every thread in a forum that doesn't
+ * already match "mine" — exactly what the bare "Other Communities" tab
+ * shows.
  */
 function computeCommunityCounts(
   forums: { communityId: string | null; threadCount: number }[],
@@ -239,10 +239,8 @@ export default async function ForumsPage({
             Sorted by {SORT_OPTIONS.find((option) => option.value === sort)?.label}
           </span>
         </div>
-        {selectedCommunity === "other" && miscForums.length === 0 && communityGroups.length === 0 ? (
-          <p className="rounded-[10px] border p-8 text-center text-muted-foreground">
-            Pick a community above to see its forums.
-          </p>
+        {miscForums.length === 0 && communityGroups.length === 0 ? (
+          <p className="rounded-[10px] border p-8 text-center text-muted-foreground">No forums match this filter.</p>
         ) : (
           <div className="flex flex-col gap-10">
             {miscForums.length > 0 && (

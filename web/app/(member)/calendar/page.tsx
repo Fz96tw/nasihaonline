@@ -29,32 +29,29 @@ const COMMUNITY_FILTER_COOKIE = "calendar_community_filter";
  * Community-only filter match, mirroring Peer Review's own
  * matchesCommunityFilter — but with one deliberate addition: an event
  * with zero tagged communities (every pre-existing event, per objective
- * 5's grandfathering) matches "mine" and any specific community pill, same
- * "universal match" rule the original community-based-categorization plan
- * specified for Forum's community-less threads. It does NOT match a bare
- * "other" selection — that tab shows nothing until a specific community
- * pill underneath it is picked (two-level filter, no more unfiltered "All
- * Communities" state), confirmed with user.
+ * 5's grandfathering) matches every selection, same "universal match" rule
+ * the original community-based-categorization plan specified for Forum's
+ * community-less threads. A bare "other" selection is the aggregate of
+ * every community the member ISN'T part of (mirrors "mine" being the
+ * aggregate of every community they are), not a single specific id.
  */
 function matchesCommunityFilter(
   eventCommunities: { id: string }[],
   selection: CommunityFilterSelection,
   myCommunityIds: string[],
 ): boolean {
-  if (selection === "other") return false;
   if (eventCommunities.length === 0) return true;
-  const targetIds = selection === "mine" ? myCommunityIds : [selection];
-  return eventCommunities.some((c) => targetIds.includes(c.id));
+  if (selection === "mine") return eventCommunities.some((c) => myCommunityIds.includes(c.id));
+  if (selection === "other") return eventCommunities.some((c) => !myCommunityIds.includes(c.id));
+  return eventCommunities.some((c) => c.id === selection);
 }
 
 /**
  * Per-pill item counts against the mine-toggle-filtered but community-
  * unfiltered list — same "counts reflect the active tab, not the
  * community-filtered subset" convention as Peer Review's
- * computeCommunityCounts. "other" is informational only (the tab itself
- * shows nothing until a specific pill is picked) — it's every event that
- * doesn't already match "mine", i.e. what picking each "other" pill in
- * turn would reveal, combined.
+ * computeCommunityCounts. "other" is every event that doesn't already
+ * match "mine" — exactly what the bare "Other Communities" tab shows.
  */
 function computeCommunityCounts(
   events: { communities: { id: string }[] }[],

@@ -98,23 +98,19 @@ export default async function LibraryPage({
   // category badges, same rationale Peer Review's switch documented. A
   // real community slug picks that one; absent means "mine" (the member's
   // own communities, or unfiltered if they follow all — see
-  // getDefaultCommunityFilter). "other" with no specific pick shows
-  // nothing — there's no more unfiltered "everything" state (confirmed
-  // with user) — via a sentinel communityId that can never match a real
-  // row rather than an empty array, since getPublishedKnowledgeItems
-  // treats an empty communityIds array as "no filter" (see its own doc
-  // comment) not "match nothing".
+  // getDefaultCommunityFilter). "other" with no specific pick shows the
+  // aggregate of every community the member ISN'T part of (mirrors "mine"),
+  // via getPublishedKnowledgeItems' excludeCommunityIds.
   const requestedCommunity = searchParams.community ?? cookies().get(COMMUNITY_FILTER_COOKIE)?.value;
   const explicitCommunity = communities.find((c) => c.slug === requestedCommunity);
   const isOther = requestedCommunity === "other";
   const selected: CommunityFilterSelection = isOther ? "other" : explicitCommunity ? explicitCommunity.id : "mine";
-  const communityIds = isOther
-    ? ["__other_communities_no_pick__"]
-    : getDefaultCommunityFilter(profile, explicitCommunity?.id);
+  const communityIds = isOther ? undefined : getDefaultCommunityFilter(profile, explicitCommunity?.id);
 
   const [items, communityCounts] = await Promise.all([
     getPublishedKnowledgeItems({
       communityIds,
+      excludeCommunityIds: isOther ? myCommunityIds : undefined,
       contentType,
       level,
       q: searchParams.q,

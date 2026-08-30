@@ -753,6 +753,14 @@ export async function getPublishedKnowledgeItems(params: {
    * communities as the default when neither is picked).
    */
   communityIds?: string[];
+  /**
+   * Two-level community filter's bare "Other Communities" tab — every item
+   * touching at least one community NOT in this list (the member's own
+   * communities), mirroring how the bare "mine" default aggregates every
+   * community they ARE in. Ignored when communityIds is set (a specific
+   * pick, from either tab, always wins).
+   */
+  excludeCommunityIds?: string[];
   q?: string;
   sort?: LibrarySort;
   userId: string;
@@ -765,7 +773,9 @@ export async function getPublishedKnowledgeItems(params: {
   // otherwise be unfindable by this filter.
   const communityFilter = params.communityIds?.length
     ? { communities: { some: { communityId: { in: params.communityIds } } } }
-    : {};
+    : params.excludeCommunityIds?.length
+      ? { communities: { some: { communityId: { notIn: params.excludeCommunityIds } } } }
+      : {};
   const filters = {
     ...(params.contentType ? { contentType: params.contentType } : {}),
     ...(params.level ? { level: params.level } : {}),

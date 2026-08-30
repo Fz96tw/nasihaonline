@@ -13,24 +13,22 @@ import { ReviewItemStatus } from "@/lib/generated/prisma/enums";
  * Community-only filter match — no category tier (each card already shows
  * its own category badges, so a second filter level would be redundant).
  * "mine" matches any item with >=1 category under one of the member's own
- * communities; a specific community id matches only items with >=1
- * category under that one community; a bare "other" selection matches
- * nothing — that tab shows nothing until a specific community pill
- * underneath it is picked (two-level filter, no more unfiltered "All
- * Communities" state, confirmed with user). Submitting or being invited to
- * an item auto-joins the member to its community (ensureCommunityMembership,
- * lib/profile-server.ts), so "mine" never hides one of the member's own
- * personal items just because they hadn't explicitly joined that community
- * before.
+ * communities; a bare "other" selection is the aggregate of every
+ * community the member ISN'T part of (mirrors "mine"); a specific
+ * community id matches only items with >=1 category under that one
+ * community. Submitting or being invited to an item auto-joins the member
+ * to its community (ensureCommunityMembership, lib/profile-server.ts), so
+ * "mine" never hides one of the member's own personal items just because
+ * they hadn't explicitly joined that community before.
  */
 function matchesCommunityFilter(
   categories: { communityId: string }[],
   selection: CommunityFilterSelection,
   myCommunityIds: string[],
 ): boolean {
-  if (selection === "other") return false;
-  const targetIds = selection === "mine" ? myCommunityIds : [selection];
-  return categories.some((c) => targetIds.includes(c.communityId));
+  if (selection === "mine") return categories.some((c) => myCommunityIds.includes(c.communityId));
+  if (selection === "other") return categories.some((c) => !myCommunityIds.includes(c.communityId));
+  return categories.some((c) => c.communityId === selection);
 }
 
 /**
@@ -38,8 +36,8 @@ function matchesCommunityFilter(
  * active — counting against the already-community-filtered list would
  * collapse every count to either 0 or the current total, which defeats
  * the point of showing them (how many items would each other pill reveal).
- * "other" is informational only (the tab itself shows nothing until a
- * specific pill is picked) — every item that doesn't already match "mine".
+ * "other" is every item that doesn't already match "mine" — exactly what
+ * the bare "Other Communities" tab shows.
  */
 function computeCommunityCounts(
   items: { categories: { communityId: string }[] }[],
