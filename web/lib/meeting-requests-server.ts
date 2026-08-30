@@ -9,6 +9,7 @@ import {
   MeetingRequestOrigin,
   MeetingRequestStatus,
   NotificationType,
+  RecordingOwnerType,
   Role,
 } from "@/lib/generated/prisma/enums";
 import type { MeetingRequestModel } from "@/lib/generated/prisma/models/MeetingRequest";
@@ -34,6 +35,15 @@ import {
   uploadMeetingMessageImage,
   UploadValidationError,
 } from "@/lib/storage";
+import {
+  EVENT_THREAD_ACCESS_SELECT,
+  FORUM_COMMUNITY_ACCESS_SELECT,
+  isThreadVisible,
+  KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
+  OWN_THREAD_ACCESS_SELECT,
+} from "@/lib/forums-server";
+import { canViewReviewItem } from "@/lib/review-server";
+import { getMemberCommunityContext } from "@/lib/profile-server";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
@@ -44,7 +54,7 @@ const KNOWLEDGE_DISCUSSION_ACTIVITY_KEY = "knowledge_discussion";
 
 export class MeetingRequestError extends Error {
   constructor(
-    public readonly status: 400 | 403 | 404 | 409 | 502,
+    public readonly status: 400 | 403 | 404 | 409 | 410 | 502,
     message: string,
   ) {
     super(message);
@@ -1181,6 +1191,67 @@ export async function finalizeMeetingRequestChatTranscript(roomName: string): Pr
  * getMeetingRequestMeetingStatus's own check) — an admin bypasses it
  * entirely (objective c602a120).
  */
+/**
+ * Whether `actingUser` (already established not to be a participant of the
+ * recording's own meeting) may view it anyway because it's shared
+ * (RecordingOwnerType set) into content they can already see — dispatches
+ * exactly like canViewPastedImage (lib/pasted-images-server.ts) does for
+ * images, re-running each surface's own existing visibility rule so a
+ * shared recording is never more visible than what it's embedded in.
+ * Unshared (ownerType null) means no non-participant has access at all.
+ */
+async function canViewSharedRecording(
+  recording: {
+    ownerType: RecordingOwnerType | null;
+    forumPostId: string | null;
+    inboxMessageId: string | null;
+    reviewCommentId: string | null;
+  },
+  actingUser: UserModel,
+): Promise<boolean> {
+  if (!recording.ownerType) return false;
+  const isPrivileged = actingUser.role === Role.admin || actingUser.role === Role.moderator;
+
+  if (recording.ownerType === RecordingOwnerType.forum_post) {
+    if (!recording.forumPostId) return false;
+    const post = await db.forumPost.findUnique({
+      where: { id: recording.forumPostId },
+      select: {
+        thread: {
+          select: {
+            event: EVENT_THREAD_ACCESS_SELECT,
+            knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
+            forum: FORUM_COMMUNITY_ACCESS_SELECT,
+            ...OWN_THREAD_ACCESS_SELECT,
+          },
+        },
+      },
+    });
+    if (!post) return false;
+    const member = await getMemberCommunityContext(actingUser.id);
+    return isThreadVisible(post.thread, actingUser.id, isPrivileged, member);
+  }
+
+  if (recording.ownerType === RecordingOwnerType.inbox_message) {
+    if (!recording.inboxMessageId) return false;
+    const message = await db.inboxMessage.findUnique({
+      where: { id: recording.inboxMessageId },
+      select: { senderId: true, recipientId: true },
+    });
+    if (!message) return false;
+    return message.senderId === actingUser.id || message.recipientId === actingUser.id;
+  }
+
+  // review_comment
+  if (!recording.reviewCommentId) return false;
+  const comment = await db.reviewComment.findUnique({
+    where: { id: recording.reviewCommentId },
+    select: { reviewItem: { select: { submitterId: true, invitees: { select: { userId: true } } } } },
+  });
+  if (!comment) return false;
+  return canViewReviewItem(comment.reviewItem, actingUser);
+}
+
 export async function getMeetingRequestRecordingObjectKey(
   meetingRequestId: string,
   recordingId: string,
@@ -1191,16 +1262,34 @@ export async function getMeetingRequestRecordingObjectKey(
     select: { senderId: true, recipientId: true },
   });
   if (!meetingRequest) throw new MeetingRequestError(404, "Meeting request not found.");
-  const isAdmin = actingUser.role === Role.admin;
-  if (!isAdmin && meetingRequest.senderId !== actingUser.id && meetingRequest.recipientId !== actingUser.id) {
-    throw new MeetingRequestError(403, "You're not part of this meeting.");
-  }
 
   const recording = await db.meetingRequestRecording.findFirst({
     where: { id: recordingId, meetingRequestId },
-    select: { objectKey: true },
+    select: {
+      objectKey: true,
+      deletedAt: true,
+      ownerType: true,
+      forumPostId: true,
+      inboxMessageId: true,
+      reviewCommentId: true,
+    },
   });
-  if (!recording?.objectKey) throw new MeetingRequestError(404, "Recording not found.");
+  if (!recording) throw new MeetingRequestError(404, "Recording not found.");
+  // Shared video-sharing infrastructure — checked before the participant/
+  // sharing-visibility checks below, so a deleted recording renders its
+  // distinct "deleted by owner" state for every viewer (including this
+  // meeting's own participants), not a generic 403/404. The message body
+  // itself ("deleted") is the whole point of the distinct status: whoever
+  // renders this response's error can match on it directly.
+  if (recording.deletedAt) throw new MeetingRequestError(410, "deleted");
+
+  const isAdmin = actingUser.role === Role.admin;
+  const isParticipant = meetingRequest.senderId === actingUser.id || meetingRequest.recipientId === actingUser.id;
+  if (!isAdmin && !isParticipant && !(await canViewSharedRecording(recording, actingUser))) {
+    throw new MeetingRequestError(403, "You're not part of this meeting.");
+  }
+
+  if (!recording.objectKey) throw new MeetingRequestError(404, "Recording not found.");
   return recording.objectKey;
 }
 

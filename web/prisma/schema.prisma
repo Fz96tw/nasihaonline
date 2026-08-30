@@ -686,6 +686,15 @@ enum MeetingRequestOrigin {
   quick_recording
 }
 
+// Shared video-sharing infrastructure — mirrors PastedImageOwnerType, minus
+// library_item (sharing a real 1:1 meeting recording into the Library is out
+// of scope) plus review_comment (in scope here, unlike PastedImage).
+enum RecordingOwnerType {
+  forum_post
+  inbox_message
+  review_comment
+}
+
 enum MeetingRequestStatus {
   pending
   accepted
@@ -1363,7 +1372,31 @@ model MeetingRequestRecording {
   durationSeconds  Int?
   createdAt        DateTime       @default(now())
 
+  // Quick video sharing (shared-infrastructure objective) — a ready quick
+  // recording may be embedded into at most one piece of content at a time.
+  // Non-relational cross-domain FKs (no @relation), same style as
+  // EventChatTranscript.forumPostId — the owning row lives in a different
+  // domain's table entirely, and Prisma relations across every possible
+  // owner type here would be unwieldy for what's just an optional pointer.
+  // `ownerType` null means "not currently shared anywhere" (either never
+  // linked, or unlinked — see lib/quick-recordings-server.ts's
+  // linkSharedRecording/unlinkSharedRecordings).
+  ownerType       RecordingOwnerType?
+  forumPostId     String?
+  inboxMessageId  String?
+  reviewCommentId String?
+  // Set when the owner deletes the recording from the dashboard (video-
+  // library objective) — the row and its ownerType/FK linkage are kept
+  // (soft delete), only objectKey's underlying MinIO object is actually
+  // removed, so a deleted-but-still-embedded recording can be distinguished
+  // from "never existed" or "no access" wherever it's rendered (see
+  // getMeetingRequestRecordingObjectKey's deletedAt check).
+  deletedAt       DateTime?
+
   @@index([meetingRequestId])
+  @@index([forumPostId])
+  @@index([inboxMessageId])
+  @@index([reviewCommentId])
   @@map("meeting_request_recordings")
 }
 

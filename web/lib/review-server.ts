@@ -19,6 +19,7 @@ import {
   KnowledgeVisibility,
   LedgerStatus,
   LedgerTransactionType,
+  RecordingOwnerType,
   ReviewItemStatus,
   ReviewVolunteerStatus,
   Role,
@@ -28,6 +29,7 @@ import { DIRECTORY_TIERS } from "@/lib/members";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import { createNotification } from "@/lib/notifications-server";
 import { ensureCommunityMembership } from "@/lib/profile-server";
+import { unlinkSharedRecordings } from "@/lib/quick-recordings-server";
 import { sendReviewInviteEmail, sendReviewLifecycleEmail } from "@/lib/email";
 import type {
   MyReviewSubmission,
@@ -488,6 +490,20 @@ export async function deleteReviewItem(itemId: string, actingUser: UserModel): P
   const item = await db.reviewItem.findUnique({ where: { id: itemId }, select: { submitterId: true } });
   if (!item) throw new ReviewItemError(404, "Review item not found.");
   assertSubmitter(item, actingUser);
+
+  // Shared video-sharing infrastructure — comments cascade-delete with the
+  // item (onDelete: Cascade on ReviewComment.reviewItemId), but a shared
+  // recording's ownerType/reviewCommentId FK isn't a real Prisma relation
+  // (see RecordingOwnerType's schema doc comment), so it wouldn't otherwise
+  // get cleared and would keep pointing at a comment that no longer exists.
+  const commentIds = await db.reviewComment.findMany({ where: { reviewItemId: itemId }, select: { id: true } });
+  if (commentIds.length > 0) {
+    await unlinkSharedRecordings(
+      RecordingOwnerType.review_comment,
+      commentIds.map((comment) => comment.id),
+    );
+  }
+
   await db.reviewItem.delete({ where: { id: itemId } });
 }
 
