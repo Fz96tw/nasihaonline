@@ -14,7 +14,7 @@ export function CommunitySelectionForm({
   initialFollowsAll,
   redirectTo,
 }: {
-  communities: { id: string; name: string }[];
+  communities: { id: string; name: string; description?: string | null }[];
   initialSelectedIds: string[];
   initialFollowsAll: boolean;
   /** Where to send the member after a successful save — /dashboard when
@@ -85,19 +85,25 @@ export function CommunitySelectionForm({
           <Checkbox checked={followsAll} onCheckedChange={() => toggle(ALL_COMMUNITIES_VALUE)} />
           All Communities
         </label>
-        <div className="flex flex-col gap-2 pl-1">
+        <div className="flex flex-col gap-2">
           {communities.map((community) => (
             <label
               key={community.id}
-              className="flex items-center gap-2 text-sm data-[disabled]:opacity-50"
+              className="flex items-start gap-2 rounded-md border p-3 text-sm data-[disabled]:opacity-50"
               data-disabled={followsAll || undefined}
             >
               <Checkbox
+                className="mt-0.5"
                 checked={followsAll || selected.has(community.id)}
                 disabled={followsAll}
                 onCheckedChange={() => toggle(community.id)}
               />
-              {community.name}
+              <span className="flex flex-col gap-0.5">
+                <span className="font-medium">{community.name}</span>
+                {community.description && (
+                  <span className="text-muted-foreground">{community.description}</span>
+                )}
+              </span>
             </label>
           ))}
         </div>

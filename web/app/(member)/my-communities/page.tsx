@@ -23,7 +23,6 @@ export default async function MyCommunitiesPage() {
   const yourCommunities = profile.followsAllCommunities
     ? communities
     : communities.filter((c) => joinedIds.has(c.id));
-  const otherCommunities = profile.followsAllCommunities ? [] : communities.filter((c) => !joinedIds.has(c.id));
 
   return (
     <main className="min-h-screen">
@@ -70,28 +69,12 @@ export default async function MyCommunitiesPage() {
         <div className="flex flex-col gap-3">
           <h2 className="text-lg font-semibold">Edit Membership</h2>
           <CommunitySelectionForm
-            communities={communities.map((c) => ({ id: c.id, name: c.name }))}
+            communities={communities.map((c) => ({ id: c.id, name: c.name, description: c.description }))}
             initialSelectedIds={Array.from(joinedIds)}
             initialFollowsAll={profile.followsAllCommunities}
             redirectTo="/my-communities"
           />
         </div>
-
-        {otherCommunities.length > 0 && (
-          <div className="flex flex-col gap-3">
-            <h2 className="text-lg font-semibold">Other Communities</h2>
-            <ul className="flex flex-col gap-2">
-              {otherCommunities.map((community) => (
-                <li key={community.id} className="rounded-md border p-3">
-                  <p className="text-sm font-medium">{community.name}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {community.description ?? "No description yet."}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </section>
     </main>
   );

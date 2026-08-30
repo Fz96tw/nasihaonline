@@ -315,15 +315,47 @@ const KNOWLEDGE_TAGS = ["guidelines", "review-article", "recorded-lecture", "cas
 
 // Community-based-categorization initiative: the 8 top-level communities
 // every KnowledgeCategory belongs to.
-const COMMUNITIES: { name: string; slug: string }[] = [
-  { name: "Healthcare", slug: "healthcare" },
-  { name: "Sciences", slug: "sciences" },
-  { name: "Business & Finance", slug: "business-finance" },
-  { name: "Technology", slug: "technology" },
-  { name: "Education & Career", slug: "education-career" },
-  { name: "Humanities", slug: "humanities" },
-  { name: "Arts, Culture & Lifestyle", slug: "arts-culture-lifestyle" },
-  { name: "Nature & Outdoor", slug: "nature-outdoor" },
+const COMMUNITIES: { name: string; slug: string; description: string }[] = [
+  {
+    name: "Healthcare",
+    slug: "healthcare",
+    description: "Clinical practice, patient care, and medical knowledge across specialties.",
+  },
+  {
+    name: "Sciences",
+    slug: "sciences",
+    description: "Research, experimentation, and discovery across the natural and physical sciences.",
+  },
+  {
+    name: "Business & Finance",
+    slug: "business-finance",
+    description: "Entrepreneurship, investing, career growth, and financial literacy.",
+  },
+  {
+    name: "Technology",
+    slug: "technology",
+    description: "Software, data, engineering, and the tools shaping how we build and work.",
+  },
+  {
+    name: "Education & Career",
+    slug: "education-career",
+    description: "Teaching, learning, mentorship, and professional development at every stage.",
+  },
+  {
+    name: "Humanities",
+    slug: "humanities",
+    description: "History, philosophy, language, and the ideas that shape how we understand each other.",
+  },
+  {
+    name: "Arts, Culture & Lifestyle",
+    slug: "arts-culture-lifestyle",
+    description: "Creative work, cultural traditions, and everyday living well.",
+  },
+  {
+    name: "Nature & Outdoor",
+    slug: "nature-outdoor",
+    description: "The natural world, conservation, and life outside — from hiking to gardening.",
+  },
 ];
 
 // Single source of truth for which Community each KnowledgeCategory belongs
@@ -469,11 +501,11 @@ const SAMPLE_KNOWLEDGE_ITEMS: {
 
 async function seedKnowledgeLibrary() {
   const communitiesByName = new Map<string, { id: string }>();
-  for (const { name, slug } of COMMUNITIES) {
+  for (const { name, slug, description } of COMMUNITIES) {
     const community = await db.community.upsert({
       where: { name },
-      update: {},
-      create: { name, slug },
+      update: { description },
+      create: { name, slug, description },
     });
     communitiesByName.set(name, community);
   }
