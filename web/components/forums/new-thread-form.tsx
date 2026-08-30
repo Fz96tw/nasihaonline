@@ -114,6 +114,12 @@ export function NewThreadForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
+  // Communities aren't a submitted field here (a thread's forum, not a
+  // community list, is the required top-level classification — see
+  // createForumThreadSchema) so this is local UI state, not a form field.
+  // Pre-checking the member's own communities preserves the old behavior of
+  // surfacing their categories without extra clicks.
+  const [selectedCommunityIds, setSelectedCommunityIds] = useState<string[]>(myCommunityIds);
 
   const form = useForm<CreateForumThreadValues>({
     resolver: zodResolver(createForumThreadSchema),
@@ -267,13 +273,35 @@ export function NewThreadForm({
                     ))}
                 </div>
               ) : (
-                <CategoryCheckboxField
-                  categories={categories}
-                  communities={communities}
-                  value={field.value}
-                  onChange={field.onChange}
-                  myCommunityIds={myCommunityIds}
-                />
+                // No fixed community (a general forum) — let the member pick
+                // which top-level communities they're posting about first,
+                // then only show categories for the communities selected.
+                // Same two-step shape as SubmitResourceForm/SubmitEventForm.
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap gap-4 rounded-md border p-3">
+                    {communities.map((community) => (
+                      <label key={community.id} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={selectedCommunityIds.includes(community.id)}
+                          onCheckedChange={(checked) =>
+                            setSelectedCommunityIds((prev) =>
+                              checked ? [...prev, community.id] : prev.filter((id) => id !== community.id),
+                            )
+                          }
+                        />
+                        {community.name}
+                      </label>
+                    ))}
+                  </div>
+                  {selectedCommunityIds.length > 0 && (
+                    <CategoryCheckboxField
+                      categories={categories.filter((category) => selectedCommunityIds.includes(category.communityId))}
+                      communities={communities.filter((community) => selectedCommunityIds.includes(community.id))}
+                      value={field.value}
+                      onChange={field.onChange}
+                    />
+                  )}
+                </div>
               )}
               <FormMessage />
             </FormItem>
