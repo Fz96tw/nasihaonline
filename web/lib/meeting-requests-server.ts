@@ -6,6 +6,7 @@ import {
   LedgerTransactionType,
   MeetingPlatform,
   MeetingRequestMessageAction,
+  MeetingRequestOrigin,
   MeetingRequestStatus,
   NotificationType,
   Role,
@@ -794,7 +795,9 @@ export async function resolveMeetingRequest(
  */
 export async function getMyMeetingRequests(userId: string) {
   const meetings = await db.meetingRequest.findMany({
-    where: { OR: [{ senderId: userId }, { recipientId: userId }] },
+    // origin: directory excludes quick recordings (Quick Video Recording &
+    // Sharing initiative) — see MeetingRequestOrigin's doc comment.
+    where: { OR: [{ senderId: userId }, { recipientId: userId }], origin: MeetingRequestOrigin.directory },
     select: {
       id: true,
       topic: true,
@@ -852,6 +855,7 @@ export async function getUpcomingMeetingsForUser(userId: string) {
         },
         scheduledAt: { gte: startOfToday },
         OR: [{ senderId: userId }, { recipientId: userId }],
+        origin: MeetingRequestOrigin.directory,
       },
       select: {
         id: true,
@@ -869,6 +873,7 @@ export async function getUpcomingMeetingsForUser(userId: string) {
       where: {
         status: { in: [MeetingRequestStatus.pending, MeetingRequestStatus.rescheduled] },
         OR: [{ senderId: userId }, { recipientId: userId }],
+        origin: MeetingRequestOrigin.directory,
       },
       select: {
         id: true,
@@ -967,6 +972,7 @@ export async function getPastMeetingsForUser(userId: string): Promise<UpcomingMe
       },
       scheduledAt: { lt: startOfToday },
       OR: [{ senderId: userId }, { recipientId: userId }],
+      origin: MeetingRequestOrigin.directory,
     },
     select: {
       id: true,

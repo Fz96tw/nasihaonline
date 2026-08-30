@@ -3,7 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { EventError, getEventMeetingStatus } from "@/lib/events-server";
 import { getMeetingRequestMeetingStatus, MeetingRequestError } from "@/lib/meeting-requests-server";
+import { getQuickRecordingMaxDuration } from "@/lib/settings";
 import { MeetingWaitingRoom, type MeetingWaitingRoomStatus } from "@/components/calendar/meeting-waiting-room";
+import { QuickRecordingMeetingScreen } from "@/components/calendar/quick-recording-meeting-screen";
 import { BackLink } from "@/components/back-link";
 import { Button } from "@/components/ui/button";
 
@@ -40,18 +42,21 @@ export default async function MeetPage({
   // chatEndpoint below), which each independently re-validate it. Meaningless
   // for kind "request" (no anonymous-guest concept there).
   const { rid } = await searchParams;
-  if (kind !== "event" && kind !== "request") notFound();
+  if (kind !== "event" && kind !== "request" && kind !== "quick") notFound();
 
   const user = await getSessionUser();
-  if (kind === "request" && !user) redirect("/sign-in");
+  if ((kind === "request" || kind === "quick") && !user) redirect("/sign-in");
 
   // This page is reachable from many places (calendar list, event detail,
   // dashboard schedule widget, notification, emailed link), so there's no
   // single "correct" fixed destination — BackLink prefers in-app history
   // and only falls back to this when the page was opened directly. Event
   // links to the event's own detail page; a meeting request has no
-  // standalone detail page, only its Inbox thread.
-  const backHref = kind === "event" ? `/calendar/${id}` : `/inbox?item=${id}`;
+  // standalone detail page, only its Inbox thread. A quick recording has no
+  // thread either (it never appears in the Inbox at all — see
+  // getInboxList's `origin: directory` filter), and its own creation entry
+  // points are Dashboard/Forums, so it goes back to the Dashboard.
+  const backHref = kind === "event" ? `/calendar/${id}` : kind === "quick" ? "/dashboard" : `/inbox?item=${id}`;
 
   let status: MeetingWaitingRoomStatus | null = null;
   let deniedMessage: string | null = null;
@@ -107,6 +112,31 @@ export default async function MeetPage({
         <h1 className="text-2xl font-bold tracking-tight">No meeting link yet</h1>
         <p className="text-muted-foreground">This meeting doesn&apos;t have a video link set up.</p>
       </main>
+    );
+  }
+
+  // Quick recording (Quick Video Recording & Sharing initiative) — bypasses
+  // MeetingWaitingRoom unconditionally, unlike kind "event"/"request" below.
+  // Today's auto-skip in MeetingWaitingRoom only fires for a non-organizer,
+  // which never applies here (the creator is always both sender and
+  // recipient — see createQuickRecordingMeetingRequest), so there's nothing
+  // for a waiting room to add: the LiveKit room and meetingStartedAt are
+  // already set at creation time, so status.started/livekitRoomName are
+  // already true/non-null by the time this page ever renders.
+  if (kind === "quick") {
+    const maxRecordingSeconds = await getQuickRecordingMaxDuration();
+    return (
+      <QuickRecordingMeetingScreen
+        tokenEndpoint={`/api/inbox/meeting-requests/${id}/meeting/token`}
+        recordingStartEndpoint={`/api/inbox/meeting-requests/${id}/meeting/recording/start`}
+        recordingStopEndpoint={`/api/inbox/meeting-requests/${id}/meeting/recording/stop`}
+        chatEndpoint={`/api/inbox/meeting-requests/${id}/meeting/chat`}
+        title={status.title}
+        organizerName={status.organizerName}
+        maxRecordingSeconds={maxRecordingSeconds}
+        doneHref={`/meet/quick/${id}/done`}
+        backHref={backHref}
+      />
     );
   }
 

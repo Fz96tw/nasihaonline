@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { getAdmissionPhase, getWelcomeAnnouncementSettings } from "@/lib/settings";
+import { getAdmissionPhase, getQuickRecordingMaxDuration, getWelcomeAnnouncementSettings } from "@/lib/settings";
 import { getFlaggedContentCount } from "@/lib/moderation-server";
 import { getPendingLedgerCountForAdmin } from "@/lib/contributions-server";
 import { getReviewQueueCount } from "@/lib/library-server";
@@ -12,6 +12,7 @@ import { getPendingApplicationsCount } from "@/lib/admin-review-server";
 import { getNewDonationsCount } from "@/lib/donations-server";
 import { AdminPhaseForm } from "@/components/admin-phase-form";
 import { WelcomeAnnouncementSettingsForm } from "@/components/admin/welcome-announcement-settings-form";
+import { QuickRecordingSettingsForm } from "@/components/admin/quick-recording-settings-form";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -162,6 +163,7 @@ export default async function AdminPage() {
   const [
     admissionPhase,
     welcomeAnnouncementSettings,
+    quickRecordingMaxDurationSeconds,
     applicationsCount,
     contentCount,
     ledgerCount,
@@ -173,6 +175,7 @@ export default async function AdminPage() {
   ] = await Promise.all([
     getAdmissionPhase(),
     getWelcomeAnnouncementSettings(),
+    getQuickRecordingMaxDuration(),
     getPendingApplicationsCount(),
     getFlaggedContentCount(),
     getPendingLedgerCountForAdmin(),
@@ -287,6 +290,7 @@ export default async function AdminPage() {
           Settings
         </h2>
         <AdminPhaseForm currentPhase={admissionPhase} />
+        <QuickRecordingSettingsForm currentMaxDurationSeconds={quickRecordingMaxDurationSeconds} />
       </div>
     </main>
   );

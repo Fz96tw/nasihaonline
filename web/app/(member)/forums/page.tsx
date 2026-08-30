@@ -3,16 +3,18 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { Flame, Clock, ListOrdered, ArrowDownAZ } from "lucide-react";
+import { Flame, Clock, ListOrdered, ArrowDownAZ, Video } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getForumCategories } from "@/lib/forums-server";
 import { getAllCommunities, getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
 import { CommunityFilterPillsNav } from "@/components/shared/community-filter-pills-nav";
 import type { CommunityFilterSelection } from "@/components/shared/community-filter-pills";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Reveal } from "@/components/home/reveal";
 import { SortButton } from "@/components/forums/sort-button";
+import { QuickRecordingButton } from "@/components/quick-recording-button";
 import { Role } from "@/lib/generated/prisma/enums";
 import type { ForumCategory } from "@/lib/forums";
 
@@ -193,6 +195,13 @@ export default async function ForumsPage({
       </section>
 
       <section className="mx-auto flex max-w-[1120px] flex-col gap-6 px-8 py-16">
+        <div className="flex justify-end">
+          <QuickRecordingButton className={buttonVariants({ variant: "outline" })}>
+            <Video className="h-4 w-4" />
+            Record a quick video
+          </QuickRecordingButton>
+        </div>
+
         <CommunityFilterPillsNav
           communities={communities}
           myCommunityIds={myCommunityIds}

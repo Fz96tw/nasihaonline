@@ -256,12 +256,17 @@ enum AdmissionPhase {
 // Extend with more columns as future settings (e.g. inactivity threshold,
 // §3.4) are added, rather than introducing a generic key/value table.
 model SiteSettings {
-  id                        Int            @id @default(1)
-  admissionPhase            AdmissionPhase @default(referral_driven_growth)
-  welcomeAnnouncementInFeed Boolean        @default(true)
-  welcomeAnnouncementNotify Boolean        @default(true)
-  welcomeAnnouncementEmail  Boolean        @default(true)
-  updatedAt                 DateTime       @updatedAt
+  id                               Int            @id @default(1)
+  admissionPhase                   AdmissionPhase @default(referral_driven_growth)
+  welcomeAnnouncementInFeed        Boolean        @default(true)
+  welcomeAnnouncementNotify        Boolean        @default(true)
+  welcomeAnnouncementEmail         Boolean        @default(true)
+  // Quick Video Recording & Sharing initiative — max length of a one-click
+  // self/self quick recording, enforced both client-side (visible countdown,
+  // LiveKitMeetingScreen) and server-side (an in-process delayed stopEgress
+  // call scheduled by the recording/start route — see its doc comment).
+  quickRecordingMaxDurationSeconds Int            @default(30)
+  updatedAt                        DateTime       @updatedAt
 
   @@map("site_settings")
 }
@@ -669,6 +674,18 @@ enum MeetingPlatform {
   livekit
 }
 
+// Quick Video Recording & Sharing initiative — distinguishes a real
+// two-party negotiated meeting (`directory`, the only kind that existed
+// before this) from a one-click solo self/self recording (`quick_recording`,
+// created directly by lib/quick-recordings-server.ts, never through
+// createMeetingRequest/resolveMeetingRequest). Every list query that
+// surfaces "meetings with someone" (Inbox, My Meetings, upcoming/past
+// widgets) filters to `directory` so a quick recording never appears there.
+enum MeetingRequestOrigin {
+  directory
+  quick_recording
+}
+
 enum MeetingRequestStatus {
   pending
   accepted
@@ -785,6 +802,10 @@ model MeetingRequest {
   // decide which platform to create the room/link on. Defaults to
   // google_meet, preserving today's only behavior for existing rows.
   meetingPlatform                 MeetingPlatform             @default(google_meet)
+  // Quick Video Recording & Sharing initiative — see MeetingRequestOrigin's
+  // doc comment. Defaults to `directory`, preserving every existing row's
+  // (and every other creation path's) actual meaning unchanged.
+  origin                          MeetingRequestOrigin        @default(directory)
   // Set instead of meetingUrl/googleEventId when meetingPlatform is
   // livekit — non-null is the authoritative signal that this meeting is
   // LiveKit-backed, read by the in-app meeting page and recording webhook.

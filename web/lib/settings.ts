@@ -56,3 +56,21 @@ export async function setWelcomeAnnouncementSettings(
     update: input,
   });
 }
+
+/** Quick Video Recording & Sharing initiative — see SiteSettings.quickRecordingMaxDurationSeconds's schema comment. */
+export async function getQuickRecordingMaxDuration(): Promise<number> {
+  const settings = await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID },
+    update: {},
+  });
+  return settings.quickRecordingMaxDurationSeconds;
+}
+
+export async function setQuickRecordingMaxDuration(seconds: number): Promise<void> {
+  await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID, quickRecordingMaxDurationSeconds: seconds },
+    update: { quickRecordingMaxDurationSeconds: seconds },
+  });
+}

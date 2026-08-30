@@ -8,6 +8,8 @@ import {
   setAdmissionPhase,
   getWelcomeAnnouncementSettings,
   setWelcomeAnnouncementSettings,
+  getQuickRecordingMaxDuration,
+  setQuickRecordingMaxDuration,
 } from "@/lib/settings";
 
 const patchSchema = z.object({
@@ -15,6 +17,7 @@ const patchSchema = z.object({
   welcomeAnnouncementInFeed: z.boolean().optional(),
   welcomeAnnouncementNotify: z.boolean().optional(),
   welcomeAnnouncementEmail: z.boolean().optional(),
+  quickRecordingMaxDurationSeconds: z.number().int().min(1).max(3600).optional(),
 });
 
 export async function GET() {
@@ -23,6 +26,7 @@ export async function GET() {
     return NextResponse.json({
       admissionPhase: await getAdmissionPhase(),
       ...(await getWelcomeAnnouncementSettings()),
+      quickRecordingMaxDurationSeconds: await getQuickRecordingMaxDuration(),
     });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
@@ -61,8 +65,13 @@ export async function PATCH(request: Request) {
     });
   }
 
+  if (parsed.data.quickRecordingMaxDurationSeconds !== undefined) {
+    await setQuickRecordingMaxDuration(parsed.data.quickRecordingMaxDurationSeconds);
+  }
+
   return NextResponse.json({
     admissionPhase: await getAdmissionPhase(),
     ...(await getWelcomeAnnouncementSettings()),
+    quickRecordingMaxDurationSeconds: await getQuickRecordingMaxDuration(),
   });
 }

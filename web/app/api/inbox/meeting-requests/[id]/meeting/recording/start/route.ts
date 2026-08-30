@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { MeetingRequestOrigin } from "@/lib/generated/prisma/enums";
 import {
   attachLiveKitMeetingRequestRecordingSegment,
   getMeetingRequestMeetingStatus,
@@ -7,6 +9,8 @@ import {
 } from "@/lib/meeting-requests-server";
 import { updateRoomMetadata } from "@/lib/livekit";
 import { startEgress } from "@/lib/livekit-egress";
+import { getQuickRecordingMaxDuration } from "@/lib/settings";
+import { scheduleQuickRecordingAutoStop } from "@/lib/quick-recordings-server";
 
 /**
  * Same shape as the Event route (see
@@ -48,6 +52,17 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     });
 
     await updateRoomMetadata(status.livekitRoomName, { recording: true, egressId: result.egressId });
+
+    // Server-side duration backstop (Quick Video Recording & Sharing
+    // initiative) — only for a quick recording; a regular scheduled
+    // meeting has no duration cap. The client-side countdown
+    // (LiveKitMeetingScreen) is the primary enforcement.
+    const meetingRequest = await db.meetingRequest.findUnique({ where: { id }, select: { origin: true } });
+    if (meetingRequest?.origin === MeetingRequestOrigin.quick_recording) {
+      const maxDurationSeconds = await getQuickRecordingMaxDuration();
+      scheduleQuickRecordingAutoStop(status.livekitRoomName, result.egressId, maxDurationSeconds);
+    }
+
     return NextResponse.json({ recording: true, egressId: result.egressId });
   } catch (error) {
     if (error instanceof MeetingRequestError) {

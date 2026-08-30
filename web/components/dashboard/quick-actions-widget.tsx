@@ -13,8 +13,10 @@ import {
   Search,
   Send,
   Users,
+  Video,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { QuickRecordingButton } from "@/components/quick-recording-button";
 import type { LucideIcon } from "lucide-react";
 
 const ACTIONS: { label: string; href: string; icon: LucideIcon }[] = [
@@ -27,6 +29,9 @@ const ACTIONS: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Schedule 1-1 meeting", href: "/inbox", icon: Users },
   { label: "Send a direct message", href: "/inbox", icon: Send },
 ];
+
+const QUICK_ACTION_ITEM_CLASS =
+  "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-medium hover:bg-accent hover:underline disabled:opacity-50";
 
 const OPEN_STORAGE_KEY = "nasiha:dashboard:quick-actions-open";
 
@@ -66,6 +71,13 @@ export function QuickActionsWidget() {
       </CardHeader>
       <CardContent id="quick-actions-content" className={open ? "block" : "hidden lg:block"}>
         <ul className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+          <li>
+            <QuickRecordingButton className={QUICK_ACTION_ITEM_CLASS}>
+              <Video className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+              <span className="min-w-0 truncate">Record a quick video</span>
+              <ArrowRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+            </QuickRecordingButton>
+          </li>
           {ACTIONS.map((action) => (
             <li key={action.label}>
               <Link

@@ -405,6 +405,31 @@ const LK_BUTTON_ACTIVE_CLASS = "bg-[#373737] hover:bg-[#373737]";
 /** Matches `--lk-border-color: rgba(255,255,255,.1)` — for the dropdown panel and badges below, same dark-theme-consistency rationale as LK_BUTTON_CLASS. */
 const LK_PANEL_CLASS = "border-white/10 bg-[#1d1d1d] text-white";
 
+/** "4:59" / "0:07" — always minutes:seconds, no hours (recording limits are short, per-minute at most). */
+function formatSecondsRemaining(totalSeconds: number): string {
+  const seconds = Math.max(0, totalSeconds);
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes}:${String(remainder).padStart(2, "0")}`;
+}
+
+/**
+ * Countdown shown next to the Record button while recording is active
+ * (Quick Video Recording & Sharing initiative) — only rendered when the
+ * caller passed maxRecordingSeconds (today, only the quick-recording
+ * screen does; a regular scheduled meeting/event recording has no limit).
+ * Ticks down locally from `recording`'s true transition, independent of
+ * the actual egress duration — good enough given the short limits this is
+ * for, and avoids needing a server-supplied start timestamp.
+ */
+function RecordingCountdown({ secondsRemaining }: { secondsRemaining: number }) {
+  return (
+    <span className="pointer-events-none rounded-lg bg-[#1d1d1d] px-2.5 py-1 font-mono text-xs text-white/90 tabular-nums">
+      {formatSecondsRemaining(secondsRemaining)}
+    </span>
+  );
+}
+
 /**
  * Record/Stop button — rendered inside TopLeftOverlay below, not
  * independently positioned. Originally bottom-right (reported 2026-08-25:
@@ -699,6 +724,8 @@ export function LiveKitMeetingScreen({
   isHostOrCoHost,
   canKick,
   backHref,
+  maxRecordingSeconds,
+  onRecordingStopped,
 }: {
   tokenEndpoint: string;
   /** POST endpoints for the Record/Stop control — host/co-host only (Recording Access initiative; previously any attendee), same auth as tokenEndpoint. */
@@ -737,6 +764,10 @@ export function LiveKitMeetingScreen({
   canKick: boolean;
   /** Where to navigate once the participant leaves the call (VideoConference's built-in Leave button, or a connection drop) — same destination the page's own BackLink uses. */
   backHref: string;
+  /** Admin-configurable recording time limit (Quick Video Recording & Sharing initiative) — undefined means no limit (every caller except the quick-recording screen), which skips the countdown UI and auto-stop entirely. */
+  maxRecordingSeconds?: number;
+  /** Fires on any recording→not-recording transition (manual Stop or the countdown auto-stop) — never on initial mount. Only the quick-recording screen passes this, to navigate to its processing/done page. */
+  onRecordingStopped?: () => void;
 }) {
   const router = useRouter();
   const [credentials, setCredentials] = useState<{ token: string; serverUrl: string } | null>(null);
@@ -745,8 +776,47 @@ export function LiveKitMeetingScreen({
   const [recording, setRecording] = useState(false);
   const [participants, setParticipants] = useState<ParticipantSummary[]>([]);
   const [coHostUserIds, setCoHostUserIds] = useState<string[]>([]);
+  const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
+  const wasRecordingRef = useRef(false);
 
   usePreventScreenShareSelfMirror();
+
+  // Countdown + auto-stop (Quick Video Recording & Sharing initiative) —
+  // primary, client-side enforcement of maxRecordingSeconds; the
+  // recording/start route additionally schedules an independent
+  // server-side backstop for the case this tab goes idle and the interval
+  // below never fires. Also fires onRecordingStopped on every
+  // recording→not-recording transition, whether via this auto-stop or a
+  // manual Stop click (both surface identically through `recording`,
+  // which mirrors the room's own metadata — see RecordingStateListener).
+  useEffect(() => {
+    if (recording) {
+      if (!wasRecordingRef.current) setSecondsRemaining(maxRecordingSeconds ?? null);
+      wasRecordingRef.current = true;
+      return;
+    }
+    if (wasRecordingRef.current) onRecordingStopped?.();
+    wasRecordingRef.current = false;
+    setSecondsRemaining(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording]);
+
+  useEffect(() => {
+    if (secondsRemaining === null) return;
+    if (secondsRemaining <= 0) {
+      (async () => {
+        try {
+          const csrfToken = await getCsrfToken();
+          await fetch(recordingStopEndpoint, { method: "POST", headers: { "x-csrf-token": csrfToken } });
+        } catch (err) {
+          console.error("[livekit] Failed to auto-stop recording at the time limit", err);
+        }
+      })();
+      return;
+    }
+    const timer = setTimeout(() => setSecondsRemaining((current) => (current === null ? null : current - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [secondsRemaining, recordingStopEndpoint]);
 
   useEffect(() => {
     let cancelled = false;
@@ -806,6 +876,7 @@ export function LiveKitMeetingScreen({
             onError={pushToast}
           />
         )}
+        {recording && secondsRemaining !== null && <RecordingCountdown secondsRemaining={secondsRemaining} />}
         <ParticipantsControl
           participants={participants}
           viewerIsHostOrCoHost={isHostOrCoHost}
