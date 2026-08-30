@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, type ControllerRenderProps } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import { ForumThreadVisibility } from "@/lib/generated/prisma/enums";
 import { usePasteImageUpload } from "@/lib/use-paste-image-upload";
 import { CategoryCheckboxField } from "@/components/shared/category-checkbox-field";
 import type { KnowledgeCategoryOption } from "@/lib/library";
+import { QuickRecordingPicker, type QuickRecordingListItem } from "@/components/quick-recording-picker";
 
 const DEFAULT_VALUES: CreateForumThreadValues = {
   title: "",
@@ -26,6 +27,21 @@ const DEFAULT_VALUES: CreateForumThreadValues = {
   invitedUserIds: [],
   categoryIds: [],
 };
+
+/**
+ * Parses the `?video={meetingRequestId}:{recordingId}` param the quick-
+ * recording "done" page's Share CTA navigates here with (see
+ * ShareToForumDialog's onSelect) into the same `![video](...)` token format
+ * linkSharedRecording's SHARED_VIDEO_TOKEN_PATTERN/RECORDING_PROXY_URL_PATTERN
+ * expects. Malformed/missing params degrade to an empty body rather than
+ * throwing — this is just a prefill convenience, not a required input.
+ */
+function buildVideoTokenFromParam(videoParam: string | null): string {
+  if (!videoParam) return "";
+  const [meetingRequestId, recordingId] = videoParam.split(":");
+  if (!meetingRequestId || !recordingId) return "";
+  return `![video](/api/inbox/meeting-requests/${meetingRequestId}/recording/${recordingId})`;
+}
 
 /**
  * The "Post" body Textarea, split out so usePasteImageUpload (a hook) is
@@ -59,8 +75,15 @@ function ThreadBodyField({
     onImageUploadStateChange(pasteImage.uploading);
   }, [pasteImage.uploading, onImageUploadStateChange]);
 
+  function insertVideo(recording: QuickRecordingListItem) {
+    insertAtCaret(`![${recording.topic}](/api/inbox/meeting-requests/${recording.meetingRequestId}/recording/${recording.id})`);
+  }
+
   return (
     <>
+      <div className="mb-2">
+        <QuickRecordingPicker onSelect={insertVideo} triggerLabel="Insert a video…" />
+      </div>
       <Textarea
         rows={6}
         name={field.name}
@@ -111,6 +134,7 @@ export function NewThreadForm({
   myCommunityIds: string[];
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
@@ -123,7 +147,7 @@ export function NewThreadForm({
 
   const form = useForm<CreateForumThreadValues>({
     resolver: zodResolver(createForumThreadSchema),
-    defaultValues: DEFAULT_VALUES,
+    defaultValues: { ...DEFAULT_VALUES, body: buildVideoTokenFromParam(searchParams.get("video")) },
     mode: "onTouched",
   });
 

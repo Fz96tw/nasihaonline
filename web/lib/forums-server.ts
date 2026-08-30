@@ -6,6 +6,7 @@ import {
   KnowledgeVisibility,
   NotificationType,
   PastedImageOwnerType,
+  RecordingOwnerType,
 } from "@/lib/generated/prisma/enums";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { createNotification } from "@/lib/notifications-server";
@@ -17,6 +18,7 @@ import { DIRECTORY_TIERS } from "@/lib/members";
 import { CLINICAL_DISCUSSIONS_SLUG, EVENTS_FORUM_SLUG, LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import { ensureCommunityMembership, getMemberCommunityContext, type MemberCommunityContext } from "@/lib/profile-server";
 import { countPastedImageReferences, linkPastedImages, MAX_PASTED_IMAGES_PER_BODY } from "@/lib/pasted-images-server";
+import { linkSharedRecording } from "@/lib/quick-recordings-server";
 import type {
   ForumCategory,
   ForumThreadListItem,
@@ -751,6 +753,12 @@ export async function createForumThread(
     uploaderId: authorId,
     body: input.body,
   });
+  await linkSharedRecording({
+    ownerType: RecordingOwnerType.forum_post,
+    ownerId: thread.posts[0].id,
+    uploaderId: authorId,
+    body: input.body,
+  });
 
   const forumCommunityId = forum.category?.communityId;
   await ensureCommunityMembership(
@@ -949,6 +957,12 @@ export async function createForumPost(
   });
   await linkPastedImages({
     ownerType: PastedImageOwnerType.forum_post,
+    ownerId: post.id,
+    uploaderId: authorId,
+    body: input.body,
+  });
+  await linkSharedRecording({
+    ownerType: RecordingOwnerType.forum_post,
     ownerId: post.id,
     uploaderId: authorId,
     body: input.body,

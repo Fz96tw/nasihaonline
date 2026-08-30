@@ -1,11 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getCsrfToken } from "@/lib/csrf-client";
 import type { QuickRecordingProcessingStatus } from "@/lib/quick-recordings-server";
+import { ShareToForumDialog } from "@/components/forums/share-to-forum-dialog";
+import type { ForumCategory } from "@/lib/forums";
 
 const POLL_INTERVAL_MS = 3_000;
 
@@ -19,14 +22,18 @@ const POLL_INTERVAL_MS = 3_000;
 export function QuickRecordingDonePanel({
   meetingRequestId,
   initialStatus,
+  forums,
 }: {
   meetingRequestId: string;
   initialStatus: QuickRecordingProcessingStatus;
+  forums: Pick<ForumCategory, "id" | "name" | "slug">[];
 }) {
+  const router = useRouter();
   const [status, setStatus] = useState(initialStatus);
   const [topicDraft, setTopicDraft] = useState(initialStatus.topic);
   const [renaming, setRenaming] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const done = status.ready || status.failed;
@@ -130,9 +137,28 @@ export function QuickRecordingDonePanel({
         </div>
       )}
 
+      {status.ready && status.recordingId && (
+        <Button type="button" onClick={() => setShareDialogOpen(true)}>
+          Share to a forum
+        </Button>
+      )}
+
       <Button asChild variant="ghost">
         <a href="/dashboard">Back to Dashboard</a>
       </Button>
+
+      {status.ready && status.recordingId && (
+        <ShareToForumDialog
+          forums={forums}
+          open={shareDialogOpen}
+          onOpenChange={setShareDialogOpen}
+          onSelect={(forum) => {
+            router.push(
+              `/forums/${forum.slug}/new?video=${encodeURIComponent(`${meetingRequestId}:${status.recordingId}`)}`,
+            );
+          }}
+        />
+      )}
     </main>
   );
 }

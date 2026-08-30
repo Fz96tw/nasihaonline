@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getQuickRecordingProcessingStatus, QuickRecordingError } from "@/lib/quick-recordings-server";
+import { getForumCategories } from "@/lib/forums-server";
 import { QuickRecordingDonePanel } from "@/components/calendar/quick-recording-done-panel";
+import { Role } from "@/lib/generated/prisma/enums";
 
 export const metadata: Metadata = {
   title: "Quick Recording — NASIHA",
@@ -31,5 +33,8 @@ export default async function QuickRecordingDonePage({ params }: { params: Promi
     throw error;
   }
 
-  return <QuickRecordingDonePanel meetingRequestId={id} initialStatus={status} />;
+  const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
+  const forums = await getForumCategories(user.id, isPrivileged);
+
+  return <QuickRecordingDonePanel meetingRequestId={id} initialStatus={status} forums={forums} />;
 }

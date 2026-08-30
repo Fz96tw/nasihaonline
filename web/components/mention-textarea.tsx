@@ -6,6 +6,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import type { DirectoryMember } from "@/lib/members";
 import { usePasteImageUpload } from "@/lib/use-paste-image-upload";
+import { QuickRecordingPicker, type QuickRecordingListItem } from "@/components/quick-recording-picker";
 
 const SUGGESTION_LIMIT = 5;
 
@@ -31,6 +32,7 @@ export function MentionTextarea({
   allowedMemberIds,
   pasteImageUploadUrl,
   onImageUploadStateChange,
+  videoPickerEnabled,
   ...textareaProps
 }: Omit<TextareaProps, "value" | "onChange"> & {
   value: string;
@@ -41,6 +43,8 @@ export function MentionTextarea({
   pasteImageUploadUrl?: string;
   /** Notified whenever the paste-image upload's in-flight state changes, so the parent form can disable its submit button meanwhile. */
   onImageUploadStateChange?: (uploading: boolean) => void;
+  /** When true, shows an "Insert a video…" toolbar action (QuickRecordingPicker) above the textarea, wired to this component's own internal insertAtCaret — not exposed externally, so this has to be an opt-in prop rather than a caller-driven imperative call. Omit to leave the composer as a plain mention textarea (e.g. a post-body edit, which doesn't support this yet). */
+  videoPickerEnabled?: boolean;
 }) {
   const [query, setQuery] = useState<{ start: number; query: string } | null>(null);
   const [suggestions, setSuggestions] = useState<DirectoryMember[]>([]);
@@ -130,8 +134,17 @@ export function MentionTextarea({
     }
   }
 
+  function insertVideo(recording: QuickRecordingListItem) {
+    insertAtCaret(`![${recording.topic}](/api/inbox/meeting-requests/${recording.meetingRequestId}/recording/${recording.id})`);
+  }
+
   return (
     <div className="relative">
+      {videoPickerEnabled && (
+        <div className="mb-2">
+          <QuickRecordingPicker onSelect={insertVideo} triggerLabel="Insert a video…" />
+        </div>
+      )}
       <Textarea
         {...textareaProps}
         ref={textareaRef}

@@ -81,6 +81,7 @@ function ReplyForm({
         autoFocus={autoFocus}
         pasteImageUploadUrl="/api/forums/post-image"
         onImageUploadStateChange={setImageUploading}
+        videoPickerEnabled
       />
       {requireDeidentification && (
         <label className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">

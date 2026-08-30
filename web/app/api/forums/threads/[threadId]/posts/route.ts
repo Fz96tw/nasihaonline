@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { ForumError, createForumPost } from "@/lib/forums-server";
+import { QuickRecordingError } from "@/lib/quick-recordings-server";
 import { createForumPostSchema } from "@/lib/validation/forum";
 import { enqueueForumThreadIndexSync } from "@/lib/queues/search-index-queue";
 import { Role } from "@/lib/generated/prisma/enums";
@@ -32,6 +33,9 @@ export async function POST(request: Request, { params }: { params: { threadId: s
     return NextResponse.json(post, { status: 201 });
   } catch (error) {
     if (error instanceof ForumError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof QuickRecordingError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     throw error;
