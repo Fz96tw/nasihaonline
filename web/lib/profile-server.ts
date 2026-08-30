@@ -101,12 +101,11 @@ export type MemberCommunityContext = { communityIds: string[]; followsAllCommuni
  * Auto-join rule (community-based-categorization initiative): a member who
  * gets tagged into a community's content — submitting/hosting an item under
  * it, or being invited to one — becomes a real member of that community,
- * not just someone who can see the one item. This is what lets the
- * two-level "My Communities" / "Other Communities" filter default safely to
- * "My Communities" everywhere (Peer Review's dashboard included) without a
- * per-page exemption for personal items tagged under a community the member
- * hadn't explicitly joined — they're a real member the moment they're
- * tagged. Called by every domain's create/invite path (Library, Review,
+ * not just someone who can see the one item. This is what lets the "Show
+ * only my communities" checkbox (Peer Review's dashboard included) safely
+ * include a personal item tagged under a community the member hadn't
+ * explicitly joined — they're a real member the moment they're tagged.
+ * Called by every domain's create/invite path (Library, Review,
  * Events, Forum) with the submitter/host + any invitees and the content's
  * community id(s). A follows-all-communities member is skipped — they're
  * already effectively a member of everything. `skipDuplicates` makes this

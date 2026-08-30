@@ -908,6 +908,8 @@ export async function createForumPost(
       id: true,
       title: true,
       forumId: true,
+      eventId: true,
+      knowledgeItemId: true,
       forum: { select: { slug: true, category: { select: { communityId: true } } } },
       event: EVENT_THREAD_ACCESS_SELECT,
       knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
@@ -955,6 +957,29 @@ export async function createForumPost(
   // forum_thread branch sorts on this) so fresh replies resurface it
   // instead of it only ever appearing once at its original creation time.
   await db.forumThread.update({ where: { id: threadId }, data: { lastActivityAt: post.createdAt } });
+
+  // Auto-join rule (community-based-categorization initiative, see
+  // ensureCommunityMembership's doc comment): commenting on an item tagged
+  // to a community makes the commenter a real member of it too, same as
+  // submitting/hosting one. Covers a standalone forum thread's own category
+  // community plus, for a thread spawned from an event or Library item, that
+  // item's own community tags (a category-less Events/Library forum
+  // otherwise wouldn't resolve any community here).
+  const [eventCommunities, itemCommunities] = await Promise.all([
+    thread.eventId ? db.eventCommunity.findMany({ where: { eventId: thread.eventId }, select: { communityId: true } }) : [],
+    thread.knowledgeItemId
+      ? db.knowledgeItemCommunity.findMany({ where: { knowledgeItemId: thread.knowledgeItemId }, select: { communityId: true } })
+      : [],
+  ]);
+  const forumCommunityId = thread.forum.category?.communityId;
+  await ensureCommunityMembership(
+    [authorId],
+    [
+      ...(forumCommunityId ? [forumCommunityId] : []),
+      ...eventCommunities.map((c) => c.communityId),
+      ...itemCommunities.map((c) => c.communityId),
+    ],
+  );
 
   const participants = await db.forumPost.findMany({
     where: { threadId, authorId: { not: authorId } },

@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { Clock, Eye, MessageSquare } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getLibraryCommunityCounts, getPublishedKnowledgeItems } from "@/lib/library-server";
-import { getAllCommunities, getDefaultCommunityFilter, getOrCreateProfile } from "@/lib/profile-server";
+import { getAllCommunities, getDefaultCommunityFilter, getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS } from "@/lib/library";
 import type { LibrarySort } from "@/lib/library";
 import { KnowledgeContentType, KnowledgeLevel, Role } from "@/lib/generated/prisma/enums";
@@ -63,7 +63,7 @@ export default async function LibraryPage({
   searchParams,
 }: {
   searchParams: {
-    /** "other" for the Other Communities tab with no specific pick (shows nothing), a community slug for a specific pick, or absent (defaults to "mine" — the member's own communities). */
+    /** "mine" (the checkbox is checked), a community slug (a pill is active), or absent (unrestricted — show everything). */
     community?: string;
     type?: string;
     level?: string;
@@ -91,26 +91,25 @@ export default async function LibraryPage({
   const [profile, communities] = await Promise.all([getOrCreateProfile(user.id), getAllCommunities()]);
   const myCommunityIds = profile.communities.map((c) => c.community.id);
 
-  // Two-level pill selection (My Communities / Other Communities tabs,
-  // each with its own community sub-pills), matching the Peer Review
-  // dashboard's CommunityFilterPills — replaces the two-step Community ->
-  // Category chip design now that every card already shows its own
-  // category badges, same rationale Peer Review's switch documented. A
-  // real community slug picks that one; absent means "mine" (the member's
-  // own communities, or unfiltered if they follow all — see
-  // getDefaultCommunityFilter). "other" with no specific pick shows the
-  // aggregate of every community the member ISN'T part of (mirrors "mine"),
-  // via getPublishedKnowledgeItems' excludeCommunityIds.
+  // "Show only my communities" checkbox + flat community pill row
+  // (CommunityFilterPillsNav) — replaces the two-step Community -> Category
+  // chip design now that every card already shows its own category badges,
+  // same rationale Peer Review's switch documented, and the earlier My/
+  // Other Communities two-tab design (a bare "Other Communities" pick with
+  // no specific pill used to show nothing until narrowed further; now
+  // unchecked-with-no-pill shows everything instead). A real community
+  // slug picks that one; "mine" checks the box (the member's own
+  // communities, or unfiltered if they follow all — see
+  // getDefaultCommunityFilter); absent/unrecognized means unrestricted.
   const requestedCommunity = searchParams.community ?? cookies().get(COMMUNITY_FILTER_COOKIE)?.value;
   const explicitCommunity = communities.find((c) => c.slug === requestedCommunity);
-  const isOther = requestedCommunity === "other";
-  const selected: CommunityFilterSelection = isOther ? "other" : explicitCommunity ? explicitCommunity.id : "mine";
-  const communityIds = isOther ? undefined : getDefaultCommunityFilter(profile, explicitCommunity?.id);
+  const selected: CommunityFilterSelection | undefined =
+    requestedCommunity === "mine" ? "mine" : explicitCommunity ? explicitCommunity.id : undefined;
+  const communityIds = selected === undefined ? undefined : getDefaultCommunityFilter(profile, explicitCommunity?.id);
 
   const [items, communityCounts] = await Promise.all([
     getPublishedKnowledgeItems({
       communityIds,
-      excludeCommunityIds: isOther ? myCommunityIds : undefined,
       contentType,
       level,
       q: searchParams.q,
@@ -122,6 +121,7 @@ export default async function LibraryPage({
   ]);
 
   const canEditAny = isPrivileged;
+  const currentUserAvatarUrl = withResolvedAvatarUrl(profile).avatarUrl;
 
   return (
     <main className="min-h-screen">
@@ -157,19 +157,21 @@ export default async function LibraryPage({
           selected={selected}
           counts={communityCounts}
           cookieName={COMMUNITY_FILTER_COOKIE}
+          currentUserName={user.name ?? "Member"}
+          currentUserAvatarUrl={currentUserAvatarUrl}
           buildHref={(selection) => {
             const params = new URLSearchParams();
             if (searchParams.type) params.set("type", searchParams.type);
             if (searchParams.level) params.set("level", searchParams.level);
             if (searchParams.q) params.set("q", searchParams.q);
             if (searchParams.ref) params.set("ref", searchParams.ref);
-            if (selection === "other") {
-              params.set("community", "other");
-            } else if (selection !== "mine") {
+            if (selection === "mine") {
+              params.set("community", "mine");
+            } else if (selection !== undefined) {
               const slug = communities.find((c) => c.id === selection)?.slug;
               if (slug) params.set("community", slug);
             }
-            // selection === "mine" sets no community param — that's the implicit default.
+            // selection undefined sets no community param — that's the implicit "show all" default.
             const qs = params.toString();
             return qs ? `/library?${qs}` : "/library";
           }}

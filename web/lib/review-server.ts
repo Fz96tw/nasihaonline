@@ -874,7 +874,13 @@ export async function postReviewComment(
 ): Promise<{ id: string; createdAt: string }> {
   const item = await db.reviewItem.findUnique({
     where: { id: itemId },
-    select: { id: true, title: true, submitterId: true, invitees: { select: { userId: true } } },
+    select: {
+      id: true,
+      title: true,
+      submitterId: true,
+      invitees: { select: { userId: true } },
+      categories: { select: { category: { select: { communityId: true } } } },
+    },
   });
   if (!item) throw new ReviewItemError(404, "Review item not found.");
 
@@ -948,6 +954,11 @@ export async function postReviewComment(
 
     return created;
   });
+
+  await ensureCommunityMembership(
+    [authorId],
+    item.categories.map((c) => c.category.communityId),
+  );
 
   const recipientIds = new Set<string>();
   if (item.submitterId !== authorId) recipientIds.add(item.submitterId);

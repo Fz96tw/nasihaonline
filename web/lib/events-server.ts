@@ -416,13 +416,24 @@ export async function getEventsForViewer(
       cancelledAt: null,
       ...(filterParams?.categorySlug ? { categories: { some: { category: { slug: filterParams.categorySlug } } } } : {}),
       ...(filterParams?.communityIds?.length
-        ? { communities: { some: { communityId: { in: filterParams.communityIds } } } }
+        ? {
+            OR: [
+              { communities: { some: { communityId: { in: filterParams.communityIds } } } },
+              ...(userId ? [{ rsvps: { some: { userId, status: RSVPStatus.going } } }] : []),
+            ],
+          }
         : {}),
       AND: [
         {
           OR: [
             { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
-            ...(userId ? [{ hostId: userId }, { invitees: { some: { userId } } }] : []),
+            ...(userId
+              ? [
+                  { hostId: userId },
+                  { invitees: { some: { userId } } },
+                  { rsvps: { some: { userId, status: RSVPStatus.going } } },
+                ]
+              : []),
           ],
         },
         recurringSeriesStillActiveOrUpcoming(now),
@@ -518,6 +529,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
         { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
         { hostId: userId },
         { invitees: { some: { userId } } },
+        { rsvps: { some: { userId, status: RSVPStatus.going } } },
       ],
     },
     select: {
@@ -643,6 +655,7 @@ export async function getMemberEventById(
               { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
               { hostId: userId },
               { invitees: { some: { userId } } },
+              { rsvps: { some: { userId, status: RSVPStatus.going } } },
             ],
           }),
     },
@@ -849,6 +862,11 @@ export async function startEventDiscussion(eventId: string, starterId: string): 
     });
     return created;
   });
+
+  await ensureCommunityMembership(
+    [starterId],
+    event.communities.map((c) => c.community.id),
+  );
 
   return { threadId: thread.id };
 }
@@ -1063,21 +1081,25 @@ export async function getDashboardUpcomingEvents(
         // A restricted event's organizer/invitees see it unconditionally —
         // they shouldn't have to RSVP to their own private event just to
         // have it surface here. A community event keeps its pre-existing
-        // "open OR I've RSVP'd" gate unchanged (the host isn't auto-included
-        // for a community event either, same as before this objective).
+        // "open" gate unchanged otherwise (the host isn't auto-included for
+        // a community event either, same as before this objective); an
+        // RSVP'd-going member always sees it regardless, handled by the
+        // dedicated rsvps branch above.
         {
           OR: [
             { hostId: userId },
             { invitees: { some: { userId } } },
+            // A member who RSVP'd going always sees it here regardless of
+            // current community membership (e.g. they left the community, or
+            // it was tagged after they RSVP'd) — same rationale as every
+            // other events read path's rsvps bypass branch.
+            { rsvps: { some: { userId, status: RSVPStatus.going } } },
             {
               visibility: EventVisibility.community,
               // AND'd rather than spread alongside the literal OR two lines
               // below — see getPublicUpcomingEvents' identical note on why
               // two OR-bearing fragments can't share one object.
-              AND: [
-                communityVisibilityWhere(member),
-                { OR: [{ open: true }, { rsvps: { some: { userId, status: RSVPStatus.going } } }] },
-              ],
+              AND: [communityVisibilityWhere(member), { open: true }],
             },
           ],
         },
@@ -3291,6 +3313,7 @@ export async function getEventMeetRecordingDownloadUrl(
         { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
         { hostId: userId },
         { invitees: { some: { userId } } },
+        { rsvps: { some: { userId, status: RSVPStatus.going } } },
       ],
     },
     select: {

@@ -190,16 +190,13 @@ export async function getKnowledgeCategories(): Promise<KnowledgeCategoryOption[
 }
 
 /**
- * Powers /library's CommunityFilterPills item-count hints ("mine"/"all"/
- * one per other community) — same visibility-scoped counting as
+ * Powers /library's CommunityFilterPillsNav item-count hints ("mine" plus
+ * one per community) — same visibility-scoped counting as
  * getKnowledgeCategoriesWithCounts, but against the direct
  * KnowledgeItemCommunity relation (standardization objective) rather than
- * derived through categories, and pre-shaped into the
- * "mine"/"all"/communityId keying CommunityFilterPills' `counts` prop
- * expects. "all" is every visible item once each (not a sum of per-
- * community counts, which would double-count an item tagged to more than
- * one community); "mine" is every visible item tagged to at least one of
- * the member's own communities.
+ * derived through categories, and pre-shaped into the "mine"/communityId
+ * keying CommunityFilterPillsNav's `counts` prop expects. "mine" is every
+ * visible item tagged to at least one of the member's own communities.
  */
 export async function getLibraryCommunityCounts(params: {
   userId: string;
@@ -218,19 +215,12 @@ export async function getLibraryCommunityCounts(params: {
       };
   const baseWhere = { status: { in: visibleStatuses }, ...visibilityFilter };
 
-  const [mine, other, perCommunity] = await Promise.all([
+  const [mine, perCommunity] = await Promise.all([
     params.myCommunityIds.length > 0
       ? db.knowledgeItem.count({
           where: { ...baseWhere, communities: { some: { communityId: { in: params.myCommunityIds } } } },
         })
       : Promise.resolve(0),
-    // "other" is informational only (the tab itself shows nothing until a
-    // specific pill underneath it is picked) — every item touching at
-    // least one community outside the member's own set, i.e. what picking
-    // each "other" pill in turn would reveal, combined.
-    db.knowledgeItem.count({
-      where: { ...baseWhere, communities: { some: { communityId: { notIn: params.myCommunityIds } } } },
-    }),
     db.knowledgeItemCommunity.groupBy({
       by: ["communityId"],
       where: { knowledgeItem: baseWhere },
@@ -240,7 +230,6 @@ export async function getLibraryCommunityCounts(params: {
 
   const counts = new Map<string, number>();
   counts.set("mine", mine);
-  counts.set("other", other);
   for (const row of perCommunity) counts.set(row.communityId, row._count._all);
   return counts;
 }
@@ -753,14 +742,6 @@ export async function getPublishedKnowledgeItems(params: {
    * communities as the default when neither is picked).
    */
   communityIds?: string[];
-  /**
-   * Two-level community filter's bare "Other Communities" tab — every item
-   * touching at least one community NOT in this list (the member's own
-   * communities), mirroring how the bare "mine" default aggregates every
-   * community they ARE in. Ignored when communityIds is set (a specific
-   * pick, from either tab, always wins).
-   */
-  excludeCommunityIds?: string[];
   q?: string;
   sort?: LibrarySort;
   userId: string;
@@ -773,9 +754,7 @@ export async function getPublishedKnowledgeItems(params: {
   // otherwise be unfindable by this filter.
   const communityFilter = params.communityIds?.length
     ? { communities: { some: { communityId: { in: params.communityIds } } } }
-    : params.excludeCommunityIds?.length
-      ? { communities: { some: { communityId: { notIn: params.excludeCommunityIds } } } }
-      : {};
+    : {};
   const filters = {
     ...(params.contentType ? { contentType: params.contentType } : {}),
     ...(params.level ? { level: params.level } : {}),
@@ -1168,6 +1147,7 @@ export async function startKnowledgeItemDiscussion(
       contributorId: true,
       invitees: { select: { userId: true } },
       forumThread: { select: { id: true } },
+      communities: { select: { communityId: true } },
     },
   });
   if (!item) throw new KnowledgeItemError(404, "Resource not found.");
@@ -1196,6 +1176,11 @@ export async function startKnowledgeItemDiscussion(
     });
     return created;
   });
+
+  await ensureCommunityMembership(
+    [actingUser.id],
+    item.communities.map((c) => c.communityId),
+  );
 
   return { threadId: thread.id };
 }

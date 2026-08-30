@@ -6,7 +6,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getMemberEvents } from "@/lib/events-server";
 import { EVENT_SUBMISSION_TIERS } from "@/lib/events";
 import { getPastMeetingsForUser, getUpcomingMeetingsForUser } from "@/lib/meeting-requests-server";
-import { getAllCommunities, getOrCreateProfile } from "@/lib/profile-server";
+import { getAllCommunities, getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
 import { CalendarView } from "@/components/calendar/calendar-view";
 import { BackToFeedLink } from "@/components/feed/back-to-feed-link";
 import { CommunityFilterPillsNav } from "@/components/shared/community-filter-pills-nav";
@@ -31,18 +31,16 @@ const COMMUNITY_FILTER_COOKIE = "calendar_community_filter";
  * with zero tagged communities (every pre-existing event, per objective
  * 5's grandfathering) matches every selection, same "universal match" rule
  * the original community-based-categorization plan specified for Forum's
- * community-less threads. A bare "other" selection is the aggregate of
- * every community the member ISN'T part of (mirrors "mine" being the
- * aggregate of every community they are), not a single specific id.
+ * community-less threads. `undefined` (checkbox unchecked, no pill picked)
+ * matches everything.
  */
 function matchesCommunityFilter(
   eventCommunities: { id: string }[],
-  selection: CommunityFilterSelection,
+  selection: CommunityFilterSelection | undefined,
   myCommunityIds: string[],
 ): boolean {
-  if (eventCommunities.length === 0) return true;
+  if (selection === undefined || eventCommunities.length === 0) return true;
   if (selection === "mine") return eventCommunities.some((c) => myCommunityIds.includes(c.id));
-  if (selection === "other") return eventCommunities.some((c) => !myCommunityIds.includes(c.id));
   return eventCommunities.some((c) => c.id === selection);
 }
 
@@ -50,8 +48,7 @@ function matchesCommunityFilter(
  * Per-pill item counts against the mine-toggle-filtered but community-
  * unfiltered list — same "counts reflect the active tab, not the
  * community-filtered subset" convention as Peer Review's
- * computeCommunityCounts. "other" is every event that doesn't already
- * match "mine" — exactly what the bare "Other Communities" tab shows.
+ * computeCommunityCounts.
  */
 function computeCommunityCounts(
   events: { communities: { id: string }[] }[],
@@ -59,9 +56,7 @@ function computeCommunityCounts(
   myCommunityIds: string[],
 ): Map<string, number> {
   const counts = new Map<string, number>();
-  const mineMatches = events.filter((event) => matchesCommunityFilter(event.communities, "mine", myCommunityIds));
-  counts.set("mine", mineMatches.length);
-  counts.set("other", events.length - mineMatches.length);
+  counts.set("mine", events.filter((event) => matchesCommunityFilter(event.communities, "mine", myCommunityIds)).length);
   for (const community of communities) {
     counts.set(
       community.id,
@@ -93,16 +88,13 @@ export default async function CalendarPage({
   const myCommunityIds = profile.communities.map((c) => c.community.id);
   const requestedCommunity = searchParams.community ?? cookies().get(COMMUNITY_FILTER_COOKIE)?.value;
   const explicitCommunity = communities.find((c) => c.slug === requestedCommunity);
-  const isOtherCommunities = requestedCommunity === "other";
-  const selectedCommunity: CommunityFilterSelection = isOtherCommunities
-    ? "other"
-    : explicitCommunity
-      ? explicitCommunity.id
-      : "mine";
+  const selectedCommunity: CommunityFilterSelection | undefined =
+    requestedCommunity === "mine" ? "mine" : explicitCommunity ? explicitCommunity.id : undefined;
   const events = mineFilteredEvents.filter((event) =>
     matchesCommunityFilter(event.communities, selectedCommunity, myCommunityIds),
   );
   const communityCounts = computeCommunityCounts(mineFilteredEvents, communities, myCommunityIds);
+  const currentUserAvatarUrl = withResolvedAvatarUrl(profile).avatarUrl;
 
   const mineHref = (() => {
     const qs = new URLSearchParams();
@@ -149,17 +141,19 @@ export default async function CalendarPage({
           selected={selectedCommunity}
           counts={communityCounts}
           cookieName={COMMUNITY_FILTER_COOKIE}
+          currentUserName={user.name ?? "Member"}
+          currentUserAvatarUrl={currentUserAvatarUrl}
           buildHref={(selection) => {
             const params = new URLSearchParams();
             if (searchParams.ref) params.set("ref", searchParams.ref);
             if (mine) params.set("mine", "1");
-            if (selection === "other") {
-              params.set("community", "other");
-            } else if (selection !== "mine") {
+            if (selection === "mine") {
+              params.set("community", "mine");
+            } else if (selection !== undefined) {
               const slug = communities.find((c) => c.id === selection)?.slug;
               if (slug) params.set("community", slug);
             }
-            // selection === "mine" sets no community param — that's the implicit default.
+            // selection undefined sets no community param — that's the implicit "show all" default.
             const qs = params.toString();
             return qs ? `/calendar?${qs}` : "/calendar";
           }}

@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { Flame, Clock, ListOrdered, ArrowDownAZ } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getForumCategories } from "@/lib/forums-server";
-import { getAllCommunities, getOrCreateProfile } from "@/lib/profile-server";
+import { getAllCommunities, getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
 import { CommunityFilterPillsNav } from "@/components/shared/community-filter-pills-nav";
 import type { CommunityFilterSelection } from "@/components/shared/community-filter-pills";
 import { Badge } from "@/components/ui/badge";
@@ -35,21 +35,18 @@ const COMMUNITY_FILTER_COOKIE = "forums_community_filter";
  * community-based-categorization initiative, objective 6 — which forum
  * tiles the current pill selection shows. A generic (untouched) forum
  * always matches every selection, same "universal" rule Calendar/Events
- * use for community-less content. A bare "other" selection is the
- * aggregate of every community the member ISN'T part of (mirrors "mine"
- * being the aggregate of every community they are), not a single specific
- * id. This is purely a display narrowing *within* the already-access-
- * filtered list getForumCategories returns — it never un-hides a forum
- * the viewer can't access.
+ * use for community-less content. `undefined` (checkbox unchecked, no
+ * pill picked) matches everything. This is purely a display narrowing
+ * *within* the already-access-filtered list getForumCategories returns —
+ * it never un-hides a forum the viewer can't access.
  */
 function matchesCommunityFilter(
   communityId: string | null,
-  selection: CommunityFilterSelection,
+  selection: CommunityFilterSelection | undefined,
   myCommunityIds: string[],
 ): boolean {
-  if (communityId === null) return true;
+  if (communityId === null || selection === undefined) return true;
   if (selection === "mine") return myCommunityIds.includes(communityId);
-  if (selection === "other") return !myCommunityIds.includes(communityId);
   return communityId === selection;
 }
 
@@ -57,9 +54,7 @@ function matchesCommunityFilter(
  * Pill counts show total threads across the matching forums, not the
  * number of matching forums — a member scanning pills cares how much
  * discussion is in a community, not how many forum categories it happens
- * to be split into. "other" is every thread in a forum that doesn't
- * already match "mine" — exactly what the bare "Other Communities" tab
- * shows.
+ * to be split into.
  */
 function computeCommunityCounts(
   forums: { communityId: string | null; threadCount: number }[],
@@ -68,9 +63,7 @@ function computeCommunityCounts(
 ): Map<string, number> {
   const counts = new Map<string, number>();
   const sumThreads = (matching: typeof forums) => matching.reduce((sum, forum) => sum + forum.threadCount, 0);
-  const mineMatches = forums.filter((forum) => matchesCommunityFilter(forum.communityId, "mine", myCommunityIds));
-  counts.set("mine", sumThreads(mineMatches));
-  counts.set("other", sumThreads(forums) - sumThreads(mineMatches));
+  counts.set("mine", sumThreads(forums.filter((forum) => matchesCommunityFilter(forum.communityId, "mine", myCommunityIds))));
   for (const community of communities) {
     counts.set(
       community.id,
@@ -155,13 +148,10 @@ export default async function ForumsPage({
 
   const requestedCommunity = searchParams.community ?? cookies().get(COMMUNITY_FILTER_COOKIE)?.value;
   const explicitCommunity = communities.find((c) => c.slug === requestedCommunity);
-  const isOtherCommunities = requestedCommunity === "other";
-  const selectedCommunity: CommunityFilterSelection = isOtherCommunities
-    ? "other"
-    : explicitCommunity
-      ? explicitCommunity.id
-      : "mine";
+  const selectedCommunity: CommunityFilterSelection | undefined =
+    requestedCommunity === "mine" ? "mine" : explicitCommunity ? explicitCommunity.id : undefined;
   const communityCounts = computeCommunityCounts(accessibleForums, communities, myCommunityIds);
+  const currentUserAvatarUrl = withResolvedAvatarUrl(profile).avatarUrl;
 
   const forums = accessibleForums.filter((forum) =>
     matchesCommunityFilter(forum.communityId, selectedCommunity, myCommunityIds),
@@ -210,12 +200,14 @@ export default async function ForumsPage({
           selected={selectedCommunity}
           counts={communityCounts}
           cookieName={COMMUNITY_FILTER_COOKIE}
+          currentUserName={user.name ?? "Member"}
+          currentUserAvatarUrl={currentUserAvatarUrl}
           buildHref={(selection) => {
             const params = new URLSearchParams();
             if (searchParams.sort) params.set("sort", searchParams.sort);
-            if (selection === "other") {
-              params.set("community", "other");
-            } else if (selection !== "mine") {
+            if (selection === "mine") {
+              params.set("community", "mine");
+            } else if (selection !== undefined) {
               const slug = communities.find((c) => c.id === selection)?.slug;
               if (slug) params.set("community", slug);
             }

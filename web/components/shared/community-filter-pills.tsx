@@ -1,47 +1,45 @@
 "use client";
 
+import { Avatar } from "@/components/ui/avatar";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
-export type CommunityFilterSelection = "mine" | "other" | (string & {});
+/** `"mine"` (the checkbox is checked) or a specific community id (a pill is active). `undefined` means unchecked with no pill picked — show everything, unrestricted. */
+export type CommunityFilterSelection = "mine" | (string & {});
 
 function chipClasses(active: boolean, muted: boolean) {
   return cn(
-    "rounded-full px-3 py-1 text-sm font-medium transition-colors",
+    "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition-colors",
     active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70",
     muted && !active && "opacity-50",
-  );
-}
-
-// The My/Other tab pair reads as one segmented toggle (a single pill-shaped
-// track with the active side filled) rather than two separate free-floating
-// pills — visually distinct from the sub-pill row underneath, which stays a
-// flat wrapping list of independent pills.
-function tabClasses(active: boolean) {
-  return cn(
-    "rounded-full px-3 py-1 text-sm font-medium transition-colors",
-    active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
   );
 }
 
 function Count({ value, active }: { value: number | undefined; active: boolean }) {
   if (value === undefined) return null;
   return (
-    <span className={cn("ml-1 text-[0.65rem] tabular-nums", active ? "text-primary-foreground/70" : "text-muted-foreground/70")}>
+    <span className={cn("text-[0.65rem] tabular-nums", active ? "text-primary-foreground/70" : "text-muted-foreground/70")}>
       {value}
     </span>
   );
 }
 
 /**
- * Two-level community filter — a top row of "My Communities" / "Other
- * Communities" tabs, and a second row underneath listing the individual
- * communities for whichever tab is active. Replaces the earlier flat "My
- * Communities" / "All Communities" / one-pill-per-community row: there's
- * no more unfiltered "everything" state — picking the "Other Communities"
- * tab alone shows nothing until the member picks a specific community pill
- * below it, same as "My Communities" only ever means the aggregate of the
- * member's own joined communities, never every community (confirmed with
- * user). Local-state only (no href/nav mode) — its one consumer
+ * Single "Show only my communities" checkbox (same label/behavior as
+ * MyCommunitiesCheckbox on /whats-new) plus, only while unchecked, a flat
+ * row of one pill per community — clicking a pill narrows to just that
+ * community, clicking it again clears back to "everything". Checked means
+ * the aggregate of the member's own joined communities (pills hidden
+ * entirely, same as the old "My Communities" tab); unchecked with no pill
+ * picked is a new third state this replaces the old "Other Communities"
+ * tab with — every community's content, not just non-member ones (no more
+ * unfiltered-content-has-no-representation gap that tab had).
+ *
+ * A pill for a community the member already belongs to carries their own
+ * avatar as a small badge — the visual replacement for what the old
+ * checked-tab grouping used to convey structurally.
+ *
+ * Local-state only (no href/nav mode) — its one consumer
  * (ReviewDashboardTabs) already filters already-loaded client data with no
  * URL round trip. A server-driven, shareable-URL consumer (e.g. Library's
  * browse page) needs community-filter-pills-nav.tsx instead: this
@@ -58,43 +56,42 @@ export function CommunityFilterPills({
   selected,
   onSelect,
   counts,
+  currentUserName,
+  currentUserAvatarUrl,
 }: {
   communities: { id: string; name: string }[];
   myCommunityIds: string[];
   followsAllCommunities: boolean;
-  selected: CommunityFilterSelection;
-  onSelect: (selection: CommunityFilterSelection) => void;
-  /** Item count per pill (keyed by "mine"/"other"/communityId) for whichever list is currently in view — e.g. the active dashboard tab. Omit to render plain pills with no count. */
+  selected: CommunityFilterSelection | undefined;
+  onSelect: (selection: CommunityFilterSelection | undefined) => void;
+  /** Item count per pill (keyed by "mine"/communityId) for whichever list is currently in view — e.g. the active dashboard tab. Omit to render plain pills with no count. */
   counts?: Map<string, number>;
+  currentUserName: string;
+  currentUserAvatarUrl?: string | null;
 }) {
   const myIdSet = new Set(followsAllCommunities ? communities.map((c) => c.id) : myCommunityIds);
-  const myCommunities = communities.filter((c) => myIdSet.has(c.id));
-  const otherCommunities = communities.filter((c) => !myIdSet.has(c.id));
-  const activeTab: "mine" | "other" =
-    selected === "mine" ? "mine" : selected === "other" ? "other" : myIdSet.has(selected) ? "mine" : "other";
-  const subCommunities = activeTab === "mine" ? myCommunities : otherCommunities;
+  const checked = selected === "mine";
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="inline-flex w-fit gap-0.5 rounded-full border bg-muted p-1">
-        <button type="button" onClick={() => onSelect("mine")} className={tabClasses(activeTab === "mine")}>
-          My Communities
-          <Count value={counts?.get("mine")} active={activeTab === "mine"} />
-        </button>
-        <button type="button" onClick={() => onSelect("other")} className={tabClasses(activeTab === "other")}>
-          Other Communities
-          <Count value={counts?.get("other")} active={activeTab === "other"} />
-        </button>
-      </div>
-      {subCommunities.length > 0 && (
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filter Content</span>
+      <label className="flex w-fit cursor-pointer items-center gap-1.5 text-sm text-muted-foreground">
+        <Checkbox checked={checked} onCheckedChange={(next) => onSelect(next ? "mine" : undefined)} />
+        Show only my communities
+        <Count value={counts?.get("mine")} active={checked} />
+      </label>
+      {!checked && communities.length > 0 && (
         <div className="flex flex-wrap gap-2 pl-1">
-          {subCommunities.map((community) => (
+          {communities.map((community) => (
             <button
               key={community.id}
               type="button"
-              onClick={() => onSelect(community.id)}
+              onClick={() => onSelect(selected === community.id ? undefined : community.id)}
               className={chipClasses(selected === community.id, counts?.get(community.id) === 0)}
             >
+              {myIdSet.has(community.id) && (
+                <Avatar name={currentUserName} src={currentUserAvatarUrl} size="xs" className="h-4 w-4 shrink-0 text-[8px]" />
+              )}
               {community.name}
               <Count value={counts?.get(community.id)} active={selected === community.id} />
             </button>

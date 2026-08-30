@@ -7,13 +7,22 @@ import { getSessionUser } from "@/lib/auth";
 import { getFeedPage } from "@/lib/feed-server";
 import { FEED_TYPES, FEED_TYPE_LABELS, isFeedItemType } from "@/lib/feed";
 import { FeedList } from "@/components/feed/feed-list";
-import { MY_COMMUNITIES_COOKIE, MyCommunitiesCheckbox } from "@/components/feed/my-communities-checkbox";
+import { MyCommunitiesCheckbox } from "@/components/shared/my-communities-checkbox";
 import { cn } from "@/lib/utils";
 import { getMemberCommunityIdsForFiltering, getOrCreateProfile } from "@/lib/profile-server";
 
 export const metadata: Metadata = {
   title: "What's New — NASIHA",
 };
+
+// Defined here (not exported from the "use client" MyCommunitiesCheckbox
+// module, passed down instead as a prop) — a plain value exported from a
+// "use client" file resolves to `{}` rather than the real string when
+// imported into a Server Component, since the client-module proxy replaces
+// every export, not just components. Same pattern as
+// library/page.tsx's LIBRARY_SORT_COOKIE / calendar/page.tsx's
+// COMMUNITY_FILTER_COOKIE.
+const MY_COMMUNITIES_COOKIE = "whats_new_my_communities";
 
 /** /whats-new — the post-sign-in landing page: a merged, newest-first feed across Events/Blog/Library/Forums/Announcements. */
 export default async function WhatsNewPage({
@@ -96,7 +105,7 @@ export default async function WhatsNewPage({
 
   return (
     <main className="mx-auto flex max-w-[720px] flex-col gap-6 px-[2px] py-8 sm:px-8">
-      <div>
+      <div className="flex flex-col gap-1.5">
         <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
           {q ? (
             `${totalCount ?? 0} search result${totalCount === 1 ? "" : "s"} for: "${q}"`
@@ -107,9 +116,9 @@ export default async function WhatsNewPage({
             </>
           )}
         </h1>
-      </div>
 
-      <MyCommunitiesCheckbox checked={myCommunities} href={myCommunitiesHref} />
+        <MyCommunitiesCheckbox checked={myCommunities} href={myCommunitiesHref} cookieName={MY_COMMUNITIES_COOKIE} />
+      </div>
 
       <div className="flex flex-wrap gap-2">
         <Link href={filterHref()} className={filterLinkClasses(activeType === undefined)}>

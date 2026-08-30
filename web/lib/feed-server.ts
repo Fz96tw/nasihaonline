@@ -237,7 +237,12 @@ export async function getFeedPage(params: {
       : {
           OR: [
             { visibility: EventVisibility.community, ...communityVisibilityWhere(eventMember) },
-            ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
+            ...(viewerId
+              ? [
+                  { invitees: { some: { userId: viewerId } } },
+                  { rsvps: { some: { userId: viewerId, status: RSVPStatus.going } } },
+                ]
+              : []),
             ...ownerBypass(viewerId ? { hostId: viewerId } : null),
           ],
         }),

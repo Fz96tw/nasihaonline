@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getMySubmissions, getSharedWithMe, getSeekingReviewersFeed } from "@/lib/review-server";
-import { getAllCommunities, getOrCreateProfile } from "@/lib/profile-server";
+import { getAllCommunities, getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Button } from "@/components/ui/button";
 import { ReviewDashboardTabs } from "@/components/review/review-dashboard-tabs";
@@ -29,6 +29,7 @@ export default async function ReviewFeedbackPage() {
     getAllCommunities(),
     getOrCreateProfile(user.id),
   ]);
+  const avatarUrl = withResolvedAvatarUrl(profile).avatarUrl;
 
   return (
     <main className="min-h-screen">
@@ -60,6 +61,8 @@ export default async function ReviewFeedbackPage() {
           myCommunityIds={profile.communities.map((c) => c.community.id)}
           followsAllCommunities={profile.followsAllCommunities}
           currentUserId={user.id}
+          currentUserName={user.name ?? "Member"}
+          currentUserAvatarUrl={avatarUrl}
         />
       </section>
     </main>

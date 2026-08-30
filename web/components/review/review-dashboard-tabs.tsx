@@ -12,22 +12,22 @@ import { ReviewItemStatus } from "@/lib/generated/prisma/enums";
 /**
  * Community-only filter match — no category tier (each card already shows
  * its own category badges, so a second filter level would be redundant).
+ * `undefined` (checkbox unchecked, no pill picked) matches everything;
  * "mine" matches any item with >=1 category under one of the member's own
- * communities; a bare "other" selection is the aggregate of every
- * community the member ISN'T part of (mirrors "mine"); a specific
- * community id matches only items with >=1 category under that one
- * community. Submitting or being invited to an item auto-joins the member
- * to its community (ensureCommunityMembership, lib/profile-server.ts), so
- * "mine" never hides one of the member's own personal items just because
- * they hadn't explicitly joined that community before.
+ * communities; a specific community id matches only items with >=1
+ * category under that one community. Submitting or being invited to an
+ * item auto-joins the member to its community (ensureCommunityMembership,
+ * lib/profile-server.ts), so "mine" never hides one of the member's own
+ * personal items just because they hadn't explicitly joined that
+ * community before.
  */
 function matchesCommunityFilter(
   categories: { communityId: string }[],
-  selection: CommunityFilterSelection,
+  selection: CommunityFilterSelection | undefined,
   myCommunityIds: string[],
 ): boolean {
+  if (selection === undefined) return true;
   if (selection === "mine") return categories.some((c) => myCommunityIds.includes(c.communityId));
-  if (selection === "other") return categories.some((c) => !myCommunityIds.includes(c.communityId));
   return categories.some((c) => c.communityId === selection);
 }
 
@@ -36,8 +36,6 @@ function matchesCommunityFilter(
  * active — counting against the already-community-filtered list would
  * collapse every count to either 0 or the current total, which defeats
  * the point of showing them (how many items would each other pill reveal).
- * "other" is every item that doesn't already match "mine" — exactly what
- * the bare "Other Communities" tab shows.
  */
 function computeCommunityCounts(
   items: { categories: { communityId: string }[] }[],
@@ -45,9 +43,7 @@ function computeCommunityCounts(
   myCommunityIds: string[],
 ): Map<string, number> {
   const counts = new Map<string, number>();
-  const mineMatches = items.filter((item) => matchesCommunityFilter(item.categories, "mine", myCommunityIds));
-  counts.set("mine", mineMatches.length);
-  counts.set("other", items.length - mineMatches.length);
+  counts.set("mine", items.filter((item) => matchesCommunityFilter(item.categories, "mine", myCommunityIds)).length);
   for (const community of communities) {
     counts.set(community.id, items.filter((item) => matchesCommunityFilter(item.categories, community.id, myCommunityIds)).length);
   }
@@ -70,6 +66,8 @@ export function ReviewDashboardTabs({
   myCommunityIds,
   followsAllCommunities,
   currentUserId,
+  currentUserName,
+  currentUserAvatarUrl,
 }: {
   mySubmissions: MyReviewSubmission[];
   sharedWithMe: SharedReviewItem[];
@@ -78,15 +76,14 @@ export function ReviewDashboardTabs({
   myCommunityIds: string[];
   followsAllCommunities: boolean;
   currentUserId: string;
+  currentUserName: string;
+  currentUserAvatarUrl?: string | null;
 }) {
   const [tab, setTab] = useState("mine");
   // Local state, not URL params — the tabs' own selection isn't URL-driven
-  // either. Defaults to "mine" (the member's own communities), same as
-  // every other page's pill filter — safe here specifically because
-  // submitting or being invited to a review item auto-joins the member to
-  // its community (ensureCommunityMembership), so this can never hide one
-  // of the viewer's own personal submissions/shares on load.
-  const [selected, setSelected] = useState<CommunityFilterSelection>("mine");
+  // either. Defaults to unchecked/no pill (everything), matching every
+  // other page's pill filter's own default.
+  const [selected, setSelected] = useState<CommunityFilterSelection | undefined>(undefined);
 
   const filteredMySubmissions = mySubmissions.filter((item) =>
     matchesCommunityFilter(item.categories, selected, myCommunityIds),
@@ -114,6 +111,8 @@ export function ReviewDashboardTabs({
           selected={selected}
           onSelect={setSelected}
           counts={communityCounts}
+          currentUserName={currentUserName}
+          currentUserAvatarUrl={currentUserAvatarUrl}
         />
       </div>
       <TabsList
