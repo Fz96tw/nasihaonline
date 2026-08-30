@@ -55,6 +55,16 @@ export function CommunityFilterPillsNav({
       muted && !active && "opacity-50",
     );
 
+  // The My/Other tab pair reads as one segmented toggle (a single
+  // pill-shaped track with the active side filled) rather than two
+  // separate free-floating pills — visually distinct from the sub-pill
+  // row underneath, which stays a flat wrapping list of independent pills.
+  const tabClasses = (active: boolean) =>
+    cn(
+      "rounded-full px-3 py-1 text-sm font-medium transition-colors",
+      active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+    );
+
   function Count({ value, active }: { value: number | undefined; active: boolean }) {
     if (value === undefined) return null;
     return (
@@ -73,16 +83,18 @@ export function CommunityFilterPillsNav({
     cookieValue,
     label,
     active,
+    variant = "chip",
   }: {
     selection: CommunityFilterSelection;
     cookieValue: string;
     label: string;
     active: boolean;
+    variant?: "chip" | "tab";
   }) {
     return (
       <CommunityFilterCookieLink
         href={buildHref(selection)}
-        className={chipClasses(active, counts?.get(selection) === 0)}
+        className={variant === "tab" ? tabClasses(active) : chipClasses(active, counts?.get(selection) === 0)}
         cookieName={cookieName}
         cookieValue={cookieValue}
       >
@@ -94,9 +106,15 @@ export function CommunityFilterPillsNav({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap gap-2">
-        <Pill selection="mine" cookieValue="mine" label="My Communities" active={activeTab === "mine"} />
-        <Pill selection="other" cookieValue="other" label="Other Communities" active={activeTab === "other"} />
+      <div className="inline-flex w-fit gap-0.5 rounded-full border bg-muted p-1">
+        <Pill selection="mine" cookieValue="mine" label="My Communities" active={activeTab === "mine"} variant="tab" />
+        <Pill
+          selection="other"
+          cookieValue="other"
+          label="Other Communities"
+          active={activeTab === "other"}
+          variant="tab"
+        />
       </div>
       {subCommunities.length > 0 && (
         <div className="flex flex-wrap gap-2 pl-1">
