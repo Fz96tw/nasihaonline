@@ -30,37 +30,47 @@ const COMMUNITY_FILTER_COOKIE = "forums_community_filter";
 /**
  * community-based-categorization initiative, objective 6 — which forum
  * tiles the current pill selection shows. A generic (untouched) forum
- * always matches, same "universal" rule Calendar/Events use for
- * community-less content. This is purely a display narrowing *within* the
- * already-access-filtered list getForumCategories returns — it never
- * un-hides a forum the viewer can't access.
+ * always matches "mine" or a specific community pill, same "universal"
+ * rule Calendar/Events use for community-less content — but never a bare
+ * "other" selection, which shows nothing until a specific community pill
+ * underneath it is picked (two-level filter, no more unfiltered "All
+ * Communities" state, confirmed with user). This is purely a display
+ * narrowing *within* the already-access-filtered list getForumCategories
+ * returns — it never un-hides a forum the viewer can't access.
  */
 function matchesCommunityFilter(
   communityId: string | null,
   selection: CommunityFilterSelection,
   myCommunityIds: string[],
 ): boolean {
+  if (selection === "other") return false;
   if (communityId === null) return true;
-  if (selection === "all") return true;
   const targetIds = selection === "mine" ? myCommunityIds : [selection];
   return targetIds.includes(communityId);
 }
 
+/**
+ * Pill counts show total threads across the matching forums, not the
+ * number of matching forums — a member scanning pills cares how much
+ * discussion is in a community, not how many forum categories it happens
+ * to be split into. "other" is informational only (the tab itself shows
+ * nothing until a specific pill is picked) — every thread in a forum
+ * that doesn't already match "mine".
+ */
 function computeCommunityCounts(
-  forums: { communityId: string | null }[],
+  forums: { communityId: string | null; threadCount: number }[],
   communities: { id: string }[],
   myCommunityIds: string[],
 ): Map<string, number> {
   const counts = new Map<string, number>();
-  counts.set("all", forums.length);
-  counts.set(
-    "mine",
-    forums.filter((forum) => matchesCommunityFilter(forum.communityId, "mine", myCommunityIds)).length,
-  );
+  const sumThreads = (matching: typeof forums) => matching.reduce((sum, forum) => sum + forum.threadCount, 0);
+  const mineMatches = forums.filter((forum) => matchesCommunityFilter(forum.communityId, "mine", myCommunityIds));
+  counts.set("mine", sumThreads(mineMatches));
+  counts.set("other", sumThreads(forums) - sumThreads(mineMatches));
   for (const community of communities) {
     counts.set(
       community.id,
-      forums.filter((forum) => matchesCommunityFilter(forum.communityId, community.id, myCommunityIds)).length,
+      sumThreads(forums.filter((forum) => matchesCommunityFilter(forum.communityId, community.id, myCommunityIds))),
     );
   }
   return counts;
@@ -136,9 +146,9 @@ export default async function ForumsPage({
 
   const requestedCommunity = searchParams.community ?? cookies().get(COMMUNITY_FILTER_COOKIE)?.value;
   const explicitCommunity = communities.find((c) => c.slug === requestedCommunity);
-  const isAllCommunities = requestedCommunity === "all";
-  const selectedCommunity: CommunityFilterSelection = isAllCommunities
-    ? "all"
+  const isOtherCommunities = requestedCommunity === "other";
+  const selectedCommunity: CommunityFilterSelection = isOtherCommunities
+    ? "other"
     : explicitCommunity
       ? explicitCommunity.id
       : "mine";
@@ -194,8 +204,8 @@ export default async function ForumsPage({
           buildHref={(selection) => {
             const params = new URLSearchParams();
             if (searchParams.sort) params.set("sort", searchParams.sort);
-            if (selection === "all") {
-              params.set("community", "all");
+            if (selection === "other") {
+              params.set("community", "other");
             } else if (selection !== "mine") {
               const slug = communities.find((c) => c.id === selection)?.slug;
               if (slug) params.set("community", slug);
@@ -229,20 +239,26 @@ export default async function ForumsPage({
             Sorted by {SORT_OPTIONS.find((option) => option.value === sort)?.label}
           </span>
         </div>
-        <div className="flex flex-col gap-10">
-          {miscForums.length > 0 && (
-            <section>
-              <h2 className="mb-4 text-lg font-semibold">Misc Groups</h2>
-              <ForumTileGrid forums={miscForums} />
-            </section>
-          )}
-          {communityGroups.map((group) => (
-            <section key={group.community.id}>
-              <h2 className="mb-4 text-lg font-semibold">{group.community.name}</h2>
-              <ForumTileGrid forums={group.forums} />
-            </section>
-          ))}
-        </div>
+        {selectedCommunity === "other" && miscForums.length === 0 && communityGroups.length === 0 ? (
+          <p className="rounded-[10px] border p-8 text-center text-muted-foreground">
+            Pick a community above to see its forums.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-10">
+            {miscForums.length > 0 && (
+              <section>
+                <h2 className="mb-4 text-lg font-semibold">Misc Groups</h2>
+                <ForumTileGrid forums={miscForums} />
+              </section>
+            )}
+            {communityGroups.map((group) => (
+              <section key={group.community.id}>
+                <h2 className="mb-4 text-lg font-semibold">{group.community.name}</h2>
+                <ForumTileGrid forums={group.forums} />
+              </section>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );

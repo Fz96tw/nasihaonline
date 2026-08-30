@@ -63,7 +63,7 @@ export default async function LibraryPage({
   searchParams,
 }: {
   searchParams: {
-    /** "all" for explicitly unfiltered, a community slug for a specific pick, or absent (defaults to "mine" — the member's own communities). */
+    /** "other" for the Other Communities tab with no specific pick (shows nothing), a community slug for a specific pick, or absent (defaults to "mine" — the member's own communities). */
     community?: string;
     type?: string;
     level?: string;
@@ -91,19 +91,26 @@ export default async function LibraryPage({
   const [profile, communities] = await Promise.all([getOrCreateProfile(user.id), getAllCommunities()]);
   const myCommunityIds = profile.communities.map((c) => c.community.id);
 
-  // Flat, single-tier pill selection (My Communities / All Communities /
-  // one pill per community), matching the Peer Review dashboard's
-  // CommunityFilterPills — replaces the two-step Community -> Category
-  // chip design now that every card already shows its own category
-  // badges, same rationale Peer Review's switch documented. "all" is an
-  // explicit override; a real community slug picks that one; absent means
-  // "mine" (the member's own communities, or unfiltered if they follow
-  // all — see getDefaultCommunityFilter).
+  // Two-level pill selection (My Communities / Other Communities tabs,
+  // each with its own community sub-pills), matching the Peer Review
+  // dashboard's CommunityFilterPills — replaces the two-step Community ->
+  // Category chip design now that every card already shows its own
+  // category badges, same rationale Peer Review's switch documented. A
+  // real community slug picks that one; absent means "mine" (the member's
+  // own communities, or unfiltered if they follow all — see
+  // getDefaultCommunityFilter). "other" with no specific pick shows
+  // nothing — there's no more unfiltered "everything" state (confirmed
+  // with user) — via a sentinel communityId that can never match a real
+  // row rather than an empty array, since getPublishedKnowledgeItems
+  // treats an empty communityIds array as "no filter" (see its own doc
+  // comment) not "match nothing".
   const requestedCommunity = searchParams.community ?? cookies().get(COMMUNITY_FILTER_COOKIE)?.value;
   const explicitCommunity = communities.find((c) => c.slug === requestedCommunity);
-  const isAll = requestedCommunity === "all";
-  const selected: CommunityFilterSelection = isAll ? "all" : explicitCommunity ? explicitCommunity.id : "mine";
-  const communityIds = isAll ? undefined : getDefaultCommunityFilter(profile, explicitCommunity?.id);
+  const isOther = requestedCommunity === "other";
+  const selected: CommunityFilterSelection = isOther ? "other" : explicitCommunity ? explicitCommunity.id : "mine";
+  const communityIds = isOther
+    ? ["__other_communities_no_pick__"]
+    : getDefaultCommunityFilter(profile, explicitCommunity?.id);
 
   const [items, communityCounts] = await Promise.all([
     getPublishedKnowledgeItems({
@@ -160,8 +167,8 @@ export default async function LibraryPage({
             if (searchParams.level) params.set("level", searchParams.level);
             if (searchParams.q) params.set("q", searchParams.q);
             if (searchParams.ref) params.set("ref", searchParams.ref);
-            if (selection === "all") {
-              params.set("community", "all");
+            if (selection === "other") {
+              params.set("community", "other");
             } else if (selection !== "mine") {
               const slug = communities.find((c) => c.id === selection)?.slug;
               if (slug) params.set("community", slug);

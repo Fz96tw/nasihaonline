@@ -29,17 +29,19 @@ const COMMUNITY_FILTER_COOKIE = "calendar_community_filter";
  * Community-only filter match, mirroring Peer Review's own
  * matchesCommunityFilter — but with one deliberate addition: an event
  * with zero tagged communities (every pre-existing event, per objective
- * 5's grandfathering) matches every pill, not just "All Communities",
- * same "universal match" rule the original community-based-categorization
- * plan specified for Forum's community-less threads. Without this, picking
- * a specific community pill would hide every legacy event.
+ * 5's grandfathering) matches "mine" and any specific community pill, same
+ * "universal match" rule the original community-based-categorization plan
+ * specified for Forum's community-less threads. It does NOT match a bare
+ * "other" selection — that tab shows nothing until a specific community
+ * pill underneath it is picked (two-level filter, no more unfiltered "All
+ * Communities" state), confirmed with user.
  */
 function matchesCommunityFilter(
   eventCommunities: { id: string }[],
   selection: CommunityFilterSelection,
   myCommunityIds: string[],
 ): boolean {
-  if (selection === "all") return true;
+  if (selection === "other") return false;
   if (eventCommunities.length === 0) return true;
   const targetIds = selection === "mine" ? myCommunityIds : [selection];
   return eventCommunities.some((c) => targetIds.includes(c.id));
@@ -49,7 +51,10 @@ function matchesCommunityFilter(
  * Per-pill item counts against the mine-toggle-filtered but community-
  * unfiltered list — same "counts reflect the active tab, not the
  * community-filtered subset" convention as Peer Review's
- * computeCommunityCounts.
+ * computeCommunityCounts. "other" is informational only (the tab itself
+ * shows nothing until a specific pill is picked) — it's every event that
+ * doesn't already match "mine", i.e. what picking each "other" pill in
+ * turn would reveal, combined.
  */
 function computeCommunityCounts(
   events: { communities: { id: string }[] }[],
@@ -57,8 +62,9 @@ function computeCommunityCounts(
   myCommunityIds: string[],
 ): Map<string, number> {
   const counts = new Map<string, number>();
-  counts.set("all", events.length);
-  counts.set("mine", events.filter((event) => matchesCommunityFilter(event.communities, "mine", myCommunityIds)).length);
+  const mineMatches = events.filter((event) => matchesCommunityFilter(event.communities, "mine", myCommunityIds));
+  counts.set("mine", mineMatches.length);
+  counts.set("other", events.length - mineMatches.length);
   for (const community of communities) {
     counts.set(
       community.id,
@@ -90,9 +96,9 @@ export default async function CalendarPage({
   const myCommunityIds = profile.communities.map((c) => c.community.id);
   const requestedCommunity = searchParams.community ?? cookies().get(COMMUNITY_FILTER_COOKIE)?.value;
   const explicitCommunity = communities.find((c) => c.slug === requestedCommunity);
-  const isAllCommunities = requestedCommunity === "all";
-  const selectedCommunity: CommunityFilterSelection = isAllCommunities
-    ? "all"
+  const isOtherCommunities = requestedCommunity === "other";
+  const selectedCommunity: CommunityFilterSelection = isOtherCommunities
+    ? "other"
     : explicitCommunity
       ? explicitCommunity.id
       : "mine";
@@ -150,8 +156,8 @@ export default async function CalendarPage({
             const params = new URLSearchParams();
             if (searchParams.ref) params.set("ref", searchParams.ref);
             if (mine) params.set("mine", "1");
-            if (selection === "all") {
-              params.set("community", "all");
+            if (selection === "other") {
+              params.set("community", "other");
             } else if (selection !== "mine") {
               const slug = communities.find((c) => c.id === selection)?.slug;
               if (slug) params.set("community", slug);

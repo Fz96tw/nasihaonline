@@ -12,16 +12,23 @@ import { ReviewItemStatus } from "@/lib/generated/prisma/enums";
 /**
  * Community-only filter match — no category tier (each card already shows
  * its own category badges, so a second filter level would be redundant).
- * "all" always matches; "mine" matches any item with >=1 category under
- * one of the member's own communities; a specific community id matches
- * only items with >=1 category under that one community.
+ * "mine" matches any item with >=1 category under one of the member's own
+ * communities; a specific community id matches only items with >=1
+ * category under that one community; a bare "other" selection matches
+ * nothing — that tab shows nothing until a specific community pill
+ * underneath it is picked (two-level filter, no more unfiltered "All
+ * Communities" state, confirmed with user). Submitting or being invited to
+ * an item auto-joins the member to its community (ensureCommunityMembership,
+ * lib/profile-server.ts), so "mine" never hides one of the member's own
+ * personal items just because they hadn't explicitly joined that community
+ * before.
  */
 function matchesCommunityFilter(
   categories: { communityId: string }[],
   selection: CommunityFilterSelection,
   myCommunityIds: string[],
 ): boolean {
-  if (selection === "all") return true;
+  if (selection === "other") return false;
   const targetIds = selection === "mine" ? myCommunityIds : [selection];
   return categories.some((c) => targetIds.includes(c.communityId));
 }
@@ -31,6 +38,8 @@ function matchesCommunityFilter(
  * active — counting against the already-community-filtered list would
  * collapse every count to either 0 or the current total, which defeats
  * the point of showing them (how many items would each other pill reveal).
+ * "other" is informational only (the tab itself shows nothing until a
+ * specific pill is picked) — every item that doesn't already match "mine".
  */
 function computeCommunityCounts(
   items: { categories: { communityId: string }[] }[],
@@ -38,8 +47,9 @@ function computeCommunityCounts(
   myCommunityIds: string[],
 ): Map<string, number> {
   const counts = new Map<string, number>();
-  counts.set("all", items.length);
-  counts.set("mine", items.filter((item) => matchesCommunityFilter(item.categories, "mine", myCommunityIds)).length);
+  const mineMatches = items.filter((item) => matchesCommunityFilter(item.categories, "mine", myCommunityIds));
+  counts.set("mine", mineMatches.length);
+  counts.set("other", items.length - mineMatches.length);
   for (const community of communities) {
     counts.set(community.id, items.filter((item) => matchesCommunityFilter(item.categories, community.id, myCommunityIds)).length);
   }
@@ -73,12 +83,12 @@ export function ReviewDashboardTabs({
 }) {
   const [tab, setTab] = useState("mine");
   // Local state, not URL params — the tabs' own selection isn't URL-driven
-  // either. Defaults to "all" (unfiltered) rather than the member's own
-  // communities — unlike Library's browse filter, this dashboard already
-  // only ever shows the viewer's own personal/relevant items, so
-  // pre-narrowing it by community on load would risk hiding something
-  // they already expect to see.
-  const [selected, setSelected] = useState<CommunityFilterSelection>("all");
+  // either. Defaults to "mine" (the member's own communities), same as
+  // every other page's pill filter — safe here specifically because
+  // submitting or being invited to a review item auto-joins the member to
+  // its community (ensureCommunityMembership), so this can never hide one
+  // of the viewer's own personal submissions/shares on load.
+  const [selected, setSelected] = useState<CommunityFilterSelection>("mine");
 
   const filteredMySubmissions = mySubmissions.filter((item) =>
     matchesCommunityFilter(item.categories, selected, myCommunityIds),

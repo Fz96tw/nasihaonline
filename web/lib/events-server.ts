@@ -26,7 +26,7 @@ import type {
 } from "@/lib/events";
 import { EVENTS_FORUM_SLUG } from "@/lib/forums";
 import { DIRECTORY_TIERS } from "@/lib/members";
-import { getMemberCommunityContext, type MemberCommunityContext } from "@/lib/profile-server";
+import { ensureCommunityMembership, getMemberCommunityContext, type MemberCommunityContext } from "@/lib/profile-server";
 import {
   cancelMeetingCalendarEvent,
   createLiveKitMeetingCalendarEvent,
@@ -1635,6 +1635,11 @@ export async function createEvent(
     timezone: input.timezone,
   });
 
+  await ensureCommunityMembership(
+    [hostId, ...invitedUsers.map((user) => user.id), ...coHostUsers.map((user) => user.id)],
+    input.communityIds,
+  );
+
   return { id: event.id };
 }
 
@@ -2219,6 +2224,7 @@ export async function updateEventInvitees(
       cancelledAt: true,
       startsAt: true,
       timezone: true,
+      communities: { select: { communityId: true } },
     },
   });
   if (!event) throw new EventError(404, "Event not found.");
@@ -2329,6 +2335,11 @@ export async function updateEventInvitees(
     ];
     await updateMeetingCalendarEventAttendees(event.googleEventId, attendees);
   }
+
+  await ensureCommunityMembership(
+    newInvitees.map((user) => user.id),
+    event.communities.map((c) => c.communityId),
+  );
 
   return { added: newInvitees.length, removed: removeCandidates.length };
 }

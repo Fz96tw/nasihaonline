@@ -12,6 +12,7 @@ import {
   UploadValidationError,
 } from "@/lib/storage";
 import { searchLibraryDocuments } from "@/lib/meilisearch";
+import { ensureCommunityMembership } from "@/lib/profile-server";
 import {
   NotificationType,
   KnowledgeContentType,
@@ -217,13 +218,19 @@ export async function getLibraryCommunityCounts(params: {
       };
   const baseWhere = { status: { in: visibleStatuses }, ...visibilityFilter };
 
-  const [total, mine, perCommunity] = await Promise.all([
-    db.knowledgeItem.count({ where: baseWhere }),
+  const [mine, other, perCommunity] = await Promise.all([
     params.myCommunityIds.length > 0
       ? db.knowledgeItem.count({
           where: { ...baseWhere, communities: { some: { communityId: { in: params.myCommunityIds } } } },
         })
       : Promise.resolve(0),
+    // "other" is informational only (the tab itself shows nothing until a
+    // specific pill underneath it is picked) — every item touching at
+    // least one community outside the member's own set, i.e. what picking
+    // each "other" pill in turn would reveal, combined.
+    db.knowledgeItem.count({
+      where: { ...baseWhere, communities: { some: { communityId: { notIn: params.myCommunityIds } } } },
+    }),
     db.knowledgeItemCommunity.groupBy({
       by: ["communityId"],
       where: { knowledgeItem: baseWhere },
@@ -232,8 +239,8 @@ export async function getLibraryCommunityCounts(params: {
   ]);
 
   const counts = new Map<string, number>();
-  counts.set("all", total);
   counts.set("mine", mine);
+  counts.set("other", other);
   for (const row of perCommunity) counts.set(row.communityId, row._count._all);
   return counts;
 }
@@ -417,6 +424,8 @@ export async function createKnowledgeItem(
       body: sanitizedBody ?? "",
     });
   }
+
+  await ensureCommunityMembership([contributorId, ...invitedUsers.map((user) => user.id)], input.communityIds);
 
   return item;
 }
@@ -958,7 +967,14 @@ export async function updateKnowledgeItemInvitees(
 ): Promise<{ added: number; removed: number }> {
   const item = await db.knowledgeItem.findUnique({
     where: { id: itemId },
-    select: { id: true, title: true, status: true, visibility: true, contributorId: true },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      visibility: true,
+      contributorId: true,
+      communities: { select: { communityId: true } },
+    },
   });
   if (!item) throw new KnowledgeItemError(404, "Resource not found.");
   if (item.visibility !== KnowledgeVisibility.restricted) {
@@ -1059,6 +1075,11 @@ export async function updateKnowledgeItemInvitees(
         )
       : Promise.resolve(),
   ]);
+
+  await ensureCommunityMembership(
+    newInvitees.map((user) => user.id),
+    item.communities.map((c) => c.communityId),
+  );
 
   return { added: newInvitees.length, removed: removeCandidates.length };
 }

@@ -15,7 +15,7 @@ import { getProfileAvatarUrl } from "@/lib/storage";
 import { findMentionedMembers } from "@/lib/mentions";
 import { DIRECTORY_TIERS } from "@/lib/members";
 import { CLINICAL_DISCUSSIONS_SLUG, EVENTS_FORUM_SLUG, LIBRARY_FORUM_SLUG } from "@/lib/forums";
-import { getMemberCommunityContext, type MemberCommunityContext } from "@/lib/profile-server";
+import { ensureCommunityMembership, getMemberCommunityContext, type MemberCommunityContext } from "@/lib/profile-server";
 import { countPastedImageReferences, linkPastedImages, MAX_PASTED_IMAGES_PER_BODY } from "@/lib/pasted-images-server";
 import type {
   ForumCategory,
@@ -752,6 +752,12 @@ export async function createForumThread(
     body: input.body,
   });
 
+  const forumCommunityId = forum.category?.communityId;
+  await ensureCommunityMembership(
+    [authorId, ...invitees.map((user) => user.id)],
+    forumCommunityId ? [forumCommunityId] : [],
+  );
+
   return { id: thread.id };
 }
 
@@ -802,7 +808,7 @@ export async function updateForumThread(
       eventId: true,
       knowledgeItemId: true,
       removed: true,
-      forum: { select: { slug: true } },
+      forum: { select: { slug: true, category: { select: { communityId: true } } } },
     },
   });
   if (!thread) throw new ForumError(404, "Thread not found.");
@@ -860,6 +866,14 @@ export async function updateForumThread(
       });
     }
   });
+
+  if (isNewlyRestricted) {
+    const forumCommunityId = thread.forum.category?.communityId;
+    await ensureCommunityMembership(
+      invitees.map((u) => u.id),
+      forumCommunityId ? [forumCommunityId] : [],
+    );
+  }
 
   return { id: threadId };
 }
@@ -1127,7 +1141,7 @@ export async function updateForumThreadInvitees(
       authorId: true,
       visibility: true,
       removed: true,
-      forum: { select: { slug: true } },
+      forum: { select: { slug: true, category: { select: { communityId: true } } } },
       _count: { select: { invitees: true } },
     },
   });
@@ -1207,6 +1221,12 @@ export async function updateForumThreadInvitees(
       });
     }
   });
+
+  const forumCommunityId = thread.forum.category?.communityId;
+  await ensureCommunityMembership(
+    newInvitees.map((user) => user.id),
+    forumCommunityId ? [forumCommunityId] : [],
+  );
 
   return { added: newInvitees.length, removed: removeCandidates.length };
 }
