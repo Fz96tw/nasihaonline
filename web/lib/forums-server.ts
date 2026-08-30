@@ -10,7 +10,6 @@ import {
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { createNotification } from "@/lib/notifications-server";
 import { recordAdminAction } from "@/lib/audit-server";
-import { searchForumDocuments } from "@/lib/meilisearch";
 import { getDirectoryMembersByIds, getMentionableMembers } from "@/lib/members-server";
 import { getProfileAvatarUrl } from "@/lib/storage";
 import { findMentionedMembers } from "@/lib/mentions";
@@ -296,7 +295,6 @@ export async function getForumBySlug(
   slug: string,
   userId?: string,
   isPrivileged = false,
-  q?: string,
 ): Promise<{ forum: ForumCategory; threads: ForumThreadListItem[]; isFollowing: boolean } | null> {
   const forum = await db.forum.findUnique({
     where: { slug },
@@ -331,23 +329,6 @@ export async function getForumBySlug(
     threadCount: forum._count.threads,
     communityId: forum.category?.communityId ?? null,
   };
-
-  if (q?.trim()) {
-    const hits = await searchForumDocuments(q.trim(), { forumSlug: slug });
-    if (hits.length === 0) return { forum: forumCategory, threads: [], isFollowing };
-
-    const threads = await db.forumThread.findMany({
-      where: { id: { in: hits.map((hit) => hit.id) } },
-      select: THREAD_LIST_SELECT,
-    });
-    const visibleThreads = threads.filter((thread) => isThreadVisible(thread, userId, isPrivileged, member));
-    const byId = new Map(visibleThreads.map((thread) => [thread.id, thread]));
-    return {
-      forum: forumCategory,
-      threads: hits.map((hit) => byId.get(hit.id)).filter((thread) => thread != null).map(toThreadListItem),
-      isFollowing,
-    };
-  }
 
   // Browse view sorts pinned first, then by each thread's latest post
   // (falling back to its own createdAt, same as toThreadListItem) — a

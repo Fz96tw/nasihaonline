@@ -9,7 +9,6 @@ import { getForumBySlug } from "@/lib/forums-server";
 import { ForumThreadVisibility, Role } from "@/lib/generated/prisma/enums";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { SortButton } from "@/components/forums/sort-button";
 import { cn } from "@/lib/utils";
 
@@ -36,26 +35,26 @@ function isThreadSort(value: string | undefined): value is ThreadSort {
 }
 
 /**
- * /forums/[category] (§4.13) — a forum's thread list. `q` routes through
- * Meilisearch (§7.2/§9), same "real query goes to Meilisearch, browse
- * stays on Postgres" split as /library. Sort buttons re-order the fetched
- * list via a `?sort=` param — getForumBySlug already returns "recent
- * activity" order (pinned first) as the default, so "recent" here is a
- * no-op re-sort; "newest"/"active" re-order by createdAt/replyCount,
- * still keeping pinned threads first.
+ * /forums/[category] (§4.13) — a forum's thread list. Searching for a
+ * specific thread by keyword is handled by the global nav search
+ * (Meilisearch-backed) rather than a per-forum search box here. Sort
+ * buttons re-order the fetched list via a `?sort=` param — getForumBySlug
+ * already returns "recent activity" order (pinned first) as the default,
+ * so "recent" here is a no-op re-sort; "newest"/"active" re-order by
+ * createdAt/replyCount, still keeping pinned threads first.
  */
 export default async function ForumCategoryPage({
   params,
   searchParams,
 }: {
   params: { category: string };
-  searchParams: { q?: string; sort?: string; mine?: string; topic?: string };
+  searchParams: { sort?: string; mine?: string; topic?: string };
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
   const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
-  const result = await getForumBySlug(params.category, user.id, isPrivileged, searchParams.q);
+  const result = await getForumBySlug(params.category, user.id, isPrivileged);
   if (!result) notFound();
   const { forum } = result;
 
@@ -84,7 +83,6 @@ export default async function ForumCategoryPage({
 
   const sortHref = (value: ThreadSort) => {
     const qs = new URLSearchParams();
-    if (searchParams.q) qs.set("q", searchParams.q);
     if (value !== "recent") qs.set("sort", value);
     if (mine) qs.set("mine", "1");
     if (searchParams.topic) qs.set("topic", searchParams.topic);
@@ -94,7 +92,6 @@ export default async function ForumCategoryPage({
 
   const mineHref = (() => {
     const qs = new URLSearchParams();
-    if (searchParams.q) qs.set("q", searchParams.q);
     if (searchParams.sort) qs.set("sort", searchParams.sort);
     if (!mine) qs.set("mine", "1");
     if (searchParams.topic) qs.set("topic", searchParams.topic);
@@ -104,7 +101,6 @@ export default async function ForumCategoryPage({
 
   const topicHref = (slug: string | null) => {
     const qs = new URLSearchParams();
-    if (searchParams.q) qs.set("q", searchParams.q);
     if (searchParams.sort) qs.set("sort", searchParams.sort);
     if (mine) qs.set("mine", "1");
     if (slug) qs.set("topic", slug);
@@ -166,15 +162,7 @@ export default async function ForumCategoryPage({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <form action={`/forums/${forum.slug}`} method="get" className="flex max-w-sm gap-2">
-          {mine && <input type="hidden" name="mine" value="1" />}
-          <Input type="search" name="q" defaultValue={searchParams.q} placeholder="Search this forum…" />
-          <Button type="submit" variant="outline">
-            Search
-          </Button>
-        </form>
-
+      <div className="flex flex-wrap items-center justify-end gap-4">
         <div className="flex flex-col items-end gap-1">
           <div className="flex items-center gap-1">
             <span className="mr-1 text-sm text-muted-foreground">Sort:</span>
@@ -198,7 +186,7 @@ export default async function ForumCategoryPage({
 
       {threads.length === 0 ? (
         <p className="rounded-[10px] border p-8 text-center text-muted-foreground">
-          {searchParams.q || selectedTopic
+          {selectedTopic
             ? "No threads match your filters."
             : mine
               ? "You haven't started any threads in this forum yet."
