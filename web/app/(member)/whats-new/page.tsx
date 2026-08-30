@@ -9,7 +9,7 @@ import { FEED_TYPES, FEED_TYPE_LABELS, isFeedItemType } from "@/lib/feed";
 import { FeedList } from "@/components/feed/feed-list";
 import { MyCommunitiesCheckbox } from "@/components/shared/my-communities-checkbox";
 import { cn } from "@/lib/utils";
-import { getMemberCommunityIdsForFiltering, getOrCreateProfile } from "@/lib/profile-server";
+import { getAllCommunities, getMemberCommunityIdsForFiltering, getOrCreateProfile } from "@/lib/profile-server";
 
 export const metadata: Metadata = {
   title: "What's New — NASIHA",
@@ -46,8 +46,13 @@ export default async function WhatsNewPage({
       : searchParams.myCommunities === "0"
         ? false
         : cookies().get(MY_COMMUNITIES_COOKIE)?.value === "1";
-  const profile = await getOrCreateProfile(user.id);
+  const [profile, communities] = await Promise.all([getOrCreateProfile(user.id), getAllCommunities()]);
   const communityIds = getMemberCommunityIdsForFiltering(profile, myCommunities);
+  // Same rationale as CommunityFilterPills(Nav): once the member already
+  // belongs to every community, "Show only my communities" is a no-op, so
+  // hide it rather than leave a checkbox that can't change anything.
+  const joinedAllCommunities =
+    profile.followsAllCommunities || (communities.length > 0 && profile.communities.length >= communities.length);
   const { items, nextCursor, hasMore, totalCount, countsByType } = await getFeedPage({
     cursor: null,
     types: activeType ? [activeType] : undefined,
@@ -117,7 +122,9 @@ export default async function WhatsNewPage({
           )}
         </h1>
 
-        <MyCommunitiesCheckbox checked={myCommunities} href={myCommunitiesHref} cookieName={MY_COMMUNITIES_COOKIE} />
+        {!joinedAllCommunities && (
+          <MyCommunitiesCheckbox checked={myCommunities} href={myCommunitiesHref} cookieName={MY_COMMUNITIES_COOKIE} />
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">

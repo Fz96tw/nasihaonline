@@ -71,16 +71,25 @@ export function CommunityFilterPills({
 }) {
   const myIdSet = new Set(followsAllCommunities ? communities.map((c) => c.id) : myCommunityIds);
   const checked = selected === "mine";
+  // Same rationale as community-filter-pills-nav.tsx: once the member
+  // already belongs to every community, "Show only my communities" can't
+  // narrow anything further, so hide it (and its label) — the per-community
+  // pills still do useful narrowing, so those stay.
+  const joinedAll = followsAllCommunities || (communities.length > 0 && myCommunityIds.length >= communities.length);
 
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filter Content</span>
-      <label className="flex w-fit cursor-pointer items-center gap-1.5 text-sm text-muted-foreground">
-        <Checkbox checked={checked} onCheckedChange={(next) => onSelect(next ? "mine" : undefined)} />
-        Show only my communities
-        <Count value={counts?.get("mine")} active={checked} />
-      </label>
-      {!checked && communities.length > 0 && (
+      {!joinedAll && (
+        <>
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filter Content</span>
+          <label className="flex w-fit cursor-pointer items-center gap-1.5 text-sm text-muted-foreground">
+            <Checkbox checked={checked} onCheckedChange={(next) => onSelect(next ? "mine" : undefined)} />
+            Show only my communities
+            <Count value={counts?.get("mine")} active={checked} />
+          </label>
+        </>
+      )}
+      {(joinedAll || !checked) && communities.length > 0 && (
         <div className="flex flex-wrap gap-2 pl-1">
           {communities.map((community) => (
             <button

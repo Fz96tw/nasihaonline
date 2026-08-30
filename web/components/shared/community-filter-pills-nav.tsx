@@ -49,6 +49,12 @@ export function CommunityFilterPillsNav({
 }) {
   const myIdSet = new Set(followsAllCommunities ? communities.map((c) => c.id) : myCommunityIds);
   const checked = selected === "mine";
+  // "Show only my communities" is a no-op once the member already belongs to
+  // every community — checking it can't narrow anything further, so the
+  // checkbox (and its "Filter Content" label) just adds noise. The
+  // per-community pills below still narrow to one specific community, so
+  // those stay.
+  const joinedAll = followsAllCommunities || (communities.length > 0 && myCommunityIds.length >= communities.length);
 
   const chipClasses = (active: boolean, muted: boolean) =>
     cn(
@@ -68,16 +74,20 @@ export function CommunityFilterPillsNav({
 
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filter Content</span>
-      <MyCommunitiesCheckbox
-        checked={checked}
-        href={buildHref(checked ? undefined : "mine")}
-        cookieName={cookieName}
-        checkedValue="mine"
-        uncheckedValue=""
-        count={counts?.get("mine")}
-      />
-      {!checked && communities.length > 0 && (
+      {!joinedAll && (
+        <>
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filter Content</span>
+          <MyCommunitiesCheckbox
+            checked={checked}
+            href={buildHref(checked ? undefined : "mine")}
+            cookieName={cookieName}
+            checkedValue="mine"
+            uncheckedValue=""
+            count={counts?.get("mine")}
+          />
+        </>
+      )}
+      {(joinedAll || !checked) && communities.length > 0 && (
         <div className="flex flex-wrap gap-2 pl-1">
           {communities.map((community) => {
             const active = selected === community.id;
