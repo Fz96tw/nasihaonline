@@ -9,6 +9,7 @@ import {
   Rss,
   Shield,
   Users,
+  UsersRound,
   type LucideIcon,
 } from "lucide-react";
 
@@ -39,6 +40,7 @@ export const MEMBER_NAV_SECTIONS: NavSection[] = [
   {
     title: "Community",
     items: [
+      { label: "My Communities", href: "/my-communities", icon: UsersRound },
       { label: "Member Directory", href: "/members", icon: Users },
       { label: "Message Inbox", href: "/inbox", icon: Inbox },
       { label: "Events Calendar", href: "/calendar", icon: CalendarDays },

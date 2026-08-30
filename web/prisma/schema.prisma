@@ -1151,10 +1151,10 @@ model Event {
   // KnowledgeItem/ReviewItem's single-visibility-plus-categories shape.
   // Zero rows (every event that predates this) is the grandfathered
   // "visible to everyone" state — see isEventVisibleToMember.
-  communities             EventCommunity[]
+  communities            EventCommunity[]
   // Optional, fine-grained, scoped in the UI to whichever community/
   // communities are selected above.
-  categories              EventCategory[]
+  categories             EventCategory[]
 
   @@index([startsAt])
   @@map("events")
@@ -1573,15 +1573,19 @@ enum KnowledgeVisibility {
 // ~22-item category list. Forum/Event link to this in later objectives
 // of the same initiative.
 model Community {
-  id         String              @id @default(cuid())
-  name       String              @unique
-  slug       String              @unique
-  categories KnowledgeCategory[]
-  profiles   ProfileCommunity[]
-  events     EventCommunity[]
+  id             String                   @id @default(cuid())
+  name           String                   @unique
+  slug           String                   @unique
+  // Shown on the /my-communities and /communities browse pages for
+  // communities the viewer hasn't joined yet. Nullable — no backfilled
+  // copy exists yet, UI must render gracefully when absent.
+  description    String?
+  categories     KnowledgeCategory[]
+  profiles       ProfileCommunity[]
+  events         EventCommunity[]
   knowledgeItems KnowledgeItemCommunity[]
-  createdAt  DateTime            @default(now())
-  updatedAt  DateTime            @updatedAt
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
 
   @@map("communities")
 }
@@ -2030,14 +2034,14 @@ model ReviewVolunteerOffer {
 // retire-without-delete + explicit-ordering convention as TeamMember (§4.12),
 // since the org is expected to add/retire categories over time.
 model Forum {
-  id           String   @id @default(cuid())
-  name         String   @unique
-  slug         String   @unique
+  id           String             @id @default(cuid())
+  name         String             @unique
+  slug         String             @unique
   description  String?
-  displayOrder Int      @default(0)
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  displayOrder Int                @default(0)
+  active       Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
   // Community-based-categorization initiative, objective 6 — set only for
   // the new, seeded-one-per-KnowledgeCategory forums (e.g. "Health-tech",
   // "Clinical Research"); null (untouched) for every pre-existing forum,

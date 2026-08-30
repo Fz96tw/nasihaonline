@@ -171,7 +171,7 @@ export function HeaderSearchRow({
           <span className="truncate">
             Your Communities: <span className="text-foreground">{communityLabel}</span>
           </span>
-          <Link href="/welcome/communities" className="shrink-0 underline underline-offset-2 hover:text-foreground">
+          <Link href="/my-communities" className="shrink-0 underline underline-offset-2 hover:text-foreground">
             Edit
           </Link>
         </div>

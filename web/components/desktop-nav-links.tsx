@@ -26,6 +26,9 @@ export function DesktopNavLinks({ signedIn }: { signedIn: boolean }) {
       </NavDropdown>
       <NavDropdown label="Community">
         <DropdownMenuItem className="text-base" asChild>
+          <Link href={signedIn ? "/my-communities" : "/communities"}>My Communities</Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem className="text-base" asChild>
           <Link href={signedIn ? "/calendar" : "/events"}>Events Calendar</Link>
         </DropdownMenuItem>
         <DropdownMenuItem className="text-base" asChild>

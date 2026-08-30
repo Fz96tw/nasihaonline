@@ -13,7 +13,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "mcp__planwright__planwright_check_alignment",
+        "matcher": "mcp__planwright__planwright_check_alignment|mcp__claude_ai_Planwright__planwright_check_alignment",
         "hooks": [
           {
             "type": "command",
