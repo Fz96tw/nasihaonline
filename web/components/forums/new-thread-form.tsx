@@ -98,6 +98,7 @@ export function NewThreadForm({
   currentUserId,
   categories,
   communities,
+  communityId,
 }: {
   forumId: string;
   forumSlug: string;
@@ -105,6 +106,7 @@ export function NewThreadForm({
   currentUserId: string;
   categories: KnowledgeCategoryOption[];
   communities: { id: string; name: string }[];
+  communityId: string | null;
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -237,12 +239,39 @@ export function NewThreadForm({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Topics (optional)</FormLabel>
-              <CategoryCheckboxField
-                categories={categories}
-                communities={communities}
-                value={field.value}
-                onChange={field.onChange}
-              />
+              {communityId ? (
+                // This forum already belongs to a single community, so
+                // asking the member to pick a community again (via the
+                // Accordion CategoryCheckboxField normally uses) would be
+                // redundant — scope straight to that community's
+                // categories as a flat checkbox list.
+                <div className="flex flex-wrap gap-4 rounded-md border p-3">
+                  {categories
+                    .filter((category) => category.communityId === communityId)
+                    .map((category) => (
+                      <label key={category.id} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={field.value.includes(category.id)}
+                          onCheckedChange={() =>
+                            field.onChange(
+                              field.value.includes(category.id)
+                                ? field.value.filter((id) => id !== category.id)
+                                : [...field.value, category.id],
+                            )
+                          }
+                        />
+                        {category.name}
+                      </label>
+                    ))}
+                </div>
+              ) : (
+                <CategoryCheckboxField
+                  categories={categories}
+                  communities={communities}
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              )}
               <FormMessage />
             </FormItem>
           )}

@@ -36,6 +36,7 @@ export default async function NewForumThreadPage({ params }: { params: { categor
         currentUserId={user.id}
         categories={categories}
         communities={communities}
+        communityId={forum.communityId}
       />
     </main>
   );
