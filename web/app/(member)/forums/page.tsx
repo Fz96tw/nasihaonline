@@ -22,6 +22,10 @@ export const metadata: Metadata = {
 
 type ForumSort = "az" | "featured" | "active" | "recent";
 
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
 const FORUM_SORT_COOKIE = "forums_sort";
 // Own cookie, independent of /library's and /calendar's (confirmed with
 // user: each page remembers its own last pick, not a shared value).
@@ -98,9 +102,14 @@ function ForumTile({ forum, index }: { forum: ForumCategory; index: number }) {
           <div className="font-medium">{forum.name}</div>
           {forum.description && <div className="truncate text-sm text-muted-foreground">{forum.description}</div>}
         </div>
-        <Badge variant="neutral" className="shrink-0">
-          {forum.threadCount} {forum.threadCount === 1 ? "thread" : "threads"}
-        </Badge>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <Badge variant="neutral">
+            {forum.threadCount} {forum.threadCount === 1 ? "thread" : "threads"}
+          </Badge>
+          {forum.lastActivityAt && (
+            <span className="text-xs text-muted-foreground">Updated {formatDate(forum.lastActivityAt)}</span>
+          )}
+        </div>
       </Link>
     </Reveal>
   );
@@ -245,7 +254,7 @@ export default async function ForumsPage({
           <div className="flex flex-col gap-10">
             {miscForums.length > 0 && (
               <section>
-                <h2 className="mb-4 text-lg font-semibold">Misc Groups</h2>
+                <h2 className="mb-4 text-lg font-semibold">General Topics</h2>
                 <ForumTileGrid forums={miscForums} />
               </section>
             )}

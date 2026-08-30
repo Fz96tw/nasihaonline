@@ -11,6 +11,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 // community-based-categorization initiative (objective 2) adds a second
 // row of content — was 56px (one line) before.
 const ROW_HEIGHT_PX = 88;
+// Below the `sm` breakpoint the "Search only my communities" checkbox
+// drops to its own row (between the search input and the Your Communities
+// line, per user request) instead of sitting inline with the search input
+// — one more line than desktop, so the sticky row needs to reserve more
+// height or its `overflow-hidden` clips the checkbox row.
+const ROW_HEIGHT_PX_MOBILE = 114;
+const MOBILE_BREAKPOINT_QUERY = "(min-width: 640px)"; // Tailwind's `sm`
 // Accumulated scroll distance (not per-event delta — a single scroll event
 // can fire with a tiny delta many times) needed in one direction before
 // flipping revealed state.
@@ -76,10 +83,14 @@ export function HeaderSearchRow({
 
   useEffect(() => {
     const root = document.documentElement;
+    const rowHeightPx = () => (window.matchMedia(MOBILE_BREAKPOINT_QUERY).matches ? ROW_HEIGHT_PX : ROW_HEIGHT_PX_MOBILE);
+
     if (pinned) {
-      root.style.setProperty("--search-row-height", `${ROW_HEIGHT_PX}px`);
+      const applyPinned = () => root.style.setProperty("--search-row-height", `${rowHeightPx()}px`);
+      applyPinned();
       setSearchRowVisible(true);
-      return;
+      window.addEventListener("resize", applyPinned);
+      return () => window.removeEventListener("resize", applyPinned);
     }
 
     let revealed = true;
@@ -88,7 +99,7 @@ export function HeaderSearchRow({
     let lastFlipAt = 0;
 
     const apply = () => {
-      root.style.setProperty("--search-row-height", revealed ? `${ROW_HEIGHT_PX}px` : "0px");
+      root.style.setProperty("--search-row-height", revealed ? `${rowHeightPx()}px` : "0px");
       setSearchRowVisible(revealed);
     };
 
@@ -123,7 +134,13 @@ export function HeaderSearchRow({
 
     apply();
     window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
+    // Crossing the `sm` breakpoint (rotating a phone, resizing a browser
+    // window) changes which of the two row heights above applies.
+    window.addEventListener("resize", apply);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", apply);
+    };
   }, [pinned, setSearchRowVisible]);
 
   // Shared by both the form submit and the checkbox's immediate toggle —
@@ -148,13 +165,13 @@ export function HeaderSearchRow({
   return (
     <div className="sticky top-[var(--header-height)] z-40 h-[var(--search-row-height)] overflow-hidden border-b bg-background shadow-sm transition-[height] duration-300 ease-in-out">
       <div className="flex h-full flex-col justify-center gap-1.5 px-4 py-2 lg:px-8">
-        <div className="mx-auto flex w-full max-w-[720px] items-center gap-3">
+        <div className="mx-auto flex w-full max-w-[720px] flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
           <form
             onSubmit={(event) => {
               event.preventDefault();
               navigate(myCommunities);
             }}
-            className="relative flex-1"
+            className="relative sm:flex-1"
           >
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -186,7 +203,7 @@ export function HeaderSearchRow({
                 navigate(next);
               }}
             />
-            <span className="hidden sm:inline">Search only my communities</span>
+            <span>Search only my communities</span>
           </label>
         </div>
         <div className="mx-auto flex w-full max-w-[720px] items-center gap-2 truncate text-xs text-muted-foreground">
