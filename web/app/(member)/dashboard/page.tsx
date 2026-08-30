@@ -10,6 +10,7 @@ import { PendingConfirmationsWidget } from "@/components/dashboard/pending-confi
 import { ScheduleWidget } from "@/components/dashboard/schedule-widget";
 import { InboxWidget } from "@/components/dashboard/inbox-widget";
 import { QuickActionsWidget } from "@/components/dashboard/quick-actions-widget";
+import { QuickRecordingsSection } from "@/components/dashboard/quick-recordings-section";
 import { TrendingSection } from "@/components/dashboard/trending-section";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -128,6 +129,12 @@ export default async function DashboardPage() {
       </div>
 
       <StaggeredIn index={3}>
+        <Suspense fallback={null}>
+          <QuickRecordingsSection userId={user.id} />
+        </Suspense>
+      </StaggeredIn>
+
+      <StaggeredIn index={4}>
         <Suspense fallback={null}>
           <TrendingSection userId={user.id} isPrivileged={isPrivileged} />
         </Suspense>

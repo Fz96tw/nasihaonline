@@ -10,6 +10,7 @@ import type { MeetingRequestModel } from "@/lib/generated/prisma/models/MeetingR
 import { formatTimestamp } from "@/lib/format-date";
 import { createLiveKitRoom, getRoomMetadata, updateRoomMetadata } from "@/lib/livekit";
 import { stopEgress } from "@/lib/livekit-egress";
+import { deleteRecordingObject } from "@/lib/recordings-storage";
 
 export class QuickRecordingError extends Error {
   constructor(
@@ -270,5 +271,197 @@ export async function unlinkSharedRecordings(ownerType: RecordingOwnerType, owne
   await db.meetingRequestRecording.updateMany({
     where: { ownerType, [idField]: { in: ownerIds } },
     data: CLEARED_OWNER_FIELDS,
+  });
+}
+
+// ===== Video library =====
+// Browsing/reusing/managing a member's own past quick recordings — builds
+// directly on the shared video-sharing infrastructure above (ownerType/FK
+// columns, RECORDING_OWNER_ID_FIELD) to resolve where a recording is
+// currently shared, if anywhere.
+
+export type SharedRecordingLink = { label: string; href: string };
+
+/**
+ * Resolves a human-readable "where is this shared" label/link — dispatches
+ * on ownerType exactly the way canViewSharedRecording (lib/meeting-requests-
+ * server.ts) does for authorization, but for display instead of an access
+ * check. `ownerId` is the recording's own owner (the quick recording's
+ * sender) — needed only to pick "the other participant" for inbox_message,
+ * since an inbox message's own sender/recipient columns don't say which
+ * side is the video's uploader.
+ */
+async function resolveSharedRecordingLink(
+  recording: {
+    ownerType: RecordingOwnerType | null;
+    forumPostId: string | null;
+    inboxMessageId: string | null;
+    reviewCommentId: string | null;
+  },
+  ownerId: string,
+): Promise<SharedRecordingLink | null> {
+  if (!recording.ownerType) return null;
+
+  if (recording.ownerType === RecordingOwnerType.forum_post && recording.forumPostId) {
+    const post = await db.forumPost.findUnique({
+      where: { id: recording.forumPostId },
+      select: { threadId: true, thread: { select: { title: true, forum: { select: { slug: true } } } } },
+    });
+    if (!post) return null;
+    return {
+      label: `Shared in forum thread: ${post.thread.title}`,
+      href: `/forums/${post.thread.forum.slug}/${post.threadId}#post-${recording.forumPostId}`,
+    };
+  }
+
+  if (recording.ownerType === RecordingOwnerType.inbox_message && recording.inboxMessageId) {
+    const message = await db.inboxMessage.findUnique({
+      where: { id: recording.inboxMessageId },
+      select: {
+        senderId: true,
+        sender: { select: { name: true } },
+        recipientId: true,
+        recipient: { select: { name: true } },
+      },
+    });
+    if (!message) return null;
+    const otherParty = message.senderId === ownerId ? message.recipient : message.sender;
+    return {
+      label: `Shared in a message to ${otherParty.name ?? "a member"}`,
+      href: `/inbox?item=${recording.inboxMessageId}`,
+    };
+  }
+
+  if (recording.ownerType === RecordingOwnerType.review_comment && recording.reviewCommentId) {
+    const comment = await db.reviewComment.findUnique({
+      where: { id: recording.reviewCommentId },
+      select: { reviewItem: { select: { id: true, title: true } } },
+    });
+    if (!comment) return null;
+    return {
+      label: `Shared in peer review: ${comment.reviewItem.title}`,
+      href: `/review-feedback/${comment.reviewItem.id}#comment-${recording.reviewCommentId}`,
+    };
+  }
+
+  return null;
+}
+
+export type QuickRecordingListItem = {
+  /** MeetingRequestRecording id — what /api/quick-recordings/[id]/... routes key on for playback, but rename/delete key on meetingRequestId (see below), matching the create/rename/status routes' existing convention. */
+  id: string;
+  meetingRequestId: string;
+  topic: string;
+  createdAt: string;
+  durationSeconds: number | null;
+  ready: boolean;
+  failed: boolean;
+  shared: SharedRecordingLink | null;
+};
+
+const RECORDING_LIST_SELECT = {
+  id: true,
+  meetingRequestId: true,
+  objectKey: true,
+  failedAt: true,
+  durationSeconds: true,
+  createdAt: true,
+  ownerType: true,
+  forumPostId: true,
+  inboxMessageId: true,
+  reviewCommentId: true,
+  meetingRequest: { select: { topic: true, senderId: true } },
+} as const;
+
+type RecordingListRow = {
+  id: string;
+  meetingRequestId: string;
+  objectKey: string | null;
+  failedAt: Date | null;
+  durationSeconds: number | null;
+  createdAt: Date;
+  ownerType: RecordingOwnerType | null;
+  forumPostId: string | null;
+  inboxMessageId: string | null;
+  reviewCommentId: string | null;
+  meetingRequest: { topic: string; senderId: string };
+};
+
+async function toQuickRecordingListItems(rows: RecordingListRow[]): Promise<QuickRecordingListItem[]> {
+  return Promise.all(
+    rows.map(async (row) => ({
+      id: row.id,
+      meetingRequestId: row.meetingRequestId,
+      topic: row.meetingRequest.topic,
+      createdAt: row.createdAt.toISOString(),
+      durationSeconds: row.durationSeconds,
+      ready: row.objectKey !== null,
+      failed: row.failedAt !== null,
+      shared: await resolveSharedRecordingLink(row, row.meetingRequest.senderId),
+    })),
+  );
+}
+
+/**
+ * GET /api/quick-recordings — ready-only (per its own doc comment: a
+ * "record a new video instead"-or-"pick an existing one" picker has nothing
+ * useful to do with a still-processing or failed recording). Newest first.
+ */
+export async function getReadyQuickRecordingsForUser(userId: string): Promise<QuickRecordingListItem[]> {
+  const rows = await db.meetingRequestRecording.findMany({
+    where: {
+      meetingRequest: { senderId: userId, origin: MeetingRequestOrigin.quick_recording },
+      objectKey: { not: null },
+      deletedAt: null,
+    },
+    orderBy: { createdAt: "desc" },
+    select: RECORDING_LIST_SELECT,
+  });
+  return toQuickRecordingListItems(rows);
+}
+
+/**
+ * "My Quick Recordings" dashboard section — every one of the user's own
+ * non-deleted quick recordings regardless of state (ready/processing/
+ * failed), unlike the ready-only picker API above.
+ */
+export async function getQuickRecordingsForDashboard(userId: string): Promise<QuickRecordingListItem[]> {
+  const rows = await db.meetingRequestRecording.findMany({
+    where: {
+      meetingRequest: { senderId: userId, origin: MeetingRequestOrigin.quick_recording },
+      deletedAt: null,
+    },
+    orderBy: { createdAt: "desc" },
+    select: RECORDING_LIST_SELECT,
+  });
+  return toQuickRecordingListItems(rows);
+}
+
+/**
+ * Dashboard delete action — creator-only. Always allowed, including for a
+ * currently-linked recording (the client is expected to have already shown
+ * the "this is shared in X" warning from the same resolved link this file
+ * computes above; this function doesn't re-check that, same "confirmation
+ * is a UI concern" split as every other AlertDialog-gated delete in this
+ * app). The underlying MinIO object is removed immediately; the DB row is
+ * soft-deleted (deletedAt set, objectKey left as-is) so a still-embedded
+ * player elsewhere can render its distinct "deleted by owner" state
+ * (getMeetingRequestRecordingObjectKey's deletedAt check) instead of just
+ * vanishing. ownerType/FK are deliberately left untouched — deleting
+ * doesn't unlink; the "deleted by owner" message *is* what the link now
+ * resolves to.
+ */
+export async function deleteQuickRecording(meetingRequestId: string, userId: string): Promise<void> {
+  await getOwnQuickRecording(meetingRequestId, userId);
+  const recordings = await db.meetingRequestRecording.findMany({
+    where: { meetingRequestId, deletedAt: null },
+    select: { id: true, objectKey: true },
+  });
+  if (recordings.length === 0) throw new QuickRecordingError(404, "Recording not found.");
+
+  await Promise.all(recordings.map((r) => (r.objectKey ? deleteRecordingObject(r.objectKey) : Promise.resolve())));
+  await db.meetingRequestRecording.updateMany({
+    where: { id: { in: recordings.map((r) => r.id) } },
+    data: { deletedAt: new Date() },
   });
 }
