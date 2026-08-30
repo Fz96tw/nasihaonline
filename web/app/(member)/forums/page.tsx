@@ -9,9 +9,7 @@ import { getForumCategories } from "@/lib/forums-server";
 import { getAllCommunities, getOrCreateProfile } from "@/lib/profile-server";
 import { CommunityFilterPillsNav } from "@/components/shared/community-filter-pills-nav";
 import type { CommunityFilterSelection } from "@/components/shared/community-filter-pills";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Reveal } from "@/components/home/reveal";
 import { SortButton } from "@/components/forums/sort-button";
@@ -81,19 +79,18 @@ function isForumSort(value: string | undefined): value is ForumSort {
 
 function ForumTile({ forum, index }: { forum: ForumCategory; index: number }) {
   return (
-    <Reveal index={index} hover className="h-full">
-      <Link href={`/forums/${forum.slug}`}>
-        <Card className="h-full">
-          <CardHeader>
-            <CardTitle className="text-lg">{forum.name}</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {forum.description && <p className="text-sm text-muted-foreground">{forum.description}</p>}
-            <Badge variant="neutral" className="w-fit">
-              {forum.threadCount} {forum.threadCount === 1 ? "thread" : "threads"}
-            </Badge>
-          </CardContent>
-        </Card>
+    <Reveal index={index}>
+      <Link
+        href={`/forums/${forum.slug}`}
+        className="flex items-center gap-4 px-4 py-3 transition-colors hover:bg-muted/50"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="font-medium">{forum.name}</div>
+          {forum.description && <div className="truncate text-sm text-muted-foreground">{forum.description}</div>}
+        </div>
+        <Badge variant="neutral" className="shrink-0">
+          {forum.threadCount} {forum.threadCount === 1 ? "thread" : "threads"}
+        </Badge>
       </Link>
     </Reveal>
   );
@@ -101,7 +98,7 @@ function ForumTile({ forum, index }: { forum: ForumCategory; index: number }) {
 
 function ForumTileGrid({ forums }: { forums: ForumCategory[] }) {
   return (
-    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="divide-y rounded-lg border">
       {forums.map((forum, index) => (
         <ForumTile key={forum.id} forum={forum} index={index} />
       ))}
@@ -150,34 +147,28 @@ export default async function ForumsPage({
   const forums = accessibleForums.filter((forum) =>
     matchesCommunityFilter(forum.communityId, selectedCommunity, myCommunityIds),
   );
-  const sortedForums = [...forums].sort((a, b) => {
-    if (sort === "az") return a.name.localeCompare(b.name);
-    if (sort === "active") return (b.postCount ?? 0) - (a.postCount ?? 0);
-    if (sort === "recent") {
-      return (b.lastActivityAt ?? "").localeCompare(a.lastActivityAt ?? "");
-    }
-    return 0; // "featured" — keep displayOrder as returned by getForumCategories
-  });
 
-  // Grouping only applies under "Featured order" (the default, inherently
-  // organizational sort) — a flat 35-tile grid under "All Communities"
-  // reads as a wall of cards otherwise, and grouping keeps it legible.
-  // Picking an explicit ranking sort (A–Z/Recent/Active) flattens back to
-  // one globally-sorted list instead: grouping would make the sort read as
-  // "top N within each community" rather than a real overall ranking,
-  // which defeats the point of picking one (confirmed with user). Defaults
-  // open (defaultValue = every group present) so the category tiles are
-  // visible without an extra click.
-  const isGrouped = sort === "featured";
-  const genericForums = isGrouped ? sortedForums.filter((forum) => forum.communityId === null) : sortedForums;
-  const communityGroups = isGrouped
-    ? communities
-        .map((community) => ({
-          community,
-          forums: sortedForums.filter((forum) => forum.communityId === community.id),
-        }))
-        .filter((group) => group.forums.length > 0)
-    : [];
+  // Sections are always fully expanded (no Accordion) — sort only re-orders
+  // forums *within* a section, never re-orders/collapses the sections
+  // themselves, so scanning "which communities have forums" never requires
+  // opening anything. Misc (community-less) forums get their own section,
+  // pinned first; the rest are ordered alphabetically by community name.
+  const sortForums = (list: ForumCategory[]) =>
+    [...list].sort((a, b) => {
+      if (sort === "az") return a.name.localeCompare(b.name);
+      if (sort === "active") return (b.postCount ?? 0) - (a.postCount ?? 0);
+      if (sort === "recent") return (b.lastActivityAt ?? "").localeCompare(a.lastActivityAt ?? "");
+      return 0; // "featured" — keep displayOrder as returned by getForumCategories
+    });
+  const miscForums = sortForums(forums.filter((forum) => forum.communityId === null));
+  const communityGroups = communities
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((community) => ({
+      community,
+      forums: sortForums(forums.filter((forum) => forum.communityId === community.id)),
+    }))
+    .filter((group) => group.forums.length > 0);
 
   return (
     <main className="min-h-screen">
@@ -238,29 +229,20 @@ export default async function ForumsPage({
             Sorted by {SORT_OPTIONS.find((option) => option.value === sort)?.label}
           </span>
         </div>
-        <ForumTileGrid forums={genericForums} />
-
-        {communityGroups.length > 0 && (
-          <Accordion
-            type="multiple"
-            defaultValue={communityGroups.map((group) => group.community.id)}
-            className="flex flex-col gap-4"
-          >
-            {communityGroups.map((group) => (
-              <AccordionItem key={group.community.id} value={group.community.id} className="rounded-[10px] border px-4">
-                <AccordionTrigger className="text-base font-semibold hover:no-underline">
-                  {group.community.name}
-                  <span className="ml-2 text-xs font-normal text-muted-foreground">
-                    ({group.forums.length} {group.forums.length === 1 ? "forum" : "forums"})
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent>
-                  <ForumTileGrid forums={group.forums} />
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-        )}
+        <div className="flex flex-col gap-10">
+          {miscForums.length > 0 && (
+            <section>
+              <h2 className="mb-4 text-lg font-semibold">Misc Groups</h2>
+              <ForumTileGrid forums={miscForums} />
+            </section>
+          )}
+          {communityGroups.map((group) => (
+            <section key={group.community.id}>
+              <h2 className="mb-4 text-lg font-semibold">{group.community.name}</h2>
+              <ForumTileGrid forums={group.forums} />
+            </section>
+          ))}
+        </div>
       </section>
     </main>
   );
