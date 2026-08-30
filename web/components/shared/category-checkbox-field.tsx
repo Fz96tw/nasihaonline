@@ -18,11 +18,13 @@ export function CategoryCheckboxField({
   communities,
   value,
   onChange,
+  myCommunityIds = [],
 }: {
   categories: { id: string; name: string; communityId: string }[];
   communities: { id: string; name: string }[];
   value: string[];
   onChange: (categoryIds: string[]) => void;
+  myCommunityIds?: string[];
 }) {
   const categoriesByCommunity = communities
     .map((community) => ({
@@ -33,9 +35,16 @@ export function CategoryCheckboxField({
 
   // Open every section that already has a checked category (edit mode, or
   // a create-mode resubmit after a validation error) so the member isn't
-  // left hunting for where their existing selection lives.
+  // left hunting for where their existing selection lives, plus every
+  // section for a community the member has actually joined — so their own
+  // communities are visible up front without hiding the rest (callers that
+  // don't pass myCommunityIds keep the original checked-only behavior).
   const defaultOpen = categoriesByCommunity
-    .filter((group) => group.categories.some((category) => value.includes(category.id)))
+    .filter(
+      (group) =>
+        group.categories.some((category) => value.includes(category.id)) ||
+        myCommunityIds.includes(group.community.id),
+    )
     .map((group) => group.community.id);
 
   function toggle(categoryId: string) {

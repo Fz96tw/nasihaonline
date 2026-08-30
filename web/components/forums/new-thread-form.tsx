@@ -99,6 +99,7 @@ export function NewThreadForm({
   categories,
   communities,
   communityId,
+  myCommunityIds,
 }: {
   forumId: string;
   forumSlug: string;
@@ -107,6 +108,7 @@ export function NewThreadForm({
   categories: KnowledgeCategoryOption[];
   communities: { id: string; name: string }[];
   communityId: string | null;
+  myCommunityIds: string[];
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -270,6 +272,7 @@ export function NewThreadForm({
                   communities={communities}
                   value={field.value}
                   onChange={field.onChange}
+                  myCommunityIds={myCommunityIds}
                 />
               )}
               <FormMessage />
