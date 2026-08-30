@@ -1,23 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { useSearchQuery } from "@/components/header-search-context";
-import { Checkbox } from "@/components/ui/checkbox";
 
 // Sized for two lines (search input + communities line) now that the
 // community-based-categorization initiative (objective 2) adds a second
 // row of content — was 56px (one line) before.
 const ROW_HEIGHT_PX = 88;
-// Below the `sm` breakpoint the "Search only my communities" checkbox
-// drops to its own row (between the search input and the Your Communities
-// line, per user request) instead of sitting inline with the search input
-// — one more line than desktop, so the sticky row needs to reserve more
-// height or its `overflow-hidden` clips the checkbox row.
-const ROW_HEIGHT_PX_MOBILE = 114;
-const MOBILE_BREAKPOINT_QUERY = "(min-width: 640px)"; // Tailwind's `sm`
 // Accumulated scroll distance (not per-event delta — a single scroll event
 // can fire with a tiny delta many times) needed in one direction before
 // flipping revealed state.
@@ -53,6 +45,11 @@ const FLIP_COOLDOWN_MS = 200;
  * once by the server-rendered SiteHeader — this component only ever mounts
  * for a signed-in user (`{user && <HeaderSearchRow />}` in site-header.tsx),
  * so there's no signed-out-visitor case to hide here.
+ *
+ * The "Show only my communities" toggle used to live on this row too, but
+ * moved to the top of the /whats-new results page itself (a checkbox that
+ * scopes search results belongs next to the results, not the input) — see
+ * MyCommunitiesCheckbox in components/feed/.
  */
 export function HeaderSearchRow({
   communities,
@@ -76,21 +73,12 @@ export function HeaderSearchRow({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setQuery is stable (useState setter via context)
   }, [urlQuery]);
 
-  const [myCommunities, setMyCommunities] = useState(searchParams.get("myCommunities") === "1");
-  useEffect(() => {
-    setMyCommunities(searchParams.get("myCommunities") === "1");
-  }, [searchParams]);
-
   useEffect(() => {
     const root = document.documentElement;
-    const rowHeightPx = () => (window.matchMedia(MOBILE_BREAKPOINT_QUERY).matches ? ROW_HEIGHT_PX : ROW_HEIGHT_PX_MOBILE);
-
     if (pinned) {
-      const applyPinned = () => root.style.setProperty("--search-row-height", `${rowHeightPx()}px`);
-      applyPinned();
+      root.style.setProperty("--search-row-height", `${ROW_HEIGHT_PX}px`);
       setSearchRowVisible(true);
-      window.addEventListener("resize", applyPinned);
-      return () => window.removeEventListener("resize", applyPinned);
+      return;
     }
 
     let revealed = true;
@@ -99,7 +87,7 @@ export function HeaderSearchRow({
     let lastFlipAt = 0;
 
     const apply = () => {
-      root.style.setProperty("--search-row-height", revealed ? `${rowHeightPx()}px` : "0px");
+      root.style.setProperty("--search-row-height", revealed ? `${ROW_HEIGHT_PX}px` : "0px");
       setSearchRowVisible(revealed);
     };
 
@@ -134,26 +122,12 @@ export function HeaderSearchRow({
 
     apply();
     window.addEventListener("scroll", handleScroll, { passive: true });
-    // Crossing the `sm` breakpoint (rotating a phone, resizing a browser
-    // window) changes which of the two row heights above applies.
-    window.addEventListener("resize", apply);
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-      window.removeEventListener("resize", apply);
-    };
+    return () => window.removeEventListener("scroll", handleScroll);
   }, [pinned, setSearchRowVisible]);
 
-  // Shared by both the form submit and the checkbox's immediate toggle —
-  // navigating on toggle (not just on next submit) is what makes "actually
-  // scopes /whats-new search results" true the moment you click it, even
-  // while a query is already active.
-  function navigate(nextMyCommunities: boolean) {
+  function navigate() {
     const trimmed = query.trim();
-    const params = new URLSearchParams();
-    if (trimmed) params.set("q", trimmed);
-    if (nextMyCommunities) params.set("myCommunities", "1");
-    const qs = params.toString();
-    router.push(qs ? `/whats-new?${qs}` : "/whats-new");
+    router.push(trimmed ? `/whats-new?q=${encodeURIComponent(trimmed)}` : "/whats-new");
   }
 
   const communityLabel = followsAllCommunities
@@ -165,47 +139,34 @@ export function HeaderSearchRow({
   return (
     <div className="sticky top-[var(--header-height)] z-40 h-[var(--search-row-height)] overflow-hidden border-b bg-background shadow-sm transition-[height] duration-300 ease-in-out">
       <div className="flex h-full flex-col justify-center gap-1.5 px-4 py-2 lg:px-8">
-        <div className="mx-auto flex w-full max-w-[720px] flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              navigate(myCommunities);
-            }}
-            className="relative sm:flex-1"
-          >
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              ref={inputRef}
-              type="search"
-              value={query}
-              placeholder="Search NASIHA…"
-              aria-label="Search NASIHA"
-              onChange={(event) => setQuery(event.currentTarget.value)}
-              className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-9 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-search-cancel-button]:appearance-none"
-            />
-            {query ? (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                aria-label="Clear search"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            ) : null}
-          </form>
-          <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
-            <Checkbox
-              checked={myCommunities}
-              onCheckedChange={(checked) => {
-                const next = Boolean(checked);
-                setMyCommunities(next);
-                navigate(next);
-              }}
-            />
-            <span>Search only my communities</span>
-          </label>
-        </div>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            navigate();
+          }}
+          className="relative mx-auto w-full max-w-[720px]"
+        >
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            ref={inputRef}
+            type="search"
+            value={query}
+            placeholder="Search NASIHA…"
+            aria-label="Search NASIHA"
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-9 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-search-cancel-button]:appearance-none"
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
+        </form>
         <div className="mx-auto flex w-full max-w-[720px] items-center gap-2 truncate text-xs text-muted-foreground">
           <span className="truncate">
             Your Communities: <span className="text-foreground">{communityLabel}</span>

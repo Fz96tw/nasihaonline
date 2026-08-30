@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Rss } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getFeedPage } from "@/lib/feed-server";
 import { FEED_TYPES, FEED_TYPE_LABELS, isFeedItemType } from "@/lib/feed";
 import { FeedList } from "@/components/feed/feed-list";
+import { MY_COMMUNITIES_COOKIE, MyCommunitiesCheckbox } from "@/components/feed/my-communities-checkbox";
 import { cn } from "@/lib/utils";
 import { getMemberCommunityIdsForFiltering, getOrCreateProfile } from "@/lib/profile-server";
 
@@ -24,7 +26,17 @@ export default async function WhatsNewPage({
 
   const activeType = isFeedItemType(searchParams.type) ? searchParams.type : undefined;
   const q = searchParams.q?.trim() || undefined;
-  const myCommunities = searchParams.myCommunities === "1";
+  // "Show only my communities" — explicit "1"/"0" in the URL (from clicking
+  // the checkbox, or a link that preserves it) always wins; otherwise fall
+  // back to the cookie so the setting survives a brand-new search typed
+  // into the header, which knows nothing about this toggle. Unchecked
+  // (false) when neither is set.
+  const myCommunities =
+    searchParams.myCommunities === "1"
+      ? true
+      : searchParams.myCommunities === "0"
+        ? false
+        : cookies().get(MY_COMMUNITIES_COOKIE)?.value === "1";
   const profile = await getOrCreateProfile(user.id);
   const communityIds = getMemberCommunityIdsForFiltering(profile, myCommunities);
   const { items, nextCursor, hasMore, totalCount, countsByType } = await getFeedPage({
@@ -57,6 +69,14 @@ export default async function WhatsNewPage({
     return qs ? `/whats-new?${qs}` : "/whats-new";
   };
 
+  const myCommunitiesHref = (() => {
+    const params = new URLSearchParams();
+    if (activeType) params.set("type", activeType);
+    if (q) params.set("q", q);
+    params.set("myCommunities", myCommunities ? "0" : "1");
+    return `/whats-new?${params.toString()}`;
+  })();
+
   // The Inbox pill only makes sense while a search is active (getFeedPage's
   // inbox branch never returns anything without a query) — hidden outside
   // search mode rather than left clickable into a dead, unexplained "0
@@ -88,6 +108,8 @@ export default async function WhatsNewPage({
           )}
         </h1>
       </div>
+
+      <MyCommunitiesCheckbox checked={myCommunities} href={myCommunitiesHref} />
 
       <div className="flex flex-wrap gap-2">
         <Link href={filterHref()} className={filterLinkClasses(activeType === undefined)}>
