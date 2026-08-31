@@ -51,8 +51,8 @@ export function CommunityFilterPillsNav({
   const checked = selected === "mine";
   // "Show only my communities" is a no-op once the member already belongs to
   // every community — checking it can't narrow anything further, so the
-  // checkbox (and its "Filter Content" label) just adds noise. The
-  // per-community pills below still narrow to one specific community, so
+  // checkbox (and its "Filter Content" label) is swapped for a plain notice.
+  // The per-community pills below still narrow to one specific community, so
   // those stay.
   const joinedAll = followsAllCommunities || (communities.length > 0 && myCommunityIds.length >= communities.length);
 
@@ -74,7 +74,9 @@ export function CommunityFilterPillsNav({
 
   return (
     <div className="flex flex-col gap-2">
-      {!joinedAll && (
+      {joinedAll ? (
+        <span className="text-sm text-muted-foreground">You are member of all the communities</span>
+      ) : (
         <>
           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filter Content</span>
           <MyCommunitiesCheckbox

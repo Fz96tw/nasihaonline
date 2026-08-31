@@ -73,13 +73,15 @@ export function CommunityFilterPills({
   const checked = selected === "mine";
   // Same rationale as community-filter-pills-nav.tsx: once the member
   // already belongs to every community, "Show only my communities" can't
-  // narrow anything further, so hide it (and its label) — the per-community
-  // pills still do useful narrowing, so those stay.
+  // narrow anything further, so swap it for a plain notice — the
+  // per-community pills still do useful narrowing, so those stay.
   const joinedAll = followsAllCommunities || (communities.length > 0 && myCommunityIds.length >= communities.length);
 
   return (
     <div className="flex flex-col gap-2">
-      {!joinedAll && (
+      {joinedAll ? (
+        <span className="text-sm text-muted-foreground">You are member of all the communities</span>
+      ) : (
         <>
           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filter Content</span>
           <label className="flex w-fit cursor-pointer items-center gap-1.5 text-sm text-muted-foreground">
