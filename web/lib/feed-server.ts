@@ -701,11 +701,12 @@ export async function getFeedPage(params: {
         // feed row still gets a thumbnail (see FeedRow's forum_thread layout).
         imageUrl: "/images/forum-thread.jpg",
         stats: { views: thread._count.views, comments: thread._count.posts - 1 },
-        // Browse mode only ever shows this for a reply-bumped thread
-        // (unchanged); search mode always shows *some* post preview, since
-        // there's now a real excerptPost to source it from regardless of
-        // whether the thread was freshly created or bumped.
-        replyExcerpt: query ? (excerptPost ? excerptOf(excerptPost.body) : undefined) : isReply && latestPost ? excerptOf(latestPost.body) : undefined,
+        // Browse mode: latestPost is either the opening post (fresh thread)
+        // or the newest reply (bumped thread) — either way it's real content
+        // worth previewing, so always show it rather than only on a bump.
+        // Search mode always shows *some* post preview, since there's a real
+        // excerptPost to source it from regardless of new-vs-bumped.
+        replyExcerpt: query ? (excerptPost ? excerptOf(excerptPost.body) : undefined) : latestPost ? excerptOf(latestPost.body) : undefined,
         isRestricted: thread.visibility === ForumThreadVisibility.invited,
       };
     }),
