@@ -185,7 +185,7 @@ function QuickRecordingRow({
           controls
           preload="metadata"
           src={`/api/inbox/meeting-requests/${recording.meetingRequestId}/recording/${recording.id}`}
-          className="max-h-56 max-w-full rounded-md border"
+          className="w-fit max-h-56 max-w-full self-start rounded-md border"
         />
       )}
 
