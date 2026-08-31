@@ -250,6 +250,7 @@ function PostNode({
               autoFocus
               pasteImageUploadUrl="/api/forums/post-image"
               onImageUploadStateChange={setEditImageUploading}
+              videoPickerEnabled
             />
             {editError && <p className="text-xs text-destructive">{editError}</p>}
             <div className="flex justify-end gap-2">
