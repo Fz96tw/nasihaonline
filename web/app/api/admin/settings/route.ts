@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { AuthError, authErrorResponse, requireRole } from "@/lib/auth";
 import { Role } from "@/lib/generated/prisma/enums";
-import { AdmissionPhase } from "@/lib/generated/prisma/enums";
+import { AdmissionPhase, BodyFont, HeadingFont } from "@/lib/generated/prisma/enums";
 import {
   getAdmissionPhase,
   setAdmissionPhase,
@@ -10,6 +10,8 @@ import {
   setWelcomeAnnouncementSettings,
   getQuickRecordingMaxDuration,
   setQuickRecordingMaxDuration,
+  getSiteFonts,
+  setSiteFonts,
 } from "@/lib/settings";
 
 const patchSchema = z.object({
@@ -18,6 +20,8 @@ const patchSchema = z.object({
   welcomeAnnouncementNotify: z.boolean().optional(),
   welcomeAnnouncementEmail: z.boolean().optional(),
   quickRecordingMaxDurationSeconds: z.number().int().min(1).max(3600).optional(),
+  bodyFont: z.nativeEnum(BodyFont).optional(),
+  headingFont: z.nativeEnum(HeadingFont).optional(),
 });
 
 export async function GET() {
@@ -27,6 +31,7 @@ export async function GET() {
       admissionPhase: await getAdmissionPhase(),
       ...(await getWelcomeAnnouncementSettings()),
       quickRecordingMaxDurationSeconds: await getQuickRecordingMaxDuration(),
+      ...(await getSiteFonts()),
     });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
@@ -69,9 +74,19 @@ export async function PATCH(request: Request) {
     await setQuickRecordingMaxDuration(parsed.data.quickRecordingMaxDurationSeconds);
   }
 
+  const { bodyFont, headingFont } = parsed.data;
+  if (bodyFont !== undefined || headingFont !== undefined) {
+    const current = await getSiteFonts();
+    await setSiteFonts({
+      bodyFont: bodyFont ?? current.bodyFont,
+      headingFont: headingFont ?? current.headingFont,
+    });
+  }
+
   return NextResponse.json({
     admissionPhase: await getAdmissionPhase(),
     ...(await getWelcomeAnnouncementSettings()),
     quickRecordingMaxDurationSeconds: await getQuickRecordingMaxDuration(),
+    ...(await getSiteFonts()),
   });
 }

@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { AdmissionPhase } from "@/lib/generated/prisma/enums";
+import { AdmissionPhase, BodyFont, HeadingFont } from "@/lib/generated/prisma/enums";
 
 export { ADMISSION_PHASE_LABELS } from "@/lib/admission-phase";
 
@@ -72,5 +72,27 @@ export async function setQuickRecordingMaxDuration(seconds: number): Promise<voi
     where: { id: SETTINGS_ROW_ID },
     create: { id: SETTINGS_ROW_ID, quickRecordingMaxDurationSeconds: seconds },
     update: { quickRecordingMaxDurationSeconds: seconds },
+  });
+}
+
+export type SiteFontSettings = {
+  bodyFont: BodyFont;
+  headingFont: HeadingFont;
+};
+
+export async function getSiteFonts(): Promise<SiteFontSettings> {
+  const settings = await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID },
+    update: {},
+  });
+  return { bodyFont: settings.bodyFont, headingFont: settings.headingFont };
+}
+
+export async function setSiteFonts(input: SiteFontSettings): Promise<void> {
+  await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID, ...input },
+    update: input,
   });
 }

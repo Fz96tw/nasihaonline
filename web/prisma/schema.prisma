@@ -266,9 +266,28 @@ model SiteSettings {
   // LiveKitMeetingScreen) and server-side (an in-process delayed stopEgress
   // call scheduled by the recording/start route — see its doc comment).
   quickRecordingMaxDurationSeconds Int            @default(30)
+  // Site-wide typography, chosen from a curated set of fonts preloaded via
+  // next/font/google in app/layout.tsx (see lib/fonts.ts) — not a free-text
+  // Google Font name, since next/font self-hosts fonts at build time.
+  bodyFont                         BodyFont       @default(montserrat)
+  headingFont                      HeadingFont    @default(mulish)
   updatedAt                        DateTime       @updatedAt
 
   @@map("site_settings")
+}
+
+enum BodyFont {
+  inter
+  ibm_plex_sans
+  montserrat
+  mulish
+}
+
+enum HeadingFont {
+  inter
+  lora
+  source_serif_4
+  mulish
 }
 
 enum CareerStage {
