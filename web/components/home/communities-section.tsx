@@ -3,9 +3,11 @@ import { Reveal } from "@/components/home/reveal";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getAllCommunities } from "@/lib/profile-server";
+import { CommunityAccordionStack } from "@/components/communities/community-accordion-stack";
+import { COMMUNITY_IMAGES, COMMUNITY_FALLBACK_IMAGE } from "@/lib/community-images";
 
-// Matches the section's own grid shape so the swap-in doesn't shift layout —
-// same rationale as HeroStatsSkeleton in hero-section.tsx.
+// Matches the section's own layout shape so the swap-in doesn't shift
+// layout — same rationale as HeroStatsSkeleton in hero-section.tsx.
 export function CommunitiesSectionSkeleton() {
   return (
     <section className="px-8 py-24">
@@ -15,11 +17,7 @@ export function CommunitiesSectionSkeleton() {
           <Skeleton className="h-9 w-64" />
           <Skeleton className="h-5 w-96 max-w-full" />
         </div>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-32 rounded-xl" />
-          ))}
-        </div>
+        <Skeleton className="mx-auto h-[480px] w-full max-w-[1120px] rounded-xl sm:h-[230px] md:h-[260px]" />
       </div>
     </section>
   );
@@ -43,18 +41,14 @@ export async function CommunitiesSection() {
             NASIHA groups its Library, Events, and Forums by broad topic area — join the ones you care about.
           </p>
         </Reveal>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {communities.map((community, index) => (
-            <Reveal key={community.id} index={index} hover className="h-full">
-              <div className="flex h-full flex-col gap-2 rounded-xl border bg-card p-6 text-center shadow-sm">
-                <p className="font-bold">{community.name}</p>
-                <p className="text-sm leading-[1.6] text-muted-foreground">
-                  {community.description ?? "No description yet."}
-                </p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
+        <CommunityAccordionStack
+          communities={communities.map((community) => ({
+            id: community.id,
+            name: community.name,
+            description: community.description,
+            image: COMMUNITY_IMAGES[community.name] ?? COMMUNITY_FALLBACK_IMAGE,
+          }))}
+        />
         <Reveal className="mt-10 text-center">
           <Button variant="default" size="lg" asChild>
             <Link href="/communities">Browse All Communities</Link>

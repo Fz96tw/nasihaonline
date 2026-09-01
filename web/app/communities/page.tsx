@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getAllCommunities } from "@/lib/profile-server";
+import { getKnowledgeCategories } from "@/lib/library-server";
 import { Button } from "@/components/ui/button";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
-import { Reveal } from "@/components/home/reveal";
+import { CommunityCategoryList } from "@/components/communities/community-category-list";
+import { COMMUNITY_IMAGES, COMMUNITY_FALLBACK_IMAGE } from "@/lib/community-images";
 
 export const metadata: Metadata = {
   title: "Communities — NASIHA",
@@ -16,7 +18,14 @@ export const metadata: Metadata = {
  * list, since a signed-out visitor has no Profile to join with.
  */
 export default async function CommunitiesPage() {
-  const communities = await getAllCommunities();
+  const [communities, categories] = await Promise.all([getAllCommunities(), getKnowledgeCategories()]);
+  const communitiesWithCategories = communities.map((community) => ({
+    id: community.id,
+    name: community.name,
+    description: community.description,
+    image: COMMUNITY_IMAGES[community.name] ?? COMMUNITY_FALLBACK_IMAGE,
+    categories: categories.filter((category) => category.communityId === community.id),
+  }));
 
   return (
     <main className="min-h-screen">
@@ -33,17 +42,8 @@ export default async function CommunitiesPage() {
         </div>
       </section>
 
-      <section className="mx-auto flex max-w-[720px] flex-col gap-6 px-8 py-16">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {communities.map((community, index) => (
-            <Reveal key={community.id} index={index} className="h-full">
-              <div className="flex h-full flex-col gap-1 rounded-md border p-4">
-                <p className="font-medium">{community.name}</p>
-                <p className="text-sm text-muted-foreground">{community.description ?? "No description yet."}</p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
+      <section className="mx-auto flex max-w-[1120px] flex-col items-center gap-6 px-8 py-16">
+        <CommunityCategoryList communities={communitiesWithCategories} />
 
         <div className="flex flex-col items-center gap-3 pt-6 text-center">
           <p className="text-muted-foreground">Sign in to join a community and personalize your feed.</p>
