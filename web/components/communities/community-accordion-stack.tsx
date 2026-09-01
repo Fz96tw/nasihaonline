@@ -96,7 +96,7 @@ export function CommunityAccordionStack({ communities }: { communities: Communit
               <p className="text-2xl font-bold text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)]">
                 {community.name}
               </p>
-              <p className="mt-1 line-clamp-2 max-w-[280px] text-lg leading-[1.7] text-white/90 sm:line-clamp-4 sm:max-w-[320px]">
+              <p className="mt-1 max-w-[280px] text-lg leading-[1.7] text-white/90 sm:max-w-[320px]">
                 {community.description ?? "No description yet."}
               </p>
             </div>

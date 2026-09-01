@@ -50,8 +50,8 @@ export async function CommunitiesSection() {
           }))}
         />
         <Reveal className="mt-10 text-center">
-          <Button variant="default" size="lg" asChild>
-            <Link href="/communities">Browse All Communities</Link>
+          <Button variant="outline" size="lg" asChild>
+            <Link href="/communities">Learn more</Link>
           </Button>
         </Reveal>
       </div>
