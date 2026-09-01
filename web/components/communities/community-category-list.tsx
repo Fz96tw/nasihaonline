@@ -116,6 +116,7 @@ function CommunityRow({ community, isReversed }: { community: CommunityWithCateg
         className="relative h-[90px] w-full shrink-0 overflow-hidden rounded-xl sm:h-[200px] sm:w-[280px]"
       >
         <Image src={community.image} alt="" fill sizes="(min-width: 640px) 280px, 100vw" className="object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/5 to-transparent" />
       </motion.div>
       <motion.div variants={textVariants} className="flex flex-1 flex-col gap-3">
         <div>
