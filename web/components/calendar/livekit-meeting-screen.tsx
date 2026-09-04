@@ -745,21 +745,31 @@ function TopLeftOverlay({ children }: { children: ReactNode }) {
 
 /**
  * Quick-recording-only replacement for TopLeftOverlay — Record, Reset, and
- * Exit anchored bottom-left, positioned directly above LiveKit's own
- * bottom `.lk-control-bar` rather than overlapping it. That control bar is
- * a fixed single row that never wraps at any viewport width — confirmed
- * via `@livekit/components-styles`' control-bar.css (`display:flex`, no
- * `flex-wrap`, `max-height: var(--lk-control-bar-height)`, 69px in the
- * default theme) — so 69px is hardcoded below rather than read from that
- * CSS variable, which wouldn't cascade here anyway (this overlay is a
- * sibling of `<LiveKitRoom>`, which is where the theme scopes it).
+ * Exit anchored bottom-right, positioned directly above LiveKit's own
+ * bottom `.lk-control-bar` rather than overlapping it. Bottom-left was
+ * tried first and reported (live testing) to collide with content already
+ * occupying that corner — LiveKit's own per-tile participant metadata
+ * (name/mic-state overlay) and the native "you're sharing your
+ * screen/window" status message during screen share. Bottom-right is clear
+ * in quick-recording mode: LiveKit's own bottom-right occupant, the Chat
+ * toggle/panel, is hidden entirely here (see the `<LiveKitRoom>`
+ * className above).
+ *
+ * LiveKit's control bar is a fixed single row that never wraps at any
+ * viewport width — confirmed via `@livekit/components-styles`'
+ * control-bar.css (`display:flex`, no `flex-wrap`, `max-height:
+ * var(--lk-control-bar-height)`, 69px in the default theme) — so 69px is
+ * hardcoded below rather than read from that CSS variable, which wouldn't
+ * cascade here anyway (this overlay is a sibling of `<LiveKitRoom>`, which
+ * is where the theme scopes it).
  *
  * Row count is achieved purely by flex-direction, not duplicated markup:
  * below `sm` the outer wrapper is `flex-row` (countdown + button row sit
  * side by side, wrapping as needed) — one combined row here, plus LiveKit's
  * own single row below it, is 2 rows total in the bottom control region on
  * mobile. At `sm:`+ the wrapper switches to `flex-col`, stacking the
- * countdown above the button row — 2 rows here, 3 total with LiveKit's bar.
+ * countdown above the button row (both right-aligned) — 2 rows here, 3
+ * total with LiveKit's bar.
  */
 function QuickRecordingOverlay({
   recording,
@@ -784,7 +794,7 @@ function QuickRecordingOverlay({
 }) {
   return (
     <div
-      className="pointer-events-none absolute left-4 z-50 flex flex-row flex-wrap items-center gap-2 sm:flex-col sm:items-start"
+      className="pointer-events-none absolute right-4 z-50 flex flex-row flex-wrap items-center justify-end gap-2 sm:flex-col sm:items-end"
       style={{ bottom: "calc(69px + 0.5rem)" }}
     >
       {recording && secondsRemaining !== null && <RecordingCountdown secondsRemaining={secondsRemaining} />}
