@@ -17,6 +17,7 @@ export function QuickRecordingMeetingScreen({
   tokenEndpoint,
   recordingStartEndpoint,
   recordingStopEndpoint,
+  recordingDiscardEndpoint,
   chatEndpoint,
   title,
   organizerName,
@@ -27,6 +28,8 @@ export function QuickRecordingMeetingScreen({
   tokenEndpoint: string;
   recordingStartEndpoint: string;
   recordingStopEndpoint: string;
+  /** POST endpoint for the Reset button — quick-recording only, see LiveKitMeetingScreen's doc comment on the prop. */
+  recordingDiscardEndpoint: string;
   chatEndpoint: string;
   title: string;
   organizerName: string;
@@ -41,6 +44,7 @@ export function QuickRecordingMeetingScreen({
       tokenEndpoint={tokenEndpoint}
       recordingStartEndpoint={recordingStartEndpoint}
       recordingStopEndpoint={recordingStopEndpoint}
+      recordingDiscardEndpoint={recordingDiscardEndpoint}
       chatEndpoint={chatEndpoint}
       title={title}
       organizerName={organizerName}

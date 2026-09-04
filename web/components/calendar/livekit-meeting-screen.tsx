@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Users, X } from "lucide-react";
-import { RoomEvent, VideoPreset, VideoPresets, type RemoteParticipant } from "livekit-client";
+import { LogOut, RotateCcw, Users, X } from "lucide-react";
+import { RoomEvent, VideoPreset, VideoPresets, type RemoteParticipant, type Room } from "livekit-client";
 import { LiveKitRoom, VideoConference, useChat, useParticipants, useRoomContext } from "@livekit/components-react";
 import "@livekit/components-styles";
 import { getCsrfToken } from "@/lib/csrf-client";
@@ -122,8 +122,18 @@ function MeetingBanner({ title, organizerName }: { title: string; organizerName:
  * risks losing to its internal layout/stacking in ways that are opaque
  * from the outside. Rendering it as a sibling at the top level, same as
  * the banner below, avoids that entirely.
+ *
+ * `isQuickRecording` is passed straight through to getPublicMeetingClosingNote
+ * — see its own doc comment for which clauses that drops — and additionally
+ * prepends QUICK_RECORDING_INTRO_BLURB, a short explainer of the feature
+ * and its Record/Reset/Exit controls. That blurb is screen-specific UI
+ * copy, not reusable legal text, so it lives here rather than in
+ * lib/legal.ts alongside the ToS-flavored closing note.
  */
-function DisclaimerReminderFlash() {
+const QUICK_RECORDING_INTRO_BLURB =
+  "Quick Recording lets you record a short video of yourself to share with the community. Click Record to start. Reset discards the current take so you can try again. Exit leaves without saving once you're done.";
+
+function DisclaimerReminderFlash({ isQuickRecording }: { isQuickRecording: boolean }) {
   const [visible, setVisible] = useState(true);
 
   if (!visible) return null;
@@ -135,7 +145,8 @@ function DisclaimerReminderFlash() {
         onClick={() => setVisible(false)}
         className="pointer-events-auto w-full max-w-sm cursor-pointer rounded-lg border bg-background p-4 text-left shadow-lg"
       >
-        <p className="text-sm text-muted-foreground">{getPublicMeetingClosingNote("livekit")}</p>
+        {isQuickRecording && <p className="mb-2 text-sm font-medium">{QUICK_RECORDING_INTRO_BLURB}</p>}
+        <p className="text-sm text-muted-foreground">{getPublicMeetingClosingNote("livekit", isQuickRecording)}</p>
         <p className="mt-2 text-xs font-medium text-muted-foreground">Tap to dismiss</p>
       </button>
     </div>
@@ -414,20 +425,79 @@ function formatSecondsRemaining(totalSeconds: number): string {
 }
 
 /**
- * Countdown shown next to the Record button while recording is active
- * (Quick Video Recording & Sharing initiative) — only rendered when the
- * caller passed maxRecordingSeconds (today, only the quick-recording
- * screen does; a regular scheduled meeting/event recording has no limit).
- * Ticks down locally from `recording`'s true transition, independent of
- * the actual egress duration — good enough given the short limits this is
- * for, and avoids needing a server-supplied start timestamp.
+ * Countdown shown while recording is active (Quick Video Recording &
+ * Sharing initiative) — only rendered when the caller passed
+ * maxRecordingSeconds (today, only the quick-recording screen does; a
+ * regular scheduled meeting/event recording has no limit, so this is
+ * effectively quick-recording-only — see QuickRecordingOverlay, its sole
+ * caller). Ticks down locally from `recording`'s true transition,
+ * independent of the actual egress duration — good enough given the short
+ * limits this is for, and avoids needing a server-supplied start
+ * timestamp. Sized up at `sm:`+ (its own status row, above the button row
+ * in QuickRecordingOverlay) but stays compact below `sm`, where it shares
+ * a single row with the buttons — see QuickRecordingOverlay's doc comment.
  */
 function RecordingCountdown({ secondsRemaining }: { secondsRemaining: number }) {
   return (
-    <span className="pointer-events-none rounded-lg bg-[#1d1d1d] px-2.5 py-1 font-mono text-xs text-white/90 tabular-nums">
+    <span className="pointer-events-auto rounded-lg bg-[#1d1d1d] px-2.5 py-1 font-mono text-sm text-white/90 tabular-nums sm:px-3 sm:py-1.5 sm:text-xl">
       {formatSecondsRemaining(secondsRemaining)}
     </span>
   );
+}
+
+/**
+ * Reset button (Quick Video Recording & Sharing initiative, quick-recording
+ * only) — rendered in QuickRecordingOverlay's button row next to Record,
+ * only while `recording` is true (caller gates this). Discards the
+ * in-progress recording without disconnecting — see LiveKitMeetingScreen's
+ * handleReset for the actual discard-endpoint call and the ref-flag
+ * dance that keeps it from also triggering onRecordingStopped's
+ * navigation.
+ */
+function ResetControl({ pending, onClick }: { pending: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={pending}
+      className={`pointer-events-auto ${LK_BUTTON_CLASS}`}
+    >
+      <RotateCcw className="h-4 w-4" />
+      <span className="hidden sm:inline">Reset</span>
+    </button>
+  );
+}
+
+/**
+ * Exit button (quick-recording only) — behaves exactly like LiveKit's own
+ * (hidden, in this mode) Leave button: a plain room.disconnect(), which
+ * `<LiveKitRoom onDisconnected>` already turns into the same backHref
+ * navigation Leave always produced. No discard/confirmation logic.
+ */
+function ExitControl({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className={`pointer-events-auto ${LK_BUTTON_CLASS}`}>
+      <LogOut className="h-4 w-4" />
+      <span className="hidden sm:inline">Exit</span>
+    </button>
+  );
+}
+
+/**
+ * Headless bridge reporting the live Room instance up to the Exit button,
+ * which (like RecordingControl/ParticipantsControl) renders outside
+ * <LiveKitRoom>'s own DOM tree and so can't call useRoomContext() itself —
+ * same structural pattern as RecordingStateListener/ParticipantsListener/
+ * CoHostStateListener above.
+ */
+function RoomExitBridge({ onRoomReady }: { onRoomReady: (room: Room) => void }) {
+  const room = useRoomContext();
+
+  useEffect(() => {
+    onRoomReady(room);
+  }, [room, onRoomReady]);
+
+  return null;
 }
 
 /**
@@ -668,9 +738,65 @@ function ParticipantsControl({
   );
 }
 
-/** Shared top-left overlay slot for Record and Participants — see RecordingControl's doc comment for why this corner (never the right, which LiveKit's chat panel can claim). */
+/** Shared top-left overlay slot for Record and Participants — see RecordingControl's doc comment for why this corner (never the right, which LiveKit's chat panel can claim). Only used for non-quick-recording meetings — see QuickRecordingOverlay for the quick-recording equivalent. */
 function TopLeftOverlay({ children }: { children: ReactNode }) {
   return <div className="pointer-events-none absolute left-4 top-4 z-50 flex flex-col items-start gap-2">{children}</div>;
+}
+
+/**
+ * Quick-recording-only replacement for TopLeftOverlay — Record, Reset, and
+ * Exit anchored bottom-left, positioned directly above LiveKit's own
+ * bottom `.lk-control-bar` rather than overlapping it. That control bar is
+ * a fixed single row that never wraps at any viewport width — confirmed
+ * via `@livekit/components-styles`' control-bar.css (`display:flex`, no
+ * `flex-wrap`, `max-height: var(--lk-control-bar-height)`, 69px in the
+ * default theme) — so 69px is hardcoded below rather than read from that
+ * CSS variable, which wouldn't cascade here anyway (this overlay is a
+ * sibling of `<LiveKitRoom>`, which is where the theme scopes it).
+ *
+ * Row count is achieved purely by flex-direction, not duplicated markup:
+ * below `sm` the outer wrapper is `flex-row` (countdown + button row sit
+ * side by side, wrapping as needed) — one combined row here, plus LiveKit's
+ * own single row below it, is 2 rows total in the bottom control region on
+ * mobile. At `sm:`+ the wrapper switches to `flex-col`, stacking the
+ * countdown above the button row — 2 rows here, 3 total with LiveKit's bar.
+ */
+function QuickRecordingOverlay({
+  recording,
+  secondsRemaining,
+  isHostOrCoHost,
+  startEndpoint,
+  stopEndpoint,
+  resetPending,
+  onReset,
+  onExit,
+  onError,
+}: {
+  recording: boolean;
+  secondsRemaining: number | null;
+  isHostOrCoHost: boolean;
+  startEndpoint: string;
+  stopEndpoint: string;
+  resetPending: boolean;
+  onReset: () => void;
+  onExit: () => void;
+  onError: (message: string) => void;
+}) {
+  return (
+    <div
+      className="pointer-events-none absolute left-4 z-50 flex flex-row flex-wrap items-center gap-2 sm:flex-col sm:items-start"
+      style={{ bottom: "calc(69px + 0.5rem)" }}
+    >
+      {recording && secondsRemaining !== null && <RecordingCountdown secondsRemaining={secondsRemaining} />}
+      <div className="pointer-events-none flex items-center gap-2">
+        {isHostOrCoHost && (
+          <RecordingControl recording={recording} startEndpoint={startEndpoint} stopEndpoint={stopEndpoint} onError={onError} />
+        )}
+        {recording && <ResetControl pending={resetPending} onClick={onReset} />}
+        <ExitControl onClick={onExit} />
+      </div>
+    </div>
+  );
 }
 
 /** The visible toast stack — a sibling of <LiveKitRoom>, not nested inside it (see ParticipantActivityListener). */
@@ -726,6 +852,7 @@ export function LiveKitMeetingScreen({
   backHref,
   maxRecordingSeconds,
   onRecordingStopped,
+  recordingDiscardEndpoint,
 }: {
   tokenEndpoint: string;
   /** POST endpoints for the Record/Stop control — host/co-host only (Recording Access initiative; previously any attendee), same auth as tokenEndpoint. */
@@ -766,8 +893,10 @@ export function LiveKitMeetingScreen({
   backHref: string;
   /** Admin-configurable recording time limit (Quick Video Recording & Sharing initiative) — undefined means no limit (every caller except the quick-recording screen), which skips the countdown UI and auto-stop entirely. */
   maxRecordingSeconds?: number;
-  /** Fires on any recording→not-recording transition (manual Stop or the countdown auto-stop) — never on initial mount. Only the quick-recording screen passes this, to navigate to its processing/done page. */
+  /** Fires on any recording→not-recording transition (manual Stop or the countdown auto-stop) — never on initial mount. Only the quick-recording screen passes this, to navigate to its processing/done page. Deliberately does NOT fire for a Reset-triggered stop — see handleReset's resettingRef. */
   onRecordingStopped?: () => void;
+  /** POST endpoint for the Reset button (quick-recording only) — always provided together with maxRecordingSeconds by the one caller (QuickRecordingMeetingScreen) that sets isQuickRecording true; unused, and Reset never renders, otherwise. */
+  recordingDiscardEndpoint?: string;
 }) {
   const router = useRouter();
   const [credentials, setCredentials] = useState<{ token: string; serverUrl: string } | null>(null);
@@ -777,7 +906,16 @@ export function LiveKitMeetingScreen({
   const [participants, setParticipants] = useState<ParticipantSummary[]>([]);
   const [coHostUserIds, setCoHostUserIds] = useState<string[]>([]);
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
+  const [room, setRoom] = useState<Room | null>(null);
+  const [resetPending, setResetPending] = useState(false);
   const wasRecordingRef = useRef(false);
+  // Set right before calling the discard endpoint (handleReset), checked
+  // instead of firing onRecordingStopped in the recording-transition effect
+  // below — distinguishes a Reset-triggered stop (stay in the room, ready
+  // to record again) from a real Stop (navigate to the done page).
+  const resettingRef = useRef(false);
+
+  const isQuickRecording = maxRecordingSeconds !== undefined;
 
   usePreventScreenShareSelfMirror();
 
@@ -795,7 +933,13 @@ export function LiveKitMeetingScreen({
       wasRecordingRef.current = true;
       return;
     }
-    if (wasRecordingRef.current) onRecordingStopped?.();
+    if (wasRecordingRef.current) {
+      if (resettingRef.current) {
+        resettingRef.current = false;
+      } else {
+        onRecordingStopped?.();
+      }
+    }
     wasRecordingRef.current = false;
     setSecondsRemaining(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -846,6 +990,38 @@ export function LiveKitMeetingScreen({
     setTimeout(() => setToasts((prev) => prev.filter((toast) => toast.id !== id)), TOAST_DURATION_MS);
   }
 
+  /**
+   * Reset button (quick-recording only): discards the in-progress
+   * recording via recordingDiscardEndpoint (POST .../recording/discard —
+   * stops the egress and soft-deletes the MeetingRequestRecording row
+   * server-side) without disconnecting or navigating away. resettingRef is
+   * set before the request so the recording-transition effect above skips
+   * onRecordingStopped for the resulting recording->false transition; it's
+   * reset back to false again on any failure, so a subsequent real Stop
+   * still navigates normally.
+   */
+  async function handleReset() {
+    if (!recordingDiscardEndpoint) return;
+    resettingRef.current = true;
+    setResetPending(true);
+    try {
+      const csrfToken = await getCsrfToken();
+      const res = await fetch(recordingDiscardEndpoint, { method: "POST", headers: { "x-csrf-token": csrfToken } });
+      if (!res.ok) {
+        resettingRef.current = false;
+        const payload = await res.json().catch(() => null);
+        pushToast(typeof payload?.error === "string" ? payload.error : "Couldn't reset. Try again.");
+      }
+      // On success, `recording` flips to false via the same room-metadata
+      // broadcast (RecordingStateListener) every other transition uses.
+    } catch {
+      resettingRef.current = false;
+      pushToast("Couldn't reset. Try again.");
+    } finally {
+      setResetPending(false);
+    }
+  }
+
   if (error) {
     return (
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background p-8 text-center">
@@ -865,27 +1041,40 @@ export function LiveKitMeetingScreen({
   return (
     <div className="fixed inset-0 z-[60] bg-background">
       <MeetingBanner title={title} organizerName={organizerName} />
-      <DisclaimerReminderFlash />
+      <DisclaimerReminderFlash isQuickRecording={isQuickRecording} />
       <ParticipantActivityToasts toasts={toasts} />
-      <TopLeftOverlay>
-        {isHostOrCoHost && (
-          <RecordingControl
-            recording={recording}
-            startEndpoint={recordingStartEndpoint}
-            stopEndpoint={recordingStopEndpoint}
-            onError={pushToast}
-          />
-        )}
-        {recording && secondsRemaining !== null && <RecordingCountdown secondsRemaining={secondsRemaining} />}
-        <ParticipantsControl
-          participants={participants}
-          viewerIsHostOrCoHost={isHostOrCoHost}
-          coHostsEndpoint={coHostsEndpoint}
-          canKick={canKick}
-          kickEndpoint={kickEndpoint}
+      {isQuickRecording ? (
+        <QuickRecordingOverlay
+          recording={recording}
+          secondsRemaining={secondsRemaining}
+          isHostOrCoHost={isHostOrCoHost}
+          startEndpoint={recordingStartEndpoint}
+          stopEndpoint={recordingStopEndpoint}
+          resetPending={resetPending}
+          onReset={handleReset}
+          onExit={() => room?.disconnect()}
           onError={pushToast}
         />
-      </TopLeftOverlay>
+      ) : (
+        <TopLeftOverlay>
+          {isHostOrCoHost && (
+            <RecordingControl
+              recording={recording}
+              startEndpoint={recordingStartEndpoint}
+              stopEndpoint={recordingStopEndpoint}
+              onError={pushToast}
+            />
+          )}
+          <ParticipantsControl
+            participants={participants}
+            viewerIsHostOrCoHost={isHostOrCoHost}
+            coHostsEndpoint={coHostsEndpoint}
+            canKick={canKick}
+            kickEndpoint={kickEndpoint}
+            onError={pushToast}
+          />
+        </TopLeftOverlay>
+      )}
       <LiveKitRoom
         token={credentials.token}
         serverUrl={credentials.serverUrl}
@@ -893,6 +1082,11 @@ export function LiveKitMeetingScreen({
         options={ROOM_OPTIONS}
         data-lk-theme="default"
         style={{ height: "100%" }}
+        // Quick-recording only: hides LiveKit's own Chat toggle and Leave
+        // button (stable classes confirmed in @livekit/components-styles),
+        // both replaced by this mode's own Exit button / removed entirely
+        // (Chat has no replacement — see the objective's rationale).
+        className={isQuickRecording ? "[&_.lk-chat-toggle]:hidden [&_.lk-disconnect-button]:hidden" : undefined}
         // replace, not push — the meeting page (this same URL) is already
         // the current history entry; pushing on top of it left it reachable
         // via the browser Back button, which would land back on a still-
@@ -904,6 +1098,7 @@ export function LiveKitMeetingScreen({
         <CoHostStateListener onChange={setCoHostUserIds} />
         <ChatCaptureListener chatEndpoint={chatEndpoint} />
         <ParticipantsListener hostId={hostId} coHostUserIds={coHostUserIds} onChange={setParticipants} />
+        <RoomExitBridge onRoomReady={setRoom} />
         <VideoConference />
       </LiveKitRoom>
     </div>

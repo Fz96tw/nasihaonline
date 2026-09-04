@@ -39,11 +39,25 @@ export const PUBLIC_MEETING_CODE_OF_CONDUCT = [
  * that work landing (2026-08-25) — keep this comment in sync once egress
  * ships so it stops describing a stated intent as already-built.
  */
-export function getPublicMeetingClosingNote(platform: "google_meet" | "livekit"): string {
+/**
+ * `isQuickRecording` (Quick Video Recording & Sharing initiative, default
+ * false — the only other call site, meeting-waiting-room.tsx, never has a
+ * quick recording to gate) drops three clauses that don't apply to a quick
+ * recording: it's always solo self/self (no other participant exists to
+ * remove), it's a MeetingRequest rather than an Event (so there's no
+ * "event's details" page — the recording actually surfaces in the
+ * dashboard's "My Quick Recordings" list), and LiveKit's own chat toggle is
+ * hidden in quick-recording mode (livekit-meeting-screen.tsx), so its chat
+ * panel isn't reachable to record anything into.
+ */
+export function getPublicMeetingClosingNote(platform: "google_meet" | "livekit", isQuickRecording = false): string {
   const platformNote =
     platform === "livekit"
       ? "This meeting is hosted on a third-party video platform; your use of it is also subject to that platform's own Terms of Service."
       : "This meeting is hosted on Google Meet; your use of it is also subject to Google's own Terms of Service.";
+  if (isQuickRecording) {
+    return `Please be respectful and abide by NASIHA's Terms of Service. ${platformNote}`;
+  }
   return `The host reserves the right to remove any participant for disruptive or inappropriate behavior. Please be respectful and abide by NASIHA's Terms of Service. This meeting will be recorded, including the meeting chat, and the recording will be made available in the event's details after the meeting has ended. ${platformNote}`;
 }
 

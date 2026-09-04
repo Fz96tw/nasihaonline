@@ -1111,6 +1111,20 @@ export async function attachLiveKitMeetingRequestRecordingSegment(
   });
   if (!meetingRequest) return false;
 
+  // Webhook race guard (Reset/discard, quick-recording only): if this
+  // egress's row was already soft-deleted by discardMeetingRequestRecordingSegment
+  // before this (async, can arrive seconds later) egress_ended webhook did,
+  // the row must stay discarded — never let a late-arriving file resurrect
+  // it. Any object that landed anyway is deleted rather than left orphaned.
+  const existing = await db.meetingRequestRecording.findUnique({
+    where: { egressId: segment.egressId },
+    select: { deletedAt: true },
+  });
+  if (existing?.deletedAt) {
+    if (segment.objectKey) await deleteRecordingObject(segment.objectKey);
+    return true;
+  }
+
   await db.meetingRequestRecording.upsert({
     where: { egressId: segment.egressId },
     create: { meetingRequestId: meetingRequest.id, ...segment },
@@ -1126,6 +1140,35 @@ export async function attachLiveKitMeetingRequestRecordingSegment(
         : {},
   });
   return true;
+}
+
+/**
+ * Reset button (quick-recording only): soft-deletes the MeetingRequestRecording
+ * row for `egressId` the same way deleteQuickRecording does (deletedAt set,
+ * objectKey left as-is) — reuses that field rather than a distinct
+ * "discarded" flag so the row is automatically excluded from every list
+ * query (getReadyQuickRecordingsForUser/getQuickRecordingsForDashboard's
+ * `deletedAt: null` where-clauses) with no extra filtering needed anywhere.
+ * If objectKey is already set (rare race — the file landed between
+ * Record-click and this Reset), its S3 object is deleted too. No-op if the
+ * row doesn't exist yet — egress_ended just hasn't created it, and the
+ * webhook race guard in attachLiveKitMeetingRequestRecordingSegment handles
+ * that ordering instead, once it does arrive.
+ */
+export async function discardMeetingRequestRecordingSegment(egressId: string): Promise<void> {
+  const recording = await db.meetingRequestRecording.findUnique({
+    where: { egressId },
+    select: { id: true, objectKey: true },
+  });
+  if (!recording) return;
+
+  if (recording.objectKey) {
+    await deleteRecordingObject(recording.objectKey);
+  }
+  await db.meetingRequestRecording.update({
+    where: { id: recording.id },
+    data: { deletedAt: new Date() },
+  });
 }
 
 /** MeetingRequest counterpart to markLiveKitEventRecordingSegmentFailed — see its doc comment. */

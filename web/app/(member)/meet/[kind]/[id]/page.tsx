@@ -130,6 +130,7 @@ export default async function MeetPage({
         tokenEndpoint={`/api/inbox/meeting-requests/${id}/meeting/token`}
         recordingStartEndpoint={`/api/inbox/meeting-requests/${id}/meeting/recording/start`}
         recordingStopEndpoint={`/api/inbox/meeting-requests/${id}/meeting/recording/stop`}
+        recordingDiscardEndpoint={`/api/inbox/meeting-requests/${id}/meeting/recording/discard`}
         chatEndpoint={`/api/inbox/meeting-requests/${id}/meeting/chat`}
         title={status.title}
         organizerName={status.organizerName}
