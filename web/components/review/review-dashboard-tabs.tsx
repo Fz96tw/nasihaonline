@@ -5,8 +5,50 @@ import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { MySubmissionCard, SharedReviewCard, SeekingReviewersCard } from "@/components/review/review-item-card";
+import { CommunityFilterPills, type CommunityFilterSelection } from "@/components/shared/community-filter-pills";
 import type { MyReviewSubmission, SeekingReviewersItem, SharedReviewItem } from "@/lib/review";
 import { ReviewItemStatus } from "@/lib/generated/prisma/enums";
+
+/**
+ * Community-only filter match — no category tier (each card already shows
+ * its own category badges, so a second filter level would be redundant).
+ * `undefined` (checkbox unchecked, no pill picked) matches everything;
+ * "mine" matches any item with >=1 category under one of the member's own
+ * communities; a specific community id matches only items with >=1
+ * category under that one community. Submitting or being invited to an
+ * item auto-joins the member to its community (ensureCommunityMembership,
+ * lib/profile-server.ts), so "mine" never hides one of the member's own
+ * personal items just because they hadn't explicitly joined that
+ * community before.
+ */
+function matchesCommunityFilter(
+  categories: { communityId: string }[],
+  selection: CommunityFilterSelection | undefined,
+  myCommunityIds: string[],
+): boolean {
+  if (selection === undefined) return true;
+  if (selection === "mine") return categories.some((c) => myCommunityIds.includes(c.communityId));
+  return categories.some((c) => c.communityId === selection);
+}
+
+/**
+ * Per-pill item counts against the *unfiltered* list for whichever tab is
+ * active — counting against the already-community-filtered list would
+ * collapse every count to either 0 or the current total, which defeats
+ * the point of showing them (how many items would each other pill reveal).
+ */
+function computeCommunityCounts(
+  items: { categories: { communityId: string }[] }[],
+  communities: { id: string }[],
+  myCommunityIds: string[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  counts.set("mine", items.filter((item) => matchesCommunityFilter(item.categories, "mine", myCommunityIds)).length);
+  for (const community of communities) {
+    counts.set(community.id, items.filter((item) => matchesCommunityFilter(item.categories, community.id, myCommunityIds)).length);
+  }
+  return counts;
+}
 
 /**
  * The /review-feedback dashboard's 3 tabs — My Submissions (personal),
@@ -20,20 +62,59 @@ export function ReviewDashboardTabs({
   mySubmissions,
   sharedWithMe,
   seekingReviewers,
+  communities,
+  myCommunityIds,
+  followsAllCommunities,
   currentUserId,
+  currentUserName,
+  currentUserAvatarUrl,
 }: {
   mySubmissions: MyReviewSubmission[];
   sharedWithMe: SharedReviewItem[];
   seekingReviewers: SeekingReviewersItem[];
+  communities: { id: string; name: string }[];
+  myCommunityIds: string[];
+  followsAllCommunities: boolean;
   currentUserId: string;
+  currentUserName: string;
+  currentUserAvatarUrl?: string | null;
 }) {
   const [tab, setTab] = useState("mine");
+  // Local state, not URL params — the tabs' own selection isn't URL-driven
+  // either. Defaults to unchecked/no pill (everything), matching every
+  // other page's pill filter's own default.
+  const [selected, setSelected] = useState<CommunityFilterSelection | undefined>(undefined);
 
-  const openSubmissionsCount = mySubmissions.filter((item) => item.status === ReviewItemStatus.open).length;
-  const sharedWithMeCount = sharedWithMe.length;
+  const filteredMySubmissions = mySubmissions.filter((item) =>
+    matchesCommunityFilter(item.categories, selected, myCommunityIds),
+  );
+  const filteredSharedWithMe = sharedWithMe.filter((item) =>
+    matchesCommunityFilter(item.categories, selected, myCommunityIds),
+  );
+  const filteredSeekingReviewers = seekingReviewers.filter((item) =>
+    matchesCommunityFilter(item.categories, selected, myCommunityIds),
+  );
+
+  const openSubmissionsCount = filteredMySubmissions.filter((item) => item.status === ReviewItemStatus.open).length;
+  const sharedWithMeCount = filteredSharedWithMe.length;
+
+  const activeTabItems = tab === "mine" ? mySubmissions : tab === "shared" ? sharedWithMe : seekingReviewers;
+  const communityCounts = computeCommunityCounts(activeTabItems, communities, myCommunityIds);
 
   return (
     <Tabs value={tab} onValueChange={setTab}>
+      <div className="mb-4">
+        <CommunityFilterPills
+          communities={communities}
+          myCommunityIds={myCommunityIds}
+          followsAllCommunities={followsAllCommunities}
+          selected={selected}
+          onSelect={setSelected}
+          counts={communityCounts}
+          currentUserName={currentUserName}
+          currentUserAvatarUrl={currentUserAvatarUrl}
+        />
+      </div>
       <TabsList
         className="h-auto w-full items-end justify-start gap-1 overflow-x-auto overflow-y-hidden rounded-none bg-transparent p-0 [-ms-overflow-style:none] [scrollbar-width:none] [touch-action:pan-x] [&::-webkit-scrollbar]:hidden"
       >
@@ -66,9 +147,13 @@ export function ReviewDashboardTabs({
                 <Link href="/review-feedback/new">Submit your first item</Link>
               </Button>
             </div>
+          ) : filteredMySubmissions.length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              No submissions in this community.
+            </p>
           ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {mySubmissions.map((item) => (
+              {filteredMySubmissions.map((item) => (
                 <MySubmissionCard key={item.id} item={item} />
               ))}
             </div>
@@ -80,9 +165,13 @@ export function ReviewDashboardTabs({
             <div className="py-12 text-center">
               <p className="text-sm text-muted-foreground">No one has invited you to review anything yet.</p>
             </div>
+          ) : filteredSharedWithMe.length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              No shared items in this community.
+            </p>
           ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {sharedWithMe.map((item) => (
+              {filteredSharedWithMe.map((item) => (
                 <SharedReviewCard key={item.id} item={item} />
               ))}
             </div>
@@ -94,9 +183,13 @@ export function ReviewDashboardTabs({
             <div className="py-12 text-center">
               <p className="text-sm text-muted-foreground">No open calls for reviewers right now.</p>
             </div>
+          ) : filteredSeekingReviewers.length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              No open calls in this community.
+            </p>
           ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {seekingReviewers.map((item) => (
+              {filteredSeekingReviewers.map((item) => (
                 <SeekingReviewersCard key={item.id} item={item} currentUserId={currentUserId} />
               ))}
             </div>

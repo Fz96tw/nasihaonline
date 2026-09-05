@@ -11,6 +11,7 @@ export function FeedList({
   initialHasMore,
   activeType,
   q,
+  myCommunities,
 }: {
   initialItems: FeedItem[];
   initialCursor: FeedCursor | null;
@@ -18,6 +19,8 @@ export function FeedList({
   activeType?: FeedItemType;
   /** Active search query (What's New feed's inline search box), threaded into "Load more" pagination. */
   q?: string;
+  /** "Search only my communities" toggle, threaded into "Load more" pagination. */
+  myCommunities?: boolean;
 }) {
   const [items, setItems] = useState(initialItems);
   const [cursor, setCursor] = useState(initialCursor);
@@ -30,7 +33,10 @@ export function FeedList({
     try {
       const typeParam = activeType ? `&type=${activeType}` : "";
       const qParam = q ? `&q=${encodeURIComponent(q)}` : "";
-      const response = await fetch(`/api/whats-new?cursor=${encodeFeedCursor(cursor)}${typeParam}${qParam}`);
+      const myCommunitiesParam = myCommunities ? `&myCommunities=1` : "";
+      const response = await fetch(
+        `/api/whats-new?cursor=${encodeFeedCursor(cursor)}${typeParam}${qParam}${myCommunitiesParam}`,
+      );
       if (!response.ok) return;
       const data = (await response.json()) as { items: FeedItem[]; nextCursor: FeedCursor | null; hasMore: boolean };
       setItems((prev) => [...prev, ...data.items]);

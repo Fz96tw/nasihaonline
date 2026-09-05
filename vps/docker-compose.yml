@@ -17,6 +17,13 @@ services:
         aliases:
           - livekit.nasihaforyou.org
           - vps-s3.nasihaforyou.org
+          # Without this, containers on this host resolving nasihaforyou.org
+          # (e.g. livekit's egress_ended webhook) go out to the public IP and
+          # hit this VPS's hairpin-NAT quirk — the connection hangs for
+          # 2+ minutes before LiveKit gives up, so the webhook gets dropped
+          # for exceeding its age limit before ever reaching the app. This
+          # alias routes it straight to nginx-proxy-manager internally instead.
+          - nasihaforyou.org
 
   postgres:
     image: postgres:16-alpine

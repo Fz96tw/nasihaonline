@@ -98,7 +98,7 @@ export default async function LibraryItemDetailPage({
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {item.categories.map((category) => (
           <Badge key={category.slug} variant="info" className="w-fit">
-            {category.name}
+            {category.communityName} · {category.name}
           </Badge>
         ))}
         <Badge variant="neutral">{CONTENT_TYPE_LABELS[item.contentType]}</Badge>

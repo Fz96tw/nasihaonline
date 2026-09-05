@@ -66,10 +66,19 @@ echo "==> [4/5] Recreating app + worker containers..."
 ssh "$VPS_HOST" "cd '$VPS_DIR' && docker compose up -d app worker"
 
 echo "==> [5/5] Verifying..."
-sleep 3
-HEALTH="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$PROD_APP_URL/api/health")"
+# The container runs a data-seed step (skills, communities, forums, etc.)
+# before Next.js even binds its port, so a fixed short sleep here can catch
+# the app mid-startup and get a false-alarm 503 from the proxy. Retry with
+# backoff instead of a single check.
+HEALTH="000"
+for i in 1 2 3 4 5 6; do
+  sleep 5
+  HEALTH="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$PROD_APP_URL/api/health")"
+  [ "$HEALTH" = "200" ] && break
+  echo "    ...attempt $i: got $HEALTH, retrying"
+done
 if [ "$HEALTH" != "200" ]; then
-  echo "Health check returned $HEALTH, not 200 — check 'ssh $VPS_HOST docker logs nasiha-app-1' immediately." >&2
+  echo "Health check returned $HEALTH, not 200 after 30s of retries — check 'ssh $VPS_HOST docker logs nasiha-app-1' immediately." >&2
   exit 1
 fi
 

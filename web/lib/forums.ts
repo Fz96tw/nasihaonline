@@ -31,6 +31,8 @@ export type ForumCategory = {
   /** Only populated by getForumCategories, for the /forums sort buttons. */
   postCount?: number;
   lastActivityAt?: string | null;
+  /** Community-based-categorization initiative, objective 6 — null for every pre-existing (untouched) forum; set only on the new, seeded-one-per-Community forums. */
+  communityId: string | null;
 };
 
 export type ForumThreadListItem = {
@@ -45,6 +47,8 @@ export type ForumThreadListItem = {
   lastActivityAt: string;
   /** Member-Initiated Restricted Forum Threads (§4.13/§11.16) — only ever `invited` for a standalone thread its author, an invitee, or a moderator/admin can see; every other viewer never receives this row at all. */
   visibility: ForumThreadVisibility;
+  /** Optional "Topics" (community-based-categorization initiative, objective 6) — empty for most threads. */
+  categories: { id: string; name: string; slug: string }[];
 };
 
 /** Member-Initiated Restricted Forum Threads (§4.13/§11.16) — one row per invited member, shown on the thread detail page's invite-management panel. No RSVP-equivalent status, same rationale as KnowledgeItemRosterMember. */
@@ -113,4 +117,6 @@ export type ForumThreadDetail = {
   invitees: ForumThreadRosterMember[];
   /** False for a thread linked to an Event or Knowledge Library item (inherited visibility) — its title/audience are managed automatically and can't be edited via /forums/[category]/[threadId]/edit. */
   isEditable: boolean;
+  /** Optional "Topics" (community-based-categorization initiative, objective 6) — empty for most threads. */
+  categories: { id: string; name: string; slug: string }[];
 };

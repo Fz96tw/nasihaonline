@@ -34,6 +34,7 @@ import {
   EVENT_THREAD_ACCESS_SELECT,
   KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
 } from "@/lib/forums-server";
+import { communityVisibilityWhere, getMemberCommunityContext } from "@/lib/events-server";
 import { getInboxList } from "@/lib/inbox-server";
 import { matchesInboxSearch } from "@/lib/inbox";
 
@@ -135,6 +136,17 @@ export async function getFeedPage(params: {
    * feed's browse behavior, which is why it's gated on `query` being set.
    */
   q?: string;
+  /**
+   * Community-based-categorization initiative, objective 2's "Search only
+   * my communities" checkbox. Only the Library domain (KnowledgeItem, via
+   * KnowledgeCategory.communityId) can actually be scoped by this today —
+   * Events/Forum/Announcements/Survey/ReviewItem don't carry community tags
+   * yet (later objectives in the same initiative), so they're deliberately
+   * left unfiltered here rather than made to disappear entirely, matching
+   * the "untagged content stays universal" rule those objectives use
+   * elsewhere. Omit/undefined to leave every domain unfiltered.
+   */
+  communityIds?: string[];
 }): Promise<{
   items: FeedItem[];
   nextCursor: FeedCursor | null;
@@ -195,6 +207,22 @@ export async function getFeedPage(params: {
         searchReviewItemDocuments(query).then((hits) => hits.map((hit) => hit.id)),
       ]);
 
+  // Community-based-categorization initiative, objective 5's access-control
+  // change: `visibility: community` no longer means "every member" once an
+  // event is tagged — functionally the same "is this event visible to this
+  // viewer" gate events-server.ts's read paths apply, just re-derived here
+  // (this feed query is Prisma-native, not a call through those functions).
+  // Skipped when isPrivilegedSearchBypass already omits the whole OR clause
+  // below.
+  const eventMember = isPrivilegedSearchBypass ? null : await getMemberCommunityContext(viewerId);
+  // Community-based-categorization initiative, objective 6 — same idea as
+  // eventMember above, for isThreadVisible's new isForumAccessibleToMember
+  // check (a thread posted in one of the community-linked forums). Unlike
+  // eventMember this isn't gated on isPrivilegedSearchBypass: forum threads'
+  // visibility filter runs post-fetch (isThreadVisible below), not as a
+  // where-clause OR member the bypass needs to omit for query efficiency.
+  const forumMember = await getMemberCommunityContext(viewerId);
+
   // Extracted so each domain's count() below (for countsByType/totalCount)
   // shares the exact same where clause its findMany uses, rather than
   // drifting out of sync with it over time.
@@ -208,8 +236,13 @@ export async function getFeedPage(params: {
       ? {}
       : {
           OR: [
-            { visibility: EventVisibility.community },
-            ...(viewerId ? [{ invitees: { some: { userId: viewerId } } }] : []),
+            { visibility: EventVisibility.community, ...communityVisibilityWhere(eventMember) },
+            ...(viewerId
+              ? [
+                  { invitees: { some: { userId: viewerId } } },
+                  { rsvps: { some: { userId: viewerId, status: RSVPStatus.going } } },
+                ]
+              : []),
             ...ownerBypass(viewerId ? { hostId: viewerId } : null),
           ],
         }),
@@ -225,6 +258,9 @@ export async function getFeedPage(params: {
     status: query ? { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] } : KnowledgeStatus.published,
     ...(before ? { createdAt: { lt: before } } : {}),
     ...(libraryHitIds ? { id: { in: libraryHitIds } } : {}),
+    ...(params.communityIds?.length
+      ? { categories: { some: { category: { communityId: { in: params.communityIds } } } } }
+      : {}),
     // Same restricted-audience shape as eventWhere above (Objective 04's
     // read-path filter, mirrored here): a restricted item reaches an
     // invited member's feed, and its own contributor's. Omitted entirely
@@ -409,7 +445,7 @@ export async function getFeedPage(params: {
         createdAt: true,
         lastActivityAt: true,
         author: { select: AUTHOR_SELECT },
-        forum: { select: { name: true, slug: true } },
+        forum: { select: { name: true, slug: true, category: { select: { communityId: true } } } },
         // Latest post's author + body — a bump from a reply should credit
         // the replier (not the thread creator) and show what they wrote.
         // Falls back to `author` above when the thread has no posts yet.
@@ -433,7 +469,7 @@ export async function getFeedPage(params: {
       },
       orderBy: { lastActivityAt: "desc" },
       take: pageSize,
-    }).then((threads) => threads.filter((thread) => isThreadVisible(thread, viewerId ?? undefined, isPrivileged))),
+    }).then((threads) => threads.filter((thread) => isThreadVisible(thread, viewerId ?? undefined, isPrivileged, forumMember))),
     !wants("announcement") || announcementHitIds?.length === 0 ? Promise.resolve([]) : db.announcement.findMany({
       where: announcementWhere,
       select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true, welcomeTier: true },
@@ -665,11 +701,12 @@ export async function getFeedPage(params: {
         // feed row still gets a thumbnail (see FeedRow's forum_thread layout).
         imageUrl: "/images/forum-thread.jpg",
         stats: { views: thread._count.views, comments: thread._count.posts - 1 },
-        // Browse mode only ever shows this for a reply-bumped thread
-        // (unchanged); search mode always shows *some* post preview, since
-        // there's now a real excerptPost to source it from regardless of
-        // whether the thread was freshly created or bumped.
-        replyExcerpt: query ? (excerptPost ? excerptOf(excerptPost.body) : undefined) : isReply && latestPost ? excerptOf(latestPost.body) : undefined,
+        // Browse mode: latestPost is either the opening post (fresh thread)
+        // or the newest reply (bumped thread) — either way it's real content
+        // worth previewing, so always show it rather than only on a bump.
+        // Search mode always shows *some* post preview, since there's a real
+        // excerptPost to source it from regardless of new-vs-bumped.
+        replyExcerpt: query ? (excerptPost ? excerptOf(excerptPost.body) : undefined) : latestPost ? excerptOf(latestPost.body) : undefined,
         isRestricted: thread.visibility === ForumThreadVisibility.invited,
       };
     }),

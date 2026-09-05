@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/team";
 
@@ -22,7 +25,13 @@ export function Avatar({
   size?: AvatarSize;
   className?: string;
 }) {
-  if (src) {
+  // Tracks the specific src that failed, rather than a plain boolean, so a
+  // later src change (e.g. after re-uploading a photo) on the same mounted
+  // instance gets a fresh chance to load instead of staying stuck on the
+  // initials fallback.
+  const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
+
+  if (src && src !== brokenSrc) {
     return (
       // MinIO signed URLs point at a per-environment host/port, so a plain
       // <img> is used here rather than next/image (which needs a static,
@@ -31,6 +40,7 @@ export function Avatar({
       <img
         src={src}
         alt={name}
+        onError={() => setBrokenSrc(src)}
         className={cn("rounded-full object-cover", SIZES[size], className)}
       />
     );

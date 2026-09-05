@@ -23,7 +23,11 @@ const knowledgeItemBaseSchema = z.object({
   body: z.string().trim().nullable(),
   contentType: z.nativeEnum(KnowledgeContentType, { message: "Select a content type" }),
   level: z.nativeEnum(KnowledgeLevel, { message: "Select a career-stage level" }),
-  categoryIds: z.array(z.string()).min(1, "Select at least one category"),
+  // Required, multi-select top-level classification (standardized onto
+  // Events' EventCommunity shape) — categoryIds below is now optional,
+  // scoped in the UI to whichever communities are selected here.
+  communityIds: z.array(z.string()).min(1, "Select at least one community"),
+  categoryIds: z.array(z.string()),
   tagIds: z.array(z.string()),
   youtubeUrl: z
     .string()

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getMySubmissions, getSharedWithMe, getSeekingReviewersFeed } from "@/lib/review-server";
+import { getAllCommunities, getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Button } from "@/components/ui/button";
 import { ReviewDashboardTabs } from "@/components/review/review-dashboard-tabs";
@@ -21,11 +22,14 @@ export default async function ReviewFeedbackPage() {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const [mySubmissions, sharedWithMe, seekingReviewers] = await Promise.all([
+  const [mySubmissions, sharedWithMe, seekingReviewers, communities, profile] = await Promise.all([
     getMySubmissions(user.id),
     getSharedWithMe(user.id),
     getSeekingReviewersFeed(user.id),
+    getAllCommunities(),
+    getOrCreateProfile(user.id),
   ]);
+  const avatarUrl = withResolvedAvatarUrl(profile).avatarUrl;
 
   return (
     <main className="min-h-screen">
@@ -53,7 +57,12 @@ export default async function ReviewFeedbackPage() {
           mySubmissions={mySubmissions}
           sharedWithMe={sharedWithMe}
           seekingReviewers={seekingReviewers}
+          communities={communities}
+          myCommunityIds={profile.communities.map((c) => c.community.id)}
+          followsAllCommunities={profile.followsAllCommunities}
           currentUserId={user.id}
+          currentUserName={user.name ?? "Member"}
+          currentUserAvatarUrl={avatarUrl}
         />
       </section>
     </main>

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CategoryCheckboxField } from "@/components/shared/category-checkbox-field";
 import {
   Form,
   FormControl,
@@ -23,6 +24,12 @@ import { CONTENT_TYPE_LABELS, LEVEL_LABELS, type ReviewCategoryOption, type Revi
 import { createReviewItemSchema, editReviewItemFormSchema, type CreateReviewItemValues } from "@/lib/validation/review";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { InviteePicker } from "@/components/members/invitee-picker";
+
+// Mirrors ALLOWED_DOCUMENT_MIME_TYPES in lib/storage.ts (uploadKnowledgeDocument,
+// shared by Library and Peer Review) — a browser accept hint only, the
+// server re-validates regardless.
+const DOCUMENT_ACCEPT =
+  "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,image/jpeg,image/png,image/webp,image/gif,image/bmp";
 
 const DEFAULT_VALUES: CreateReviewItemValues = {
   title: "",
@@ -54,11 +61,13 @@ const DEFAULT_VALUES: CreateReviewItemValues = {
  */
 export function SubmitReviewItemForm({
   categories,
+  communities,
   tags,
   existingItem,
   currentUserId,
 }: {
   categories: ReviewCategoryOption[];
+  communities: { id: string; name: string }[];
   tags: ReviewTagOption[];
   existingItem?: ReviewItemForEdit;
   /** Current user's id — excludes them from the invitee picker's suggestions (create mode only). */
@@ -319,24 +328,12 @@ export function SubmitReviewItemForm({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Categories</FormLabel>
-              <div className="flex flex-wrap gap-4">
-                {categories.map((category) => {
-                  const checked = field.value.includes(category.id);
-                  return (
-                    <label key={category.id} className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={(c) =>
-                          field.onChange(
-                            c === true ? [...field.value, category.id] : field.value.filter((id) => id !== category.id),
-                          )
-                        }
-                      />
-                      {category.name}
-                    </label>
-                  );
-                })}
-              </div>
+              <CategoryCheckboxField
+                categories={categories}
+                communities={communities}
+                value={field.value}
+                onChange={field.onChange}
+              />
               <FormMessage />
             </FormItem>
           )}
@@ -435,9 +432,13 @@ export function SubmitReviewItemForm({
                 <input
                   id="review-item-file"
                   type="file"
+                  accept={DOCUMENT_ACCEPT}
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                   className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
                 />
+                <p className="text-xs text-muted-foreground">
+                  PDF, Word, PowerPoint, plain text, or image (JPEG/PNG/WebP/GIF/BMP) — up to 20MB.
+                </p>
                 {existingItem?.attachment && (
                   <p className="text-xs text-muted-foreground">Choose a new file to replace the current one.</p>
                 )}

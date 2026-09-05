@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { getEventForEdit } from "@/lib/events-server";
+import { getEventForEdit, getEventCategories } from "@/lib/events-server";
+import { getAllCommunities } from "@/lib/profile-server";
 import { SubmitEventForm } from "@/components/calendar/submit-event-form";
 import { Role } from "@/lib/generated/prisma/enums";
 
@@ -23,6 +24,8 @@ export default async function EditEventPage({ params }: { params: { eventId: str
   const isHost = event.hostId === user.id;
   if (!isAdmin && !isHost) notFound();
 
+  const [communities, categories] = await Promise.all([getAllCommunities(), getEventCategories()]);
+
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-8 p-8">
       <div>
@@ -31,6 +34,8 @@ export default async function EditEventPage({ params }: { params: { eventId: str
       </div>
 
       <SubmitEventForm
+        communities={communities}
+        categories={categories}
         existingEvent={{
           id: event.id,
           title: event.title,
@@ -44,6 +49,8 @@ export default async function EditEventPage({ params }: { params: { eventId: str
           heroImageUrl: event.heroImageUrl,
           deidentificationConfirmed: event.deidentificationConfirmed,
           visibility: event.visibility,
+          communityIds: event.communityIds,
+          categoryIds: event.categoryIds,
           meetingOrganizerMessage: event.meetingOrganizerMessage,
           meetingOrganizerMessageImageUrl: event.meetingOrganizerMessageImageUrl,
           recurrence: event.recurrence,

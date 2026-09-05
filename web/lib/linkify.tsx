@@ -4,6 +4,7 @@ import { Fragment, type ReactNode } from "react";
 
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { HighlightText } from "@/components/highlight-text";
+import { VideoEmbed } from "@/components/shared/video-embed";
 
 // Matches, in priority order: a `![alt](url)` pasted-image token (see
 // PastedImage/lib/use-paste-image-upload.ts — checked first since it would
@@ -27,6 +28,20 @@ const TRAILING_PUNCTUATION = /[.,;:!?)\]}]+$/;
 // image. A hand-typed `![alt](https://evil.example/pixel.png)` falls
 // through to ordinary link rendering instead.
 const IMAGE_PROXY_PREFIXES = ["/api/forums/post-image/", "/api/inbox/message-image/", "/api/library/body-image/"];
+
+// A `![alt](url)` token whose url points at the meeting-request recording
+// proxy (same route the quick-recording "done" page and inbox recording
+// list already use to play back a MeetingRequestRecording) — checked
+// against the image prefixes first (see linkifyText's imageUrl branch), so
+// this only ever matches a token that isn't one of our own pasted images.
+// Must stay in sync with lib/quick-recordings-server.ts's
+// RECORDING_PROXY_URL_PATTERN, which authorizes linking this same url shape
+// (shared video-sharing infrastructure).
+const VIDEO_PROXY_PREFIXES = ["/api/inbox/meeting-requests/"];
+
+function isVideoProxyUrl(url: string): boolean {
+  return VIDEO_PROXY_PREFIXES.some((prefix) => url.startsWith(prefix)) && url.includes("/recording/");
+}
 
 /**
  * Count of `![alt](url)` tokens in `text` pointing at one of our own
@@ -140,10 +155,11 @@ export function linkifyText(text: string, highlightQuery?: string): ReactNode {
         parts.push(renderPlain(text.slice(lastIndex, start), key++));
       }
       const image = renderImage(key, imageAlt, imageUrl);
-      // A hand-typed image token whose url isn't one of our own proxy
-      // paths falls back to an ordinary link, same as any other markdown
-      // link — rather than rendering as plain (unclickable) text.
-      parts.push(image ?? renderLink(key, imageAlt || imageUrl, imageUrl, appOrigin));
+      const video = image ? null : isVideoProxyUrl(imageUrl) ? <VideoEmbed key={key} url={imageUrl} /> : null;
+      // A hand-typed image/video token whose url isn't one of our own
+      // proxy paths falls back to an ordinary link, same as any other
+      // markdown link — rather than rendering as plain (unclickable) text.
+      parts.push(image ?? video ?? renderLink(key, imageAlt || imageUrl, imageUrl, appOrigin));
       key++;
       lastIndex = start + rawMatch.length;
       continue;

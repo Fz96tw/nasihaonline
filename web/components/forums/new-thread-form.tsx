@@ -15,6 +15,9 @@ import { getCsrfToken } from "@/lib/csrf-client";
 import { InviteePicker } from "@/components/members/invitee-picker";
 import { ForumThreadVisibility } from "@/lib/generated/prisma/enums";
 import { usePasteImageUpload } from "@/lib/use-paste-image-upload";
+import { CategoryCheckboxField } from "@/components/shared/category-checkbox-field";
+import type { KnowledgeCategoryOption } from "@/lib/library";
+import { QuickRecordingPicker, type QuickRecordingListItem } from "@/components/quick-recording-picker";
 
 const DEFAULT_VALUES: CreateForumThreadValues = {
   title: "",
@@ -22,6 +25,7 @@ const DEFAULT_VALUES: CreateForumThreadValues = {
   deidentificationConfirmed: false,
   visibility: ForumThreadVisibility.community,
   invitedUserIds: [],
+  categoryIds: [],
 };
 
 /**
@@ -56,8 +60,15 @@ function ThreadBodyField({
     onImageUploadStateChange(pasteImage.uploading);
   }, [pasteImage.uploading, onImageUploadStateChange]);
 
+  function insertVideo(recording: QuickRecordingListItem) {
+    insertAtCaret(`![${recording.topic}](/api/inbox/meeting-requests/${recording.meetingRequestId}/recording/${recording.id})`);
+  }
+
   return (
     <>
+      <div className="mb-2">
+        <QuickRecordingPicker onSelect={insertVideo} triggerLabel="Insert a video…" allowRecordNew={false} />
+      </div>
       <Textarea
         rows={6}
         name={field.name}
@@ -93,16 +104,30 @@ export function NewThreadForm({
   forumSlug,
   requireDeidentification,
   currentUserId,
+  categories,
+  communities,
+  communityId,
+  myCommunityIds,
 }: {
   forumId: string;
   forumSlug: string;
   requireDeidentification: boolean;
   currentUserId: string;
+  categories: KnowledgeCategoryOption[];
+  communities: { id: string; name: string }[];
+  communityId: string | null;
+  myCommunityIds: string[];
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
+  // Communities aren't a submitted field here (a thread's forum, not a
+  // community list, is the required top-level classification — see
+  // createForumThreadSchema) so this is local UI state, not a form field.
+  // Pre-checking the member's own communities preserves the old behavior of
+  // surfacing their categories without extra clicks.
+  const [selectedCommunityIds, setSelectedCommunityIds] = useState<string[]>(myCommunityIds);
 
   const form = useForm<CreateForumThreadValues>({
     resolver: zodResolver(createForumThreadSchema),
@@ -219,6 +244,73 @@ export function NewThreadForm({
               <FormControl>
                 <ThreadBodyField field={field} onImageUploadStateChange={setImageUploading} />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="categoryIds"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Topics (optional)</FormLabel>
+              {communityId ? (
+                // This forum already belongs to a single community, so
+                // asking the member to pick a community again (via the
+                // Accordion CategoryCheckboxField normally uses) would be
+                // redundant — scope straight to that community's
+                // categories as a flat checkbox list.
+                <div className="flex flex-wrap gap-4 rounded-md border p-3">
+                  {categories
+                    .filter((category) => category.communityId === communityId)
+                    .map((category) => (
+                      <label key={category.id} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={field.value.includes(category.id)}
+                          onCheckedChange={() =>
+                            field.onChange(
+                              field.value.includes(category.id)
+                                ? field.value.filter((id) => id !== category.id)
+                                : [...field.value, category.id],
+                            )
+                          }
+                        />
+                        {category.name}
+                      </label>
+                    ))}
+                </div>
+              ) : (
+                // No fixed community (a general forum) — let the member pick
+                // which top-level communities they're posting about first,
+                // then only show categories for the communities selected.
+                // Same two-step shape as SubmitResourceForm/SubmitEventForm.
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap gap-4 rounded-md border p-3">
+                    {communities.map((community) => (
+                      <label key={community.id} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={selectedCommunityIds.includes(community.id)}
+                          onCheckedChange={(checked) =>
+                            setSelectedCommunityIds((prev) =>
+                              checked ? [...prev, community.id] : prev.filter((id) => id !== community.id),
+                            )
+                          }
+                        />
+                        {community.name}
+                      </label>
+                    ))}
+                  </div>
+                  {selectedCommunityIds.length > 0 && (
+                    <CategoryCheckboxField
+                      categories={categories.filter((category) => selectedCommunityIds.includes(category.communityId))}
+                      communities={communities.filter((community) => selectedCommunityIds.includes(community.id))}
+                      value={field.value}
+                      onChange={field.onChange}
+                    />
+                  )}
+                </div>
+              )}
               <FormMessage />
             </FormItem>
           )}

@@ -12,6 +12,7 @@ import {
   UploadValidationError,
 } from "@/lib/storage";
 import { searchLibraryDocuments } from "@/lib/meilisearch";
+import { ensureCommunityMembership } from "@/lib/profile-server";
 import {
   NotificationType,
   KnowledgeContentType,
@@ -35,7 +36,6 @@ import { sendLibraryInviteEmail, sendLibraryLifecycleEmail } from "@/lib/email";
 import {
   excerptFromHtml,
   type KnowledgeCategoryOption,
-  type KnowledgeCategoryWithCount,
   type KnowledgeItemDetail,
   type KnowledgeItemForEdit,
   type KnowledgeItemRosterMember,
@@ -116,6 +116,7 @@ const LIBRARY_CARD_SELECT = {
   heroImageUrl: true,
   externalUrl: true,
   categories: { select: { category: { select: { name: true, slug: true } } } },
+  communities: { select: { community: { select: { id: true, name: true, slug: true } } } },
   contributor: { select: { id: true, name: true } },
   attachments: { select: { fileName: true, mimeType: true, objectKey: true }, take: 1 },
   _count: { select: { views: true } },
@@ -135,6 +136,7 @@ function toLibraryCard(item: {
   heroImageUrl: string | null;
   externalUrl: string | null;
   categories: { category: { name: string; slug: string } }[];
+  communities: { community: { id: string; name: string; slug: string } }[];
   contributor: { id: string; name: string | null };
   attachments: { fileName: string; mimeType: string; objectKey: string }[];
   _count: { views: number };
@@ -149,6 +151,7 @@ function toLibraryCard(item: {
     status: item.status,
     visibility: item.visibility,
     categories: item.categories.map(({ category }) => category),
+    communities: item.communities.map(({ community }) => community),
     contributor: item.contributor,
     createdAt: item.createdAt.toISOString(),
     youtubeUrl: item.youtubeUrl,
@@ -187,16 +190,19 @@ export async function getKnowledgeCategories(): Promise<KnowledgeCategoryOption[
 }
 
 /**
- * Same category list as getKnowledgeCategories, with a per-category count of
- * published/flagged items visible to this user — powers the /library filter
- * chips' item-count hint. Kept separate since the submit/edit forms that
- * call getKnowledgeCategories have no userId/visibility context to scope
- * counts by, and don't need one.
+ * Powers /library's CommunityFilterPillsNav item-count hints ("mine" plus
+ * one per community) — same visibility-scoped counting as
+ * getKnowledgeCategoriesWithCounts, but against the direct
+ * KnowledgeItemCommunity relation (standardization objective) rather than
+ * derived through categories, and pre-shaped into the "mine"/communityId
+ * keying CommunityFilterPillsNav's `counts` prop expects. "mine" is every
+ * visible item tagged to at least one of the member's own communities.
  */
-export async function getKnowledgeCategoriesWithCounts(params: {
+export async function getLibraryCommunityCounts(params: {
   userId: string;
   isPrivileged: boolean;
-}): Promise<KnowledgeCategoryWithCount[]> {
+  myCommunityIds: string[];
+}): Promise<Map<string, number>> {
   const visibleStatuses = [KnowledgeStatus.published, KnowledgeStatus.flagged];
   const visibilityFilter = params.isPrivileged
     ? {}
@@ -207,18 +213,25 @@ export async function getKnowledgeCategoriesWithCounts(params: {
           { invitees: { some: { userId: params.userId } } },
         ],
       };
+  const baseWhere = { status: { in: visibleStatuses }, ...visibilityFilter };
 
-  const [categories, counts] = await Promise.all([
-    db.knowledgeCategory.findMany({ orderBy: { name: "asc" } }),
-    db.knowledgeItemCategory.groupBy({
-      by: ["categoryId"],
-      where: { knowledgeItem: { status: { in: visibleStatuses }, ...visibilityFilter } },
+  const [mine, perCommunity] = await Promise.all([
+    params.myCommunityIds.length > 0
+      ? db.knowledgeItem.count({
+          where: { ...baseWhere, communities: { some: { communityId: { in: params.myCommunityIds } } } },
+        })
+      : Promise.resolve(0),
+    db.knowledgeItemCommunity.groupBy({
+      by: ["communityId"],
+      where: { knowledgeItem: baseWhere },
       _count: { _all: true },
     }),
   ]);
 
-  const countByCategory = new Map(counts.map((row) => [row.categoryId, row._count._all]));
-  return categories.map((category) => ({ ...category, count: countByCategory.get(category.id) ?? 0 }));
+  const counts = new Map<string, number>();
+  counts.set("mine", mine);
+  for (const row of perCommunity) counts.set(row.communityId, row._count._all);
+  return counts;
 }
 
 export async function getKnowledgeTags(): Promise<KnowledgeTagOption[]> {
@@ -263,6 +276,9 @@ export async function createKnowledgeItem(
     body: string | null;
     contentType: KnowledgeContentType;
     level: KnowledgeLevel;
+    /** Required, multi-select top-level classification (standardized onto Events' EventCommunity shape). */
+    communityIds: string[];
+    /** Optional, scoped in the UI to the chosen communities above. */
     categoryIds: string[];
     tagIds: string[];
     youtubeUrl: string | null;
@@ -380,6 +396,7 @@ export async function createKnowledgeItem(
       licenseConsented: true,
       status: KnowledgeStatus.pending_review,
       visibility: input.visibility,
+      communities: { create: input.communityIds.map((communityId) => ({ communityId })) },
       categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
       tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
       attachments: attachment ? { create: [attachment] } : undefined,
@@ -396,6 +413,8 @@ export async function createKnowledgeItem(
       body: sanitizedBody ?? "",
     });
   }
+
+  await ensureCommunityMembership([contributorId, ...invitedUsers.map((user) => user.id)], input.communityIds);
 
   return item;
 }
@@ -418,6 +437,7 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
       contentType: true,
       level: true,
       status: true,
+      communities: { select: { communityId: true } },
       categories: { select: { categoryId: true } },
       youtubeUrl: true,
       heroImageUrl: true,
@@ -438,6 +458,7 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
     contentType: item.contentType,
     level: item.level,
     status: item.status,
+    communityIds: item.communities.map(({ communityId }) => communityId),
     categoryIds: item.categories.map(({ categoryId }) => categoryId),
     tagIds: item.tags.map(({ tagId }) => tagId),
     youtubeUrl: item.youtubeUrl,
@@ -471,6 +492,8 @@ export async function updateKnowledgeItem(
     body: string | null;
     contentType: KnowledgeContentType;
     level: KnowledgeLevel;
+    /** Required, multi-select — genuinely editable here, unlike visibility/invitedUserIds which stay create-only. */
+    communityIds: string[];
     categoryIds: string[];
     tagIds: string[];
     youtubeUrl: string | null;
@@ -575,6 +598,7 @@ export async function updateKnowledgeItem(
   const updated = await db.$transaction(async (tx) => {
     await tx.knowledgeItemTag.deleteMany({ where: { knowledgeItemId: item.id } });
     await tx.knowledgeItemCategory.deleteMany({ where: { knowledgeItemId: item.id } });
+    await tx.knowledgeItemCommunity.deleteMany({ where: { knowledgeItemId: item.id } });
     if (dropsExistingAttachment) {
       await tx.knowledgeAttachment.delete({ where: { id: existingAttachment!.id } });
     }
@@ -591,6 +615,7 @@ export async function updateKnowledgeItem(
         externalUrl: requiresAttachmentOrLink ? input.externalUrl : null,
         deidentificationConfirmed: input.deidentificationConfirmed,
         status: nextStatus,
+        communities: { create: input.communityIds.map((communityId) => ({ communityId })) },
         categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
         tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
         attachments: newAttachment ? { create: [newAttachment] } : undefined,
@@ -708,16 +733,33 @@ export async function getPublishedKnowledgeItems(params: {
   contentType?: KnowledgeContentType;
   level?: KnowledgeLevel;
   categorySlug?: string;
+  /**
+   * Community-based-categorization initiative, objective 3. Applied on top
+   * of categorySlug (redundant but harmless when both are set — a specific
+   * category already implies its community) — see
+   * getDefaultCommunityFilter in lib/profile-server.ts for how callers
+   * derive this (explicit ?community= selection, or the member's own
+   * communities as the default when neither is picked).
+   */
+  communityIds?: string[];
   q?: string;
   sort?: LibrarySort;
   userId: string;
   isPrivileged: boolean;
 }): Promise<LibraryCard[]> {
   const visibleStatuses = [KnowledgeStatus.published, KnowledgeStatus.flagged];
+  // Queries the direct KnowledgeItemCommunity relation (standardization
+  // objective) rather than deriving through categories — categories are now
+  // optional, so an item tagged with a community but zero categories would
+  // otherwise be unfindable by this filter.
+  const communityFilter = params.communityIds?.length
+    ? { communities: { some: { communityId: { in: params.communityIds } } } }
+    : {};
   const filters = {
     ...(params.contentType ? { contentType: params.contentType } : {}),
     ...(params.level ? { level: params.level } : {}),
     ...(params.categorySlug ? { categories: { some: { category: { slug: params.categorySlug } } } } : {}),
+    ...communityFilter,
   };
   const visibilityFilter = params.isPrivileged
     ? {}
@@ -739,7 +781,12 @@ export async function getPublishedKnowledgeItems(params: {
     if (hits.length === 0) return [];
 
     const items = await db.knowledgeItem.findMany({
-      where: { id: { in: hits.map((hit) => hit.id) }, status: { in: visibleStatuses }, ...visibilityFilter },
+      where: {
+        id: { in: hits.map((hit) => hit.id) },
+        status: { in: visibleStatuses },
+        ...communityFilter,
+        ...visibilityFilter,
+      },
       select: LIBRARY_CARD_SELECT,
     });
     const byId = new Map(items.map((item) => [item.id, item]));
@@ -785,6 +832,9 @@ export async function getPublishedKnowledgeItemById(
     },
     select: {
       ...LIBRARY_CARD_SELECT,
+      // Overrides LIBRARY_CARD_SELECT's plain {name, slug} categories
+      // select — only the detail page needs each category's Community too.
+      categories: { select: { category: { select: { name: true, slug: true, community: { select: { name: true } } } } } },
       body: true,
       deidentificationConfirmed: true,
       tags: { select: { tag: { select: { name: true, slug: true } } } },
@@ -797,6 +847,11 @@ export async function getPublishedKnowledgeItemById(
 
   return {
     ...toLibraryCard(item),
+    categories: item.categories.map(({ category }) => ({
+      name: category.name,
+      slug: category.slug,
+      communityName: category.community.name,
+    })),
     body: item.body,
     deidentificationConfirmed: item.deidentificationConfirmed,
     tags: item.tags.map(({ tag }) => tag),
@@ -901,7 +956,14 @@ export async function updateKnowledgeItemInvitees(
 ): Promise<{ added: number; removed: number }> {
   const item = await db.knowledgeItem.findUnique({
     where: { id: itemId },
-    select: { id: true, title: true, status: true, visibility: true, contributorId: true },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      visibility: true,
+      contributorId: true,
+      communities: { select: { communityId: true } },
+    },
   });
   if (!item) throw new KnowledgeItemError(404, "Resource not found.");
   if (item.visibility !== KnowledgeVisibility.restricted) {
@@ -1003,6 +1065,11 @@ export async function updateKnowledgeItemInvitees(
       : Promise.resolve(),
   ]);
 
+  await ensureCommunityMembership(
+    newInvitees.map((user) => user.id),
+    item.communities.map((c) => c.communityId),
+  );
+
   return { added: newInvitees.length, removed: removeCandidates.length };
 }
 
@@ -1080,6 +1147,7 @@ export async function startKnowledgeItemDiscussion(
       contributorId: true,
       invitees: { select: { userId: true } },
       forumThread: { select: { id: true } },
+      communities: { select: { communityId: true } },
     },
   });
   if (!item) throw new KnowledgeItemError(404, "Resource not found.");
@@ -1108,6 +1176,11 @@ export async function startKnowledgeItemDiscussion(
     });
     return created;
   });
+
+  await ensureCommunityMembership(
+    [actingUser.id],
+    item.communities.map((c) => c.communityId),
+  );
 
   return { threadId: thread.id };
 }

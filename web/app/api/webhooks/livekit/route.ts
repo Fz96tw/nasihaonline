@@ -98,6 +98,9 @@ async function handleEgressEnded(egressInfo: NonNullable<Awaited<ReturnType<type
       // absent so the upsert's `durationSeconds: segment.durationSeconds`
       // doesn't overwrite with 0 for a payload that omitted it.
       durationSeconds: file.duration ? Number(file.duration / BigInt(1_000_000_000)) : undefined,
+      // size is already plain bytes on the wire (unlike duration/startedAt,
+      // no unit conversion needed) — same undefined-not-0 reasoning.
+      sizeBytes: file.size ? Number(file.size) : undefined,
     };
 
     const attachedToEvent = await attachLiveKitEventRecordingSegment(egressInfo.roomName, segment);

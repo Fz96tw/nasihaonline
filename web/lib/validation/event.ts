@@ -27,6 +27,13 @@ const eventFieldsSchema = z.object({
   // outright; formatEventDateTime falls back to a fixed default zone when
   // it's null.
   timezone: z.string().trim().min(1).nullable(),
+  // Community-based-categorization initiative, objective 5 — required,
+  // multi-select (unlike invitedUserIds/coHostUserIds, this is editable in
+  // both create and edit mode, so it lives in the shared fields rather than
+  // createEventSchema-only). categoryIds is optional, scoped in the UI to
+  // whichever communities are selected.
+  communityIds: z.array(z.string()).min(1, "Select at least one community"),
+  categoryIds: z.array(z.string()),
 });
 
 // Case Discussion's de-identification checkbox (§11's hard requirement, not

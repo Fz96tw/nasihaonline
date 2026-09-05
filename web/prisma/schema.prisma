@@ -81,13 +81,13 @@ model User {
   // Events (§4.6) — hostId is required and un-cascaded on delete, same
   // convention as ContributionEvent.actorId, since a host's past events
   // are historical record even if their account is later removed.
-  hostedEvents     Event[]        @relation("EventHost")
-  eventRsvps       RSVP[]         @relation("EventRsvp")
-  eventAttendances Attendance[]   @relation("EventAttendance")
-  eventInvitations EventInvitee[] @relation("EventInvitee")
+  hostedEvents                    Event[]                      @relation("EventHost")
+  eventRsvps                      RSVP[]                       @relation("EventRsvp")
+  eventAttendances                Attendance[]                 @relation("EventAttendance")
+  eventInvitations                EventInvitee[]               @relation("EventInvitee")
   // Recording Access initiative — members the host has designated as
   // co-host, able to start/stop recording and manage further co-hosts.
-  eventCoHostOf    EventCoHost[]  @relation("EventCoHost")
+  eventCoHostOf                   EventCoHost[]                @relation("EventCoHost")
   // Resend Notifications (event detail page) — who triggered each member-wide
   // broadcast, not just the automatic one at createEvent() time.
   eventNotificationBroadcastsSent EventNotificationBroadcast[] @relation("EventNotificationBroadcastSentBy")
@@ -198,6 +198,15 @@ model Profile {
   // only until now; also editable here since availability changes over time.
   availability          ApplicationAvailability[] @default([])
   skills                ProfileSkill[]
+  // Community-based-categorization initiative, objective 2. Separate from
+  // interestAreas (which only supplies the one-time onboarding suggestion,
+  // see getSuggestedCommunityIds): communities is independently editable
+  // afterward. followsAllCommunities makes "ALL communities" a real,
+  // forward-compatible choice — a member who picks it sees any community
+  // added in the future too, without new ProfileCommunity rows each time.
+  // Mutually exclusive in practice with a non-empty `communities`.
+  communities           ProfileCommunity[]
+  followsAllCommunities Boolean                   @default(false)
   // Directory visibility prefs (§4.3/§4.5/§9) — enforced server-side in
   // lib/members-server.ts, not just hidden client-side.
   listInDirectory       Boolean                   @default(true)
@@ -247,14 +256,38 @@ enum AdmissionPhase {
 // Extend with more columns as future settings (e.g. inactivity threshold,
 // §3.4) are added, rather than introducing a generic key/value table.
 model SiteSettings {
-  id                        Int            @id @default(1)
-  admissionPhase            AdmissionPhase @default(referral_driven_growth)
-  welcomeAnnouncementInFeed Boolean        @default(true)
-  welcomeAnnouncementNotify Boolean        @default(true)
-  welcomeAnnouncementEmail  Boolean        @default(true)
-  updatedAt                 DateTime       @updatedAt
+  id                               Int            @id @default(1)
+  admissionPhase                   AdmissionPhase @default(referral_driven_growth)
+  welcomeAnnouncementInFeed        Boolean        @default(true)
+  welcomeAnnouncementNotify        Boolean        @default(true)
+  welcomeAnnouncementEmail         Boolean        @default(true)
+  // Quick Video Recording & Sharing initiative — max length of a one-click
+  // self/self quick recording, enforced both client-side (visible countdown,
+  // LiveKitMeetingScreen) and server-side (an in-process delayed stopEgress
+  // call scheduled by the recording/start route — see its doc comment).
+  quickRecordingMaxDurationSeconds Int            @default(30)
+  // Site-wide typography, chosen from a curated set of fonts preloaded via
+  // next/font/google in app/layout.tsx (see lib/fonts.ts) — not a free-text
+  // Google Font name, since next/font self-hosts fonts at build time.
+  bodyFont                         BodyFont       @default(montserrat)
+  headingFont                      HeadingFont    @default(mulish)
+  updatedAt                        DateTime       @updatedAt
 
   @@map("site_settings")
+}
+
+enum BodyFont {
+  inter
+  ibm_plex_sans
+  montserrat
+  mulish
+}
+
+enum HeadingFont {
+  inter
+  lora
+  source_serif_4
+  mulish
 }
 
 enum CareerStage {
@@ -290,12 +323,26 @@ enum InterestArea {
   leadership_management
   literature_writing
   marketing_sales
-  science_philosophy
+  science
   sustainability_environment
   tech_development
   travel_culture
   music
   history
+  // Added for the 8-community taxonomy expansion (community-based-categorization initiative).
+  health_fitness
+  engineering
+  psychology_sociology
+  career_development
+  law
+  philosophy
+  diy
+  home_improvement_decor
+  architecture
+  photography
+  camping_hiking
+  fishing
+  nature_wildlife
 }
 
 enum ApplicationStatus {
@@ -646,6 +693,27 @@ enum MeetingPlatform {
   livekit
 }
 
+// Quick Video Recording & Sharing initiative — distinguishes a real
+// two-party negotiated meeting (`directory`, the only kind that existed
+// before this) from a one-click solo self/self recording (`quick_recording`,
+// created directly by lib/quick-recordings-server.ts, never through
+// createMeetingRequest/resolveMeetingRequest). Every list query that
+// surfaces "meetings with someone" (Inbox, My Meetings, upcoming/past
+// widgets) filters to `directory` so a quick recording never appears there.
+enum MeetingRequestOrigin {
+  directory
+  quick_recording
+}
+
+// Shared video-sharing infrastructure — mirrors PastedImageOwnerType, minus
+// library_item (sharing a real 1:1 meeting recording into the Library is out
+// of scope) plus review_comment (in scope here, unlike PastedImage).
+enum RecordingOwnerType {
+  forum_post
+  inbox_message
+  review_comment
+}
+
 enum MeetingRequestStatus {
   pending
   accepted
@@ -761,7 +829,11 @@ model MeetingRequest {
   // initiative) — consulted by resolveMeetingRequest() on acceptance to
   // decide which platform to create the room/link on. Defaults to
   // google_meet, preserving today's only behavior for existing rows.
-  meetingPlatform                 MeetingPlatform           @default(google_meet)
+  meetingPlatform                 MeetingPlatform             @default(google_meet)
+  // Quick Video Recording & Sharing initiative — see MeetingRequestOrigin's
+  // doc comment. Defaults to `directory`, preserving every existing row's
+  // (and every other creation path's) actual meaning unchanged.
+  origin                          MeetingRequestOrigin        @default(directory)
   // Set instead of meetingUrl/googleEventId when meetingPlatform is
   // livekit — non-null is the authoritative signal that this meeting is
   // LiveKit-backed, read by the in-app meeting page and recording webhook.
@@ -1087,32 +1159,32 @@ model Event {
   createdAt                       DateTime        @default(now())
   updatedAt                       DateTime        @updatedAt
 
-  recurrence    EventRecurrence?
-  rsvps         RSVP[]
-  attendances   Attendance[]
-  registrations EventRegistration[]
+  recurrence             EventRecurrence?
+  rsvps                  RSVP[]
+  attendances            Attendance[]
+  registrations          EventRegistration[]
   // Only populated for visibility = invited — who was asked, distinct from
   // RSVP (who responded). Supports add/remove after creation (a later
   // objective), not just bulk-insert at createEvent() time.
-  invitees      EventInvitee[]
+  invitees               EventInvitee[]
   // Recording Access initiative — separate from `invitees`: co-hosts must
   // work for community/open events too, which have no EventInvitee rows.
   // Assigned by the host at scheduling time; the host or an existing
   // co-host can also grant/revoke it live during the meeting.
-  coHosts       EventCoHost[]
+  coHosts                EventCoHost[]
   // Optional discussion thread in the seeded "Events" forum (EVENTS_FORUM_SLUG,
   // lib/forums.ts), opted into at creation time. The FK lives on ForumThread
   // (below) rather than here so createEvent can create the Event first and
   // still know its id when posting the thread's linking first post.
-  forumThread   ForumThread?
+  forumThread            ForumThread?
   // Unique-visitor count for the event detail page's eye-icon (mirrors
   // ThreadView) — events are member-only like forums, so this dedupes on
   // real userId rather than an opaque viewer key like PostView does.
-  views         EventView[]
+  views                  EventView[]
   // Every meeting held over an auto-generated Meet link is recorded by
   // default (lib/google-calendar.ts) — one row per occurrence, since a
   // recurring event reuses the same Meet space/link across every session.
-  recordings    EventRecording[]
+  recordings             EventRecording[]
   // Resend Notifications — the audit trail of every member-wide broadcast
   // for this event (the automatic one at creation, plus any manual resend
   // the organizer/admin triggers from the event detail page).
@@ -1121,11 +1193,50 @@ model Event {
   // meeting is live (EventChatMessage), compiled into a single ForumPost
   // per occurrence when the room ends and linked back via
   // EventChatTranscript so the event page can jump straight to it.
-  chatMessages    EventChatMessage[]
-  chatTranscripts EventChatTranscript[]
+  chatMessages           EventChatMessage[]
+  chatTranscripts        EventChatTranscript[]
+  // Community-based-categorization initiative, objective 5 — required,
+  // multi-select (an event can apply to more than one community), unlike
+  // KnowledgeItem/ReviewItem's single-visibility-plus-categories shape.
+  // Zero rows (every event that predates this) is the grandfathered
+  // "visible to everyone" state — see isEventVisibleToMember.
+  communities            EventCommunity[]
+  // Optional, fine-grained, scoped in the UI to whichever community/
+  // communities are selected above.
+  categories             EventCategory[]
 
   @@index([startsAt])
   @@map("events")
+}
+
+// Required multi-select Community tag (community-based-categorization
+// initiative, objective 5) — an event with zero rows is grandfathered as
+// visible to everyone (see isEventVisibleToMember, events-server.ts);
+// tagging with ≥1 community scopes `visibility: community` to members of
+// those communities (or followsAllCommunities) going forward.
+model EventCommunity {
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  communityId String
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, communityId])
+  @@index([communityId])
+  @@map("event_communities")
+}
+
+// Optional fine-grained category tag, scoped to the event's tagged
+// communities — same join-table shape as KnowledgeItemCategory/
+// ReviewItemCategory.
+model EventCategory {
+  eventId    String
+  event      Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   KnowledgeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, categoryId])
+  @@index([categoryId])
+  @@map("event_categories")
 }
 
 // Audit trail for member-wide event broadcasts (Resend Notifications,
@@ -1168,43 +1279,43 @@ model EventNotificationBroadcast {
 // one-row-per-occurrence guarantee still holds; it's just enforced by
 // meeting-recordings-sync.ts's own existence check instead of the DB.
 model EventRecording {
-  id             String          @id @default(cuid())
-  eventId        String
-  event          Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  occurrenceDate DateTime
-  origin         RecordingOrigin @default(meet)
+  id              String          @id @default(cuid())
+  eventId         String
+  event           Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  occurrenceDate  DateTime
+  origin          RecordingOrigin @default(meet)
   // --- meet origin only ---
   // Drive playback link. The recording's Drive fileId
   // (Recording.driveDestination.file, distinct from recordingUrl's
   // playback link) is needed to actually delete the file via the Drive API
   // when the host removes a recording, not just unlink it.
-  recordingUrl   String?
-  driveFileId    String?
+  recordingUrl    String?
+  driveFileId     String?
   // --- livekit origin only ---
   // MinIO object key for this segment (not a URL — see the streaming
   // route's doc comment in app/api/events/[id]/recording/[recordingId]/route.ts
   // for why a stored URL/presigned-URL would be wrong here).
-  objectKey      String?
+  objectKey       String?
   // LiveKit's egress id for this segment — unique (Postgres allows
   // unlimited NULLs on a unique nullable column, so meet-origin rows with
   // no egressId don't collide with each other), lets the egress_ended
   // webhook be replay-safe (upsert on egressId instead of blindly
   // inserting a duplicate row on a redelivered webhook).
-  egressId       String?         @unique
+  egressId        String?         @unique
   // When this segment's egress actually started — the ordering key for
   // "Part 1"/"Part 2" grouping, since createdAt only reflects when the
   // webhook happened to arrive.
-  startedAt      DateTime?
+  startedAt       DateTime?
   // Set by the egress_ended webhook when LiveKit reports EGRESS_FAILED/
   // EGRESS_ABORTED/no file result — distinguishes "still processing"
   // (objectKey null, failedAt null) from "genuinely failed" (failedAt
   // set), so the UI never shows a permanently-stuck processing indicator.
-  failedAt       DateTime?
+  failedAt        DateTime?
   // From the egress_ended webhook's FileInfo.duration (nanoseconds on the
   // wire, converted to seconds). Null until the webhook lands, same as
   // objectKey — a pending/failed segment has no duration yet.
   durationSeconds Int?
-  createdAt      DateTime        @default(now())
+  createdAt       DateTime        @default(now())
 
   @@index([eventId, occurrenceDate])
   @@map("event_recordings")
@@ -1219,20 +1330,20 @@ model EventRecording {
 // finalization hasn't run yet (or the event has no forumThreadId, in which
 // case rows are still cleared but nothing gets posted).
 model EventChatMessage {
-  id      String @id @default(cuid())
-  eventId String
-  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  id               String   @id @default(cuid())
+  eventId          String
+  event            Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   // LiveKit's own per-message id (ReceivedChatMessage.id) — the dedupe key
   // that makes a retried/re-effect-fired POST an idempotent no-op.
   livekitMessageId String
   // Display-name snapshot at send time, not a live User join — a guest
   // attendee has no User row at all, and even a member's name could change
   // later; the transcript should read as it did at meeting time either way.
-  authorName   String
-  authorUserId String?
-  body         String
-  sentAt       DateTime
-  createdAt    DateTime @default(now())
+  authorName       String
+  authorUserId     String?
+  body             String
+  sentAt           DateTime
+  createdAt        DateTime @default(now())
 
   @@unique([eventId, livekitMessageId])
   @@index([eventId])
@@ -1278,9 +1389,43 @@ model MeetingRequestRecording {
   failedAt         DateTime?
   // Same semantics as EventRecording.durationSeconds — see its comment.
   durationSeconds  Int?
+  // File size in bytes, read from the egress_ended webhook's FileInfo
+  // payload (LiveKit reports it directly — no MinIO stat call needed). Int
+  // (not BigInt, unlike every other numeric field in this schema — avoids
+  // BigInt's JSON-serialization friction) — comfortably covers a quick
+  // recording, which is capped at SiteSettings.quickRecordingMaxDurationSeconds
+  // (default 30s) well under the ~2GB ceiling this implies. Nullable for the
+  // same reason as durationSeconds: absent until the webhook fills it in,
+  // and permanently null for any recording finalized before this field
+  // existed.
+  sizeBytes        Int?
   createdAt        DateTime       @default(now())
 
+  // Quick video sharing (shared-infrastructure objective) — a ready quick
+  // recording may be embedded into at most one piece of content at a time.
+  // Non-relational cross-domain FKs (no @relation), same style as
+  // EventChatTranscript.forumPostId — the owning row lives in a different
+  // domain's table entirely, and Prisma relations across every possible
+  // owner type here would be unwieldy for what's just an optional pointer.
+  // `ownerType` null means "not currently shared anywhere" (either never
+  // linked, or unlinked — see lib/quick-recordings-server.ts's
+  // linkSharedRecording/unlinkSharedRecordings).
+  ownerType       RecordingOwnerType?
+  forumPostId     String?
+  inboxMessageId  String?
+  reviewCommentId String?
+  // Set when the owner deletes the recording from the dashboard (video-
+  // library objective) — the row and its ownerType/FK linkage are kept
+  // (soft delete), only objectKey's underlying MinIO object is actually
+  // removed, so a deleted-but-still-embedded recording can be distinguished
+  // from "never existed" or "no access" wherever it's rendered (see
+  // getMeetingRequestRecordingObjectKey's deletedAt check).
+  deletedAt       DateTime?
+
   @@index([meetingRequestId])
+  @@index([forumPostId])
+  @@index([inboxMessageId])
+  @@index([reviewCommentId])
   @@map("meeting_request_recordings")
 }
 
@@ -1505,15 +1650,62 @@ enum KnowledgeVisibility {
   restricted
 }
 
+// Top-level topic grouping every KnowledgeCategory belongs to (§4.9 /
+// community-based-categorization initiative) — lets browse/filter UIs
+// present a two-step Community → Category picker instead of a flat
+// ~22-item category list. Forum/Event link to this in later objectives
+// of the same initiative.
+model Community {
+  id             String                   @id @default(cuid())
+  name           String                   @unique
+  slug           String                   @unique
+  // Shown on the /my-communities and /communities browse pages for
+  // communities the viewer hasn't joined yet. Nullable — no backfilled
+  // copy exists yet, UI must render gracefully when absent.
+  description    String?
+  categories     KnowledgeCategory[]
+  profiles       ProfileCommunity[]
+  events         EventCommunity[]
+  knowledgeItems KnowledgeItemCommunity[]
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  @@map("communities")
+}
+
+// Explicit, persistent member↔community membership (community-based-
+// categorization initiative, objective 2) — drives default filtering on
+// browse pages. Independent of Profile.interestAreas after onboarding:
+// interestAreas only supplies the one-time suggested default below.
+model ProfileCommunity {
+  profileId   String
+  profile     Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  communityId String
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@id([profileId, communityId])
+  @@index([communityId])
+  @@map("profile_communities")
+}
+
 model KnowledgeCategory {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  slug      String   @unique
-  createdAt DateTime @default(now())
+  id          String    @id @default(cuid())
+  name        String    @unique
+  slug        String    @unique
+  communityId String
+  community   Community @relation(fields: [communityId], references: [id])
+  createdAt   DateTime  @default(now())
 
-  items       KnowledgeItemCategory[]
-  reviewItems ReviewItemCategory[]
+  items        KnowledgeItemCategory[]
+  reviewItems  ReviewItemCategory[]
+  events       EventCategory[]
+  forumThreads ForumThreadCategory[]
+  // The new, seeded-one-per-Category forums (community-based-categorization
+  // initiative, objective 6) — one Forum per Category, not per Community.
+  forums       Forum[]
 
+  @@index([communityId])
   @@map("knowledge_categories")
 }
 
@@ -1529,6 +1721,21 @@ model KnowledgeItemCategory {
   @@id([knowledgeItemId, categoryId])
   @@index([categoryId])
   @@map("knowledge_item_categories")
+}
+
+// Required, multi-select Community tag for a KnowledgeItem — mirrors
+// EventCommunity exactly (community-based-categorization initiative,
+// standardization objective). Backfilled for every pre-existing item from
+// the union of its categories' communities in this model's own migration.
+model KnowledgeItemCommunity {
+  knowledgeItemId String
+  knowledgeItem   KnowledgeItem @relation(fields: [knowledgeItemId], references: [id], onDelete: Cascade)
+  communityId     String
+  community       Community     @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@id([knowledgeItemId, communityId])
+  @@index([communityId])
+  @@map("knowledge_item_communities")
 }
 
 model KnowledgeTag {
@@ -1596,6 +1803,13 @@ model KnowledgeItem {
   updatedAt                 DateTime             @updatedAt
 
   categories              KnowledgeItemCategory[]
+  // Required, multi-select top-level classification (standardized onto
+  // Events' EventCommunity shape) — unlike `categories` above (now
+  // optional), every item has at least one row here. Every pre-existing
+  // item was backfilled from the union of its (already-required)
+  // categories' communities at migration time, so there is no "zero
+  // communities" legacy state the way Events had.
+  communities             KnowledgeItemCommunity[]
   tags                    KnowledgeItemTag[]
   attachments             KnowledgeAttachment[]
   // On-demand discussion thread in the Research & Resources forum (§4.9),
@@ -1903,14 +2117,27 @@ model ReviewVolunteerOffer {
 // retire-without-delete + explicit-ordering convention as TeamMember (§4.12),
 // since the org is expected to add/retire categories over time.
 model Forum {
-  id           String   @id @default(cuid())
-  name         String   @unique
-  slug         String   @unique
+  id           String             @id @default(cuid())
+  name         String             @unique
+  slug         String             @unique
   description  String?
-  displayOrder Int      @default(0)
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  displayOrder Int                @default(0)
+  active       Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  // Community-based-categorization initiative, objective 6 — set only for
+  // the new, seeded-one-per-KnowledgeCategory forums (e.g. "Health-tech",
+  // "Clinical Research"); null (untouched) for every pre-existing forum,
+  // which stays visible/accessible to everyone regardless of community
+  // membership. Non-null is what makes a forum's threads subject to
+  // isForumAccessibleToMember's gating (forums-server.ts) — community
+  // access is derived transitively via category.communityId, not stored
+  // directly on Forum (an earlier revision of this objective did store
+  // Forum.communityId directly, one row per Community rather than per
+  // Category — reverted per product decision, see the objective's own
+  // revision history).
+  categoryId   String?
+  category     KnowledgeCategory? @relation(fields: [categoryId], references: [id])
 
   threads ForumThread[]
   follows ForumFollow[]
@@ -1978,9 +2205,16 @@ model ForumThread {
   // lifecycle belongs to events-server.ts/library-server.ts, never this.
   removed Boolean @default(false)
 
-  posts    ForumPost[]
-  views    ThreadView[]
-  invitees ForumThreadInvitee[]
+  posts      ForumPost[]
+  views      ThreadView[]
+  invitees   ForumThreadInvitee[]
+  // Optional, multi-select "Topics" (community-based-categorization
+  // initiative, objective 6) — deliberately labeled "Topics" not
+  // "Category" in the UI, since Forum/[category] already means something
+  // different in this domain's routes/vocabulary. No minimum, unlike
+  // Event/KnowledgeItem's required community tag — the thread's forum
+  // already doubles as the required top-level classification.
+  categories ForumThreadCategory[]
 
   // Set only for the auto-created thread behind an Event's optional
   // "create a discussion thread" checkbox (§4.6) — null for every
@@ -1999,6 +2233,20 @@ model ForumThread {
   @@index([forumId])
   @@index([authorId])
   @@map("forum_threads")
+}
+
+// Optional "Topics" tag for a ForumThread (community-based-categorization
+// initiative, objective 6) — same join-table shape as EventCategory/
+// KnowledgeItemCategory, no minimum count.
+model ForumThreadCategory {
+  forumThreadId String
+  forumThread   ForumThread       @relation(fields: [forumThreadId], references: [id], onDelete: Cascade)
+  categoryId    String
+  category      KnowledgeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([forumThreadId, categoryId])
+  @@index([categoryId])
+  @@map("forum_thread_categories")
 }
 
 // Invite list for a member-initiated restricted ForumThread

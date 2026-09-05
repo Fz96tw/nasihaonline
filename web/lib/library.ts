@@ -36,9 +36,8 @@ export type KnowledgeCategoryOption = {
   id: string;
   name: string;
   slug: string;
+  communityId: string;
 };
-
-export type KnowledgeCategoryWithCount = KnowledgeCategoryOption & { count: number };
 
 export type KnowledgeTagOption = {
   id: string;
@@ -86,6 +85,10 @@ export type LibraryCard = {
   // Reply count on the on-demand discussion thread, excluding the
   // auto-authored opening post — 0 when no thread has been started yet.
   commentCount: number;
+  // Required, multi-select top-level classification (standardized onto
+  // Events' EventCommunity shape) — every item has >=1, unlike `categories`
+  // above which is now optional.
+  communities: { id: string; name: string; slug: string }[];
 };
 
 export type LibrarySort = "recent" | "viewed" | "commented";
@@ -97,7 +100,11 @@ export type LibrarySort = "recent" | "viewed" | "commented";
  * started; forumReplyCount excludes the auto-authored opening post, same
  * derivation as MemberEvent.forumReplyCount).
  */
-export type KnowledgeItemDetail = LibraryCard & {
+export type KnowledgeItemDetail = Omit<LibraryCard, "categories"> & {
+  // Widened from LibraryCard's plain {name, slug} — the detail page also
+  // surfaces which Community each category belongs to (community-based-
+  // categorization initiative, objective 3), unlike the browse-grid card.
+  categories: { name: string; slug: string; communityName: string }[];
   tags: { name: string; slug: string }[];
   deidentificationConfirmed: boolean;
   forumThreadId: string | null;
@@ -134,6 +141,7 @@ export type KnowledgeItemForEdit = {
   contentType: KnowledgeContentType;
   level: KnowledgeLevel;
   status: KnowledgeStatus;
+  communityIds: string[];
   categoryIds: string[];
   tagIds: string[];
   youtubeUrl: string | null;

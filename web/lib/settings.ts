@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { AdmissionPhase } from "@/lib/generated/prisma/enums";
+import { AdmissionPhase, BodyFont, HeadingFont } from "@/lib/generated/prisma/enums";
 
 export { ADMISSION_PHASE_LABELS } from "@/lib/admission-phase";
 
@@ -50,6 +50,46 @@ export async function getWelcomeAnnouncementSettings(): Promise<WelcomeAnnouncem
 export async function setWelcomeAnnouncementSettings(
   input: WelcomeAnnouncementSettings,
 ): Promise<void> {
+  await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID, ...input },
+    update: input,
+  });
+}
+
+/** Quick Video Recording & Sharing initiative — see SiteSettings.quickRecordingMaxDurationSeconds's schema comment. */
+export async function getQuickRecordingMaxDuration(): Promise<number> {
+  const settings = await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID },
+    update: {},
+  });
+  return settings.quickRecordingMaxDurationSeconds;
+}
+
+export async function setQuickRecordingMaxDuration(seconds: number): Promise<void> {
+  await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID, quickRecordingMaxDurationSeconds: seconds },
+    update: { quickRecordingMaxDurationSeconds: seconds },
+  });
+}
+
+export type SiteFontSettings = {
+  bodyFont: BodyFont;
+  headingFont: HeadingFont;
+};
+
+export async function getSiteFonts(): Promise<SiteFontSettings> {
+  const settings = await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID },
+    update: {},
+  });
+  return { bodyFont: settings.bodyFont, headingFont: settings.headingFont };
+}
+
+export async function setSiteFonts(input: SiteFontSettings): Promise<void> {
   await db.siteSettings.upsert({
     where: { id: SETTINGS_ROW_ID },
     create: { id: SETTINGS_ROW_ID, ...input },

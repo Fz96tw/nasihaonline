@@ -8,6 +8,13 @@ import { EventType, EventVisibility, Tier } from "@/lib/generated/prisma/enums";
 // Student can all submit events. Friend tier is excluded.
 export const EVENT_SUBMISSION_TIERS: Tier[] = [Tier.active, Tier.associate, Tier.student];
 
+// Community-based-categorization initiative, objective 5 — mirrors
+// KnowledgeCategoryOption/ReviewCategoryOption's shape (id/name/slug for
+// Community, plus communityId on the category so CategoryCheckboxField can
+// group by it).
+export type EventCommunityOption = { id: string; name: string; slug: string };
+export type EventCategoryOption = { id: string; name: string; slug: string; communityId: string };
+
 export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   [EventType.webinar]: "Webinar",
   [EventType.workshop]: "Workshop",
@@ -42,6 +49,9 @@ export type PublicEvent = {
   isRecurring: boolean;
   /** Human summary (e.g. "Weekly on Tue") — present only when isRecurring. */
   recurrenceSummary: string | null;
+  /** Community-based-categorization initiative, objective 5 — badges shown on the card/detail page. Empty for every event that predates this (the grandfathered "visible to everyone" state). */
+  communities: { id: string; name: string; slug: string }[];
+  categories: { id: string; name: string; slug: string }[];
 };
 
 // /events for a signed-in viewer (§4.6): same shape the public listing gets

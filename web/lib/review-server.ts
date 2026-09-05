@@ -19,6 +19,7 @@ import {
   KnowledgeVisibility,
   LedgerStatus,
   LedgerTransactionType,
+  RecordingOwnerType,
   ReviewItemStatus,
   ReviewVolunteerStatus,
   Role,
@@ -27,6 +28,8 @@ import type { Prisma } from "@/lib/generated/prisma/client";
 import { DIRECTORY_TIERS } from "@/lib/members";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import { createNotification } from "@/lib/notifications-server";
+import { ensureCommunityMembership } from "@/lib/profile-server";
+import { unlinkSharedRecordings } from "@/lib/quick-recordings-server";
 import { sendReviewInviteEmail, sendReviewLifecycleEmail } from "@/lib/email";
 import type {
   MyReviewSubmission,
@@ -153,11 +156,12 @@ export async function createReviewItem(
 
   const categories = await db.knowledgeCategory.findMany({
     where: { id: { in: input.categoryIds } },
-    select: { id: true },
+    select: { id: true, communityId: true },
   });
   if (categories.length !== input.categoryIds.length) {
     throw new ReviewItemError(400, "Select at least one valid category.");
   }
+  const communityIds = Array.from(new Set(categories.map((category) => category.communityId)));
 
   const isRecordedLecture = input.contentType === KnowledgeContentType.recorded_lecture;
   if (isRecordedLecture && !input.youtubeUrl) {
@@ -222,6 +226,8 @@ export async function createReviewItem(
     userIds: invitedUsers.map((user) => user.id),
   });
   await emailInvitedReviewUsers(invitedUsers, { reviewItemId: item.id, title: input.title, submitterName });
+
+  await ensureCommunityMembership([submitterId, ...invitedUsers.map((user) => user.id)], communityIds);
 
   return item;
 }
@@ -484,6 +490,20 @@ export async function deleteReviewItem(itemId: string, actingUser: UserModel): P
   const item = await db.reviewItem.findUnique({ where: { id: itemId }, select: { submitterId: true } });
   if (!item) throw new ReviewItemError(404, "Review item not found.");
   assertSubmitter(item, actingUser);
+
+  // Shared video-sharing infrastructure — comments cascade-delete with the
+  // item (onDelete: Cascade on ReviewComment.reviewItemId), but a shared
+  // recording's ownerType/reviewCommentId FK isn't a real Prisma relation
+  // (see RecordingOwnerType's schema doc comment), so it wouldn't otherwise
+  // get cleared and would keep pointing at a comment that no longer exists.
+  const commentIds = await db.reviewComment.findMany({ where: { reviewItemId: itemId }, select: { id: true } });
+  if (commentIds.length > 0) {
+    await unlinkSharedRecordings(
+      RecordingOwnerType.review_comment,
+      commentIds.map((comment) => comment.id),
+    );
+  }
+
   await db.reviewItem.delete({ where: { id: itemId } });
 }
 
@@ -500,10 +520,16 @@ export async function updateReviewItemInvitees(
 ): Promise<{ added: number; removed: number }> {
   const item = await db.reviewItem.findUnique({
     where: { id: itemId },
-    select: { id: true, title: true, submitterId: true },
+    select: {
+      id: true,
+      title: true,
+      submitterId: true,
+      categories: { select: { category: { select: { communityId: true } } } },
+    },
   });
   if (!item) throw new ReviewItemError(404, "Review item not found.");
   assertSubmitter(item, actingUser);
+  const communityIds = Array.from(new Set(item.categories.map((c) => c.category.communityId)));
 
   const submitter = await db.user.findUnique({ where: { id: item.submitterId }, select: { name: true } });
   const submitterName = submitter?.name ?? "A member";
@@ -579,6 +605,11 @@ export async function updateReviewItemInvitees(
       : Promise.resolve(),
   ]);
 
+  await ensureCommunityMembership(
+    newInvitees.map((user) => user.id),
+    communityIds,
+  );
+
   return { added: newInvitees.length, removed: removeCandidates.length };
 }
 
@@ -588,7 +619,7 @@ const MY_SUBMISSION_SELECT = {
   contentType: true,
   status: true,
   createdAt: true,
-  categories: { select: { category: { select: { name: true } } } },
+  categories: { select: { category: { select: { id: true, name: true, communityId: true } } } },
   invitees: {
     select: { user: { select: { name: true, profile: { select: { avatarUrl: true } } } } },
     orderBy: { createdAt: "asc" as const },
@@ -655,7 +686,7 @@ export async function getSharedWithMe(userId: string): Promise<SharedReviewItem[
         contentType: true,
         status: true,
         createdAt: true,
-        categories: { select: { category: { select: { name: true } } } },
+        categories: { select: { category: { select: { id: true, name: true, communityId: true } } } },
         submitter: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } },
         _count: { select: { comments: true } },
         comments: { select: { createdAt: true }, orderBy: { createdAt: "desc" }, take: 1 },
@@ -762,7 +793,7 @@ export async function getReviewItemDetail(itemId: string, actingUser: UserModel)
       deidentificationConfirmed: true,
       publishedKnowledgeItemId: true,
       publishedKnowledgeItem: { select: { status: true } },
-      categories: { select: { category: { select: { name: true, slug: true } } } },
+      categories: { select: { category: { select: { name: true, slug: true, community: { select: { name: true } } } } } },
       tags: { select: { tag: { select: { name: true, slug: true } } } },
       attachments: { select: { fileName: true, mimeType: true, objectKey: true }, take: 1 },
       invitees: { select: { userId: true } },
@@ -791,7 +822,11 @@ export async function getReviewItemDetail(itemId: string, actingUser: UserModel)
     status: item.status,
     seekingReviewers: item.seekingReviewers,
     volunteerNote: item.volunteerNote,
-    categories: item.categories.map(({ category }) => category),
+    categories: item.categories.map(({ category }) => ({
+      name: category.name,
+      slug: category.slug,
+      communityName: category.community.name,
+    })),
     tags: item.tags.map(({ tag }) => tag),
     submitter: {
       id: item.submitter.id,
@@ -855,7 +890,13 @@ export async function postReviewComment(
 ): Promise<{ id: string; createdAt: string }> {
   const item = await db.reviewItem.findUnique({
     where: { id: itemId },
-    select: { id: true, title: true, submitterId: true, invitees: { select: { userId: true } } },
+    select: {
+      id: true,
+      title: true,
+      submitterId: true,
+      invitees: { select: { userId: true } },
+      categories: { select: { category: { select: { communityId: true } } } },
+    },
   });
   if (!item) throw new ReviewItemError(404, "Review item not found.");
 
@@ -929,6 +970,11 @@ export async function postReviewComment(
 
     return created;
   });
+
+  await ensureCommunityMembership(
+    [authorId],
+    item.categories.map((c) => c.category.communityId),
+  );
 
   const recipientIds = new Set<string>();
   if (item.submitterId !== authorId) recipientIds.add(item.submitterId);
@@ -1289,7 +1335,7 @@ export async function getSeekingReviewersFeed(viewerId: string): Promise<Seeking
       level: true,
       volunteerNote: true,
       createdAt: true,
-      categories: { select: { category: { select: { name: true } } } },
+      categories: { select: { category: { select: { id: true, name: true, communityId: true } } } },
       submitter: { select: { id: true, name: true, profile: { select: { avatarUrl: true } } } },
       _count: { select: { volunteerOffers: { where: { status: { not: ReviewVolunteerStatus.withdrawn } } } } },
       volunteerOffers: { where: { userId: viewerId }, select: { status: true } },

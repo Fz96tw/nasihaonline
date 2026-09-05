@@ -37,12 +37,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { EventType, EventVisibility, RecurrenceFrequency } from "@/lib/generated/prisma/enums";
-import { EVENT_TYPE_LABELS } from "@/lib/events";
+import { EVENT_TYPE_LABELS, type EventCategoryOption, type EventCommunityOption } from "@/lib/events";
 import { createEventSchema, updateEventSchema, type CreateEventValues } from "@/lib/validation/event";
 import { DATETIME_LOCAL_STEP_SECONDS, snapDatetimeLocalValue } from "@/lib/datetime-input";
 import { describeRecurrence } from "@/lib/recurrence";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { InviteePicker } from "@/components/members/invitee-picker";
+import { CategoryCheckboxField } from "@/components/shared/category-checkbox-field";
 
 const DEFAULT_VALUES: CreateEventValues = {
   title: "",
@@ -57,6 +58,8 @@ const DEFAULT_VALUES: CreateEventValues = {
   visibility: EventVisibility.community,
   invitedUserIds: [],
   coHostUserIds: [],
+  communityIds: [],
+  categoryIds: [],
   meetLinkSource: "livekit",
   recurrence: null,
 };
@@ -114,6 +117,9 @@ type ExistingEvent = {
   heroImageUrl: string | null;
   deidentificationConfirmed: boolean;
   visibility: EventVisibility;
+  /** Community-based-categorization initiative, objective 5 — unlike invitedUserIds/coHostUserIds below, genuinely editable here, so this reflects the event's real current tags rather than being hardcoded empty. */
+  communityIds: string[];
+  categoryIds: string[];
   meetingOrganizerMessage: string | null;
   meetingOrganizerMessageImageUrl: string | null;
   recurrence: {
@@ -146,11 +152,15 @@ type ExistingEvent = {
 export function SubmitEventForm({
   existingEvent,
   currentUserId,
+  communities,
+  categories,
 }: {
   existingEvent?: ExistingEvent;
   /** Current user's id — excludes them from the invitee picker's suggestions (create mode only). */
   currentUserId?: string;
-} = {}) {
+  communities: EventCommunityOption[];
+  categories: EventCategoryOption[];
+}) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -202,6 +212,11 @@ export function SubmitEventForm({
           // them live from the meeting's own participant list instead
           // (POST /api/events/:id/meeting/co-hosts), not from an edit here.
           coHostUserIds: [],
+          // Unlike invitedUserIds/coHostUserIds above, this IS genuinely
+          // editable from this form — the event's real current tags, not
+          // hardcoded empty.
+          communityIds: existingEvent.communityIds,
+          categoryIds: existingEvent.categoryIds,
           meetLinkSource: existingEvent.meetLinkSource,
           recurrence: existingEvent.recurrence,
         }
@@ -214,6 +229,7 @@ export function SubmitEventForm({
   const isRestricted = visibility === EventVisibility.invited;
   const isOpen = form.watch("open");
   const meetLinkSource = form.watch("meetLinkSource");
+  const selectedCommunityIds = form.watch("communityIds");
 
   const audience: AudienceChoice = isRestricted ? "invited" : isOpen ? "open" : "community";
   function handleAudienceChange(value: AudienceChoice) {
@@ -261,6 +277,11 @@ export function SubmitEventForm({
         formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
         formData.append("coHostUserIds", JSON.stringify(values.coHostUserIds));
       }
+      // Unlike invitedUserIds/coHostUserIds above, genuinely editable —
+      // sent in both create and edit mode, same getAll()-per-value shape as
+      // Library's categoryIds field.
+      values.communityIds.forEach((communityId) => formData.append("communityIds", communityId));
+      values.categoryIds.forEach((categoryId) => formData.append("categoryIds", categoryId));
       if (values.recurrence) formData.append("recurrence", JSON.stringify(values.recurrence));
       if (heroImage) formData.append("heroImage", heroImage);
       if (meetingOrganizerMessage.trim()) formData.append("meetingOrganizerMessage", meetingOrganizerMessage.trim());
@@ -427,6 +448,58 @@ export function SubmitEventForm({
             </FormItem>
           )}
         />
+
+        <FormField
+          control={form.control}
+          name="communityIds"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Communities</FormLabel>
+              <FormControl>
+                <div className="flex flex-wrap gap-4 rounded-md border p-3">
+                  {communities.map((community) => (
+                    <label key={community.id} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={field.value.includes(community.id)}
+                        onCheckedChange={(checked) =>
+                          field.onChange(
+                            checked
+                              ? [...field.value, community.id]
+                              : field.value.filter((id) => id !== community.id),
+                          )
+                        }
+                      />
+                      {community.name}
+                    </label>
+                  ))}
+                </div>
+              </FormControl>
+              <FormDescription>Select at least one community this event belongs to.</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {selectedCommunityIds.length > 0 && (
+          <FormField
+            control={form.control}
+            name="categoryIds"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Categories (optional)</FormLabel>
+                <FormControl>
+                  <CategoryCheckboxField
+                    categories={categories.filter((category) => selectedCommunityIds.includes(category.communityId))}
+                    communities={communities.filter((community) => selectedCommunityIds.includes(community.id))}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         <FormField
           control={form.control}

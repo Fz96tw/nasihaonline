@@ -80,7 +80,7 @@ const SKILLS: string[] = [
   // Music
   "Music Performance",
   "Music Production",
-  // Science & Philosophy
+  // Science
   "Science Communication",
   "Philosophy",
   // Sustainability & Environment
@@ -313,6 +313,99 @@ async function seedEvents() {
 const KNOWLEDGE_CATEGORIES = Object.values(INTEREST_AREA_LABELS);
 const KNOWLEDGE_TAGS = ["guidelines", "review-article", "recorded-lecture", "case-study"];
 
+// Community-based-categorization initiative: the 8 top-level communities
+// every KnowledgeCategory belongs to.
+const COMMUNITIES: { name: string; slug: string; description: string }[] = [
+  {
+    name: "Healthcare",
+    slug: "healthcare",
+    description: "Clinical practice, patient care, and medical knowledge across specialties.",
+  },
+  {
+    name: "Sciences",
+    slug: "sciences",
+    description: "Research, experimentation, and discovery across the natural and physical sciences.",
+  },
+  {
+    name: "Business & Finance",
+    slug: "business-finance",
+    description: "Entrepreneurship, investing, career growth, and financial literacy.",
+  },
+  {
+    name: "Technology",
+    slug: "technology",
+    description: "Software, data, engineering, and the tools shaping how we build and work.",
+  },
+  {
+    name: "Education & Career",
+    slug: "education-career",
+    description: "Teaching, learning, mentorship, and professional development at every stage.",
+  },
+  {
+    name: "Humanities",
+    slug: "humanities",
+    description: "History, philosophy, language, and the ideas that shape how we understand each other.",
+  },
+  {
+    name: "Arts, Culture & Lifestyle",
+    slug: "arts-culture-lifestyle",
+    description: "Creative work, cultural traditions, and everyday living well.",
+  },
+  {
+    name: "Nature & Outdoor",
+    slug: "nature-outdoor",
+    description: "The natural world, conservation, and life outside — from hiking to gardening.",
+  },
+];
+
+// Single source of truth for which Community each KnowledgeCategory belongs
+// to — mirrored exactly in migration 20260829180000_expand_to_8_communities's
+// SQL, so a fresh environment's seed and the production migration agree.
+// Every INTEREST_AREA_LABELS value must appear here exactly once.
+const CATEGORY_COMMUNITY_MAP: Record<string, string> = {
+  Healthcare: "Healthcare",
+  "Health & Wellness": "Healthcare",
+  "Health-tech": "Healthcare",
+  "Clinical Research": "Healthcare",
+  "Health & Fitness": "Healthcare",
+  "Basic Science Research": "Sciences",
+  Biotechnology: "Sciences",
+  Science: "Sciences",
+  "Sustainability & Environment": "Sciences",
+  Engineering: "Sciences",
+  "Psychology & Sociology": "Sciences",
+  Business: "Business & Finance",
+  "Finance & Investing": "Business & Finance",
+  "Marketing & Sales": "Business & Finance",
+  "Leadership & Management": "Business & Finance",
+  "Tech & Development": "Technology",
+  "Data & Analytics": "Technology",
+  "E-Learning": "Technology",
+  Education: "Education & Career",
+  "Career Development": "Education & Career",
+  History: "Humanities",
+  "Literature & Writing": "Humanities",
+  Law: "Humanities",
+  Philosophy: "Humanities",
+  "Arts & Crafts": "Arts, Culture & Lifestyle",
+  Music: "Arts, Culture & Lifestyle",
+  "Culinary Arts": "Arts, Culture & Lifestyle",
+  "Travel & Culture": "Arts, Culture & Lifestyle",
+  DIY: "Arts, Culture & Lifestyle",
+  "Home Improvement & Decor": "Arts, Culture & Lifestyle",
+  Architecture: "Arts, Culture & Lifestyle",
+  Photography: "Arts, Culture & Lifestyle",
+  "Camping & Hiking": "Nature & Outdoor",
+  Fishing: "Nature & Outdoor",
+  "Nature & Wildlife": "Nature & Outdoor",
+};
+
+for (const name of KNOWLEDGE_CATEGORIES) {
+  if (!CATEGORY_COMMUNITY_MAP[name]) {
+    throw new Error(`CATEGORY_COMMUNITY_MAP is missing an entry for knowledge category "${name}".`);
+  }
+}
+
 // Six member-browsable forum categories from Member_Communications.md's
 // table, plus two on-demand forums (Events Discussion, Library Discussions)
 // that don't appear in the /forums index — see getForumCategories in
@@ -407,12 +500,24 @@ const SAMPLE_KNOWLEDGE_ITEMS: {
 ];
 
 async function seedKnowledgeLibrary() {
+  const communitiesByName = new Map<string, { id: string }>();
+  for (const { name, slug, description } of COMMUNITIES) {
+    const community = await db.community.upsert({
+      where: { name },
+      update: { description },
+      create: { name, slug, description },
+    });
+    communitiesByName.set(name, community);
+  }
+  console.log(`Seeded ${COMMUNITIES.length} communities.`);
+
   const categoriesByName = new Map<string, { id: string }>();
   for (const name of KNOWLEDGE_CATEGORIES) {
+    const communityId = communitiesByName.get(CATEGORY_COMMUNITY_MAP[name])!.id;
     const category = await db.knowledgeCategory.upsert({
       where: { name },
-      update: {},
-      create: { name, slug: slugify(name) },
+      update: { communityId },
+      create: { name, slug: slugify(name), communityId },
     });
     categoriesByName.set(name, category);
   }
@@ -496,6 +601,39 @@ async function seedForums() {
     forumsByName.set(sample.name, forum);
   }
   console.log(`Seeded ${FORUMS.length} forums.`);
+
+  // Community-based-categorization initiative, objective 6 — one new Forum
+  // per KnowledgeCategory (e.g. "Health-tech", "Clinical Research"),
+  // additive alongside (never replacing) the FORUMS above. Community-level
+  // access is derived transitively via category.communityId, not a direct
+  // Forum.communityId — an earlier revision of this objective seeded one
+  // Forum per Community instead (6, later corrected to 8 once verified
+  // live); reverted per product decision to seed per-Category instead, so
+  // e.g. selecting the "Healthcare" community pill on /forums reveals its
+  // individual category forums (Healthcare, Health & Wellness, Health-tech,
+  // Clinical Research, Health & Fitness) rather than one combined tile.
+  // Dynamic off the live KnowledgeCategory table rather than a hardcoded
+  // count/list — 35 today; hardcoding would silently drift out of sync
+  // with future taxonomy changes (the same lesson as the stale "6
+  // communities" number above). Name matches the Category's own name
+  // directly (verified no collision with any FORUMS entry above).
+  const categories = await db.knowledgeCategory.findMany({ orderBy: { name: "asc" } });
+  for (let index = 0; index < categories.length; index++) {
+    const category = categories[index];
+    const forum = await db.forum.upsert({
+      where: { name: category.name },
+      update: { categoryId: category.id },
+      create: {
+        name: category.name,
+        slug: slugify(category.name),
+        description: `Discussion for ${category.name}.`,
+        displayOrder: FORUMS.length + 100 + index,
+        categoryId: category.id,
+      },
+    });
+    forumsByName.set(category.name, forum);
+  }
+  console.log(`Seeded ${categories.length} category forums.`);
 
   if (!SEED_SAMPLE_DATA) {
     console.log("SEED_SAMPLE_DATA=false — skipping sample forum threads.");

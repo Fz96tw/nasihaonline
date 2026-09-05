@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
-import { NotificationType, PastedImageOwnerType } from "@/lib/generated/prisma/enums";
+import { MeetingRequestOrigin, NotificationType, PastedImageOwnerType } from "@/lib/generated/prisma/enums";
 import type { InboxListItem, InboxThread } from "@/lib/inbox";
 import { sendInboxMessageEmail } from "@/lib/email";
 import { INBOX_TIERS } from "@/lib/members";
@@ -54,7 +54,10 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
       orderBy: { createdAt: "asc" },
     }),
     db.meetingRequest.findMany({
-      where: { OR: [{ senderId: userId }, { recipientId: userId }] },
+      // origin: directory excludes quick recordings (Quick Video Recording
+      // & Sharing initiative) — a solo self/self recording never belongs
+      // in the Inbox, which is strictly for two-party correspondence.
+      where: { OR: [{ senderId: userId }, { recipientId: userId }], origin: MeetingRequestOrigin.directory },
       include: MEETING_REQUEST_INCLUDE,
       orderBy: { updatedAt: "desc" },
     }),

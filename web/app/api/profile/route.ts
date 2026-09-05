@@ -74,7 +74,7 @@ export async function PATCH(request: Request) {
           },
         },
       },
-      include: { skills: { include: { skill: true } } },
+      include: { skills: { include: { skill: true } }, communities: { include: { community: true } } },
     }),
   ]);
 

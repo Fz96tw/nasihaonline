@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getForumBySlug } from "@/lib/forums-server";
+import { getKnowledgeCategories } from "@/lib/library-server";
+import { getAllCommunities, getOrCreateProfile } from "@/lib/profile-server";
 import { NewThreadForm } from "@/components/forums/new-thread-form";
 import { CLINICAL_DISCUSSIONS_SLUG } from "@/lib/forums";
 import { Role } from "@/lib/generated/prisma/enums";
@@ -20,6 +22,13 @@ export default async function NewForumThreadPage({ params }: { params: { categor
   if (!result) notFound();
   const { forum } = result;
 
+  const [categories, communities, profile] = await Promise.all([
+    getKnowledgeCategories(),
+    getAllCommunities(),
+    getOrCreateProfile(user.id),
+  ]);
+  const myCommunityIds = profile.communities.map((c) => c.community.id);
+
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6 p-8">
       <div>
@@ -30,6 +39,10 @@ export default async function NewForumThreadPage({ params }: { params: { categor
         forumSlug={forum.slug}
         requireDeidentification={forum.slug === CLINICAL_DISCUSSIONS_SLUG}
         currentUserId={user.id}
+        categories={categories}
+        communities={communities}
+        communityId={forum.communityId}
+        myCommunityIds={myCommunityIds}
       />
     </main>
   );

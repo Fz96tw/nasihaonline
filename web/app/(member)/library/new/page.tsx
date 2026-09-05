@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getKnowledgeCategories, getKnowledgeTags } from "@/lib/library-server";
+import { getAllCommunities } from "@/lib/profile-server";
 import { SubmitResourceForm } from "@/components/library/submit-resource-form";
 import { KnowledgeContentType } from "@/lib/generated/prisma/enums";
 
@@ -25,7 +26,11 @@ export default async function NewLibraryItemPage({ searchParams }: { searchParam
     ? (searchParams.type as KnowledgeContentType)
     : undefined;
 
-  const [categories, tags] = await Promise.all([getKnowledgeCategories(), getKnowledgeTags()]);
+  const [categories, tags, communities] = await Promise.all([
+    getKnowledgeCategories(),
+    getKnowledgeTags(),
+    getAllCommunities(),
+  ]);
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-8 p-8">
@@ -39,6 +44,7 @@ export default async function NewLibraryItemPage({ searchParams }: { searchParam
 
       <SubmitResourceForm
         categories={categories}
+        communities={communities}
         tags={tags}
         currentUserId={user.id}
         initialContentType={initialContentType}

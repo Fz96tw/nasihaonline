@@ -8,8 +8,10 @@ import {
   EVENT_THREAD_ACCESS_SELECT,
   KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
   OWN_THREAD_ACCESS_SELECT,
+  FORUM_COMMUNITY_ACCESS_SELECT,
 } from "@/lib/forums-server";
 import { canViewKnowledgeItem } from "@/lib/library-server";
+import { getMemberCommunityContext } from "@/lib/profile-server";
 
 export class TooManyPastedImagesError extends Error {}
 
@@ -175,13 +177,15 @@ export async function canViewPastedImage(image: PastedImageAccessRecord, actingU
           select: {
             event: EVENT_THREAD_ACCESS_SELECT,
             knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
+            forum: FORUM_COMMUNITY_ACCESS_SELECT,
             ...OWN_THREAD_ACCESS_SELECT,
           },
         },
       },
     });
     if (!post) return false;
-    return isThreadVisible(post.thread, actingUser.id, isPrivilegedUser(actingUser));
+    const member = await getMemberCommunityContext(actingUser.id);
+    return isThreadVisible(post.thread, actingUser.id, isPrivilegedUser(actingUser), member);
   }
 
   if (image.ownerType === PastedImageOwnerType.inbox_message) {

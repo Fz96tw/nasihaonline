@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { useSearchQuery } from "@/components/header-search-context";
 
-const ROW_HEIGHT_PX = 56;
+// Sized for two lines (search input + communities line) now that the
+// community-based-categorization initiative (objective 2) adds a second
+// row of content — was 56px (one line) before.
+const ROW_HEIGHT_PX = 88;
 // Accumulated scroll distance (not per-event delta — a single scroll event
 // can fire with a tiny delta many times) needed in one direction before
 // flipping revealed state.
@@ -35,8 +39,25 @@ const FLIP_COOLDOWN_MS = 200;
  * non-empty), in which case it's forced fully open and the scroll listener
  * isn't even attached — restored to normal scroll-driven behavior, fresh
  * (revealed, as at initial load), the moment the field is cleared.
+ *
+ * `communities`/`followsAllCommunities` (community-based-categorization
+ * initiative, objective 2) come from the signed-in member's Profile, fetched
+ * once by the server-rendered SiteHeader — this component only ever mounts
+ * for a signed-in user (`{user && <HeaderSearchRow />}` in site-header.tsx),
+ * so there's no signed-out-visitor case to hide here.
+ *
+ * The "Show only my communities" toggle used to live on this row too, but
+ * moved to the top of the /whats-new results page itself (a checkbox that
+ * scopes search results belongs next to the results, not the input) — see
+ * MyCommunitiesCheckbox in components/feed/.
  */
-export function HeaderSearchRow() {
+export function HeaderSearchRow({
+  communities,
+  followsAllCommunities,
+}: {
+  communities: { id: string; name: string }[];
+  followsAllCommunities: boolean;
+}) {
   const { query, setQuery, pinned, setSearchRowVisible } = useSearchQuery();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -104,18 +125,24 @@ export function HeaderSearchRow() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, [pinned, setSearchRowVisible]);
 
-  function submit() {
+  function navigate() {
     const trimmed = query.trim();
     router.push(trimmed ? `/whats-new?q=${encodeURIComponent(trimmed)}` : "/whats-new");
   }
 
+  const communityLabel = followsAllCommunities
+    ? "All Communities"
+    : communities.length > 0
+      ? communities.map((c) => c.name).join(", ")
+      : "None selected";
+
   return (
     <div className="sticky top-[var(--header-height)] z-40 h-[var(--search-row-height)] overflow-hidden border-b bg-background shadow-sm transition-[height] duration-300 ease-in-out">
-      <div className="flex h-14 items-center px-4 lg:px-8">
+      <div className="flex h-full flex-col justify-center gap-1.5 px-4 py-2 lg:px-8">
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            submit();
+            navigate();
           }}
           className="relative mx-auto w-full max-w-[720px]"
         >
@@ -140,6 +167,14 @@ export function HeaderSearchRow() {
             </button>
           ) : null}
         </form>
+        <div className="mx-auto flex w-full max-w-[720px] items-center gap-2 truncate text-xs text-muted-foreground">
+          <span className="truncate">
+            Your Communities: <span className="text-foreground">{communityLabel}</span>
+          </span>
+          <Link href="/my-communities" className="shrink-0 underline underline-offset-2 hover:text-foreground">
+            Edit
+          </Link>
+        </div>
       </div>
     </div>
   );

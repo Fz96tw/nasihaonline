@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CategoryCheckboxField } from "@/components/shared/category-checkbox-field";
 import {
   Form,
   FormControl,
@@ -31,12 +32,19 @@ import { getCsrfToken } from "@/lib/csrf-client";
 import { InviteePicker } from "@/components/members/invitee-picker";
 import { TiptapEditor } from "@/components/library/tiptap-editor";
 
+// Mirrors ALLOWED_DOCUMENT_MIME_TYPES in lib/storage.ts (uploadKnowledgeDocument,
+// shared by Library and Peer Review) — a browser accept hint only, the
+// server re-validates regardless.
+const DOCUMENT_ACCEPT =
+  "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,image/jpeg,image/png,image/webp,image/gif,image/bmp";
+
 const DEFAULT_VALUES: CreateKnowledgeItemValues = {
   title: "",
   description: "",
   body: null,
   contentType: "" as KnowledgeContentType,
   level: "" as KnowledgeLevel,
+  communityIds: [],
   categoryIds: [],
   tagIds: [],
   youtubeUrl: null,
@@ -77,12 +85,14 @@ const VISIBILITY_LABELS: Record<KnowledgeVisibility, string> = {
  */
 export function SubmitResourceForm({
   categories,
+  communities,
   tags,
   existingItem,
   currentUserId,
   initialContentType,
 }: {
   categories: KnowledgeCategoryOption[];
+  communities: { id: string; name: string }[];
   tags: KnowledgeTagOption[];
   existingItem?: KnowledgeItemForEdit;
   /** Current user's id — excludes them from the invitee picker's suggestions (create mode only). */
@@ -107,6 +117,9 @@ export function SubmitResourceForm({
           body: existingItem.body,
           contentType: existingItem.contentType,
           level: existingItem.level,
+          // Genuinely editable, like categoryIds below (unlike visibility/
+          // invitedUserIds, which stay create-only).
+          communityIds: existingItem.communityIds,
           categoryIds: existingItem.categoryIds,
           tagIds: existingItem.tagIds,
           youtubeUrl: existingItem.youtubeUrl,
@@ -131,6 +144,7 @@ export function SubmitResourceForm({
   const isBlogPost = contentType === KnowledgeContentType.blog_post;
   const visibility = form.watch("visibility");
   const isRestricted = visibility === KnowledgeVisibility.restricted;
+  const selectedCommunityIds = form.watch("communityIds");
 
   async function onSubmit(values: CreateKnowledgeItemValues) {
     setSubmitting(true);
@@ -143,6 +157,9 @@ export function SubmitResourceForm({
       if (isBlogPost && values.body) formData.append("body", values.body);
       formData.append("contentType", values.contentType);
       formData.append("level", values.level);
+      // Genuinely editable — sent unconditionally, unlike visibility/
+      // invitedUserIds below which are create-only.
+      values.communityIds.forEach((communityId) => formData.append("communityIds", communityId));
       values.categoryIds.forEach((categoryId) => formData.append("categoryIds", categoryId));
       values.tagIds.forEach((tagId) => formData.append("tagIds", tagId));
       if (isRecordedLecture && values.youtubeUrl) formData.append("youtubeUrl", values.youtubeUrl);
@@ -324,34 +341,53 @@ export function SubmitResourceForm({
 
         <FormField
           control={form.control}
-          name="categoryIds"
+          name="communityIds"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Categories</FormLabel>
-              <div className="flex flex-wrap gap-4">
-                {categories.map((category) => {
-                  const checked = field.value.includes(category.id);
-                  return (
-                    <label key={category.id} className="flex items-center gap-2 text-sm">
+              <FormLabel>Communities</FormLabel>
+              <FormControl>
+                <div className="flex flex-wrap gap-4 rounded-md border p-3">
+                  {communities.map((community) => (
+                    <label key={community.id} className="flex items-center gap-2 text-sm">
                       <Checkbox
-                        checked={checked}
-                        onCheckedChange={(c) =>
+                        checked={field.value.includes(community.id)}
+                        onCheckedChange={(checked) =>
                           field.onChange(
-                            c === true
-                              ? [...field.value, category.id]
-                              : field.value.filter((id) => id !== category.id),
+                            checked
+                              ? [...field.value, community.id]
+                              : field.value.filter((id) => id !== community.id),
                           )
                         }
                       />
-                      {category.name}
+                      {community.name}
                     </label>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
+              </FormControl>
+              <FormDescription>Select at least one community this resource belongs to.</FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
+
+        {selectedCommunityIds.length > 0 && (
+          <FormField
+            control={form.control}
+            name="categoryIds"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Categories (optional)</FormLabel>
+                <CategoryCheckboxField
+                  categories={categories.filter((category) => selectedCommunityIds.includes(category.communityId))}
+                  communities={communities.filter((community) => selectedCommunityIds.includes(community.id))}
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         {tags.length > 0 && (
           <FormField
@@ -466,9 +502,13 @@ export function SubmitResourceForm({
                 <input
                   id="resource-file"
                   type="file"
+                  accept={DOCUMENT_ACCEPT}
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                   className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
                 />
+                <p className="text-xs text-muted-foreground">
+                  PDF, Word, PowerPoint, plain text, or image (JPEG/PNG/WebP/GIF/BMP) — up to 20MB.
+                </p>
                 {existingItem?.attachment && (
                   <p className="text-xs text-muted-foreground">Choose a new file to replace the current one.</p>
                 )}

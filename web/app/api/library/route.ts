@@ -39,6 +39,7 @@ export async function POST(request: Request) {
     body: formData.get("body") || null,
     contentType: formData.get("contentType"),
     level: formData.get("level"),
+    communityIds: formData.getAll("communityIds"),
     categoryIds: formData.getAll("categoryIds"),
     tagIds: formData.getAll("tagIds"),
     youtubeUrl: formData.get("youtubeUrl") || null,

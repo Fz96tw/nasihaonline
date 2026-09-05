@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { ForumError, createForumThread } from "@/lib/forums-server";
+import { QuickRecordingError } from "@/lib/quick-recordings-server";
 import { createForumThreadSchema } from "@/lib/validation/forum";
 import { enqueueForumThreadIndexSync } from "@/lib/queues/search-index-queue";
+import { Role } from "@/lib/generated/prisma/enums";
 
 /**
  * POST /api/forums/:forumId/threads — "New Thread" (§4.13), member-auth
@@ -23,12 +25,17 @@ export async function POST(request: Request, { params }: { params: { forumId: st
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  const isPrivileged = user.role === Role.admin || user.role === Role.moderator;
+
   try {
-    const thread = await createForumThread(params.forumId, user.id, parsed.data);
+    const thread = await createForumThread(params.forumId, user.id, parsed.data, isPrivileged);
     await enqueueForumThreadIndexSync(thread.id);
     return NextResponse.json({ id: thread.id }, { status: 201 });
   } catch (error) {
     if (error instanceof ForumError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof QuickRecordingError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     throw error;
