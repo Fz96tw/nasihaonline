@@ -96,6 +96,17 @@ export default async function LibraryItemDetailPage({
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{FEED_TYPE_LABELS.library}</p>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
+        {/* Communities with no category tagged under them still need to show
+            here — categories are optional (a blog_post is commonly tagged to
+            just a community), and without this such an item would surface
+            neither its community nor a category on the detail page. */}
+        {item.communities
+          .filter((community) => !item.categories.some((category) => category.communityName === community.name))
+          .map((community) => (
+            <Badge key={community.id} variant="info" className="w-fit">
+              {community.name}
+            </Badge>
+          ))}
         {item.categories.map((category) => (
           <Badge key={category.slug} variant="info" className="w-fit">
             {category.communityName} · {category.name}
