@@ -19,7 +19,7 @@ import { Role } from "@/lib/generated/prisma/enums";
 import type { ForumCategory } from "@/lib/forums";
 
 export const metadata: Metadata = {
-  title: "Forums — NASIHA",
+  title: "Forums",
 };
 
 type ForumSort = "az" | "featured" | "active" | "recent";

@@ -10,7 +10,7 @@ import { BackLink } from "@/components/back-link";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
 
 export const metadata: Metadata = {
-  title: "My Profile — NASIHA",
+  title: "My Profile",
 };
 
 export default async function ProfilePage() {

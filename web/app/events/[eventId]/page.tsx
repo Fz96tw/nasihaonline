@@ -7,7 +7,7 @@ import { BackLink } from "@/components/back-link";
 
 export async function generateMetadata({ params }: { params: { eventId: string } }): Promise<Metadata> {
   const event = await getPublicEventById(params.eventId);
-  return { title: event ? `${event.title} — Events — NASIHA` : "Event not found — NASIHA" };
+  return { title: event ? `${event.title} — Events` : "Event not found" };
 }
 
 /**

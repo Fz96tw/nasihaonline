@@ -27,9 +27,32 @@ const mulish = Mulish({ subsets: ["latin"], variable: "--font-mulish" });
 const lora = Lora({ subsets: ["latin"], variable: "--font-lora" });
 const sourceSerif4 = Source_Serif_4({ subsets: ["latin"], variable: "--font-source-serif-4" });
 
+const SITE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://nasihaforyou.org";
+const SITE_TITLE = "NASIHA — knowledge sharing & expert networking";
+const SITE_DESCRIPTION =
+  "NASIHA is a member-driven community where professionals share knowledge, curate research, teach, and exchange peer feedback across many fields of expertise.";
+
 export const metadata: Metadata = {
-  title: "NASIHA",
-  description: "A member-driven community platform for knowledge sharing and expert networking.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: SITE_TITLE,
+    template: "%s — NASIHA",
+  },
+  description: SITE_DESCRIPTION,
+  applicationName: "NASIHA",
+  openGraph: {
+    type: "website",
+    siteName: "NASIHA",
+    locale: "en_US",
+    url: "/",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
 };
 
 // ClerkProvider validates its key and resolves session state per-request,

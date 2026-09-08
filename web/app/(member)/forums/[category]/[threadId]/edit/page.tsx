@@ -6,7 +6,7 @@ import { EditThreadForm } from "@/components/forums/edit-thread-form";
 import { Role } from "@/lib/generated/prisma/enums";
 
 export const metadata: Metadata = {
-  title: "Edit Thread — NASIHA",
+  title: "Edit Thread",
 };
 
 // /forums/[category]/[threadId]/edit — thread author or moderator/admin

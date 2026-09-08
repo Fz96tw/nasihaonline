@@ -10,7 +10,7 @@ import { BackLink } from "@/components/back-link";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
-  title: "Join Meeting — NASIHA",
+  title: "Join Meeting",
 };
 
 /**

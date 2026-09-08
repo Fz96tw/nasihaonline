@@ -6,7 +6,10 @@ import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Reveal } from "@/components/home/reveal";
 
 export const metadata: Metadata = {
-  title: "Our Team — NASIHA",
+  title: "Our Team",
+  description:
+    "Meet the team and board members behind NASIHA, the member-driven knowledge-sharing community.",
+  alternates: { canonical: "/our-team" },
 };
 
 export default async function OurTeamPage() {

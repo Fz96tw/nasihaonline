@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { ActivityDetailPage } from "@/components/about/activity-detail";
 
 export const metadata: Metadata = {
-  title: "Peer Review & Feedback — NASIHA",
+  title: "Peer Review & Feedback",
+  description:
+    "How NASIHA members give and receive structured peer review and feedback on each other's work.",
+  alternates: { canonical: "/about/peer-review-feedback" },
 };
 
 const SECTIONS = [

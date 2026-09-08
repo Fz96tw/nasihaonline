@@ -6,7 +6,7 @@ import { getAllCommunities } from "@/lib/profile-server";
 import { SubmitReviewItemForm } from "@/components/review/submit-review-item-form";
 
 export const metadata: Metadata = {
-  title: "Submit Item for Peer Review — NASIHA",
+  title: "Submit Item for Peer Review",
 };
 
 /**

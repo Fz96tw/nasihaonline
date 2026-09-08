@@ -7,7 +7,10 @@ import { WhatWeDoSection } from "@/components/home/what-we-do-section";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
-  title: "About — NASIHA",
+  title: "About",
+  description:
+    "Learn what NASIHA is, the values behind it, and how our member-driven community approaches knowledge sharing, research curation, teaching, and peer review.",
+  alternates: { canonical: "/about" },
 };
 
 const VALUES = [

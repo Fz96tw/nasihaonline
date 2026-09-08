@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: { params: { eventId: string }
   const user = await getSessionUser();
   const isPrivileged = user?.role === Role.admin || user?.role === Role.moderator;
   const event = user ? await getMemberEventById(user.id, params.eventId, undefined, isPrivileged) : null;
-  return { title: event ? `${event.title} — Calendar — NASIHA` : "Event unavailable — NASIHA" };
+  return { title: event ? `${event.title} — Calendar` : "Event unavailable" };
 }
 
 /**

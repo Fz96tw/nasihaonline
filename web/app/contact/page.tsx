@@ -4,7 +4,10 @@ import { ContactForm } from "@/components/contact-form";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 
 export const metadata: Metadata = {
-  title: "Contact — NASIHA",
+  title: "Contact",
+  description:
+    "Get in touch with the NASIHA team with questions about membership, events, or the community platform.",
+  alternates: { canonical: "/contact" },
 };
 
 /**

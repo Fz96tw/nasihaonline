@@ -1,6 +1,12 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { SignIn } from "@clerk/nextjs";
 import { getSessionUser } from "@/lib/auth";
+
+export const metadata: Metadata = {
+  title: "Sign In",
+  robots: { index: false, follow: false },
+};
 
 /**
  * Clerk's hosted sign-in UI, rendered at our own /sign-in route so we

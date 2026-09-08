@@ -1,6 +1,12 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { AccountSuspendedActions } from "@/components/account-suspended-actions";
+
+export const metadata: Metadata = {
+  title: "Account Suspended",
+  robots: { index: false, follow: false },
+};
 
 /**
  * Landing point for a suspended account (§4.15). Suspension doesn't revoke

@@ -9,7 +9,7 @@ import { CLINICAL_DISCUSSIONS_SLUG } from "@/lib/forums";
 import { Role } from "@/lib/generated/prisma/enums";
 
 export const metadata: Metadata = {
-  title: "New Thread — NASIHA",
+  title: "New Thread",
 };
 
 /** /forums/[category]/new (§4.13) — "New Thread" form. */

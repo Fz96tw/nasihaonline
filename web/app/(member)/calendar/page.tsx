@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 
 export const metadata: Metadata = {
-  title: "Calendar — NASIHA",
+  title: "Calendar",
 };
 
 // Calendar-only, independent of /library's own COMMUNITY_FILTER_COOKIE

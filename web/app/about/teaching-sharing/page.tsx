@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { ActivityDetailPage } from "@/components/about/activity-detail";
 
 export const metadata: Metadata = {
-  title: "Teaching & Sharing — NASIHA",
+  title: "Teaching & Sharing",
+  description:
+    "How NASIHA members teach, present, and share practical knowledge with their peers through the community platform.",
+  alternates: { canonical: "/about/teaching-sharing" },
 };
 
 const SECTIONS = [

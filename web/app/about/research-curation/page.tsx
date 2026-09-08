@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { ActivityDetailPage } from "@/components/about/activity-detail";
 
 export const metadata: Metadata = {
-  title: "Research & Curation — NASIHA",
+  title: "Research & Curation",
+  description:
+    "How NASIHA members curate and share trustworthy research and reference material with the wider community.",
+  alternates: { canonical: "/about/research-curation" },
 };
 
 const SECTIONS = [

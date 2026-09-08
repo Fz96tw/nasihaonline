@@ -13,7 +13,7 @@ import { FEED_TYPE_LABELS } from "@/lib/feed";
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const announcement = await getSentAnnouncement(params.id);
-  return { title: announcement ? `${announcement.title} — NASIHA` : "Announcement not found — NASIHA" };
+  return { title: announcement ? announcement.title : "Announcement not found" };
 }
 
 /** /whats-new/announcements/[id] — minimal detail page a feed row's Announcement click-through lands on. */

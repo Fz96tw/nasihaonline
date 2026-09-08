@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { MySubmissionsTable } from "@/components/library/my-submissions-table";
 
 export const metadata: Metadata = {
-  title: "My Submissions — NASIHA",
+  title: "My Submissions",
 };
 
 /**

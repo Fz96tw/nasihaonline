@@ -8,7 +8,7 @@ import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { BackLink } from "@/components/back-link";
 
 export const metadata: Metadata = {
-  title: "Message Inbox — NASIHA",
+  title: "Message Inbox",
 };
 
 export default async function InboxPage() {

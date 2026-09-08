@@ -1,6 +1,12 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { SignUp } from "@clerk/nextjs";
 import { getSessionUser } from "@/lib/auth";
+
+export const metadata: Metadata = {
+  title: "Accept Invitation",
+  robots: { index: false, follow: false },
+};
 
 /**
  * Handles Clerk's invitation-ticket flow only (setting an initial password

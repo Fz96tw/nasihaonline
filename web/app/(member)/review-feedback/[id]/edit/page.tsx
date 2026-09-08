@@ -12,7 +12,7 @@ const STATUS_NOTE: Record<ReviewItemStatus, string> = {
 };
 
 export const metadata: Metadata = {
-  title: "Edit Item — Peer Review & Feedback — NASIHA",
+  title: "Edit Item — Peer Review & Feedback",
 };
 
 /**

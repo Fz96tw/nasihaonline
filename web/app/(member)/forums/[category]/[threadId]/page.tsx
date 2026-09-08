@@ -28,7 +28,7 @@ export async function generateMetadata({
   const user = await getSessionUser();
   const isPrivileged = user?.role === Role.moderator || user?.role === Role.admin;
   const thread = user ? await getForumThreadDetail(params.category, params.threadId, user.id, isPrivileged) : null;
-  return { title: thread ? `${thread.title} — Forums — NASIHA` : "Thread not found — NASIHA" };
+  return { title: thread ? `${thread.title} — Forums` : "Thread not found" };
 }
 
 /** /forums/[category]/[threadId] (§4.13) — thread detail with threaded replies. */

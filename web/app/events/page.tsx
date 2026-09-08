@@ -8,7 +8,10 @@ import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Reveal } from "@/components/home/reveal";
 
 export const metadata: Metadata = {
-  title: "Events — NASIHA",
+  title: "Events",
+  description:
+    "Browse upcoming NASIHA community events — talks, workshops, and peer sessions open to members.",
+  alternates: { canonical: "/events" },
 };
 
 export default async function EventsPage({

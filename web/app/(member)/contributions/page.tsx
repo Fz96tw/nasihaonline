@@ -11,7 +11,7 @@ import {
 import { ContributionsPanel } from "@/components/contributions/contributions-panel";
 
 export const metadata: Metadata = {
-  title: "Knowledge Hours — NASIHA",
+  title: "Knowledge Hours",
 };
 
 export default async function ContributionsPage() {

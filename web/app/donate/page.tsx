@@ -5,7 +5,10 @@ import { DonateInfoBlurb } from "@/components/donate-info-blurb";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 
 export const metadata: Metadata = {
-  title: "Donate — NASIHA",
+  title: "Donate",
+  description:
+    "Support NASIHA with a donation and help sustain a member-driven community for knowledge sharing and peer learning.",
+  alternates: { canonical: "/donate" },
 };
 
 /**

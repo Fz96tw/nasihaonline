@@ -5,7 +5,10 @@ import { getAdmissionPhase } from "@/lib/settings";
 import { getSessionUser } from "@/lib/auth";
 
 export const metadata: Metadata = {
-  title: "Get Involved — NASIHA",
+  title: "Get Involved",
+  description:
+    "Ways to get involved with NASIHA — become a member, volunteer your expertise, mentor peers, or support the community.",
+  alternates: { canonical: "/getinvolved" },
 };
 
 export default async function GetInvolvedPage({

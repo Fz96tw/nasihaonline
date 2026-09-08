@@ -8,7 +8,7 @@ import { DirectoryGrid } from "@/components/members/directory-grid";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 
 export const metadata: Metadata = {
-  title: "Member Directory — NASIHA",
+  title: "Member Directory",
 };
 
 export default async function MembersPage() {

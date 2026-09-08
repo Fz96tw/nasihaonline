@@ -7,7 +7,7 @@ import { SubmitEventForm } from "@/components/calendar/submit-event-form";
 import { Role } from "@/lib/generated/prisma/enums";
 
 export const metadata: Metadata = {
-  title: "Edit Event — NASIHA",
+  title: "Edit Event",
 };
 
 // /calendar/[eventId]/edit (§4.6) — host or admin only. Same "requester

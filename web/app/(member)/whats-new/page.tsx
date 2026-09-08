@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { getAllCommunities, getMemberCommunityIdsForFiltering, getOrCreateProfile } from "@/lib/profile-server";
 
 export const metadata: Metadata = {
-  title: "What's New — NASIHA",
+  title: "What's New",
 };
 
 // Defined here (not exported from the "use client" MyCommunitiesCheckbox

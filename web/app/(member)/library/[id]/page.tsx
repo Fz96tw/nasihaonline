@@ -33,7 +33,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const user = await getSessionUser();
   const isPrivileged = user?.role === Role.moderator || user?.role === Role.admin;
   const item = user ? await getPublishedKnowledgeItemById(params.id, user.id, isPrivileged) : null;
-  return { title: item ? `${item.title} — Knowledge Library — NASIHA` : "Resource not found — NASIHA" };
+  return { title: item ? `${item.title} — Knowledge Library` : "Resource not found" };
 }
 
 /**

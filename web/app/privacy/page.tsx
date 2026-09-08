@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — NASIHA",
+  title: "Privacy Policy",
+  description: "How NASIHA collects, uses, and protects your personal information.",
+  alternates: { canonical: "/privacy" },
 };
 
 const SECTIONS = [

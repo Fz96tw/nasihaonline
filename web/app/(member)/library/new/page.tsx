@@ -7,7 +7,7 @@ import { SubmitResourceForm } from "@/components/library/submit-resource-form";
 import { KnowledgeContentType } from "@/lib/generated/prisma/enums";
 
 export const metadata: Metadata = {
-  title: "Add Content to Knowledge Library — NASIHA",
+  title: "Add Content to Knowledge Library",
 };
 
 // "Submit Resource" (§4.9) — member-auth only, no tier gate (same as Write a

@@ -7,7 +7,7 @@ import { getAllCommunities } from "@/lib/profile-server";
 import { SubmitEventForm } from "@/components/calendar/submit-event-form";
 
 export const metadata: Metadata = {
-  title: "Create New Calendar Event — NASIHA",
+  title: "Create New Calendar Event",
 };
 
 // Gated to EVENT_SUBMISSION_TIERS (§4.6, §11 open question #2) — a member

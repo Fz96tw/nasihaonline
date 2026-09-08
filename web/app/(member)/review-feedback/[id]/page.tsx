@@ -35,7 +35,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const user = await getSessionUser();
   const item = user ? await getReviewItemDetail(id, user) : null;
-  return { title: item ? `${item.title} — Peer Review & Feedback — NASIHA` : "Item not found — NASIHA" };
+  return { title: item ? `${item.title} — Peer Review & Feedback` : "Item not found" };
 }
 
 /**

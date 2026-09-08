@@ -14,7 +14,7 @@ const STATUS_NOTE: Record<KnowledgeStatus, string> = {
 };
 
 export const metadata: Metadata = {
-  title: "Edit Resource — NASIHA",
+  title: "Edit Resource",
 };
 
 /**

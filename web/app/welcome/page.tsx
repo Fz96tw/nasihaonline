@@ -1,9 +1,15 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { DIRECTORY_TIER_LABELS } from "@/lib/members";
 import { Tier } from "@/lib/generated/prisma/enums";
+
+export const metadata: Metadata = {
+  title: "Welcome",
+  robots: { index: false, follow: false },
+};
 
 const STARTS_WITH_VOWEL_SOUND = new Set<Tier>([Tier.active, Tier.associate]);
 

@@ -16,7 +16,7 @@ import { MySubmissionsTable } from "@/components/library/my-submissions-table";
 import { MyPostsTabs } from "@/components/my-posts/my-posts-tabs";
 
 export const metadata: Metadata = {
-  title: "All My Activity — NASIHA",
+  title: "All My Activity",
 };
 
 type BadgeVariant = "neutral" | "success" | "warning" | "danger" | "info";

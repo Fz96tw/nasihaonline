@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ReviewQueueActions } from "@/components/library/review-queue-actions";
 
 export const metadata: Metadata = {
-  title: "Library Review Queue — NASIHA",
+  title: "Library Review Queue",
 };
 
 /**

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ReviewDashboardTabs } from "@/components/review/review-dashboard-tabs";
 
 export const metadata: Metadata = {
-  title: "Peer Review & Feedback — NASIHA",
+  title: "Peer Review & Feedback",
 };
 
 /**

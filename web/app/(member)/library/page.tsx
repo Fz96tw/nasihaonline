@@ -20,7 +20,7 @@ import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { SortButton } from "@/components/forums/sort-button";
 
 export const metadata: Metadata = {
-  title: "Knowledge Library — NASIHA",
+  title: "Knowledge Library",
 };
 
 const selectClasses =

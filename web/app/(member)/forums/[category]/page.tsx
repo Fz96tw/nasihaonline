@@ -13,7 +13,7 @@ import { SortButton } from "@/components/forums/sort-button";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
-  title: "Forums — NASIHA",
+  title: "Forums",
 };
 
 function formatDate(iso: string) {
