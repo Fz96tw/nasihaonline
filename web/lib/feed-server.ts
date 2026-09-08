@@ -19,6 +19,7 @@ import {
   getKnowledgeItemHeroImageUrl,
 } from "@/lib/storage";
 import { withFeedRef, type FeedItem, type FeedItemType, type FeedCursor } from "@/lib/feed";
+import { firstForumPostImageUrl, stripPastedImageTokens } from "@/lib/pasted-images";
 import { extractSnippet, textContainsMatch } from "@/lib/text-highlight";
 import { youtubeThumbnailUrl } from "@/lib/youtube";
 import {
@@ -701,12 +702,19 @@ export async function getFeedPage(params: {
         // feed row still gets a thumbnail (see FeedRow's forum_thread layout).
         imageUrl: "/images/forum-thread.jpg",
         stats: { views: thread._count.views, comments: thread._count.posts - 1 },
-        // Browse mode: latestPost is either the opening post (fresh thread)
-        // or the newest reply (bumped thread) — either way it's real content
-        // worth previewing, so always show it rather than only on a bump.
-        // Search mode always shows *some* post preview, since there's a real
-        // excerptPost to source it from regardless of new-vs-bumped.
-        replyExcerpt: query ? (excerptPost ? excerptOf(excerptPost.body) : undefined) : latestPost ? excerptOf(latestPost.body) : undefined,
+        // Browse mode: excerptPost is latestPost — either the opening post
+        // (fresh thread) or the newest reply (bumped thread), both real
+        // content worth previewing. Search mode centres it on the matched
+        // post instead. Either way, strip any `![](url)` pasted-image token
+        // so the snippet shows prose, not raw markdown (an image-only post
+        // strips to "" and the row shows just bodyImageUrl below).
+        replyExcerpt: excerptPost ? excerptOf(stripPastedImageTokens(excerptPost.body)) || undefined : undefined,
+        // When that previewed post embeds a pasted screenshot
+        // (lib/use-paste-image-upload.ts), surface it inline in the feed row
+        // (FeedRow renders it full-width, like other feed types' hero
+        // images). The /api/forums/post-image proxy re-checks thread
+        // visibility per request, so it's never more visible than the thread.
+        bodyImageUrl: firstForumPostImageUrl(excerptPost?.body),
         isRestricted: thread.visibility === ForumThreadVisibility.invited,
       };
     }),

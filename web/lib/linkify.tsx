@@ -5,6 +5,7 @@ import { Fragment, type ReactNode } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { HighlightText } from "@/components/highlight-text";
 import { VideoEmbed } from "@/components/shared/video-embed";
+import { PASTED_IMAGE_PROXY_PREFIXES as IMAGE_PROXY_PREFIXES } from "@/lib/pasted-images";
 
 // Matches, in priority order: a `![alt](url)` pasted-image token (see
 // PastedImage/lib/use-paste-image-upload.ts — checked first since it would
@@ -21,13 +22,14 @@ const LINK_PATTERN =
 // Only applies to bare URLs — markdown links have an explicit close paren.
 const TRAILING_PUNCTUATION = /[.,;:!?)\]}]+$/;
 
-// The only URL shapes a `![alt](url)` token is ever allowed to render as an
-// actual <img> for — same-origin by construction (relative paths returned
-// by uploadForumPostImage/uploadInboxMessageImage/uploadLibraryBodyImage's
-// get*Url helpers in lib/storage.ts), never an arbitrary externally-hosted
-// image. A hand-typed `![alt](https://evil.example/pixel.png)` falls
-// through to ordinary link rendering instead.
-const IMAGE_PROXY_PREFIXES = ["/api/forums/post-image/", "/api/inbox/message-image/", "/api/library/body-image/"];
+// IMAGE_PROXY_PREFIXES (imported above as PASTED_IMAGE_PROXY_PREFIXES) is
+// the only set of URL shapes a `![alt](url)` token is ever allowed to
+// render as an actual <img> for — same-origin by construction (relative
+// paths returned by uploadForumPostImage/uploadInboxMessageImage/
+// uploadLibraryBodyImage's get*Url helpers in lib/storage.ts), never an
+// arbitrary externally-hosted image. A hand-typed
+// `![alt](https://evil.example/pixel.png)` falls through to ordinary link
+// rendering instead.
 
 // A `![alt](url)` token whose url points at the meeting-request recording
 // proxy (same route the quick-recording "done" page and inbox recording

@@ -15,8 +15,11 @@ export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
   // upload), so instead of the full-width hero image other feed types render
   // below their content, it's shown as a small dimmed square in the
   // top-right corner, with the title/excerpt text overlaid on top of it.
+  // Exception: when the previewed post embeds a pasted image, that renders
+  // full-width below (like other feed types) and the corner square is
+  // dropped to avoid showing two images for the same row.
   const isForumThread = item.type === "forum_thread";
-  const hasThreadImage = isForumThread && !!item.imageUrl;
+  const hasThreadImage = isForumThread && !!item.imageUrl && !item.bodyImageUrl;
 
   return (
     <li>
@@ -117,6 +120,14 @@ export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
               // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
               <img
                 src={item.imageUrl}
+                alt=""
+                className="mt-2 max-h-48 w-full rounded-md object-cover"
+              />
+            )}
+            {isForumThread && item.bodyImageUrl && (
+              // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale
+              <img
+                src={item.bodyImageUrl}
                 alt=""
                 className="mt-2 max-h-48 w-full rounded-md object-cover"
               />

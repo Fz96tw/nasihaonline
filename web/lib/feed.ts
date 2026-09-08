@@ -56,8 +56,10 @@ export type FeedItem = {
   myOfferStatus?: ReviewVolunteerStatus | null;
   /** Only "peer_review" items carry this — the submitter's optional note on what kind of feedback they're after, shown to prospective volunteers. Undefined for every other type; null when the submitter left it blank. */
   volunteerNote?: string | null;
-  /** Only "forum_thread" items bumped up by a fresh reply (rather than freshly created) carry this — a truncated snippet of that reply's body, so the feed row shows what was actually said rather than just a "new activity" label. Undefined for a freshly created thread or every other type. */
+  /** Only "forum_thread" items carry this — a truncated snippet of the previewed post's body (the opening post for a fresh thread, the newest reply for a bumped one, the matched post in search), so the feed row shows what was actually written rather than just the "new activity" label. Pasted-image markdown tokens are stripped first; undefined when nothing prose is left, and for every other type. */
   replyExcerpt?: string;
+  /** Only "forum_thread" items whose previewed post body embeds one of our own pasted images (a `![](/api/forums/post-image/…)` token) carry this — the first such image's proxied URL, rendered inline in the feed row the way other feed types render their hero image. Undefined when the post has no pasted image, and for every other type. */
+  bodyImageUrl?: string;
   /** "event" and "forum_thread" items carry this — true when the underlying Event/ForumThread's visibility is `invited` (restricted), driving FeedRow's lock-icon title prefix. Undefined for every other type. */
   isRestricted?: boolean;
 };
