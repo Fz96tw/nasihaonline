@@ -11,6 +11,7 @@ import { BODY_FONT_OPTIONS, HEADING_FONT_OPTIONS } from "@/lib/fonts";
 import { SITE_URL, SITE_TITLE, SITE_DESCRIPTION } from "@/lib/site";
 import { JsonLd } from "@/components/json-ld";
 import { buildOrganizationJsonLd } from "@/lib/json-ld";
+import { Analytics } from "@/components/analytics";
 
 // The full curated font set is preloaded here regardless of which one is
 // active — next/font/google self-hosts fonts at build time, so the admin's
@@ -110,6 +111,7 @@ export default async function RootLayout({
       >
         <body className="flex min-h-screen flex-col antialiased">
           <JsonLd data={buildOrganizationJsonLd()} />
+          <Analytics />
           <OverlayCleanup />
           <SessionExpiryGuard />
           <div className="flex-1">{children}</div>

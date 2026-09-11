@@ -39,6 +39,11 @@ const SECTIONS = [
     title: "GDPR & Equivalent Protections",
     body: "NASIHA operates internationally and is written to meet the most stringent applicable data protection standard, including the EU's General Data Protection Regulation (GDPR), regardless of where a member is located.",
   },
+  {
+    eyebrow: "Website Analytics",
+    title: "Cookieless, No Consent Banner",
+    body: "NASIHA uses Umami, a privacy-focused analytics tool, to understand aggregate traffic to the public website (pages visited, referrers, general location). Umami does not use cookies and does not collect any personally identifiable information, so no cookie-consent banner is shown. This data is never linked to a member account.",
+  },
 ];
 
 export default function PrivacyPolicyPage() {
