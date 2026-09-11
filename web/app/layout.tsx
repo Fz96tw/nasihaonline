@@ -10,6 +10,7 @@ import { OverlayCleanup } from "@/components/overlay-cleanup";
 import { SessionExpiryGuard } from "@/components/session-expiry-guard";
 import { getSiteFonts } from "@/lib/settings";
 import { BODY_FONT_OPTIONS, HEADING_FONT_OPTIONS } from "@/lib/fonts";
+import { SITE_URL, SITE_TITLE, SITE_DESCRIPTION } from "@/lib/site";
 
 // The full curated font set is preloaded here regardless of which one is
 // active — next/font/google self-hosts fonts at build time, so the admin's
@@ -26,11 +27,6 @@ const montserrat = Montserrat({ subsets: ["latin"], variable: "--font-montserrat
 const mulish = Mulish({ subsets: ["latin"], variable: "--font-mulish" });
 const lora = Lora({ subsets: ["latin"], variable: "--font-lora" });
 const sourceSerif4 = Source_Serif_4({ subsets: ["latin"], variable: "--font-source-serif-4" });
-
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://nasihaforyou.org";
-const SITE_TITLE = "NASIHA — knowledge sharing & expert networking";
-const SITE_DESCRIPTION =
-  "NASIHA is a member-driven community where professionals share knowledge, curate research, teach, and exchange peer feedback across many fields of expertise.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
