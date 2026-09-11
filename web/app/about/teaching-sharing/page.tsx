@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { ActivityDetailPage } from "@/components/about/activity-detail";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Teaching & Sharing",
   description:
     "How NASIHA members teach, present, and share practical knowledge with their peers through the community platform.",
-  alternates: { canonical: "/about/teaching-sharing" },
-};
+  path: "/about/teaching-sharing",
+});
 
 const SECTIONS = [
   {
@@ -42,6 +43,7 @@ export default function TeachingSharingPage() {
       image="/images/teach.jpg"
       eyebrow="How It Works"
       title="Teaching & Sharing"
+      path="/about/teaching-sharing"
       intro="Lectures, webinars, and knowledge discussions — sharing expertise freely across the community, because knowledge is a common good."
       sections={SECTIONS}
       links={LINKS}

@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Privacy Policy",
   description: "How NASIHA collects, uses, and protects your personal information.",
-  alternates: { canonical: "/privacy" },
-};
+  path: "/privacy",
+});
 
 const SECTIONS = [
   {

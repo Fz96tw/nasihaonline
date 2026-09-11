@@ -3,13 +3,14 @@ import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { GetInvolvedTabs } from "@/components/getinvolved/get-involved-tabs";
 import { getAdmissionPhase } from "@/lib/settings";
 import { getSessionUser } from "@/lib/auth";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Get Involved",
   description:
     "Ways to get involved with NASIHA — become a member, volunteer your expertise, mentor peers, or support the community.",
-  alternates: { canonical: "/getinvolved" },
-};
+  path: "/getinvolved",
+});
 
 export default async function GetInvolvedPage({
   searchParams,

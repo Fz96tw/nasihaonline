@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { ActivityDetailPage } from "@/components/about/activity-detail";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Research & Curation",
   description:
     "How NASIHA members curate and share trustworthy research and reference material with the wider community.",
-  alternates: { canonical: "/about/research-curation" },
-};
+  path: "/about/research-curation",
+});
 
 const SECTIONS = [
   {
@@ -42,6 +43,7 @@ export default function ResearchCurationPage() {
       image="/images/curation.jpg"
       eyebrow="How It Works"
       title="Research & Curation"
+      path="/about/research-curation"
       intro="Finding, annotating, and sharing high-quality literature, guidelines, and resources across all fields of knowledge — so good work doesn't stay buried in one person's inbox."
       sections={SECTIONS}
       links={LINKS}

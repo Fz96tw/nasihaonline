@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
 import { ContactForm } from "@/components/contact-form";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Contact",
   description:
     "Get in touch with the NASIHA team with questions about membership, events, or the community platform.",
-  alternates: { canonical: "/contact" },
-};
+  path: "/contact",
+});
 
 /**
  * Public, unauthenticated — getSessionUser() is only used to prefill

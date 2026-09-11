@@ -4,13 +4,14 @@ import { withSignedPhotoUrls } from "@/lib/team-server";
 import { TeamMemberCard } from "@/components/team/team-member-card";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Reveal } from "@/components/home/reveal";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Our Team",
   description:
     "Meet the team and board members behind NASIHA, the member-driven knowledge-sharing community.",
-  alternates: { canonical: "/our-team" },
-};
+  path: "/our-team",
+});
 
 export default async function OurTeamPage() {
   const members = await db.teamMember.findMany({

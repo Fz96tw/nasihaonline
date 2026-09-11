@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { ActivityDetailPage } from "@/components/about/activity-detail";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Peer Review & Feedback",
   description:
     "How NASIHA members give and receive structured peer review and feedback on each other's work.",
-  alternates: { canonical: "/about/peer-review-feedback" },
-};
+  path: "/about/peer-review-feedback",
+});
 
 const SECTIONS = [
   {
@@ -42,6 +43,7 @@ export default function PeerReviewFeedbackPage() {
       image="/images/feedback.jpg"
       eyebrow="How It Works"
       title="Peer Review & Feedback"
+      path="/about/peer-review-feedback"
       intro="Constructive, evidence-based critique of work, research, and educational content across disciplines — because every expert is also, still, a student."
       sections={SECTIONS}
       links={LINKS}

@@ -3,13 +3,14 @@ import { getSessionUser } from "@/lib/auth";
 import { DonateForm } from "@/components/donate-form";
 import { DonateInfoBlurb } from "@/components/donate-info-blurb";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
+import { buildMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Donate",
   description:
     "Support NASIHA with a donation and help sustain a member-driven community for knowledge sharing and peer learning.",
-  alternates: { canonical: "/donate" },
-};
+  path: "/donate",
+});
 
 /**
  * Public, unauthenticated (PRD §4.14 AC1) — getSessionUser() is only used

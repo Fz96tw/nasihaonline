@@ -5,13 +5,16 @@ import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Reveal } from "@/components/home/reveal";
 import { WhatWeDoSection } from "@/components/home/what-we-do-section";
 import { Button } from "@/components/ui/button";
+import { buildMetadata } from "@/lib/seo";
+import { buildBreadcrumbJsonLd } from "@/lib/json-ld";
+import { JsonLd } from "@/components/json-ld";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "About",
   description:
     "Learn what NASIHA is, the values behind it, and how our member-driven community approaches knowledge sharing, research curation, teaching, and peer review.",
-  alternates: { canonical: "/about" },
-};
+  path: "/about",
+});
 
 const VALUES = [
   {
@@ -36,9 +39,15 @@ const VALUES = [
   },
 ];
 
+const BREADCRUMB_JSON_LD = buildBreadcrumbJsonLd([
+  { name: "Home", path: "/" },
+  { name: "About", path: "/about" },
+]);
+
 export default function AboutPage() {
   return (
     <main className="min-h-screen">
+      <JsonLd data={BREADCRUMB_JSON_LD} />
       <section className="relative overflow-hidden px-8 py-16 text-center text-primary-foreground">
         <ParallaxHeroImage src="/images/blue-rain.jpg" priority />
         <div className="absolute inset-0 -z-10 bg-[rgba(10,20,70,.4)]" />

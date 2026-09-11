@@ -6,13 +6,16 @@ import { EventCard } from "@/components/events/event-card";
 import { CommunityCategoryFilter } from "@/components/shared/community-category-filter";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Reveal } from "@/components/home/reveal";
+import { buildMetadata } from "@/lib/seo";
+import { buildEventJsonLd } from "@/lib/json-ld";
+import { JsonLd } from "@/components/json-ld";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMetadata({
   title: "Events",
   description:
     "Browse upcoming NASIHA community events — talks, workshops, and peer sessions open to members.",
-  alternates: { canonical: "/events" },
-};
+  path: "/events",
+});
 
 export default async function EventsPage({
   searchParams,
@@ -36,8 +39,18 @@ export default async function EventsPage({
     categorySlug: searchParams.category,
   });
 
+  // Deliberately a second, unfiltered, always-anonymous query rather than
+  // reusing `events` above: a signed-in viewer's `events` list can include
+  // invited-visibility events they're personally invited to (see
+  // getEventsForViewer / communityVisibilityWhere), and the page can be
+  // narrowed by ?community=/?category=. JSON-LD is read by crawlers, which
+  // never carry a session or query params, so it must reflect exactly what
+  // an anonymous visit to the bare /events URL would show — never more.
+  const publicEvents = await getEventsForViewer(null, {});
+
   return (
     <main className="min-h-screen">
+      <JsonLd data={publicEvents.map(buildEventJsonLd)} />
       <section className="relative overflow-hidden px-8 py-16 text-center text-primary-foreground">
         <ParallaxHeroImage src="/images/events.jpg" priority />
         <div className="absolute inset-0 -z-10 bg-[rgba(10,20,70,.4)]" />

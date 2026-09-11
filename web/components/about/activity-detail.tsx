@@ -3,6 +3,8 @@ import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Reveal } from "@/components/home/reveal";
 import { Button } from "@/components/ui/button";
 import { BackLink } from "@/components/back-link";
+import { JsonLd } from "@/components/json-ld";
+import { buildBreadcrumbJsonLd } from "@/lib/json-ld";
 
 export type ActivitySection = {
   eyebrow: string;
@@ -19,6 +21,7 @@ export function ActivityDetailPage({
   image,
   eyebrow,
   title,
+  path,
   intro,
   sections,
   links,
@@ -26,12 +29,20 @@ export function ActivityDetailPage({
   image: string;
   eyebrow: string;
   title: string;
+  path: string;
   intro: string;
   sections: ActivitySection[];
   links: ActivityLink[];
 }) {
   return (
     <main className="min-h-screen">
+      <JsonLd
+        data={buildBreadcrumbJsonLd([
+          { name: "Home", path: "/" },
+          { name: "About", path: "/about" },
+          { name: title, path },
+        ])}
+      />
       <section className="relative overflow-hidden px-8 py-16 text-center text-primary-foreground">
         <ParallaxHeroImage src={image} priority />
         <div className="absolute inset-0 -z-10 bg-[rgba(10,20,70,.4)]" />
