@@ -26,10 +26,16 @@ export function CommunitiesSectionSkeleton() {
 /**
  * DB-backed, so isolated behind its own <Suspense> boundary in page.tsx —
  * same rationale as HeroStats (hero-stats.tsx) — the rest of the landing
- * page shouldn't wait on this fetch to stream.
+ * page shouldn't wait on this fetch to stream. The homepage is statically
+ * generated (objective 4) and Docker's `next build` step has no network
+ * path to the database, so this falls back to an empty list rather than
+ * failing the whole build — production always has a reachable DB at
+ * request time, so real visitors never see this fallback; the tradeoff
+ * (accepted deliberately) is that this list reflects build time, not live
+ * data, until the next deploy.
  */
 export async function CommunitiesSection() {
-  const communities = await getAllCommunities();
+  const communities = await getAllCommunities().catch(() => []);
 
   return (
     <section className="px-8 py-24">

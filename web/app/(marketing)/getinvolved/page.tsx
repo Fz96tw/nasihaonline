@@ -12,6 +12,13 @@ export const metadata: Metadata = buildMetadata({
   path: "/getinvolved",
 });
 
+// Explicit, not just relying on Next's automatic dynamic-API detection: a
+// Docker build with no database reachable during the image build step
+// hard-fails prerendering the moment getSessionUser()/getAdmissionPhase()'s
+// DB calls execute, instead of gracefully deferring this page to request
+// time (objective 4).
+export const dynamic = "force-dynamic";
+
 export default async function GetInvolvedPage({
   searchParams,
 }: {

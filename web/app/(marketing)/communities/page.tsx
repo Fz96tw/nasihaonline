@@ -11,6 +11,13 @@ export const metadata: Metadata = {
   title: "Communities — NASIHA",
 };
 
+// Real DB-backed content (the actual community/category list) — freezing
+// it at build time would show a stale or empty (Docker build has no DB
+// access) list until the next deploy, which is worse than staying
+// dynamic. Kept out of app/(marketing)'s static win (objective 4) for
+// that reason.
+export const dynamic = "force-dynamic";
+
 /**
  * Public counterpart to /my-communities (community-based-categorization
  * initiative, objective 7) — mirrors the /calendar-vs-/events split. No

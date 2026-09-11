@@ -7,6 +7,16 @@ import { SiteHeader, SiteHeaderSkeleton } from "@/components/site-header";
 import { getSessionUser } from "@/lib/auth";
 import { getOrCreateProfile, isProfileComplete } from "@/lib/profile-server";
 
+// Explicit, not just relying on Next's automatic dynamic-API detection
+// (objective 4's original root-layout force-dynamic covered this
+// implicitly for every route; removing it exposed that several of this
+// tree's own DB reads aren't gated behind a dynamic API Next recognizes
+// early enough — a Docker build with no database reachable during the
+// image build step hard-fails prerendering every (member) page instead of
+// gracefully deferring them to request time). This restores the same
+// safety explicitly, scoped to just this route group.
+export const dynamic = "force-dynamic";
+
 /**
  * Re-executes on every navigation within (member) (layouts aren't
  * memoized across client-side nav in the App Router — each nav re-renders

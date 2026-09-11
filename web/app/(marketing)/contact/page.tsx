@@ -15,6 +15,12 @@ export const metadata: Metadata = buildMetadata({
  * Public, unauthenticated — getSessionUser() is only used to prefill
  * name/email for a signed-in visitor, never to gate access.
  */
+// Explicit, not just relying on Next's automatic dynamic-API detection: a
+// Docker build with no database reachable during the image build step
+// hard-fails prerendering the moment getSessionUser()'s DB call executes,
+// instead of gracefully deferring this page to request time (objective 4).
+export const dynamic = "force-dynamic";
+
 export default async function ContactPage() {
   const user = await getSessionUser();
 

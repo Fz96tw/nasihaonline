@@ -13,6 +13,12 @@ export const metadata: Metadata = buildMetadata({
   path: "/our-team",
 });
 
+// Real DB-backed content (the actual team roster) — freezing it at build
+// time would show a stale or empty (Docker build has no DB access) team
+// list until the next deploy, which is worse than staying dynamic. Kept
+// out of app/(marketing)'s static win (objective 4) for that reason.
+export const dynamic = "force-dynamic";
+
 export default async function OurTeamPage() {
   const members = await db.teamMember.findMany({
     where: { active: true },
