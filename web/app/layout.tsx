@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import { Inter, IBM_Plex_Sans, Montserrat, Mulish, Lora, Source_Serif_4 } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 import { cn } from "@/lib/utils";
-import { SiteHeader, SiteHeaderSkeleton } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { OverlayCleanup } from "@/components/overlay-cleanup";
 import { SessionExpiryGuard } from "@/components/session-expiry-guard";
@@ -53,11 +51,20 @@ export const metadata: Metadata = {
   },
 };
 
-// ClerkProvider validates its key and resolves session state per-request,
-// so the whole app is dynamically rendered rather than statically
-// prerendered at build time (would otherwise fail the build whenever
-// CLERK_SECRET_KEY/NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY aren't real yet).
-export const dynamic = "force-dynamic";
+// No dynamic = "force-dynamic" here on purpose (objective 4). ClerkProvider
+// itself does not force per-request rendering — verified empirically
+// against a production build. What used to force it was SiteHeader's own
+// getSessionUser() call (a Clerk auth(), which reads the session cookie —
+// a Next.js "dynamic API" — and that bubbles up to mark the whole route
+// dynamic), and SiteHeader used to render here, in the root layout, on
+// every single page. It's been split instead: (member)/layout.tsx and
+// app/admin/layout.tsx now render the original server-rendered SiteHeader
+// directly (those routes are already dynamic for their own reasons, so
+// there's nothing to lose there), while app/(marketing)/layout.tsx renders
+// MarketingHeader — a client-auth counterpart (Clerk's useUser(), resolved
+// in the browser after the page has already loaded as static HTML) — so
+// the public marketing pages that have no other session dependency can
+// actually be static/ISR. See components/marketing-header.tsx.
 
 export default async function RootLayout({
   children,
@@ -90,9 +97,6 @@ export default async function RootLayout({
           <JsonLd data={buildOrganizationJsonLd()} />
           <OverlayCleanup />
           <SessionExpiryGuard />
-          <Suspense fallback={<SiteHeaderSkeleton />}>
-            <SiteHeader />
-          </Suspense>
           <div className="flex-1">{children}</div>
           <SiteFooter />
         </body>

@@ -1,7 +1,9 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { MemberSidebar } from "@/components/members/member-sidebar";
 import { ProfileCompletionGate } from "@/components/profile/profile-completion-gate";
+import { SiteHeader, SiteHeaderSkeleton } from "@/components/site-header";
 import { getSessionUser } from "@/lib/auth";
 import { getOrCreateProfile, isProfileComplete } from "@/lib/profile-server";
 
@@ -41,19 +43,24 @@ export default async function MemberLayout({ children }: { children: React.React
     !!user && !!profile && !profile.followsAllCommunities && profile.communities.length === 0;
 
   return (
-    <QueryProvider>
-      <ProfileCompletionGate
-        needsOnboarding={needsOnboarding}
-        isFirstSignIn={isFirstSignIn}
-        needsCommunitySelection={needsCommunitySelection}
-      />
-      <div className="flex flex-1">
-        <MemberSidebar
-          isAdmin={user?.role === "admin"}
-          canModerate={user?.role === "moderator" || user?.role === "admin"}
+    <>
+      <Suspense fallback={<SiteHeaderSkeleton />}>
+        <SiteHeader />
+      </Suspense>
+      <QueryProvider>
+        <ProfileCompletionGate
+          needsOnboarding={needsOnboarding}
+          isFirstSignIn={isFirstSignIn}
+          needsCommunitySelection={needsCommunitySelection}
         />
-        <div className="min-w-0 flex-1">{children}</div>
-      </div>
-    </QueryProvider>
+        <div className="flex flex-1">
+          <MemberSidebar
+            isAdmin={user?.role === "admin"}
+            canModerate={user?.role === "moderator" || user?.role === "admin"}
+          />
+          <div className="min-w-0 flex-1">{children}</div>
+        </div>
+      </QueryProvider>
+    </>
   );
 }
