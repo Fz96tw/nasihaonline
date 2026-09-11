@@ -48,6 +48,13 @@ export function MarketingHeader() {
   const isAdmin = publicMetadata?.role === "admin";
   const canModerate = isAdmin || publicMetadata?.role === "moderator";
   const name = user?.fullName || user?.primaryEmailAddress?.emailAddress || "Member";
+  // user.imageUrl is never empty — Clerk always returns *some* URL, a
+  // generic gray person-silhouette placeholder for anyone without a real
+  // uploaded photo. Passing that unconditionally meant Avatar's own nicer
+  // branded-initials fallback (what the rest of the app shows for a member
+  // with no photo) never had a chance to trigger. hasImage is Clerk's own
+  // signal for "this is a real uploaded photo, not the placeholder."
+  const avatarUrl = user?.hasImage ? user.imageUrl : null;
 
   return (
     <ScrollHeader>
@@ -89,7 +96,7 @@ export function MarketingHeader() {
               </div>
             )}
             <NotificationBell />
-            <UserMenu name={name} avatarUrl={user?.imageUrl ?? null} />
+            <UserMenu name={name} avatarUrl={avatarUrl} />
           </>
         ) : (
           <>

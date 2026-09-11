@@ -65,6 +65,21 @@ export const metadata: Metadata = {
 // in the browser after the page has already loaded as static HTML) — so
 // the public marketing pages that have no other session dependency can
 // actually be static/ISR. See components/marketing-header.tsx.
+//
+// ISR revalidation, not a one-shot static build: the static pages under
+// this layout (/, /about + sub-pages, /privacy) still read from the
+// database for a few things (lib/settings.ts's getSiteFonts(), plus
+// HeroStats/CommunitiesSection on the homepage) — those reads fall back
+// to safe defaults if the DB is unreachable, which it always is during
+// `docker build` (standard build-stage isolation, no path to postgres).
+// Without revalidation, that build-time fallback (empty community list,
+// zero stats) would be frozen into the static HTML permanently, on every
+// single deploy, since the Docker build stage never has DB access — not
+// just "stale until the next deploy." Revalidating lets Next regenerate
+// the page in the background on the *running* container shortly after
+// each deploy, where the database genuinely is reachable, self-correcting
+// without needing a rebuild.
+export const revalidate = 60;
 
 export default async function RootLayout({
   children,
