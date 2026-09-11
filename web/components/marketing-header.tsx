@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { LayoutDashboard, Rss } from "lucide-react";
@@ -12,6 +13,42 @@ import { MobileNav } from "@/components/mobile-nav";
 import { ScrollHeader } from "@/components/scroll-header";
 import { DesktopNavLinks } from "@/components/desktop-nav-links";
 import { SiteHeaderSkeleton } from "@/components/site-header-skeleton";
+
+type ProfileIdentity = { name: string; avatarUrl: string | null };
+
+/**
+ * The nav's identity (name + avatar) has to match what /profile, the
+ * Directory, etc. show — our own Profile.avatarUrl, not Clerk's — see
+ * UserMenu's own doc comment. That's a DB read, so it's fetched
+ * client-side (same self-contained fetch pattern as NotificationBell /
+ * AdminReviewIcon below) rather than passed down as a server prop, which
+ * would force this static page back to dynamic. Briefly falls back to
+ * Clerk's own name/no-avatar (initials) until this resolves — a second,
+ * smaller flash on top of the loading-skeleton-to-header one.
+ */
+function useProfileIdentity(enabled: boolean): ProfileIdentity | null {
+  const [identity, setIdentity] = useState<ProfileIdentity | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const controller = new AbortController();
+    fetch("/api/profile", { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return;
+        setIdentity({
+          name: data.user?.name || data.user?.email || "Member",
+          avatarUrl: data.profile?.avatarUrl ?? null,
+        });
+      })
+      .catch(() => {
+        // Network error or aborted — stays on the Clerk-derived fallback.
+      });
+    return () => controller.abort();
+  }, [enabled]);
+
+  return identity;
+}
 
 /**
  * Client-auth counterpart to SiteHeader, used only by app/(marketing)'s
@@ -28,17 +65,17 @@ import { SiteHeaderSkeleton } from "@/components/site-header-skeleton";
  * tradeoff is a brief loading-skeleton flash before hydration, reusing
  * SiteHeader's own skeleton so both headers look identical while resolving.
  *
- * Deliberately does not mirror the DB Profile's avatarUrl/community list —
- * pulling those would need its own server round trip, undoing the point of
- * this component. Falls back to Clerk's own imageUrl/name/publicMetadata
- * instead (role/tier already live there — see lib/clerk-admin.ts, they're
- * the upstream source lib/clerk-sync.ts copies into our own User table, not
- * a derived copy, so reading them client-side here isn't stale). No
+ * publicMetadata (role/tier) is read straight from Clerk — see
+ * lib/clerk-admin.ts, it's the upstream source lib/clerk-sync.ts copies
+ * into our own User table, not a derived copy, so this isn't stale. Name
+ * and avatar, though, have to match our own Profile (see
+ * useProfileIdentity above), not Clerk's — fetched client-side. No
  * HeaderSearchRow either — that's community-browsing UI with no purpose on
  * a marketing page.
  */
 export function MarketingHeader() {
   const { isLoaded, isSignedIn, user } = useUser();
+  const profileIdentity = useProfileIdentity(Boolean(isSignedIn));
 
   if (!isLoaded) {
     return <SiteHeaderSkeleton />;
@@ -47,14 +84,8 @@ export function MarketingHeader() {
   const publicMetadata = user?.publicMetadata as { role?: string } | undefined;
   const isAdmin = publicMetadata?.role === "admin";
   const canModerate = isAdmin || publicMetadata?.role === "moderator";
-  const name = user?.fullName || user?.primaryEmailAddress?.emailAddress || "Member";
-  // user.imageUrl is never empty — Clerk always returns *some* URL, a
-  // generic gray person-silhouette placeholder for anyone without a real
-  // uploaded photo. Passing that unconditionally meant Avatar's own nicer
-  // branded-initials fallback (what the rest of the app shows for a member
-  // with no photo) never had a chance to trigger. hasImage is Clerk's own
-  // signal for "this is a real uploaded photo, not the placeholder."
-  const avatarUrl = user?.hasImage ? user.imageUrl : null;
+  const name = profileIdentity?.name || user?.fullName || user?.primaryEmailAddress?.emailAddress || "Member";
+  const avatarUrl = profileIdentity?.avatarUrl ?? null;
 
   return (
     <ScrollHeader>
