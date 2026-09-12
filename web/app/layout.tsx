@@ -50,6 +50,12 @@ export const metadata: Metadata = {
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
   },
+  // Backup verification method (§7) independent of the DNS TXT record
+  // Search Console auto-verified through — that record's fate isn't
+  // guaranteed once Google Workspace is decommissioned.
+  verification: {
+    google: "YuldC4Swyi-yDWg0qwoxxEmbd_UUgy6U9Z0yS4eIxfE",
+  },
 };
 
 // No dynamic = "force-dynamic" here on purpose (objective 4). ClerkProvider
