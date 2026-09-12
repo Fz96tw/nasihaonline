@@ -44,6 +44,8 @@ services:
 
   redis:
     image: redis:7-alpine
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -258,6 +260,7 @@ volumes:
   postgres_data:
   minio_data:
   meilisearch_data:
+  redis_data:
   npm_data:
   npm_letsencrypt:
   prometheus_data:
