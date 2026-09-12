@@ -41,7 +41,7 @@ if [ -z "$CLERK_KEY" ]; then
   exit 1
 fi
 
-echo "==> [1/5] Building image (a full next build — a few minutes)..."
+echo "==> [1/6] Building image (a full next build — a few minutes)..."
 docker build \
   --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_KEY" \
   --build-arg NEXT_PUBLIC_APP_URL="$PROD_APP_URL" \
@@ -49,7 +49,7 @@ docker build \
   -t "$IMAGE_WORKER:latest" -t "$IMAGE_WORKER:$GIT_SHA" \
   web/
 
-echo "==> [2/5] Pushing to Docker Hub..."
+echo "==> [2/6] Pushing to Docker Hub..."
 # The :<sha> tags are for traceability only today — vps/docker-compose.yml
 # still pulls :latest, so they don't yet change what gets deployed. They let
 # you check "what commit is actually live" (docker inspect / Docker Hub tag
@@ -59,13 +59,13 @@ for tag in latest "$GIT_SHA"; do
   docker push "$IMAGE_WORKER:$tag"
 done
 
-echo "==> [3/5] Pulling new image on the VPS..."
+echo "==> [3/6] Pulling new image on the VPS..."
 ssh "$VPS_HOST" "cd '$VPS_DIR' && docker compose pull app worker"
 
-echo "==> [4/5] Recreating app + worker containers..."
+echo "==> [4/6] Recreating app + worker containers..."
 ssh "$VPS_HOST" "cd '$VPS_DIR' && docker compose up -d app worker"
 
-echo "==> [5/5] Verifying..."
+echo "==> [5/6] Verifying..."
 # The container runs a data-seed step (skills, communities, forums, etc.)
 # before Next.js even binds its port, so a fixed short sleep here can catch
 # the app mid-startup and get a false-alarm 503 from the proxy. Retry with
@@ -84,3 +84,10 @@ fi
 
 echo "==> Deployed $GIT_SHA. Health check OK."
 ssh "$VPS_HOST" "docker logs nasiha-app-1 --tail 20 2>&1" | grep -E "migration|rror|Ready" || true
+
+echo "==> [6/6] Cleaning up old local images (each build tags a new :\$GIT_SHA that never gets removed)..."
+for img in "$IMAGE_APP" "$IMAGE_WORKER"; do
+  docker images "$img" --format '{{.Tag}}' | grep -v -E "^(latest|$GIT_SHA)$" | while read -r tag; do
+    docker rmi "$img:$tag" || true
+  done
+done
