@@ -402,6 +402,7 @@ export async function getForumThreadDetail(
           editedAt: true,
           flagged: true,
           removed: true,
+          selfDeleted: true,
         },
         orderBy: { createdAt: "asc" },
       },
@@ -421,8 +422,10 @@ export async function getForumThreadDetail(
         id: post.id,
         // A removed post keeps its row (and its replies' threading) but
         // never shows its real body again — same "takedown, not deletion"
-        // rule as Post.publishedAt=null for a removed blog post.
-        body: post.removed ? "[Removed by a moderator]" : post.body,
+        // rule as Post.publishedAt=null for a removed blog post. selfDeleted
+        // (deleteForumPost's own-author branch) picks the accurate wording
+        // rather than always blaming a moderator.
+        body: post.removed ? (post.selfDeleted ? "[Deleted by its author]" : "[Removed by a moderator]") : post.body,
         authorId: post.authorId,
         authorName: post.author.name,
         authorProfile: authorProfiles.get(post.authorId) ?? null,
@@ -1144,13 +1147,17 @@ export async function updateForumPost(
 
 /**
  * DELETE /api/forums/posts/:postId — the author (or a moderator/admin)
- * removing their own post directly, without going through the
+ * removing a post directly, without going through the
  * flag-then-moderator-resolve queue. Lands in the same state as
  * resolveForumPostFlag's "remove" action (removed: true, row and any
  * threaded replies kept intact, body placeholder'd in getForumThreadDetail)
  * — self-delete and moderator-remove are just two paths to that state, so
  * this also clears a pending flag/flagReason: there's nothing left for a
- * moderator to review once the content is already gone.
+ * moderator to review once the content is already gone. `selfDeleted` (set
+ * only when the acting user is the post's own author, same isSelfDelete
+ * check deleteForumThread uses) picks which placeholder wording the removed
+ * post's body shows — an admin/moderator deleting *someone else's* post
+ * here still correctly reads as moderator-removed.
  */
 export async function deleteForumPost(
   postId: string,
@@ -1167,10 +1174,25 @@ export async function deleteForumPost(
     throw new ForumError(403, "Only the post's author or a moderator/admin can delete it.");
   }
 
-  const removed = await db.forumPost.update({
-    where: { id: postId },
-    data: { removed: true, flagged: false, flagReason: null },
-    select: { id: true, threadId: true },
+  const isSelfDelete = actingUserId === post.authorId;
+
+  const removed = await db.$transaction(async (tx) => {
+    const updated = await tx.forumPost.update({
+      where: { id: postId },
+      data: { removed: true, selfDeleted: isSelfDelete, flagged: false, flagReason: null },
+      select: { id: true, threadId: true },
+    });
+    await recordAdminAction(
+      {
+        actorId: actingUserId,
+        action: isSelfDelete ? "content.post_self_deleted" : "content.post_deleted",
+        entityType: "ForumPost",
+        entityId: postId,
+        metadata: { authorId: post.authorId },
+      },
+      tx,
+    );
+    return updated;
   });
   // A removed post's body is hidden from everyone, so any video it had
   // shared must stop reporting itself as "shared here" too — same

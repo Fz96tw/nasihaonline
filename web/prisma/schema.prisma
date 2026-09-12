@@ -2314,10 +2314,18 @@ model ForumPost {
   // convention as Post.flagReason.
   flagReason                String?
   // Set by a moderator/admin resolving a flagged post from /admin/content
-  // (§4.11/§4.13). The row itself is kept (never deleted) so parentPostId
-  // threading on any replies stays intact — the UI swaps in a placeholder
-  // for a removed post's body instead.
+  // (§4.11/§4.13), or by deleteForumPost (the author's own self-serve
+  // delete, or a moderator/admin removing directly without the flag queue).
+  // The row itself is kept (never deleted) so parentPostId threading on any
+  // replies stays intact — the UI swaps in a placeholder for a removed
+  // post's body instead.
   removed                   Boolean @default(false)
+  // True only when `removed` was set by deleteForumPost's author-is-acting-
+  // user branch — lets the removed-body placeholder say "deleted by its
+  // author" instead of "removed by a moderator" (which resolveForumPostFlag
+  // and a moderator's own deleteForumPost call both still deserve).
+  // Meaningless while removed is false.
+  selfDeleted               Boolean @default(false)
 
   // Set when the author (or an admin/moderator) edits this post's body
   // after posting — distinct from `updatedAt` (also touched by
