@@ -6,6 +6,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import type { DirectoryMember } from "@/lib/members";
 import { usePasteImageUpload } from "@/lib/use-paste-image-upload";
+import { hasVideoToken } from "@/lib/linkify";
 import { QuickRecordingPicker, type QuickRecordingListItem } from "@/components/quick-recording-picker";
 
 const SUGGESTION_LIMIT = 5;
@@ -140,7 +141,7 @@ export function MentionTextarea({
 
   return (
     <div className="relative">
-      {videoPickerEnabled && (
+      {videoPickerEnabled && !hasVideoToken(value) && (
         <div className="mb-2">
           <QuickRecordingPicker onSelect={insertVideo} triggerLabel="Insert a video…" allowRecordNew={false} />
         </div>

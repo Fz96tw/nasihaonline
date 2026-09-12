@@ -17,6 +17,7 @@ import { ForumThreadVisibility } from "@/lib/generated/prisma/enums";
 import { usePasteImageUpload } from "@/lib/use-paste-image-upload";
 import { CategoryCheckboxField } from "@/components/shared/category-checkbox-field";
 import type { KnowledgeCategoryOption } from "@/lib/library";
+import { hasVideoToken } from "@/lib/linkify";
 import { QuickRecordingPicker, type QuickRecordingListItem } from "@/components/quick-recording-picker";
 
 const DEFAULT_VALUES: CreateForumThreadValues = {
@@ -66,9 +67,11 @@ function ThreadBodyField({
 
   return (
     <>
-      <div className="mb-2">
-        <QuickRecordingPicker onSelect={insertVideo} triggerLabel="Insert a video…" allowRecordNew={false} />
-      </div>
+      {!hasVideoToken(field.value) && (
+        <div className="mb-2">
+          <QuickRecordingPicker onSelect={insertVideo} triggerLabel="Insert a video…" allowRecordNew={false} />
+        </div>
+      )}
       <Textarea
         rows={6}
         name={field.name}

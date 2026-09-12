@@ -187,12 +187,23 @@ function extractSharedRecordingTargets(body: string): { meetingRequestId: string
 }
 
 /**
+ * Pure count check, meant to be called by createForumThread/createForumPost
+ * etc. BEFORE persisting the post itself, so a rejected save never loses the
+ * caller's text edit — mirrors countPastedImageReferences's contract.
+ */
+export function countSharedRecordingTargets(body: string): number {
+  return extractSharedRecordingTargets(body).length;
+}
+
+/**
  * Reconciles a MeetingRequestRecording's link against a just-saved
  * post/message/comment body — mirrors linkPastedImages's call-site pattern
  * (call again on every edit; it figures out what changed). At most one
  * shared video per body for v1: a second distinct video token is rejected
  * outright rather than silently picking one, since a composer that lets
- * someone attach two isn't supposed to exist yet.
+ * someone attach two isn't supposed to exist yet. Callers should already
+ * reject via countSharedRecordingTargets before persisting the body itself;
+ * this check is only a defensive fallback.
  *
  * Only the recording's own owner (the quick recording's sender — always
  * true self/self creator, see createQuickRecordingMeetingRequest) may link
@@ -258,10 +269,11 @@ export async function linkSharedRecording(params: {
 
 /**
  * Unlinks (never deletes) whatever recording is currently linked to any of
- * `ownerIds` — called when the owning post/message/comment is itself
- * hard-deleted (today: only deleteReviewItem, via its comments' ids; forum
- * posts/inbox messages have no hard-delete path yet, same "no caller needs
- * this yet" situation unlinkAndDeleteAllPastedImages documents in
+ * `ownerIds` — called when the owning post/message/comment stops showing
+ * its body to anyone, whether that's a hard delete (deleteReviewItem, via
+ * its comments' ids) or a soft takedown (deleteForumPost's removed flag;
+ * inbox messages have no delete path yet, same "no caller needs this yet"
+ * situation unlinkAndDeleteAllPastedImages documents in
  * lib/pasted-images-server.ts). A no-op FK/ownerType clear, not a delete —
  * the recording and its file survive for reuse via the video library.
  */

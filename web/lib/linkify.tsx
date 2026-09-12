@@ -46,6 +46,22 @@ function isVideoProxyUrl(url: string): boolean {
 }
 
 /**
+ * Whether `text` already carries a shared-video token — used client-side to
+ * disable "Insert a video…" once one is present, so the composer can't even
+ * form a body the server would reject (lib/quick-recordings-server.ts's "at
+ * most one shared video" rule). A UX nicety mirroring countPastedImageTokens;
+ * the real enforcement point stays server-side.
+ */
+export function hasVideoToken(text: string): boolean {
+  const pattern = /!\[[^\]]*\]\(([^\s()]+)\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text)) !== null) {
+    if (isVideoProxyUrl(match[1])) return true;
+  }
+  return false;
+}
+
+/**
  * Count of `![alt](url)` tokens in `text` pointing at one of our own
  * image-upload proxies — used client-side (lib/use-paste-image-upload.ts)
  * to locally cap how many images a composer will let you paste. The real

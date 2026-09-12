@@ -18,7 +18,7 @@ import { DIRECTORY_TIERS } from "@/lib/members";
 import { CLINICAL_DISCUSSIONS_SLUG, EVENTS_FORUM_SLUG, LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import { ensureCommunityMembership, getMemberCommunityContext, type MemberCommunityContext } from "@/lib/profile-server";
 import { countPastedImageReferences, linkPastedImages, MAX_PASTED_IMAGES_PER_BODY } from "@/lib/pasted-images-server";
-import { linkSharedRecording } from "@/lib/quick-recordings-server";
+import { countSharedRecordingTargets, linkSharedRecording, unlinkSharedRecordings } from "@/lib/quick-recordings-server";
 import type {
   ForumCategory,
   ForumThreadListItem,
@@ -695,6 +695,9 @@ export async function createForumThread(
   if (countPastedImageReferences(input.body, PastedImageOwnerType.forum_post) > MAX_PASTED_IMAGES_PER_BODY) {
     throw new ForumError(400, `A post can reference at most ${MAX_PASTED_IMAGES_PER_BODY} pasted images.`);
   }
+  if (countSharedRecordingTargets(input.body) > 1) {
+    throw new ForumError(400, "A post can reference at most one shared video.");
+  }
 
   const isRestricted = input.visibility === ForumThreadVisibility.invited;
   const invitees =
@@ -943,6 +946,9 @@ export async function createForumPost(
   if (countPastedImageReferences(input.body, PastedImageOwnerType.forum_post) > MAX_PASTED_IMAGES_PER_BODY) {
     throw new ForumError(400, `A post can reference at most ${MAX_PASTED_IMAGES_PER_BODY} pasted images.`);
   }
+  if (countSharedRecordingTargets(input.body) > 1) {
+    throw new ForumError(400, "A post can reference at most one shared video.");
+  }
 
   const author = await db.user.findUnique({ where: { id: authorId }, select: { name: true } });
 
@@ -1104,6 +1110,9 @@ export async function updateForumPost(
   if (countPastedImageReferences(input.body, PastedImageOwnerType.forum_post) > MAX_PASTED_IMAGES_PER_BODY) {
     throw new ForumError(400, `A post can reference at most ${MAX_PASTED_IMAGES_PER_BODY} pasted images.`);
   }
+  if (countSharedRecordingTargets(input.body) > 1) {
+    throw new ForumError(400, "A post can reference at most one shared video.");
+  }
 
   const updated = await db.forumPost.update({
     where: { id: postId },
@@ -1115,6 +1124,16 @@ export async function updateForumPost(
   // actually just called uploadForumPostImage via the paste handler.
   await linkPastedImages({
     ownerType: PastedImageOwnerType.forum_post,
+    ownerId: updated.id,
+    uploaderId: actingUserId,
+    body: input.body,
+  });
+  // Reconciles against the edited body the same way createForumPost does on
+  // the way in — otherwise a video token removed by editing (or added by
+  // editing) never updates MeetingRequestRecording's ownerType/forumPostId,
+  // leaving the recording's "shared" status stale.
+  await linkSharedRecording({
+    ownerType: RecordingOwnerType.forum_post,
     ownerId: updated.id,
     uploaderId: actingUserId,
     body: input.body,
@@ -1148,11 +1167,17 @@ export async function deleteForumPost(
     throw new ForumError(403, "Only the post's author or a moderator/admin can delete it.");
   }
 
-  return db.forumPost.update({
+  const removed = await db.forumPost.update({
     where: { id: postId },
     data: { removed: true, flagged: false, flagReason: null },
     select: { id: true, threadId: true },
   });
+  // A removed post's body is hidden from everyone, so any video it had
+  // shared must stop reporting itself as "shared here" too — same
+  // unlink-on-removal shape unlinkSharedRecordings already gives
+  // deleteReviewItem, applied to a takedown instead of a hard delete.
+  await unlinkSharedRecordings(RecordingOwnerType.forum_post, [removed.id]);
+  return removed;
 }
 
 /**
