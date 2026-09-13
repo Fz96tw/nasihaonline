@@ -19,6 +19,7 @@ import { CategoryCheckboxField } from "@/components/shared/category-checkbox-fie
 import type { KnowledgeCategoryOption } from "@/lib/library";
 import { hasVideoToken } from "@/lib/linkify";
 import { QuickRecordingPicker, type QuickRecordingListItem } from "@/components/quick-recording-picker";
+import { clearLocalDraft, readLocalDraft, writeLocalDraft } from "@/lib/local-draft";
 
 const DEFAULT_VALUES: CreateForumThreadValues = {
   title: "",
@@ -141,6 +142,46 @@ export function NewThreadForm({
   const visibility = form.watch("visibility");
   const isRestricted = visibility === ForumThreadVisibility.invited;
 
+  // Autosave to localStorage, scoped per forum — a lightweight recovery net
+  // for "closed the tab mid-post," distinct from the server-side Save as
+  // Draft feature Library/Events have. Only title+body (the free-text
+  // fields actually worth recovering); structured selections like
+  // categoryIds aren't restored. See lib/local-draft.ts.
+  const draftKey = `forum-new-thread-draft:${forumId}`;
+  const [draftRestored, setDraftRestored] = useState(false);
+
+  useEffect(() => {
+    const saved = readLocalDraft<{ title: string; body: string }>(draftKey);
+    if (saved && (saved.title || saved.body)) {
+      form.setValue("title", saved.title, { shouldDirty: true });
+      form.setValue("body", saved.body, { shouldDirty: true });
+      setDraftRestored(true);
+    }
+    // Only ever meant to run once, on mount — re-running on every draftKey
+    // identity (it's a fresh string each render) would refight the user's
+    // own edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const subscription = form.watch((values) => {
+      if (values.title || values.body) {
+        writeLocalDraft(draftKey, { title: values.title ?? "", body: values.body ?? "" });
+      } else {
+        clearLocalDraft(draftKey);
+      }
+    });
+    return () => subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
+
+  function discardDraft() {
+    clearLocalDraft(draftKey);
+    form.setValue("title", "", { shouldDirty: true });
+    form.setValue("body", "", { shouldDirty: true });
+    setDraftRestored(false);
+  }
+
   async function onSubmit(values: CreateForumThreadValues) {
     if (requireDeidentification && !values.deidentificationConfirmed) {
       form.setError("deidentificationConfirmed", {
@@ -169,6 +210,7 @@ export function NewThreadForm({
         );
       }
       const { id } = await res.json();
+      clearLocalDraft(draftKey);
       router.push(`/forums/${forumSlug}/${id}`);
       router.refresh();
     } catch (err) {
@@ -181,6 +223,15 @@ export function NewThreadForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
+        {draftRestored && (
+          <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+            <span>Restored your unsaved draft.</span>
+            <button type="button" onClick={discardDraft} className="text-primary hover:underline">
+              Discard
+            </button>
+          </div>
+        )}
+
         <FormField
           control={form.control}
           name="visibility"

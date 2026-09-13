@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Flag } from "lucide-react";
@@ -15,6 +15,7 @@ import { getCsrfToken } from "@/lib/csrf-client";
 import { renderTextWithMentions, type MentionCandidate } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
 import { formatTimestamp } from "@/lib/format-date";
+import { clearLocalDraft, readLocalDraft, writeLocalDraft } from "@/lib/local-draft";
 
 function ReplyForm({
   threadId,
@@ -40,6 +41,38 @@ function ReplyForm({
   const [error, setError] = useState<string | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
 
+  // Autosave to localStorage — a lightweight recovery net for "closed the
+  // tab mid-reply," distinct from the server-side Save as Draft feature
+  // Library/Events have. Scoped to the top-level "Post a Reply" composer
+  // only (parentId === null): a nested per-post reply is a quick aside, and
+  // a thread with many open nested boxes would otherwise multiply
+  // localStorage keys for little benefit. See lib/local-draft.ts.
+  const draftKey = parentId === null ? `forum-reply-draft:${threadId}` : null;
+  const [draftRestored, setDraftRestored] = useState(false);
+
+  useEffect(() => {
+    if (!draftKey) return;
+    const saved = readLocalDraft<string>(draftKey);
+    if (saved) {
+      setBody(saved);
+      setDraftRestored(true);
+    }
+    // Only ever meant to run once, on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!draftKey) return;
+    if (body) writeLocalDraft(draftKey, body);
+    else clearLocalDraft(draftKey);
+  }, [draftKey, body]);
+
+  function discardDraft() {
+    if (draftKey) clearLocalDraft(draftKey);
+    setBody("");
+    setDraftRestored(false);
+  }
+
   async function handleSubmit() {
     if (!body.trim()) return;
     if (requireDeidentification && !confirmed) {
@@ -60,6 +93,7 @@ function ReplyForm({
         const payload = await res.json().catch(() => null);
         throw new Error(typeof payload?.error === "string" ? payload.error : "Something went wrong.");
       }
+      if (draftKey) clearLocalDraft(draftKey);
       setBody("");
       setConfirmed(false);
       onPosted();
@@ -72,6 +106,14 @@ function ReplyForm({
 
   return (
     <div className="flex flex-col gap-2">
+      {draftRestored && (
+        <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          <span>Restored your unsaved draft.</span>
+          <button type="button" onClick={discardDraft} className="text-primary hover:underline">
+            Discard
+          </button>
+        </div>
+      )}
       <MentionTextarea
         rows={parentId ? 2 : 3}
         placeholder={parentId ? "Write a reply… (@ to tag a member)" : "Write a post… (@ to tag a member)"}
