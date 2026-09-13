@@ -145,7 +145,12 @@ services:
       NEXT_PUBLIC_CLERK_SIGN_UP_URL: /accept-invite
       NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: /whats-new
       NEXT_PUBLIC_CLERK_AFTER_SIGN_OUT_URL: /
-      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3010}
+      # http://localhost:3010 is homelab's own default (copy-pasted from
+      # there originally) — wrong for this host if .env's real value is
+      # ever missing. Currently masked by .env always setting it explicitly,
+      # but default to the real domain here too, same defense-in-depth as
+      # IS_TEST_ENVIRONMENT/SEED_SAMPLE_DATA above.
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://nasihaforyou.org}
       RESEND_API_KEY: ${RESEND_API_KEY}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-NASIHA <no-reply@mail.nasihaforyou.org>}
       # Deliberately false here — this is the production deployment. See
@@ -204,6 +209,14 @@ services:
       NODE_ENV: production
       MEILI_HOST: http://meilisearch:7700
       MEILI_MASTER_KEY: nasiha-dev-master-key
+      # Read by lib/surveys-lifecycle.ts's scheduled-open job (respondUrl,
+      # heroImageUrl) — this line was missing entirely (the running worker
+      # only had it baked in from an earlier container creation, silently
+      # lost on the next recreate) until the 2026-09-13 incident: with this
+      # unset, APP_URL there falls back to "" (?? not ||), producing a
+      # relative respondUrl with no domain in the opened-survey
+      # email/notification.
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://nasihaforyou.org}
     depends_on:
       postgres:
         condition: service_healthy
