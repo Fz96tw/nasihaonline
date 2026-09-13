@@ -145,6 +145,14 @@ services:
       dockerfile: Dockerfile
       args:
         DATABASE_URL: postgresql://nasiha:nasiha@postgres:5432/nasiha?schema=public
+        # Same Dockerfile as `app` above (it runs `next build` regardless of
+        # which service ends up using the image), so it needs the same
+        # build args `app` gets — this one was missing, and since the
+        # Dockerfile's ARG NEXT_PUBLIC_APP_URL has no default, it silently
+        # built as an empty string, which lib/site.ts's SITE_URL (`??`,
+        # not `||`) didn't catch, and `new URL("")` in app/layout.tsx then
+        # crashed `next build` entirely (Invalid URL on /_not-found).
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3010}
     command: ["npm", "run", "worker"]
     environment:
       DATABASE_URL: postgresql://nasiha:nasiha@postgres:5432/nasiha?schema=public

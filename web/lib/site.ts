@@ -1,4 +1,11 @@
-export const SITE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://nasihaforyou.org";
+// `||`, not `??` — a Docker ARG with no default (like NEXT_PUBLIC_APP_URL in
+// web/Dockerfile) bakes in as an empty string when a build omits
+// --build-arg/args, not undefined, so `??` alone doesn't catch it. An empty
+// SITE_URL reaches `new URL(SITE_URL)` in app/layout.tsx's metadataBase,
+// which throws and takes down the entire `next build` (surfaced 2026-09-13
+// as an Invalid URL failure collecting /_not-found's page data, traced to
+// the worker service's compose build args missing NEXT_PUBLIC_APP_URL).
+export const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://nasihaforyou.org";
 export const SITE_TITLE = "NASIHA — knowledge sharing & expert networking";
 export const SITE_SHORT_NAME = "NASIHA";
 export const SITE_DESCRIPTION =
