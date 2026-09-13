@@ -231,6 +231,11 @@ export async function getFeedPage(params: {
     ...(before ? { createdAt: { lt: before } } : {}),
     ...(eventHitIds ? { id: { in: eventHitIds } } : {}),
     cancelledAt: null,
+    // A suspended member can't log in at all (lib/auth.ts), so they're never
+    // `viewerId` here — this is unconditionally safe, same convention as
+    // the Directory (lib/members-server.ts) and the profile search index
+    // (lib/search-index-sync.ts).
+    host: { suspended: false },
     // Omitted entirely (not just an always-true OR member) when
     // isPrivilegedSearchBypass — see its own comment above for why.
     ...(isPrivilegedSearchBypass
@@ -262,6 +267,8 @@ export async function getFeedPage(params: {
     ...(params.communityIds?.length
       ? { categories: { some: { category: { communityId: { in: params.communityIds } } } } }
       : {}),
+    // Same suspended-author exclusion as eventWhere above.
+    contributor: { suspended: false },
     // Same restricted-audience shape as eventWhere above (Objective 04's
     // read-path filter, mirrored here): a restricted item reaches an
     // invited member's feed, and its own contributor's. Omitted entirely
@@ -300,6 +307,11 @@ export async function getFeedPage(params: {
     // appearing once at its original creation time.
     ...(before ? { lastActivityAt: { lt: before } } : {}),
     ...(forumHitIds ? { id: { in: forumHitIds } } : {}),
+    // Same suspended-author exclusion as eventWhere above — the thread's
+    // own starter, not whoever posted the latest reply (a suspended
+    // member's individual replies within an otherwise-live thread are a
+    // separate, unhandled edge case, not what was reported).
+    author: { suspended: false },
     // Member-Initiated Restricted Forum Threads' (§4.13/§11.16) own
     // per-viewer visibility filter — same shape as eventWhere/libraryWhere
     // above, since a standalone thread can independently carry
@@ -341,6 +353,8 @@ export async function getFeedPage(params: {
     // keying off its own lastActivityAt.
     ...(before ? { lastActivityAt: { lt: before } } : {}),
     ...(reviewHitIds ? { id: { in: reviewHitIds } } : {}),
+    // Same suspended-author exclusion as eventWhere above.
+    submitter: { suspended: false },
     // Omitted entirely when isPrivilegedSearchBypass, same as
     // eventWhere/libraryWhere/forumWhere above.
     ...(isPrivilegedSearchBypass
