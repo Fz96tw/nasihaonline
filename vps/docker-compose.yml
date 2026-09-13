@@ -151,6 +151,14 @@ services:
       # Deliberately false here — this is the production deployment. See
       # homelab/docker-compose.yml / .env.example for what this flag does.
       IS_TEST_ENVIRONMENT: ${IS_TEST_ENVIRONMENT:-false}
+      # Deliberately false here too — prisma/seed.ts's Dockerfile CMD runs on
+      # every container start, and defaults this to true when unset. A first
+      # start against a fresh production DB previously seeded 6 sample
+      # events/3 sample library items/2 sample forum threads before this was
+      # added (2026-09-13 incident). Unlike IS_TEST_ENVIRONMENT, homelab
+      # deliberately leaves this unset (defaults true there) since sample
+      # data is wanted on that box.
+      SEED_SAMPLE_DATA: ${SEED_SAMPLE_DATA:-false}
       MINIO_ENDPOINT: minio
       MINIO_PORT: "9000"
       MINIO_USE_SSL: "false"
