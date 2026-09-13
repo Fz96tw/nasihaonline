@@ -74,7 +74,17 @@ services:
       - appnet
 
   app:
-    build:
+    # Anchored so `worker` below reuses this verbatim — app and worker build
+    # the exact same web/Dockerfile (worker just overrides `command:` to run
+    # the queue processor instead of `next start`), so any build arg it
+    # needs, `next build` needs too, regardless of which service ends up
+    # running the image. Duplicating this block by hand is exactly what
+    # caused the 2026-09-13 incidents (NEXT_PUBLIC_APP_URL, then
+    # NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, each missing only from worker's copy
+    # and each crashing `next build` once the prior gap was fixed) — the
+    # anchor makes that whole class of drift structurally impossible instead
+    # of relying on remembering to keep two lists in sync.
+    build: &web-build
       context: ./web
       dockerfile: Dockerfile
       args:
@@ -140,19 +150,7 @@ services:
       - appnet
 
   worker:
-    build:
-      context: ./web
-      dockerfile: Dockerfile
-      args:
-        DATABASE_URL: postgresql://nasiha:nasiha@postgres:5432/nasiha?schema=public
-        # Same Dockerfile as `app` above (it runs `next build` regardless of
-        # which service ends up using the image), so it needs the same
-        # build args `app` gets — this one was missing, and since the
-        # Dockerfile's ARG NEXT_PUBLIC_APP_URL has no default, it silently
-        # built as an empty string, which lib/site.ts's SITE_URL (`??`,
-        # not `||`) didn't catch, and `new URL("")` in app/layout.tsx then
-        # crashed `next build` entirely (Invalid URL on /_not-found).
-        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3010}
+    build: *web-build
     command: ["npm", "run", "worker"]
     environment:
       DATABASE_URL: postgresql://nasiha:nasiha@postgres:5432/nasiha?schema=public
