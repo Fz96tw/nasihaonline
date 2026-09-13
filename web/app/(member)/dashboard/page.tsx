@@ -4,6 +4,8 @@ import { Award, LayoutDashboard, ListChecks, User } from "lucide-react";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { Role } from "@/lib/generated/prisma/enums";
+import { getDraftKnowledgeItemCount } from "@/lib/library-server";
+import { getDraftEventCount } from "@/lib/events-server";
 import { StatsRow } from "@/components/dashboard/stats-row";
 import { AccountNoticesWidget } from "@/components/dashboard/account-notices-widget";
 import { PendingConfirmationsWidget } from "@/components/dashboard/pending-confirmations-widget";
@@ -43,6 +45,15 @@ export default async function DashboardPage() {
   if (!user) redirect("/sign-in");
   const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
 
+  // Save as Draft initiative — a combined count so unfinished drafts aren't
+  // only discoverable by spotting a badge mixed into /library/mine or
+  // /my-posts; hidden entirely at 0 rather than showing "0 drafts".
+  const [draftLibraryCount, draftEventCount] = await Promise.all([
+    getDraftKnowledgeItemCount(user.id),
+    getDraftEventCount(user.id),
+  ]);
+  const draftCount = draftLibraryCount + draftEventCount;
+
   return (
     <main className="mx-auto flex max-w-[1280px] flex-col gap-8 p-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -81,6 +92,11 @@ export default async function DashboardPage() {
           >
             <ListChecks className="h-4 w-4" />
             All My Activity
+            {draftCount > 0 && (
+              <span className="text-muted-foreground">
+                · {draftCount} draft{draftCount === 1 ? "" : "s"}
+              </span>
+            )}
           </Link>
         </div>
       </div>

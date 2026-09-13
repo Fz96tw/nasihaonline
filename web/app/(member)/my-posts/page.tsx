@@ -10,28 +10,12 @@ import { getMyMeetingRequests } from "@/lib/meeting-requests-server";
 import { KnowledgeContentType } from "@/lib/generated/prisma/enums";
 import { STATUS_LABELS, STATUS_BADGE_VARIANT } from "@/lib/library";
 import { MEETING_REQUEST_STATUS_LABELS, MEETING_REQUEST_STATUS_BADGE_VARIANT } from "@/lib/meeting-requests";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MySubmissionsTable } from "@/components/library/my-submissions-table";
 import { MyPostsTabs } from "@/components/my-posts/my-posts-tabs";
+import { ActivityTable, type ActivityRow, type BadgeVariant } from "@/components/my-posts/activity-table";
 
 export const metadata: Metadata = {
   title: "All My Activity",
-};
-
-type BadgeVariant = "neutral" | "success" | "warning" | "danger" | "info";
-
-type ActivityType = "Blog" | "Library" | "Event" | "Forum" | "Meeting";
-
-type ActivityRow = {
-  id: string;
-  type: ActivityType;
-  title: string;
-  meta?: string;
-  status: { label: string; variant: BadgeVariant };
-  date: string;
-  href: string;
-  actionLabel: "Edit" | "View";
 };
 
 function eventStatus(
@@ -45,68 +29,6 @@ function eventStatus(
   return new Date(event.startsAt).getTime() > now
     ? { label: "Upcoming", variant: "success" }
     : { label: "Past", variant: "neutral" };
-}
-
-/**
- * Cross-domain activity table shared by the All/Blog/Events/Forum tabs
- * (Library keeps its own MySubmissionsTable, reused from /library/mine).
- * `showType` distinguishes the All tab's merged view; `metaHeader` adds an
- * extra column for domain-specific context (e.g. Forum's thread's forum
- * name) without forcing every tab to carry an unused column.
- */
-function ActivityTable({
-  rows,
-  showType = false,
-  metaHeader,
-  emptyMessage,
-}: {
-  rows: ActivityRow[];
-  showType?: boolean;
-  metaHeader?: string;
-  emptyMessage: string;
-}) {
-  const colSpan = 4 + (showType ? 1 : 0) + (metaHeader ? 1 : 0);
-  return (
-    <div className="rounded-[10px] border shadow-sm">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {showType && <TableHead>Type</TableHead>}
-            <TableHead>Title</TableHead>
-            {metaHeader && <TableHead>{metaHeader}</TableHead>}
-            <TableHead>Status</TableHead>
-            <TableHead>Date</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={colSpan} className="text-center text-muted-foreground">
-                {emptyMessage}
-              </TableCell>
-            </TableRow>
-          )}
-          {rows.map((row) => (
-            <TableRow key={`${row.type}-${row.id}`}>
-              {showType && <TableCell className="text-muted-foreground">{row.type}</TableCell>}
-              <TableCell className="font-medium">{row.title}</TableCell>
-              {metaHeader && <TableCell className="text-muted-foreground">{row.meta}</TableCell>}
-              <TableCell>
-                <Badge variant={row.status.variant}>{row.status.label}</Badge>
-              </TableCell>
-              <TableCell className="text-muted-foreground">{new Date(row.date).toLocaleDateString()}</TableCell>
-              <TableCell className="text-right">
-                <Link href={row.href} className="text-sm text-primary hover:underline">
-                  {row.actionLabel}
-                </Link>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
 }
 
 /**
@@ -212,7 +134,9 @@ export default async function MyPostsPage() {
         allContent={<ActivityTable rows={allRows} showType emptyMessage="You haven't created anything yet." />}
         blogContent={<MySubmissionsTable submissions={blogSubmissions} />}
         libraryContent={<MySubmissionsTable submissions={libraryOnlySubmissions} />}
-        eventsContent={<ActivityTable rows={eventRows} emptyMessage="You haven't hosted any events yet." />}
+        eventsContent={
+          <ActivityTable rows={eventRows} emptyMessage="You haven't hosted any events yet." enableDraftFilter />
+        }
         forumContent={
           <ActivityTable
             rows={forumRows}
