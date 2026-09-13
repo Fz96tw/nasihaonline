@@ -27,14 +27,25 @@ const eventFieldsSchema = z.object({
   // outright; formatEventDateTime falls back to a fixed default zone when
   // it's null.
   timezone: z.string().trim().min(1).nullable(),
-  // Community-based-categorization initiative, objective 5 — required,
-  // multi-select (unlike invitedUserIds/coHostUserIds, this is editable in
-  // both create and edit mode, so it lives in the shared fields rather than
+  // Community-based-categorization initiative, objective 5 — multi-select
+  // (unlike invitedUserIds/coHostUserIds, this is editable in both create
+  // and edit mode, so it lives in the shared fields rather than
   // createEventSchema-only). categoryIds is optional, scoped in the UI to
-  // whichever communities are selected.
-  communityIds: z.array(z.string()).min(1, "Select at least one community"),
+  // whichever communities are selected. No `.min(1)` here — required only
+  // when actually publishing (see requireCommunityIds below), so a draft
+  // can be saved with none selected yet.
+  communityIds: z.array(z.string()),
   categoryIds: z.array(z.string()),
 });
+
+// Required, multi-select top-level classification — split out of the base
+// schema (Save as Draft initiative) so a draft can be saved with none
+// selected; every strict (publish) schema still requires it.
+function requireCommunityIds(data: { communityIds: string[] }, ctx: z.RefinementCtx) {
+  if (data.communityIds.length === 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["communityIds"], message: "Select at least one community" });
+  }
+}
 
 // Case Discussion's de-identification checkbox (§11's hard requirement, not
 // optional) — enforced identically create and edit, so a host can't clear
@@ -157,7 +168,8 @@ export const createEventSchema = eventFieldsSchema
   })
   .superRefine(requireDeidentificationForCaseDiscussion)
   .superRefine(requireRestrictedEventInvariants)
-  .superRefine(requireRecurrenceInvariants);
+  .superRefine(requireRecurrenceInvariants)
+  .superRefine(requireCommunityIds);
 
 export type CreateEventValues = z.infer<typeof createEventSchema>;
 
@@ -170,6 +182,33 @@ export type CreateEventValues = z.infer<typeof createEventSchema>;
 export const updateEventSchema = eventFieldsSchema
   .extend({ meetLinkSource: z.enum(["auto", "manual", "livekit"]), recurrence: recurrenceInputSchema })
   .superRefine(requireDeidentificationForCaseDiscussion)
-  .superRefine(requireRecurrenceInvariants);
+  .superRefine(requireRecurrenceInvariants)
+  .superRefine(requireCommunityIds);
 
 export type UpdateEventValues = z.infer<typeof updateEventSchema>;
+
+/**
+ * "Save Draft" (Save as Draft initiative) — only the fields
+ * eventFieldsSchema already requires (`title`/`type`/`startsAt`) are
+ * enforced; none of requireDeidentificationForCaseDiscussion,
+ * requireRestrictedEventInvariants, or requireCommunityIds apply, so a
+ * draft can be saved at any stage of being filled out. The
+ * recurrence-consistency check stays — an internally-contradictory
+ * recurrence rule is a data-integrity bug, not a completeness gate. Same
+ * field set/types as createEventSchema (so it infers the same
+ * CreateEventValues shape and can share one RHF form type) — just without
+ * the extra superRefine passes. Publishing a draft reuses createEventSchema
+ * as-is (see publishEventDraft in lib/events-server.ts) — a draft's publish
+ * has exactly the same required-field shape as a brand-new create.
+ */
+export const draftEventSchema = eventFieldsSchema
+  .extend({
+    visibility: z.nativeEnum(EventVisibility),
+    invitedUserIds: z.array(z.string()),
+    coHostUserIds: z.array(z.string()),
+    meetLinkSource: z.enum(["auto", "manual", "livekit"]),
+    recurrence: recurrenceInputSchema,
+  })
+  .superRefine(requireRecurrenceInvariants);
+
+export type DraftEventValues = z.infer<typeof draftEventSchema>;

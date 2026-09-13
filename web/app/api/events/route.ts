@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireTier } from "@/lib/auth";
 import { EventError, createEvent, getPublicUpcomingEvents } from "@/lib/events-server";
 import { EVENT_SUBMISSION_TIERS } from "@/lib/events";
-import { createEventSchema } from "@/lib/validation/event";
+import { createEventSchema, draftEventSchema } from "@/lib/validation/event";
 import { enqueueEventIndexSync } from "@/lib/queues/search-index-queue";
 
 // Public, unauthenticated route (§4.6) — not listed in middleware's
@@ -75,7 +75,13 @@ export async function POST(request: Request) {
     }
   }
 
-  const parsed = createEventSchema.safeParse({
+  // Save as Draft initiative — "draft" relaxes every completeness check via
+  // draftEventSchema; anything else (including absent, for older clients)
+  // is today's full "Submit Event" validation.
+  const mode = formData.get("action") === "draft" ? "draft" : "publish";
+  const schema = mode === "draft" ? draftEventSchema : createEventSchema;
+
+  const parsed = schema.safeParse({
     title: formData.get("title"),
     description: formData.get("description") || null,
     type: formData.get("type"),
@@ -108,13 +114,19 @@ export async function POST(request: Request) {
     messageImageField instanceof File && messageImageField.size > 0 ? messageImageField : null;
 
   try {
-    const event = await createEvent(user.id, {
-      ...parsed.data,
-      heroImage,
-      meetingOrganizerMessage,
-      meetingOrganizerMessageImage,
-    });
-    await enqueueEventIndexSync(event.id);
+    const event = await createEvent(
+      user.id,
+      {
+        ...parsed.data,
+        heroImage,
+        meetingOrganizerMessage,
+        meetingOrganizerMessageImage,
+      },
+      mode,
+    );
+    // Only meaningful at publish time — a draft is never indexed anyway
+    // (syncEventToIndex's own eligibility gate), so skip the queue write.
+    if (mode === "publish") await enqueueEventIndexSync(event.id);
     return NextResponse.json({ id: event.id }, { status: 201 });
   } catch (error) {
     if (error instanceof EventError) {

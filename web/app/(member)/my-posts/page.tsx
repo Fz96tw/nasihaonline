@@ -34,7 +34,13 @@ type ActivityRow = {
   actionLabel: "Edit" | "View";
 };
 
-function eventStatus(event: { startsAt: string; cancelledAt: string | null }, now: number): { label: string; variant: BadgeVariant } {
+function eventStatus(
+  event: { startsAt: string; cancelledAt: string | null; publishedAt: string | null },
+  now: number,
+): { label: string; variant: BadgeVariant } {
+  // Save as Draft initiative — checked first: a draft has no meaningful
+  // Upcoming/Past/Cancelled state yet.
+  if (event.publishedAt === null) return { label: "Draft", variant: "neutral" };
   if (event.cancelledAt) return { label: "Cancelled", variant: "danger" };
   return new Date(event.startsAt).getTime() > now
     ? { label: "Upcoming", variant: "success" }

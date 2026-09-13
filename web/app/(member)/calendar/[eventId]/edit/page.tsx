@@ -30,7 +30,11 @@ export default async function EditEventPage({ params }: { params: { eventId: str
     <main className="mx-auto flex max-w-2xl flex-col gap-8 p-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Edit Event</h1>
-        <p className="text-muted-foreground">Update your event below.</p>
+        <p className="text-muted-foreground">
+          {event.isDraft
+            ? "This event is a draft — only you can see it. Publish it when you're ready."
+            : "Update your event below."}
+        </p>
       </div>
 
       <SubmitEventForm
@@ -54,6 +58,9 @@ export default async function EditEventPage({ params }: { params: { eventId: str
           meetingOrganizerMessage: event.meetingOrganizerMessage,
           meetingOrganizerMessageImageUrl: event.meetingOrganizerMessageImageUrl,
           recurrence: event.recurrence,
+          isDraft: event.isDraft,
+          invitedUserIds: event.invitedUserIds,
+          coHostUserIds: event.coHostUserIds,
         }}
       />
     </main>

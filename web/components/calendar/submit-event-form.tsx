@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -38,12 +38,18 @@ import {
 } from "@/components/ui/alert-dialog";
 import { EventType, EventVisibility, RecurrenceFrequency } from "@/lib/generated/prisma/enums";
 import { EVENT_TYPE_LABELS, type EventCategoryOption, type EventCommunityOption } from "@/lib/events";
-import { createEventSchema, updateEventSchema, type CreateEventValues } from "@/lib/validation/event";
+import {
+  createEventSchema,
+  draftEventSchema,
+  updateEventSchema,
+  type CreateEventValues,
+} from "@/lib/validation/event";
 import { DATETIME_LOCAL_STEP_SECONDS, snapDatetimeLocalValue } from "@/lib/datetime-input";
 import { describeRecurrence } from "@/lib/recurrence";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { InviteePicker } from "@/components/members/invitee-picker";
 import { CategoryCheckboxField } from "@/components/shared/category-checkbox-field";
+import { DiscardEventDraftButton } from "@/components/calendar/discard-event-draft-button";
 
 const DEFAULT_VALUES: CreateEventValues = {
   title: "",
@@ -128,6 +134,11 @@ type ExistingEvent = {
     byWeekday: number[];
     until: string | null;
   } | null;
+  /** Save as Draft initiative — null publishedAt means still-draft. */
+  isDraft: boolean;
+  /** Only meaningful while isDraft — otherwise create-only and unused, same as before this initiative. */
+  invitedUserIds: string[];
+  coHostUserIds: string[];
 };
 
 /**
@@ -147,7 +158,19 @@ type ExistingEvent = {
  * (see AudienceChoice/handleAudienceChange below) rather than two separate
  * toggles, so the two can't be set into a contradictory combination in the
  * UI. Visibility itself is create-only — see updateEvent's comment for why
- * only `open` stays editable afterward.
+ * only `open` stays editable afterward. EXCEPT while
+ * `existingEvent.isDraft`: a draft's real first publish is deferred from
+ * creation, so this section (and invitedUserIds/coHostUserIds) stays
+ * visible and editable for as long as the event is still a draft — see
+ * `isFirstSubmission` below.
+ *
+ * Save as Draft initiative: the live RHF resolver is always the lenient
+ * `draftEventSchema` (only title/type/startsAt required) so neither button
+ * is ever blocked by an incomplete form; "Publish Event"/"Save Changes"
+ * instead runs the real strict schema (createEventSchema/updateEventSchema)
+ * by hand inside onSubmit, mapping any failures onto the form via
+ * setError. "Save Draft" skips that manual check entirely and posts with
+ * `action: "draft"`.
  */
 export function SubmitEventForm({
   existingEvent,
@@ -177,18 +200,25 @@ export function SubmitEventForm({
   // createEventSchema/updateEventSchema's validated fields.
   const [meetingOrganizerMessage, setMeetingOrganizerMessage] = useState(existingEvent?.meetingOrganizerMessage ?? "");
   const [meetingOrganizerMessageImage, setMeetingOrganizerMessageImage] = useState<File | null>(null);
+  // Which button was actually clicked — read synchronously inside onSubmit
+  // (a ref, not state, since RHF's handleSubmit fires in the same
+  // click→submit cycle a state update wouldn't be visible in yet).
+  const pendingActionRef = useRef<"draft" | "primary">("primary");
+
+  // A draft's audience/invitedUserIds/coHostUserIds are genuinely still
+  // being decided — this is its real first submission, deferred from
+  // creation — so those fields behave exactly like brand-new-event mode
+  // (rendered + required) for as long as the event stays a draft.
+  const isFirstSubmission = !existingEvent || existingEvent.isDraft;
 
   const form = useForm<CreateEventValues>({
-    // Edit mode validates against updateEventSchema, not createEventSchema:
-    // createEventSchema's requireRestrictedEventInvariants demands a
-    // non-empty invitedUserIds, but that field is intentionally hardcoded to
-    // [] and hidden from the UI in edit mode (see defaultValues below) —
-    // validating against it here silently blocked every save on a
-    // restricted event, since its FormField/FormMessage isn't even rendered
-    // to show why.
-    resolver: (existingEvent ? zodResolver(updateEventSchema) : zodResolver(createEventSchema)) as Resolver<
-      CreateEventValues
-    >,
+    // Always the lenient draft schema for live per-field validation — the
+    // real strict schema (createEventSchema/updateEventSchema) runs by hand
+    // in onSubmit only when the primary button (not "Save Draft") was
+    // clicked. See this component's doc comment for why edit mode still
+    // can't validate a non-draft event's save against createEventSchema
+    // (invitedUserIds is hardcoded/hidden once isFirstSubmission is false).
+    resolver: zodResolver(draftEventSchema) as Resolver<CreateEventValues>,
     defaultValues: existingEvent
       ? {
           title: existingEvent.title,
@@ -200,18 +230,19 @@ export function SubmitEventForm({
           meetingUrl: existingEvent.meetingUrl,
           deidentificationConfirmed: existingEvent.deidentificationConfirmed,
           timezone: null,
-          // The invited list itself isn't editable from this form
-          // (Audience-Restricted Group Events — see ManageInvitees on the
-          // event detail page for that) but visibility itself needs to be
-          // the real value so isRestricted below correctly hides the
-          // "Open to the public" toggle etc. for an actually-restricted event.
+          // The invited list itself isn't editable from this form once past
+          // a draft's first submission (Audience-Restricted Group Events —
+          // see ManageInvitees on the event detail page for that) but
+          // visibility itself needs to be the real value so isRestricted
+          // below correctly hides the "Open to the public" toggle etc. for
+          // an actually-restricted event.
           visibility: existingEvent.visibility,
-          invitedUserIds: [],
-          // Same reasoning as invitedUserIds — co-hosts are create-only from
-          // this form; after creation, the host/an existing co-host manages
-          // them live from the meeting's own participant list instead
-          // (POST /api/events/:id/meeting/co-hosts), not from an edit here.
-          coHostUserIds: [],
+          // Real values while still a draft (resuming its actual picks);
+          // harmless-placeholder empty otherwise, same as before this
+          // initiative — this form section is hidden once isFirstSubmission
+          // is false, so these are never sent for a real (non-draft) edit.
+          invitedUserIds: existingEvent.invitedUserIds,
+          coHostUserIds: existingEvent.coHostUserIds,
           // Unlike invitedUserIds/coHostUserIds above, this IS genuinely
           // editable from this form — the event's real current tags, not
           // hardcoded empty.
@@ -240,11 +271,33 @@ export function SubmitEventForm({
   }
 
   async function onSubmit(values: CreateEventValues) {
+    // "draft" always saves as a draft; "primary" means whichever real
+    // submission this event is currently due for — publishing (brand-new
+    // event, or a draft's first publish) or a normal save (an
+    // already-published event's edit).
+    const action = pendingActionRef.current === "draft" ? "draft" : isFirstSubmission ? "publish" : "save";
+
+    // The live RHF resolver (draftEventSchema) is deliberately lenient so
+    // neither button is ever blocked mid-edit — "Publish Event"/"Save
+    // Changes" instead runs the real strict schema here, by hand, only when
+    // that's the button that was actually clicked.
+    if (action !== "draft") {
+      const strictSchema = isFirstSubmission ? createEventSchema : updateEventSchema;
+      const result = strictSchema.safeParse(values);
+      if (!result.success) {
+        for (const issue of result.error.issues) {
+          form.setError(issue.path.join(".") as keyof CreateEventValues, { message: issue.message });
+        }
+        return;
+      }
+    }
+
     setSubmitting(true);
     setError(null);
     try {
       const csrfToken = await getCsrfToken();
       const formData = new FormData();
+      formData.append("action", action);
       formData.append("title", values.title);
       if (values.description) formData.append("description", values.description);
       formData.append("type", values.type);
@@ -272,7 +325,7 @@ export function SubmitEventForm({
         String(isCaseDiscussion && values.deidentificationConfirmed),
       );
       formData.append("meetLinkSource", values.meetLinkSource);
-      if (!existingEvent) {
+      if (isFirstSubmission) {
         formData.append("visibility", values.visibility);
         formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
         formData.append("coHostUserIds", JSON.stringify(values.coHostUserIds));
@@ -304,14 +357,29 @@ export function SubmitEventForm({
       }
       const { id } = await res.json();
 
+      if (action === "draft") {
+        if (!existingEvent) {
+          // Brand-new draft — the id only exists now, so this is the first
+          // point a resumable edit URL is reachable from.
+          router.replace(`/calendar/${id}/edit?draft=1`);
+        }
+        router.refresh();
+        return;
+      }
+
       // The meeting link just changed to a real value (not cleared to
       // blank) — either the platform itself (Nasiha Conference/Google
       // Meet/manual, which always regenerates a brand-new link server-side,
       // see updateEvent's platformChanged branch) or, staying on manual, the
       // pasted link text. Anyone who already RSVP'd/registered/was invited
       // may still have the old one saved, so offer to resend before
-      // navigating away rather than silently leaving them with a stale link.
+      // navigating away rather than silently leaving them with a stale
+      // link. Only applies to "save" (editing an already-live event) —
+      // "publish" (brand-new, or a draft's first publish) already sends the
+      // real invite/announcement notification as part of publishing, so a
+      // resend here would double-notify the same audience.
       const linkMayHaveChanged =
+        action === "save" &&
         existingEvent &&
         (values.meetLinkSource !== existingEvent.meetLinkSource ||
           (values.meetLinkSource === "manual" && values.meetingUrl && values.meetingUrl !== existingEvent.meetingUrl));
@@ -370,7 +438,7 @@ export function SubmitEventForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
-        {!existingEvent && (
+        {isFirstSubmission && (
           <FormItem className="rounded-md border p-4">
             <FormLabel>Audience</FormLabel>
             <Select value={audience} onValueChange={handleAudienceChange}>
@@ -391,7 +459,7 @@ export function SubmitEventForm({
           </FormItem>
         )}
 
-        {!existingEvent && isRestricted && (
+        {isFirstSubmission && isRestricted && (
           <FormField
             control={form.control}
             name="invitedUserIds"
@@ -727,7 +795,7 @@ export function SubmitEventForm({
                   below. Nasiha Conference gives you real in-meeting host controls (admit, mute, or remove
                   participants), and lets you and any co-hosts you name below start or stop recording. Google Meet
                   does not record these meetings.
-                  {existingEvent && (
+                  {!isFirstSubmission && (
                     <span className="mt-1 block">
                       Switching platforms here replaces the current link with a brand-new one — you&apos;ll get a
                       chance to notify everyone who already has the old link once you save.
@@ -750,7 +818,7 @@ export function SubmitEventForm({
             )}
           />
 
-          {!existingEvent && meetLinkSource === "livekit" && (
+          {isFirstSubmission && meetLinkSource === "livekit" && (
             <FormField
               control={form.control}
               name="coHostUserIds"
@@ -857,11 +925,12 @@ export function SubmitEventForm({
           )}
         </div>
 
-        {/* Create mode sets `open` via the Audience selector above.
-            Visibility itself can't change after creation (see updateEvent),
-            but a community event's `open` flag still can — this is the
-            edit-only equivalent of that one setting. */}
-        {existingEvent && !isRestricted && (
+        {/* isFirstSubmission (brand-new, or a still-draft event) sets `open`
+            via the Audience selector above. Visibility itself can't change
+            past a draft's first publish (see updateEvent), but a community
+            event's `open` flag still can — this is that later-edit
+            equivalent of the same setting. */}
+        {!isFirstSubmission && !isRestricted && (
           <FormField
             control={form.control}
             name="open"
@@ -903,10 +972,33 @@ export function SubmitEventForm({
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        <div>
-          <Button type="submit" disabled={submitting}>
-            {submitting ? "Saving…" : existingEvent ? "Save Changes" : "Submit Event"}
+        <div className="flex items-center gap-3">
+          {isFirstSubmission && (
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={submitting}
+              onClick={() => {
+                pendingActionRef.current = "draft";
+              }}
+            >
+              {submitting && pendingActionRef.current === "draft" ? "Saving…" : "Save Draft"}
+            </Button>
+          )}
+          <Button
+            type="submit"
+            disabled={submitting}
+            onClick={() => {
+              pendingActionRef.current = "primary";
+            }}
+          >
+            {submitting && pendingActionRef.current === "primary"
+              ? "Saving…"
+              : isFirstSubmission
+                ? "Publish Event"
+                : "Save Changes"}
           </Button>
+          {existingEvent?.isDraft && <DiscardEventDraftButton eventId={existingEvent.id} title={existingEvent.title} />}
         </div>
       </form>
 

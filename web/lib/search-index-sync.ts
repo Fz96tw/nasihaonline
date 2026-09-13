@@ -156,12 +156,12 @@ export async function syncForumThreadToIndex(threadId: string): Promise<void> {
 
 /**
  * Re-derives from the DB rather than trusting the caller, same rule as
- * every sync* function above. Index-eligibility only excludes a cancelled
- * event — restricted (`invited`-visibility) events ARE indexed here;
- * per-viewer authorization (community/host/invitee/admin) is enforced at
- * query time by getFeedPage (lib/feed-server.ts), mirroring
- * getMemberEventById's own where-clause, not by excluding restricted events
- * from the index for everyone.
+ * every sync* function above. Index-eligibility excludes a cancelled event
+ * and (Save as Draft initiative) a still-draft one — restricted
+ * (`invited`-visibility) events ARE indexed here; per-viewer authorization
+ * (community/host/invitee/admin) is enforced at query time by getFeedPage
+ * (lib/feed-server.ts), mirroring getMemberEventById's own where-clause,
+ * not by excluding restricted events from the index for everyone.
  */
 export async function syncEventToIndex(eventId: string): Promise<void> {
   const event = await db.event.findUnique({
@@ -173,11 +173,12 @@ export async function syncEventToIndex(eventId: string): Promise<void> {
       type: true,
       startsAt: true,
       cancelledAt: true,
+      publishedAt: true,
       host: { select: { name: true } },
     },
   });
 
-  if (!event || event.cancelledAt !== null) {
+  if (!event || event.cancelledAt !== null || event.publishedAt === null) {
     await deleteEventDocument(eventId);
     return;
   }

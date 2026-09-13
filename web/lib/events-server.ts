@@ -305,6 +305,8 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
     where: {
       visibility: EventVisibility.community,
       cancelledAt: null,
+      // Save as Draft initiative — a draft is only ever visible to its host.
+      publishedAt: { not: null },
       // AND'd explicitly rather than spread side by side — both
       // communityVisibilityWhere and recurringSeriesStillActiveOrUpcoming
       // return their own top-level OR, and spreading two OR-bearing
@@ -360,7 +362,14 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
 // resolves.
 export async function getPublicEventById(eventId: string): Promise<PublicEvent | null> {
   const event = await db.event.findFirst({
-    where: { id: eventId, visibility: EventVisibility.community, cancelledAt: null, ...communityVisibilityWhere(null) },
+    where: {
+      id: eventId,
+      visibility: EventVisibility.community,
+      cancelledAt: null,
+      // Save as Draft initiative — a draft is only ever visible to its host.
+      publishedAt: { not: null },
+      ...communityVisibilityWhere(null),
+    },
     select: {
       id: true,
       title: true,
@@ -414,6 +423,11 @@ export async function getEventsForViewer(
   const events = await db.event.findMany({
     where: {
       cancelledAt: null,
+      // Save as Draft initiative — applies even to the viewer's own draft:
+      // this is the general browse feed, not the owner's "my activity"
+      // view, so a draft stays out of it regardless of who's asking (see
+      // getEventsHostedByMember for the host-always-sees-own-drafts path).
+      publishedAt: { not: null },
       ...(filterParams?.categorySlug ? { categories: { some: { category: { slug: filterParams.categorySlug } } } } : {}),
       ...(filterParams?.communityIds?.length
         ? {
@@ -525,6 +539,11 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
   const events = await db.event.findMany({
     where: {
       cancelledAt: null,
+      // Save as Draft initiative — applies even to the viewer's own draft:
+      // a draft (with a placeholder/unfinished date) shouldn't appear mixed
+      // into the dated calendar grid, even for its own host (find it via
+      // /my-posts instead).
+      publishedAt: { not: null },
       OR: [
         { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
         { hostId: userId },
@@ -651,11 +670,23 @@ export async function getMemberEventById(
       ...(isPrivileged
         ? {}
         : {
+            // Save as Draft initiative — only the host can reach their own
+            // still-draft event's detail page; every other access path
+            // (community visibility, invited, RSVP'd) additionally requires
+            // publishedAt to be set, closing a latent leak where a draft
+            // with the default `visibility: community` could otherwise be
+            // reachable by a non-owner, or a drafted-but-not-yet-notified
+            // invitee could reach it before it's actually published.
             OR: [
-              { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
               { hostId: userId },
-              { invitees: { some: { userId } } },
-              { rsvps: { some: { userId, status: RSVPStatus.going } } },
+              {
+                publishedAt: { not: null },
+                OR: [
+                  { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
+                  { invitees: { some: { userId } } },
+                  { rsvps: { some: { userId, status: RSVPStatus.going } } },
+                ],
+              },
             ],
           }),
     },
@@ -941,6 +972,10 @@ export async function getTrendingEvents(
     where: {
       id: { in: grouped.map((group) => group.eventId) },
       cancelledAt: null,
+      // Save as Draft initiative — defensive: a draft has no real views in
+      // practice (its detail page isn't reachable to generate any), but
+      // keep it out of "trending" regardless.
+      publishedAt: { not: null },
       ...(isPrivileged
         ? {}
         : {
@@ -982,10 +1017,19 @@ export async function getEventsHostedByMember(hostId: string, viewerId: string):
   const events = await db.event.findMany({
     where: {
       hostId,
+      // Save as Draft initiative — the host viewing their own profile still
+      // sees their own drafts (unconditional `{ hostId: viewerId }` below);
+      // anyone else additionally requires publishedAt to be set, so a
+      // draft never leaks to a non-owner viewing this host's profile.
       OR: [
-        { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
         { hostId: viewerId },
-        { invitees: { some: { userId: viewerId } } },
+        {
+          publishedAt: { not: null },
+          OR: [
+            { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
+            { invitees: { some: { userId: viewerId } } },
+          ],
+        },
       ],
     },
     select: {
@@ -998,6 +1042,7 @@ export async function getEventsHostedByMember(hostId: string, viewerId: string):
       visibility: true,
       cancelledAt: true,
       createdAt: true,
+      publishedAt: true,
     },
     orderBy: { startsAt: "desc" },
   });
@@ -1007,6 +1052,7 @@ export async function getEventsHostedByMember(hostId: string, viewerId: string):
     heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
     cancelledAt: event.cancelledAt?.toISOString() ?? null,
     createdAt: event.createdAt.toISOString(),
+    publishedAt: event.publishedAt?.toISOString() ?? null,
   }));
 }
 
@@ -1077,6 +1123,10 @@ export async function getDashboardUpcomingEvents(
   const events = await db.event.findMany({
     where: {
       cancelledAt: null,
+      // Save as Draft initiative — applies even to the viewer's own draft;
+      // the dashboard "upcoming" widget shouldn't surface the host's own
+      // unpublished draft.
+      publishedAt: { not: null },
       AND: [
         // A restricted event's organizer/invitees see it unconditionally —
         // they shouldn't have to RSVP to their own private event just to
@@ -1339,6 +1389,160 @@ async function emailEventBroadcast(
 }
 
 /**
+ * Save as Draft initiative — the meeting-link-provisioning branch extracted
+ * verbatim out of createEvent's body, so it's callable both from there
+ * (mode: "publish", `existingEventId: null`) and from publishEventDraft
+ * (an existing draft row being published, `existingEventId: eventId`).
+ * `existingEventId` doubles as "the id this Event will actually have": when
+ * null and meetLinkSource is "livekit", a fresh id is generated up front
+ * (the Calendar invite needs to link to the in-app meeting page before the
+ * Event row exists) and returned as `resolvedEventId` for the caller to
+ * assign at insert time; when non-null (an already-existing row), that id
+ * is reused as-is and `resolvedEventId` just echoes it back.
+ */
+async function provisionEventMeeting(input: {
+  meetLinkSource: "auto" | "manual" | "livekit";
+  meetingUrl: string | null;
+  title: string;
+  startsAt: Date;
+  endsAt: Date | null;
+  description: string | null;
+  recurrenceRuleString: string | null;
+  timezone: string | null;
+  host: { email: string; name: string | null } | null;
+  hostName: string;
+  invitedUsers: { email: string; name: string | null }[];
+  existingEventId: string | null;
+}): Promise<{
+  meetingUrl: string | null;
+  googleEventId: string | null;
+  livekitRoomName: string | null;
+  resolvedEventId: string | null;
+}> {
+  let meetingUrl = input.meetingUrl;
+  let googleEventId: string | null = null;
+  let livekitRoomName: string | null = null;
+  const preGeneratedEventId =
+    input.existingEventId ?? (input.meetLinkSource === "livekit" ? randomUUID() : null);
+
+  if (input.meetLinkSource === "auto" && input.host) {
+    const attendees = [
+      { email: input.host.email, name: input.hostName },
+      ...input.invitedUsers.map((user) => ({ email: user.email, name: user.name ?? "Member" })),
+    ];
+    const created = await createMeetingCalendarEvent({
+      topic: input.title,
+      startsAt: input.startsAt,
+      durationMinutes: input.endsAt
+        ? Math.round((input.endsAt.getTime() - input.startsAt.getTime()) / 60_000)
+        : undefined,
+      attendees,
+      description: input.description ?? undefined,
+      recurrenceRule: input.recurrenceRuleString ?? undefined,
+      timeZone: input.timezone,
+    });
+    meetingUrl = created.meetingUrl;
+    googleEventId = created.googleEventId;
+  } else if (input.meetLinkSource === "livekit" && input.host && preGeneratedEventId) {
+    livekitRoomName = await createLiveKitRoom(preGeneratedEventId, input.title);
+    const attendees = [
+      { email: input.host.email, name: input.hostName },
+      ...input.invitedUsers.map((user) => ({ email: user.email, name: user.name ?? "Member" })),
+    ];
+    const created = await createLiveKitMeetingCalendarEvent({
+      topic: input.title,
+      startsAt: input.startsAt,
+      durationMinutes: input.endsAt
+        ? Math.round((input.endsAt.getTime() - input.startsAt.getTime()) / 60_000)
+        : undefined,
+      attendees,
+      description: input.description ?? undefined,
+      recurrenceRule: input.recurrenceRuleString ?? undefined,
+      timeZone: input.timezone,
+      meetingPageUrl: `${APP_URL}/meet/event/${preGeneratedEventId}`,
+    });
+    googleEventId = created.googleEventId;
+  }
+
+  return { meetingUrl, googleEventId, livekitRoomName, resolvedEventId: preGeneratedEventId };
+}
+
+/**
+ * Save as Draft initiative — the publish-time notification half of
+ * createEvent's transaction, extracted so publishEventDraft can reuse it
+ * for an existing draft row. Deliberately does NOT create the
+ * EventInvitee/EventCoHost rows themselves (those are persisted
+ * unconditionally, draft or publish, so a resumed draft keeps whatever
+ * invitees/co-hosts were already picked) — only the notifications, which
+ * must never fire before an event is actually visible to its audience.
+ */
+async function recordEventPublishSideEffects(
+  tx: Prisma.TransactionClient,
+  params: {
+    eventId: string;
+    hostId: string;
+    hostName: string;
+    title: string;
+    startsAt: Date;
+    timezone: string | null;
+    isRestricted: boolean;
+    invitedUserIds: string[];
+    publicEventRecipientIds: string[];
+  },
+): Promise<void> {
+  if (params.invitedUserIds.length > 0) {
+    await notifyInvitedUsers(tx, {
+      eventId: params.eventId,
+      title: params.title,
+      hostName: params.hostName,
+      userIds: params.invitedUserIds,
+    });
+  }
+  if (!params.isRestricted) {
+    const when = formatEventDateTime(params.startsAt, params.timezone);
+    await broadcastEventNotification(tx, {
+      eventId: params.eventId,
+      sentById: params.hostId,
+      type: NotificationType.event_published,
+      message: `${params.hostName} scheduled a new event: "${params.title}" on ${when}.`,
+      userIds: params.publicEventRecipientIds,
+    });
+  }
+}
+
+/**
+ * Save as Draft initiative — the best-effort emails extracted out of
+ * createEvent's tail, reused by publishEventDraft. Same "never undoes the
+ * write" philosophy as every other email in lib/email.ts.
+ */
+async function sendEventPublishEmails(params: {
+  invitedUsers: { id: string; email: string; name: string | null }[];
+  publicEventRecipients: { id: string; email: string; name: string | null }[];
+  eventId: string;
+  title: string;
+  description: string | null;
+  hostName: string;
+  startsAt: Date;
+  timezone: string | null;
+}): Promise<void> {
+  await emailInvitedUsers(params.invitedUsers, {
+    eventId: params.eventId,
+    title: params.title,
+    hostName: params.hostName,
+    startsAt: params.startsAt,
+    timezone: params.timezone,
+  });
+  await emailEventBroadcast(params.publicEventRecipients, {
+    eventId: params.eventId,
+    title: params.title,
+    description: params.description,
+    hostName: params.hostName,
+    startsAt: params.startsAt,
+    timezone: params.timezone,
+  });
+}
+
+/**
  * Creates an Event from a member's "Submit Event" action (§4.6), gated to
  * EVENT_SUBMISSION_TIERS by the caller. The submitting member always
  * becomes the host — there's no host picker — since `Event.host` is also
@@ -1353,6 +1557,19 @@ async function emailEventBroadcast(
  * objective). `meetLinkSource: "auto"` calls the same Google Meet
  * integration the 1:1 MeetingRequest flow uses; `"manual"` just stores
  * `input.meetingUrl` as-is, like every event before this objective did.
+ *
+ * Save as Draft initiative: `mode: "draft"` skips every completeness check
+ * below (Case Discussion de-identification, restricted-visibility invitee
+ * requirement), skips provisionEventMeeting/recordEventPublishSideEffects/
+ * sendEventPublishEmails entirely (no Calendar/LiveKit call, no
+ * notification, no email), and persists `publishedAt: null`. It still
+ * creates the Event row (and its communities/categories/recurrence/
+ * invitee/co-host rows, so a resumed draft keeps everything already
+ * picked) — title/type/startsAt are the only fields this initiative
+ * requires up front (client-enforced; see draftEventSchema). `mode:
+ * "publish"` (the default) is today's exact unchanged pipeline, now
+ * calling the three extracted helpers above, plus sets `publishedAt: new
+ * Date()`.
  */
 export async function createEvent(
   hostId: string,
@@ -1386,7 +1603,9 @@ export async function createEvent(
       until: string | null;
     } | null;
   },
+  mode: "draft" | "publish" = "publish",
 ): Promise<{ id: string }> {
+  const isDraft = mode === "draft";
   const startsAt = new Date(input.startsAt);
   if (Number.isNaN(startsAt.getTime())) {
     throw new EventError(400, "Start date and time isn't valid.");
@@ -1423,7 +1642,9 @@ export async function createEvent(
   // Belt-and-suspenders: createEventSchema already blocks an unconfirmed
   // Case Discussion client- and server-side, but this is the one place no
   // caller of createEvent — schema-validated or not — can bypass it.
-  if (input.type === EventType.case_discussion && !input.deidentificationConfirmed) {
+  // Skipped for a draft, same "completeness checks only gate publishing"
+  // rule as every other check below.
+  if (!isDraft && input.type === EventType.case_discussion && !input.deidentificationConfirmed) {
     throw new EventError(400, "Case Discussion events require the de-identification confirmation.");
   }
 
@@ -1433,7 +1654,7 @@ export async function createEvent(
   // this combination. The real enforcement point against a leftover/bypassed
   // `open: true` on a restricted event is registerForEvent's own visibility
   // check below, but this stops it from ever being set at creation time.
-  if (isRestricted && input.open) {
+  if (!isDraft && isRestricted && input.open) {
     throw new EventError(400, "Restricted events can't be open to the public.");
   }
 
@@ -1450,6 +1671,8 @@ export async function createEvent(
   // them (their own "please RSVP" notification, a redundant EventInvitee
   // row, a duplicate line in their own roster) — same exclusion
   // updateEventInvitees already applies when editing the list later.
+  // Resolved regardless of mode — a draft still persists EventInvitee rows
+  // (see the transaction below) so a resumed draft keeps its picks.
   const invitedUsers = isRestricted
     ? await db.user.findMany({
         where: {
@@ -1460,7 +1683,7 @@ export async function createEvent(
         select: { id: true, email: true, name: true },
       })
     : [];
-  if (isRestricted && invitedUsers.length === 0) {
+  if (!isDraft && isRestricted && invitedUsers.length === 0) {
     throw new EventError(400, "Select at least one member to invite.");
   }
 
@@ -1483,10 +1706,9 @@ export async function createEvent(
   // announcements-server.ts's board_announcement broadcast (further scoped
   // to the tagged communities, if any — getCommunityEventRecipients). The
   // host is excluded — they don't need a notification about the event they
-  // just scheduled.
-  const publicEventRecipients = !isRestricted
-    ? await getCommunityEventRecipients(input.communityIds, hostId)
-    : [];
+  // just scheduled. Skipped for a draft — nothing to announce yet.
+  const publicEventRecipients =
+    !isDraft && !isRestricted ? await getCommunityEventRecipients(input.communityIds, hostId) : [];
 
   let heroImageUrl: string | null = null;
   if (input.heroImage) {
@@ -1512,66 +1734,44 @@ export async function createEvent(
     }
   }
 
-  const host = await db.user.findUnique({ where: { id: hostId }, select: { email: true, name: true } });
-  const hostName = host?.name ?? "A member";
-
-  // External network call — kept outside the transaction below, same
-  // best-effort philosophy as createMeetingCalendarEvent's own callers
-  // (resolveMeetingRequest): a failed/unconfigured Google call must never
-  // block event creation, since the Event row is the source of truth.
-  // Auto-generate applies to every event, not just restricted ones —
-  // `invitedUsers` is [] for a community event, so this naturally reduces
-  // to "host only" as the Calendar attendee list there; a community
-  // event's real audience is discovered later via RSVP, not known upfront.
+  // External network calls (Calendar/LiveKit) — kept outside the
+  // transaction below, same best-effort philosophy as
+  // createMeetingCalendarEvent's own callers. Skipped entirely for a draft
+  // — no meeting is provisioned until it's actually published (see
+  // publishEventDraft), so `meetingUrl` stays whatever manual value was
+  // typed (or null) and no id is pre-generated.
   let meetingUrl = input.meetingUrl;
   let googleEventId: string | null = null;
   let livekitRoomName: string | null = null;
-  // Pre-generated only for the livekit path: the Calendar invite needs to
-  // link to this event's own in-app meeting page, but that call happens
-  // before the Event row (and its DB-generated id) exists below. Reused as
-  // both the Event's id and the LiveKit room name — no reason for them to
-  // differ, and it saves a second random value.
-  const preGeneratedEventId = input.meetLinkSource === "livekit" ? randomUUID() : null;
-
-  if (input.meetLinkSource === "auto" && host) {
-    const attendees = [
-      { email: host.email, name: hostName },
-      ...invitedUsers.map((user) => ({ email: user.email, name: user.name ?? "Member" })),
-    ];
-    const created = await createMeetingCalendarEvent({
-      topic: input.title,
+  let resolvedEventId: string | null = null;
+  let hostName = "A member";
+  if (!isDraft) {
+    const host = await db.user.findUnique({ where: { id: hostId }, select: { email: true, name: true } });
+    hostName = host?.name ?? "A member";
+    const provisioned = await provisionEventMeeting({
+      meetLinkSource: input.meetLinkSource,
+      meetingUrl: input.meetingUrl,
+      title: input.title,
       startsAt,
-      durationMinutes: endsAt ? Math.round((endsAt.getTime() - startsAt.getTime()) / 60_000) : undefined,
-      attendees,
-      description: input.description ?? undefined,
-      recurrenceRule: recurrenceRuleString ?? undefined,
-      timeZone: input.timezone,
+      endsAt,
+      description: input.description,
+      recurrenceRuleString,
+      timezone: input.timezone,
+      host,
+      hostName,
+      invitedUsers,
+      existingEventId: null,
     });
-    meetingUrl = created.meetingUrl;
-    googleEventId = created.googleEventId;
-  } else if (input.meetLinkSource === "livekit" && host && preGeneratedEventId) {
-    livekitRoomName = await createLiveKitRoom(preGeneratedEventId, input.title);
-    const attendees = [
-      { email: host.email, name: hostName },
-      ...invitedUsers.map((user) => ({ email: user.email, name: user.name ?? "Member" })),
-    ];
-    const created = await createLiveKitMeetingCalendarEvent({
-      topic: input.title,
-      startsAt,
-      durationMinutes: endsAt ? Math.round((endsAt.getTime() - startsAt.getTime()) / 60_000) : undefined,
-      attendees,
-      description: input.description ?? undefined,
-      recurrenceRule: recurrenceRuleString ?? undefined,
-      timeZone: input.timezone,
-      meetingPageUrl: `${APP_URL}/meet/event/${preGeneratedEventId}`,
-    });
-    googleEventId = created.googleEventId;
+    meetingUrl = provisioned.meetingUrl;
+    googleEventId = provisioned.googleEventId;
+    livekitRoomName = provisioned.livekitRoomName;
+    resolvedEventId = provisioned.resolvedEventId;
   }
 
   const event = await db.$transaction(async (tx) => {
     const created = await tx.event.create({
       data: {
-        ...(preGeneratedEventId ? { id: preGeneratedEventId } : {}),
+        ...(resolvedEventId ? { id: resolvedEventId } : {}),
         title: input.title,
         description: input.description,
         type: input.type,
@@ -1588,6 +1788,7 @@ export async function createEvent(
         deidentificationConfirmed: input.deidentificationConfirmed,
         meetingOrganizerMessage: input.meetingOrganizerMessage,
         meetingOrganizerMessageImageKey,
+        publishedAt: isDraft ? null : new Date(),
         communities: { create: input.communityIds.map((communityId) => ({ communityId })) },
         categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
       },
@@ -1606,61 +1807,54 @@ export async function createEvent(
       });
     }
 
+    // Persisted regardless of mode — a draft keeps whatever invitees/
+    // co-hosts were already picked when resumed; only the notification
+    // below is publish-gated.
     if (invitedUsers.length > 0) {
       await tx.eventInvitee.createMany({
         data: invitedUsers.map((user) => ({ eventId: created.id, userId: user.id })),
       });
-      await notifyInvitedUsers(tx, {
-        eventId: created.id,
-        title: input.title,
-        hostName,
-        userIds: invitedUsers.map((user) => user.id),
-      });
     }
-
     if (coHostUsers.length > 0) {
       await tx.eventCoHost.createMany({
         data: coHostUsers.map((user) => ({ eventId: created.id, userId: user.id })),
       });
     }
 
-    if (!isRestricted) {
-      const when = formatEventDateTime(startsAt, input.timezone);
-      await broadcastEventNotification(tx, {
+    if (!isDraft) {
+      await recordEventPublishSideEffects(tx, {
         eventId: created.id,
-        sentById: hostId,
-        type: NotificationType.event_published,
-        message: `${hostName} scheduled a new event: "${input.title}" on ${when}.`,
-        userIds: publicEventRecipients.map((user) => user.id),
+        hostId,
+        hostName,
+        title: input.title,
+        startsAt,
+        timezone: input.timezone,
+        isRestricted,
+        invitedUserIds: invitedUsers.map((user) => user.id),
+        publicEventRecipientIds: publicEventRecipients.map((user) => user.id),
       });
     }
 
     return created;
   });
 
-  // Best-effort, same rationale as every other email in lib/email.ts — the
-  // Event/EventInvitee/Notification rows already exist by this point, so a
-  // failed/unconfigured send must not undo the creation.
-  await emailInvitedUsers(invitedUsers, {
-    eventId: event.id,
-    title: input.title,
-    hostName,
-    startsAt,
-    timezone: input.timezone,
-  });
-  await emailEventBroadcast(publicEventRecipients, {
-    eventId: event.id,
-    title: input.title,
-    description: input.description,
-    hostName,
-    startsAt,
-    timezone: input.timezone,
-  });
+  if (!isDraft) {
+    await sendEventPublishEmails({
+      invitedUsers,
+      publicEventRecipients,
+      eventId: event.id,
+      title: input.title,
+      description: input.description,
+      hostName,
+      startsAt,
+      timezone: input.timezone,
+    });
 
-  await ensureCommunityMembership(
-    [hostId, ...invitedUsers.map((user) => user.id), ...coHostUsers.map((user) => user.id)],
-    input.communityIds,
-  );
+    await ensureCommunityMembership(
+      [hostId, ...invitedUsers.map((user) => user.id), ...coHostUsers.map((user) => user.id)],
+      input.communityIds,
+    );
+  }
 
   return { id: event.id };
 }
@@ -1855,9 +2049,12 @@ export async function getEventForEdit(eventId: string) {
       visibility: true,
       meetingOrganizerMessage: true,
       meetingOrganizerMessageImageKey: true,
+      publishedAt: true,
       recurrence: { select: RECURRENCE_SELECT },
       communities: { select: { communityId: true } },
       categories: { select: { categoryId: true } },
+      invitees: { select: { userId: true } },
+      coHosts: { select: { userId: true } },
     },
   });
   if (!event) return null;
@@ -1895,6 +2092,12 @@ export async function getEventForEdit(eventId: string) {
           until: event.recurrence.until?.toISOString() ?? null,
         }
       : null,
+    // Save as Draft initiative — null publishedAt means still-draft. Only
+    // meaningful while true: invitedUserIds/coHostUserIds are otherwise
+    // create-only and unused by a normal (published) edit.
+    isDraft: event.publishedAt === null,
+    invitedUserIds: event.invitees.map((invitee) => invitee.userId),
+    coHostUserIds: event.coHosts.map((coHost) => coHost.userId),
   };
 }
 
@@ -1948,6 +2151,7 @@ export async function updateEvent(
       googleEventId: true,
       meetingUrl: true,
       livekitRoomName: true,
+      publishedAt: true,
       recurrence: { select: RECURRENCE_SELECT },
       // Only ever non-empty for a restricted event — the attendee list a
       // regenerated Meet/LiveKit calendar event needs when switching
@@ -1961,6 +2165,15 @@ export async function updateEvent(
   const isHost = event.hostId === actingUser.id;
   if (!isAdmin && !isHost) {
     throw new EventError(403, "Only the event's host or an admin can edit it.");
+  }
+
+  // Save as Draft initiative — this whole function assumes real meeting
+  // infrastructure/an audience already exists (platform switching, Google
+  // Calendar sync, reschedule notifications below), none of which is true
+  // for a still-draft event. Callers must use saveEventDraft/
+  // publishEventDraft instead while publishedAt is null.
+  if (event.publishedAt === null) {
+    throw new EventError(400, "This event is still a draft — save or publish it instead of editing it directly.");
   }
 
   // Visibility itself isn't editable via this form (see ManageInvitees for
@@ -2219,6 +2432,493 @@ export async function updateEvent(
   }
 
   return updated;
+}
+
+/**
+ * Save as Draft initiative — saves in-progress changes to an event that's
+ * still a draft (`publishedAt === null`). Deliberately much simpler than
+ * updateEvent above: no platform-switching/Calendar-sync/reschedule-
+ * notification machinery, since none of that meeting infrastructure exists
+ * yet for a draft. Replaces communities/categories/invitees/co-hosts
+ * wholesale (delete-then-recreate, same pattern updateEvent uses for
+ * communities/categories) so a resumed draft's picker state always matches
+ * its last save exactly. No completeness checks — see draftEventSchema.
+ */
+export async function saveEventDraft(
+  eventId: string,
+  actingUser: UserModel,
+  input: {
+    title: string;
+    description: string | null;
+    type: EventType;
+    startsAt: string;
+    endsAt: string | null;
+    open: boolean;
+    meetingUrl: string | null;
+    deidentificationConfirmed: boolean;
+    timezone: string | null;
+    heroImage: File | null;
+    visibility: EventVisibility;
+    invitedUserIds: string[];
+    coHostUserIds: string[];
+    communityIds: string[];
+    categoryIds: string[];
+    meetingOrganizerMessage: string | null;
+    meetingOrganizerMessageImage: File | null;
+    recurrence: {
+      frequency: RecurrenceFrequency;
+      interval: number;
+      byWeekday: number[];
+      until: string | null;
+    } | null;
+  },
+): Promise<{ id: string }> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: {
+      id: true,
+      hostId: true,
+      heroImageUrl: true,
+      meetingOrganizerMessageImageKey: true,
+      publishedAt: true,
+    },
+  });
+  if (!event) throw new EventError(404, "Event not found.");
+
+  const isAdmin = actingUser.role === Role.admin;
+  const isHost = event.hostId === actingUser.id;
+  if (!isAdmin && !isHost) {
+    throw new EventError(403, "Only the event's host or an admin can edit it.");
+  }
+  if (event.publishedAt !== null) {
+    throw new EventError(400, "This event is already published — use updateEvent instead.");
+  }
+
+  const startsAt = new Date(input.startsAt);
+  if (Number.isNaN(startsAt.getTime())) {
+    throw new EventError(400, "Start date and time isn't valid.");
+  }
+  let endsAt: Date | null = null;
+  if (input.endsAt) {
+    endsAt = new Date(input.endsAt);
+    if (Number.isNaN(endsAt.getTime())) {
+      throw new EventError(400, "End date and time isn't valid.");
+    }
+    if (endsAt <= startsAt) {
+      throw new EventError(400, "End time must be after the start time.");
+    }
+  }
+
+  let recurrenceUntil: Date | null = null;
+  if (input.recurrence?.until) {
+    recurrenceUntil = new Date(input.recurrence.until);
+    if (Number.isNaN(recurrenceUntil.getTime())) {
+      throw new EventError(400, '"Repeat until" date isn\'t valid.');
+    }
+  }
+  const recurrenceInput: RecurrenceInput | null = input.recurrence
+    ? {
+        frequency: input.recurrence.frequency,
+        interval: input.recurrence.interval,
+        byWeekday: input.recurrence.frequency === RecurrenceFrequency.weekly ? input.recurrence.byWeekday : [],
+        until: recurrenceUntil,
+      }
+    : null;
+
+  let heroImageUrl = event.heroImageUrl;
+  if (input.heroImage) {
+    try {
+      heroImageUrl = await uploadEventHeroImage(input.heroImage);
+    } catch (error) {
+      if (error instanceof UploadValidationError) {
+        throw new EventError(400, error.message);
+      }
+      throw error;
+    }
+  }
+
+  let meetingOrganizerMessageImageKey = event.meetingOrganizerMessageImageKey;
+  if (input.meetingOrganizerMessageImage) {
+    try {
+      meetingOrganizerMessageImageKey = await uploadMeetingMessageImage(input.meetingOrganizerMessageImage);
+    } catch (error) {
+      if (error instanceof UploadValidationError) {
+        throw new EventError(400, error.message);
+      }
+      throw error;
+    }
+  }
+
+  const isRestricted = input.visibility === EventVisibility.invited;
+  const invitedUsers = isRestricted
+    ? await db.user.findMany({
+        where: {
+          id: { in: input.invitedUserIds, notIn: [event.hostId] },
+          tier: { in: DIRECTORY_TIERS },
+          profile: { listInDirectory: true },
+        },
+        select: { id: true },
+      })
+    : [];
+  const coHostUsers = await db.user.findMany({
+    where: {
+      id: { in: input.coHostUserIds, notIn: [event.hostId] },
+      tier: { in: DIRECTORY_TIERS },
+      profile: { listInDirectory: true },
+    },
+    select: { id: true },
+  });
+
+  const updated = await db.$transaction(async (tx) => {
+    await tx.eventCommunity.deleteMany({ where: { eventId: event.id } });
+    await tx.eventCategory.deleteMany({ where: { eventId: event.id } });
+    await tx.eventInvitee.deleteMany({ where: { eventId: event.id } });
+    await tx.eventCoHost.deleteMany({ where: { eventId: event.id } });
+    const result = await tx.event.update({
+      where: { id: event.id },
+      data: {
+        title: input.title,
+        description: input.description,
+        type: input.type,
+        startsAt,
+        endsAt,
+        timezone: input.timezone,
+        open: input.open,
+        heroImageUrl,
+        meetingUrl: input.meetingUrl,
+        visibility: input.visibility,
+        deidentificationConfirmed: input.deidentificationConfirmed,
+        meetingOrganizerMessage: input.meetingOrganizerMessage,
+        meetingOrganizerMessageImageKey,
+        communities: { create: input.communityIds.map((communityId) => ({ communityId })) },
+        categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
+        invitees:
+          invitedUsers.length > 0 ? { create: invitedUsers.map((user) => ({ userId: user.id })) } : undefined,
+        coHosts: coHostUsers.length > 0 ? { create: coHostUsers.map((user) => ({ userId: user.id })) } : undefined,
+      },
+      select: { id: true },
+    });
+
+    if (recurrenceInput) {
+      await tx.eventRecurrence.upsert({
+        where: { eventId: event.id },
+        create: {
+          eventId: event.id,
+          frequency: recurrenceInput.frequency,
+          interval: recurrenceInput.interval,
+          byWeekday: recurrenceInput.byWeekday,
+          until: recurrenceInput.until,
+        },
+        update: {
+          frequency: recurrenceInput.frequency,
+          interval: recurrenceInput.interval,
+          byWeekday: recurrenceInput.byWeekday,
+          until: recurrenceInput.until,
+        },
+      });
+    } else {
+      await tx.eventRecurrence.deleteMany({ where: { eventId: event.id } });
+    }
+
+    return result;
+  });
+
+  return updated;
+}
+
+/**
+ * Save as Draft initiative — the draft→published transition for an
+ * existing row. Same required-field/invariant shape as createEvent's
+ * publish path (Case Discussion de-identification, restricted-visibility
+ * invitee requirement) since this genuinely is the event's first real
+ * submission, just against a row that already exists instead of a fresh
+ * insert. Reuses provisionEventMeeting/recordEventPublishSideEffects/
+ * sendEventPublishEmails — the same helpers createEvent's publish path
+ * calls — passing this event's own id to provisionEventMeeting rather than
+ * generating a new one.
+ */
+export async function publishEventDraft(
+  eventId: string,
+  actingUser: UserModel,
+  input: {
+    title: string;
+    description: string | null;
+    type: EventType;
+    startsAt: string;
+    endsAt: string | null;
+    open: boolean;
+    meetingUrl: string | null;
+    deidentificationConfirmed: boolean;
+    timezone: string | null;
+    heroImage: File | null;
+    visibility: EventVisibility;
+    invitedUserIds: string[];
+    coHostUserIds: string[];
+    communityIds: string[];
+    categoryIds: string[];
+    meetLinkSource: "auto" | "manual" | "livekit";
+    meetingOrganizerMessage: string | null;
+    meetingOrganizerMessageImage: File | null;
+    recurrence: {
+      frequency: RecurrenceFrequency;
+      interval: number;
+      byWeekday: number[];
+      until: string | null;
+    } | null;
+  },
+): Promise<{ id: string }> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: {
+      id: true,
+      hostId: true,
+      heroImageUrl: true,
+      meetingOrganizerMessageImageKey: true,
+      publishedAt: true,
+    },
+  });
+  if (!event) throw new EventError(404, "Event not found.");
+
+  const isAdmin = actingUser.role === Role.admin;
+  const isHost = event.hostId === actingUser.id;
+  if (!isAdmin && !isHost) {
+    throw new EventError(403, "Only the event's host or an admin can publish it.");
+  }
+  if (event.publishedAt !== null) {
+    throw new EventError(400, "This event is already published.");
+  }
+
+  const startsAt = new Date(input.startsAt);
+  if (Number.isNaN(startsAt.getTime())) {
+    throw new EventError(400, "Start date and time isn't valid.");
+  }
+  let endsAt: Date | null = null;
+  if (input.endsAt) {
+    endsAt = new Date(input.endsAt);
+    if (Number.isNaN(endsAt.getTime())) {
+      throw new EventError(400, "End date and time isn't valid.");
+    }
+    if (endsAt <= startsAt) {
+      throw new EventError(400, "End time must be after the start time.");
+    }
+  }
+
+  let recurrenceUntil: Date | null = null;
+  if (input.recurrence?.until) {
+    recurrenceUntil = new Date(input.recurrence.until);
+    if (Number.isNaN(recurrenceUntil.getTime())) {
+      throw new EventError(400, '"Repeat until" date isn\'t valid.');
+    }
+  }
+  const recurrenceInput: RecurrenceInput | null = input.recurrence
+    ? {
+        frequency: input.recurrence.frequency,
+        interval: input.recurrence.interval,
+        byWeekday: input.recurrence.frequency === RecurrenceFrequency.weekly ? input.recurrence.byWeekday : [],
+        until: recurrenceUntil,
+      }
+    : null;
+  const recurrenceRuleString = recurrenceInput ? buildRRuleString(recurrenceInput, startsAt) : null;
+
+  if (input.type === EventType.case_discussion && !input.deidentificationConfirmed) {
+    throw new EventError(400, "Case Discussion events require the de-identification confirmation.");
+  }
+
+  const isRestricted = input.visibility === EventVisibility.invited;
+  if (isRestricted && input.open) {
+    throw new EventError(400, "Restricted events can't be open to the public.");
+  }
+
+  const invitedUsers = isRestricted
+    ? await db.user.findMany({
+        where: {
+          id: { in: input.invitedUserIds, notIn: [event.hostId] },
+          tier: { in: DIRECTORY_TIERS },
+          profile: { listInDirectory: true },
+        },
+        select: { id: true, email: true, name: true },
+      })
+    : [];
+  if (isRestricted && invitedUsers.length === 0) {
+    throw new EventError(400, "Select at least one member to invite.");
+  }
+
+  const coHostUsers = await db.user.findMany({
+    where: {
+      id: { in: input.coHostUserIds, notIn: [event.hostId] },
+      tier: { in: DIRECTORY_TIERS },
+      profile: { listInDirectory: true },
+    },
+    select: { id: true },
+  });
+
+  const publicEventRecipients = !isRestricted
+    ? await getCommunityEventRecipients(input.communityIds, event.hostId)
+    : [];
+
+  let heroImageUrl = event.heroImageUrl;
+  if (input.heroImage) {
+    try {
+      heroImageUrl = await uploadEventHeroImage(input.heroImage);
+    } catch (error) {
+      if (error instanceof UploadValidationError) {
+        throw new EventError(400, error.message);
+      }
+      throw error;
+    }
+  }
+  let meetingOrganizerMessageImageKey = event.meetingOrganizerMessageImageKey;
+  if (input.meetingOrganizerMessageImage) {
+    try {
+      meetingOrganizerMessageImageKey = await uploadMeetingMessageImage(input.meetingOrganizerMessageImage);
+    } catch (error) {
+      if (error instanceof UploadValidationError) {
+        throw new EventError(400, error.message);
+      }
+      throw error;
+    }
+  }
+
+  const host = await db.user.findUnique({ where: { id: event.hostId }, select: { email: true, name: true } });
+  const hostName = host?.name ?? "A member";
+  const provisioned = await provisionEventMeeting({
+    meetLinkSource: input.meetLinkSource,
+    meetingUrl: input.meetingUrl,
+    title: input.title,
+    startsAt,
+    endsAt,
+    description: input.description,
+    recurrenceRuleString,
+    timezone: input.timezone,
+    host,
+    hostName,
+    invitedUsers,
+    existingEventId: event.id,
+  });
+
+  const updated = await db.$transaction(async (tx) => {
+    await tx.eventCommunity.deleteMany({ where: { eventId: event.id } });
+    await tx.eventCategory.deleteMany({ where: { eventId: event.id } });
+    await tx.eventInvitee.deleteMany({ where: { eventId: event.id } });
+    await tx.eventCoHost.deleteMany({ where: { eventId: event.id } });
+    const result = await tx.event.update({
+      where: { id: event.id },
+      data: {
+        title: input.title,
+        description: input.description,
+        type: input.type,
+        startsAt,
+        endsAt,
+        timezone: input.timezone,
+        open: input.open,
+        heroImageUrl,
+        meetingUrl: provisioned.meetingUrl,
+        googleEventId: provisioned.googleEventId,
+        livekitRoomName: provisioned.livekitRoomName,
+        visibility: input.visibility,
+        deidentificationConfirmed: input.deidentificationConfirmed,
+        meetingOrganizerMessage: input.meetingOrganizerMessage,
+        meetingOrganizerMessageImageKey,
+        publishedAt: new Date(),
+        communities: { create: input.communityIds.map((communityId) => ({ communityId })) },
+        categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
+        invitees:
+          invitedUsers.length > 0 ? { create: invitedUsers.map((user) => ({ userId: user.id })) } : undefined,
+        coHosts: coHostUsers.length > 0 ? { create: coHostUsers.map((user) => ({ userId: user.id })) } : undefined,
+      },
+      select: { id: true },
+    });
+
+    if (recurrenceInput) {
+      await tx.eventRecurrence.upsert({
+        where: { eventId: event.id },
+        create: {
+          eventId: event.id,
+          frequency: recurrenceInput.frequency,
+          interval: recurrenceInput.interval,
+          byWeekday: recurrenceInput.byWeekday,
+          until: recurrenceInput.until,
+        },
+        update: {
+          frequency: recurrenceInput.frequency,
+          interval: recurrenceInput.interval,
+          byWeekday: recurrenceInput.byWeekday,
+          until: recurrenceInput.until,
+        },
+      });
+    } else {
+      await tx.eventRecurrence.deleteMany({ where: { eventId: event.id } });
+    }
+
+    await recordEventPublishSideEffects(tx, {
+      eventId: result.id,
+      hostId: event.hostId,
+      hostName,
+      title: input.title,
+      startsAt,
+      timezone: input.timezone,
+      isRestricted,
+      invitedUserIds: invitedUsers.map((user) => user.id),
+      publicEventRecipientIds: publicEventRecipients.map((user) => user.id),
+    });
+
+    return result;
+  });
+
+  await sendEventPublishEmails({
+    invitedUsers,
+    publicEventRecipients,
+    eventId: updated.id,
+    title: input.title,
+    description: input.description,
+    hostName,
+    startsAt,
+    timezone: input.timezone,
+  });
+
+  await ensureCommunityMembership(
+    [event.hostId, ...invitedUsers.map((user) => user.id), ...coHostUsers.map((user) => user.id)],
+    input.communityIds,
+  );
+
+  return { id: updated.id };
+}
+
+/**
+ * Save as Draft initiative — "Discard Draft". A genuine hard delete, unlike
+ * every other Event removal path (cancelEvent's one-way soft-cancel via
+ * `cancelledAt`) — safe only because a still-draft event structurally
+ * cannot yet have RSVPs, registrations, a discussion thread, recordings, or
+ * chat history (all of those are reachable only once an event is
+ * published, per getMemberEventById's publishedAt gate), so there is
+ * nothing to preserve. Cascade deletes handle communities/categories/
+ * recurrence/invitees/co-hosts.
+ */
+export async function deleteEventDraft(eventId: string, actingUser: UserModel): Promise<void> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { id: true, hostId: true, heroImageUrl: true, meetingOrganizerMessageImageKey: true, publishedAt: true },
+  });
+  if (!event) throw new EventError(404, "Event not found.");
+
+  const isAdmin = actingUser.role === Role.admin;
+  const isHost = event.hostId === actingUser.id;
+  if (!isAdmin && !isHost) {
+    throw new EventError(403, "Only the event's host or an admin can discard it.");
+  }
+  if (event.publishedAt !== null) {
+    throw new EventError(400, "Only a draft can be discarded — cancel a published event instead.");
+  }
+
+  await db.event.delete({ where: { id: event.id } });
+
+  if (event.heroImageUrl) await deleteEventHeroImage(event.heroImageUrl);
+  if (event.meetingOrganizerMessageImageKey) await deleteMeetingMessageImage(event.meetingOrganizerMessageImageKey);
+}
+
+/** Draft count for the dashboard's "All My Activity" link (Save as Draft initiative). */
+export async function getDraftEventCount(hostId: string): Promise<number> {
+  return db.event.count({ where: { hostId, publishedAt: null } });
 }
 
 /**

@@ -1156,6 +1156,14 @@ model Event {
   // the field/filtering is generic.
   cancelledAt                     DateTime?
   deidentificationConfirmed       Boolean         @default(false)
+  // Save as Draft initiative — null = draft (only visible to its host),
+  // set = published (visible per `visibility` like every event before this
+  // field existed). Mirrors Campaign.sentAt's "null = draft, set = sent"
+  // convention rather than a status enum, same rationale as `cancelledAt`
+  // above. Every pre-existing row is backfilled to its `createdAt` by this
+  // migration, so there is no "grandfathered draft" the way Events had for
+  // `communities`.
+  publishedAt                     DateTime?
   createdAt                       DateTime        @default(now())
   updatedAt                       DateTime        @updatedAt
 
@@ -1206,6 +1214,7 @@ model Event {
   categories             EventCategory[]
 
   @@index([startsAt])
+  @@index([publishedAt])
   @@map("events")
 }
 
