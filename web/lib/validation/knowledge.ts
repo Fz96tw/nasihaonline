@@ -22,11 +22,17 @@ const knowledgeItemBaseSchema = z.object({
   // contentType = blog_post, which has no attachment/externalUrl/youtubeUrl.
   body: z.string().trim().nullable(),
   contentType: z.nativeEnum(KnowledgeContentType, { message: "Select a content type" }),
-  level: z.nativeEnum(KnowledgeLevel, { message: "Select a career-stage level" }),
+  // Nullable — required only when actually submitting for review (see
+  // withContentTypeRefinements below), so a draft can be saved before a
+  // level is chosen.
+  level: z.nativeEnum(KnowledgeLevel).nullable(),
   // Required, multi-select top-level classification (standardized onto
   // Events' EventCommunity shape) — categoryIds below is now optional,
-  // scoped in the UI to whichever communities are selected here.
-  communityIds: z.array(z.string()).min(1, "Select at least one community"),
+  // scoped in the UI to whichever communities are selected here. No
+  // `.min(1)` here — required only when submitting for review (see
+  // withContentTypeRefinements below), so a draft can be saved with none
+  // selected yet.
+  communityIds: z.array(z.string()),
   categoryIds: z.array(z.string()),
   tagIds: z.array(z.string()),
   youtubeUrl: z
@@ -59,6 +65,16 @@ function withContentTypeRefinements<Schema extends z.ZodType<z.infer<typeof know
   schema: Schema,
 ) {
   return schema.superRefine((data, ctx) => {
+    if (data.level === null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["level"], message: "Select a career-stage level" });
+    }
+    if (data.communityIds.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["communityIds"],
+        message: "Select at least one community",
+      });
+    }
     if (data.contentType === KnowledgeContentType.case_study && !data.deidentificationConfirmed) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -116,3 +132,20 @@ export type CreateKnowledgeItemValues = z.infer<typeof createKnowledgeItemSchema
 /** PATCH /api/library/:id body shape (editing a submission) — same fields minus licenseConsented. */
 export const updateKnowledgeItemSchema = withContentTypeRefinements(knowledgeItemBaseSchema);
 export type UpdateKnowledgeItemValues = z.infer<typeof updateKnowledgeItemSchema>;
+
+/**
+ * "Save Draft" (Save as Draft initiative) — only `title` + `contentType`
+ * (already required by knowledgeItemBaseSchema) are enforced; none of
+ * withContentTypeRefinements' completeness checks or
+ * requireRestrictedKnowledgeItemInvariants apply, so a draft can be saved at
+ * any stage of being filled out. Same field set/types as
+ * createKnowledgeItemSchema (so it infers the same CreateKnowledgeItemValues
+ * shape and can share one RHF form type) — just without the extra
+ * superRefine passes.
+ */
+export const draftKnowledgeItemSchema = knowledgeItemBaseSchema.extend({
+  licenseConsented: z.boolean(),
+  visibility: z.nativeEnum(KnowledgeVisibility),
+  invitedUserIds: z.array(z.string()),
+});
+export type DraftKnowledgeItemValues = z.infer<typeof draftKnowledgeItemSchema>;

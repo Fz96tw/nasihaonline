@@ -126,9 +126,15 @@ const LIBRARY_CARD_SELECT = {
 function toLibraryCard(item: {
   id: string;
   title: string;
-  description: string;
+  // Nullable only for a draft row — see the `level` comment below, same
+  // "always published/flagged here, so always set" guarantee.
+  description: string | null;
   contentType: KnowledgeContentType;
-  level: KnowledgeLevel;
+  // Nullable only for a draft row — this is always called against
+  // published/flagged items (see LIBRARY_CARD_SELECT's callers), which are
+  // guaranteed a non-null level by the submit-time validation in
+  // withContentTypeRefinements, so the cast below is safe.
+  level: KnowledgeLevel | null;
   status: KnowledgeStatus;
   visibility: KnowledgeVisibility;
   createdAt: Date;
@@ -145,9 +151,12 @@ function toLibraryCard(item: {
   return {
     id: item.id,
     title: item.title,
-    description: item.description,
+    description: item.description ?? "",
     contentType: item.contentType,
-    level: item.level,
+    // Non-null assertion, not a fallback value — see the param comment
+    // above, a genuinely-null level here would mean a draft leaked past
+    // the status filter every caller applies.
+    level: item.level!,
     status: item.status,
     visibility: item.visibility,
     categories: item.categories.map(({ category }) => category),
@@ -267,6 +276,15 @@ export class KnowledgeItemError extends Error {
  * invisible to everyone (including invitees) until a Steward publishes it,
  * so notifying now would point at content invitees can't see yet
  * (deferred to Objective 05).
+ *
+ * Save as Draft initiative: `mode: "draft"` skips every completeness check
+ * below (license consent, case_study de-identification, blog_post body,
+ * restricted-visibility invitee requirement, recorded_lecture YouTube URL,
+ * attachment/link requirement) and persists a `draft`-status row instead of
+ * `pending_review` — the row is otherwise built from whatever fields were
+ * actually filled in. Checks that are data-integrity rather than
+ * completeness (category ids must be real, file+externalUrl can't both be
+ * set, the pasted-image cap) still apply in both modes.
  */
 export async function createKnowledgeItem(
   contributorId: string,
@@ -275,7 +293,7 @@ export async function createKnowledgeItem(
     description: string;
     body: string | null;
     contentType: KnowledgeContentType;
-    level: KnowledgeLevel;
+    level: KnowledgeLevel | null;
     /** Required, multi-select top-level classification (standardized onto Events' EventCommunity shape). */
     communityIds: string[];
     /** Optional, scoped in the UI to the chosen communities above. */
@@ -290,15 +308,17 @@ export async function createKnowledgeItem(
     file: File | null;
     heroImage: File | null;
   },
+  mode: "draft" | "submit" = "submit",
 ): Promise<{ id: string }> {
-  if (!input.licenseConsented) {
+  const isDraft = mode === "draft";
+  if (!isDraft && !input.licenseConsented) {
     throw new KnowledgeItemError(400, "You must acknowledge the content licensing terms to submit.");
   }
-  if (input.contentType === KnowledgeContentType.case_study && !input.deidentificationConfirmed) {
+  if (!isDraft && input.contentType === KnowledgeContentType.case_study && !input.deidentificationConfirmed) {
     throw new KnowledgeItemError(400, "You must confirm all patient information has been de-identified.");
   }
   const isBlogPost = input.contentType === KnowledgeContentType.blog_post;
-  if (isBlogPost && !input.body?.trim()) {
+  if (!isDraft && isBlogPost && !input.body?.trim()) {
     throw new KnowledgeItemError(400, "Write your post before submitting.");
   }
   // Sanitized once here (rather than inline at the db.create below) so both
@@ -307,7 +327,7 @@ export async function createKnowledgeItem(
   // just a <script> tag) collapses to empty and re-triggers the same
   // "write your post" rejection, instead of silently saving a blank post.
   const sanitizedBody = isBlogPost ? sanitizeBlogPostBody(input.body ?? "") : null;
-  if (isBlogPost && !sanitizedBody?.trim()) {
+  if (!isDraft && isBlogPost && !sanitizedBody?.trim()) {
     throw new KnowledgeItemError(400, "Write your post before submitting.");
   }
   if (
@@ -328,7 +348,7 @@ export async function createKnowledgeItem(
         select: { id: true },
       })
     : [];
-  if (isRestricted && invitedUsers.length === 0) {
+  if (!isDraft && isRestricted && invitedUsers.length === 0) {
     throw new KnowledgeItemError(400, "Select at least one member to invite.");
   }
 
@@ -341,14 +361,14 @@ export async function createKnowledgeItem(
   }
 
   const isRecordedLecture = input.contentType === KnowledgeContentType.recorded_lecture;
-  if (isRecordedLecture && !input.youtubeUrl) {
+  if (!isDraft && isRecordedLecture && !input.youtubeUrl) {
     throw new KnowledgeItemError(400, "A YouTube URL is required for a recorded lecture.");
   }
   const requiresAttachmentOrLink = !isRecordedLecture && !isBlogPost;
   if (requiresAttachmentOrLink && input.file && input.externalUrl) {
     throw new KnowledgeItemError(400, "Choose either a file upload or an external link, not both.");
   }
-  if (requiresAttachmentOrLink && !input.file && !input.externalUrl) {
+  if (!isDraft && requiresAttachmentOrLink && !input.file && !input.externalUrl) {
     throw new KnowledgeItemError(400, "A file upload or external link is required for this content type.");
   }
 
@@ -393,8 +413,8 @@ export async function createKnowledgeItem(
       heroImageUrl,
       externalUrl: requiresAttachmentOrLink ? input.externalUrl : null,
       deidentificationConfirmed: input.deidentificationConfirmed,
-      licenseConsented: true,
-      status: KnowledgeStatus.pending_review,
+      licenseConsented: isDraft ? false : true,
+      status: isDraft ? KnowledgeStatus.draft : KnowledgeStatus.pending_review,
       visibility: input.visibility,
       communities: { create: input.communityIds.map((communityId) => ({ communityId })) },
       categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
@@ -482,6 +502,17 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
  * goes live immediately with no re-review, same "no re-review on edit"
  * precedent as Blog (§11.12) — only the *initial* submission gates on
  * Steward review.
+ *
+ * Save as Draft initiative: while the row is still `status: draft`,
+ * `mode: "draft"` keeps saving it as a draft with every completeness check
+ * skipped (same relaxations as createKnowledgeItem's draft mode), and
+ * `mode: "submit"` is the draft's real first submission — it resolves
+ * `licenseConsented`/`visibility`/`invitedUserIds` exactly as
+ * createKnowledgeItem does (those fields are otherwise create-only and
+ * absent from this input) and transitions the row to `pending_review`.
+ * `mode: "draft"` against a non-draft row is rejected (nothing to
+ * un-submit); once the row is no longer `draft`, `mode` is ignored and
+ * behavior is exactly what it was before this initiative.
  */
 export async function updateKnowledgeItem(
   id: string,
@@ -491,7 +522,7 @@ export async function updateKnowledgeItem(
     description: string;
     body: string | null;
     contentType: KnowledgeContentType;
-    level: KnowledgeLevel;
+    level: KnowledgeLevel | null;
     /** Required, multi-select — genuinely editable here, unlike visibility/invitedUserIds which stay create-only. */
     communityIds: string[];
     categoryIds: string[];
@@ -501,7 +532,12 @@ export async function updateKnowledgeItem(
     deidentificationConfirmed: boolean;
     file: File | null;
     heroImage: File | null;
+    /** Only meaningful while the row is still `status: draft` — see doc comment above. */
+    licenseConsented?: boolean;
+    visibility?: KnowledgeVisibility;
+    invitedUserIds?: string[];
   },
+  mode: "draft" | "submit" = "submit",
 ): Promise<{ id: string; status: KnowledgeStatus }> {
   const item = await db.knowledgeItem.findUnique({
     where: { id },
@@ -520,15 +556,21 @@ export async function updateKnowledgeItem(
     throw new KnowledgeItemError(403, "Only the submitter or a Library Steward/admin can edit this resource.");
   }
 
-  if (input.contentType === KnowledgeContentType.case_study && !input.deidentificationConfirmed) {
+  const wasDraft = item.status === KnowledgeStatus.draft;
+  if (mode === "draft" && !wasDraft) {
+    throw new KnowledgeItemError(400, "Only a draft can be saved as a draft.");
+  }
+  const isDraft = mode === "draft";
+
+  if (!isDraft && input.contentType === KnowledgeContentType.case_study && !input.deidentificationConfirmed) {
     throw new KnowledgeItemError(400, "You must confirm all patient information has been de-identified.");
   }
   const isBlogPost = input.contentType === KnowledgeContentType.blog_post;
-  if (isBlogPost && !input.body?.trim()) {
+  if (!isDraft && isBlogPost && !input.body?.trim()) {
     throw new KnowledgeItemError(400, "Write your post before submitting.");
   }
   const sanitizedBody = isBlogPost ? sanitizeBlogPostBody(input.body ?? "") : null;
-  if (isBlogPost && !sanitizedBody?.trim()) {
+  if (!isDraft && isBlogPost && !sanitizedBody?.trim()) {
     throw new KnowledgeItemError(400, "Write your post before submitting.");
   }
   if (
@@ -547,7 +589,7 @@ export async function updateKnowledgeItem(
   }
 
   const isRecordedLecture = input.contentType === KnowledgeContentType.recorded_lecture;
-  if (isRecordedLecture && !input.youtubeUrl) {
+  if (!isDraft && isRecordedLecture && !input.youtubeUrl) {
     throw new KnowledgeItemError(400, "A YouTube URL is required for a recorded lecture.");
   }
   const requiresAttachmentOrLink = !isRecordedLecture && !isBlogPost;
@@ -555,8 +597,34 @@ export async function updateKnowledgeItem(
     throw new KnowledgeItemError(400, "Choose either a file upload or an external link, not both.");
   }
   const existingAttachment = item.attachments[0] ?? null;
-  if (requiresAttachmentOrLink && !input.file && !existingAttachment && !input.externalUrl) {
+  if (!isDraft && requiresAttachmentOrLink && !input.file && !existingAttachment && !input.externalUrl) {
     throw new KnowledgeItemError(400, "A file upload or external link is required for this content type.");
+  }
+
+  // Only meaningful while the row is still a draft — visibility/invitedUserIds
+  // are otherwise create-only and this form section stays hidden once
+  // published, same as before this initiative.
+  let resolvedVisibility: KnowledgeVisibility | undefined;
+  let invitedUsers: { id: string }[] = [];
+  if (wasDraft) {
+    resolvedVisibility = input.visibility ?? KnowledgeVisibility.public;
+    const isRestricted = resolvedVisibility === KnowledgeVisibility.restricted;
+    invitedUsers = isRestricted
+      ? await db.user.findMany({
+          where: {
+            id: { in: input.invitedUserIds ?? [], notIn: [item.contributorId] },
+            tier: { in: DIRECTORY_TIERS },
+            profile: { listInDirectory: true },
+          },
+          select: { id: true },
+        })
+      : [];
+    if (!isDraft && isRestricted && invitedUsers.length === 0) {
+      throw new KnowledgeItemError(400, "Select at least one member to invite.");
+    }
+    if (!isDraft && !input.licenseConsented) {
+      throw new KnowledgeItemError(400, "You must acknowledge the content licensing terms to submit.");
+    }
   }
 
   let newAttachment: { objectKey: string; fileName: string; mimeType: string; sizeBytes: number } | null = null;
@@ -587,7 +655,13 @@ export async function updateKnowledgeItem(
     }
   }
 
-  const nextStatus = item.status === KnowledgeStatus.rejected ? KnowledgeStatus.pending_review : item.status;
+  const nextStatus = isDraft
+    ? KnowledgeStatus.draft
+    : wasDraft
+      ? KnowledgeStatus.pending_review
+      : item.status === KnowledgeStatus.rejected
+        ? KnowledgeStatus.pending_review
+        : item.status;
   // Drop the old attachment when it's being replaced by a new file, when
   // contentType moved to recorded_lecture/blog_post (neither stores an
   // attachment), or when the edit switches from a file to an external link.
@@ -599,6 +673,13 @@ export async function updateKnowledgeItem(
     await tx.knowledgeItemTag.deleteMany({ where: { knowledgeItemId: item.id } });
     await tx.knowledgeItemCategory.deleteMany({ where: { knowledgeItemId: item.id } });
     await tx.knowledgeItemCommunity.deleteMany({ where: { knowledgeItemId: item.id } });
+    // The invitee list is otherwise only editable post-publish via the
+    // separate updateKnowledgeItemInvitees action — re-resolving it on every
+    // save here is safe only because it's gated to wasDraft, where this is
+    // still the item's pre-publish, single-owner editing loop.
+    if (wasDraft) {
+      await tx.knowledgeItemInvitee.deleteMany({ where: { knowledgeItemId: item.id } });
+    }
     if (dropsExistingAttachment) {
       await tx.knowledgeAttachment.delete({ where: { id: existingAttachment!.id } });
     }
@@ -615,6 +696,14 @@ export async function updateKnowledgeItem(
         externalUrl: requiresAttachmentOrLink ? input.externalUrl : null,
         deidentificationConfirmed: input.deidentificationConfirmed,
         status: nextStatus,
+        ...(wasDraft
+          ? {
+              visibility: resolvedVisibility,
+              licenseConsented: isDraft ? (input.licenseConsented ?? false) : true,
+              invitees:
+                invitedUsers.length > 0 ? { create: invitedUsers.map((user) => ({ userId: user.id })) } : undefined,
+            }
+          : {}),
         communities: { create: input.communityIds.map((communityId) => ({ communityId })) },
         categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
         tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
@@ -647,6 +736,13 @@ export async function updateKnowledgeItem(
       uploaderId: actingUser.id,
       body: sanitizedBody ?? "",
     });
+  }
+
+  if (wasDraft) {
+    await ensureCommunityMembership(
+      [item.contributorId, ...invitedUsers.map((user) => user.id)],
+      input.communityIds,
+    );
   }
 
   return updated;
@@ -1291,6 +1387,11 @@ export async function getMySubmissions(contributorId: string): Promise<MySubmiss
   }));
 }
 
+/** Draft count for the dashboard's "All My Activity" link (Save as Draft initiative). */
+export async function getDraftKnowledgeItemCount(contributorId: string): Promise<number> {
+  return db.knowledgeItem.count({ where: { contributorId, status: KnowledgeStatus.draft } });
+}
+
 /** GET /api/admin/library/review-queue (§4.9) — Steward/admin pre-publish queue. */
 export async function getReviewQueue(): Promise<ReviewQueueItem[]> {
   const items = await db.knowledgeItem.findMany({
@@ -1316,6 +1417,12 @@ export async function getReviewQueue(): Promise<ReviewQueueItem[]> {
 
   return items.map((item) => ({
     ...item,
+    // Non-null assertions, not fallback values — every pending_review row
+    // passed through submit-time validation (withContentTypeRefinements),
+    // which requires both to be set; only a still-draft row could have
+    // either null, and this query already excludes those.
+    description: item.description!,
+    level: item.level!,
     categories: item.categories.map(({ category }) => category),
     invitees: item.invitees.map((invitee) => invitee.user),
     createdAt: item.createdAt.toISOString(),

@@ -43,7 +43,10 @@ export async function getFlaggedContent(): Promise<ModerationItem[]> {
       id: item.id,
       type: "library_item" as const,
       title: item.title,
-      excerpt: item.description,
+      // Non-null assertion, not a fallback — this query only selects
+      // flagged items, which submit-time validation guarantees a
+      // description for (only a still-draft row could have it null).
+      excerpt: item.description!,
       authorName: item.contributor.name,
       flagReason: item.flagReason,
       createdAt: item.createdAt.toISOString(),

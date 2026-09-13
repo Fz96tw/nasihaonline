@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,7 +19,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { KnowledgeContentType, KnowledgeLevel, KnowledgeVisibility } from "@/lib/generated/prisma/enums";
+import { KnowledgeContentType, KnowledgeLevel, KnowledgeStatus, KnowledgeVisibility } from "@/lib/generated/prisma/enums";
 import {
   CONTENT_TYPE_LABELS,
   LEVEL_LABELS,
@@ -27,10 +27,16 @@ import {
   type KnowledgeItemForEdit,
   type KnowledgeTagOption,
 } from "@/lib/library";
-import { createKnowledgeItemSchema, type CreateKnowledgeItemValues } from "@/lib/validation/knowledge";
+import {
+  createKnowledgeItemSchema,
+  draftKnowledgeItemSchema,
+  updateKnowledgeItemSchema,
+  type CreateKnowledgeItemValues,
+} from "@/lib/validation/knowledge";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { InviteePicker } from "@/components/members/invitee-picker";
 import { TiptapEditor } from "@/components/library/tiptap-editor";
+import { DeleteLibraryItemButton } from "@/components/library/delete-library-item-button";
 
 // Mirrors ALLOWED_DOCUMENT_MIME_TYPES in lib/storage.ts (uploadKnowledgeDocument,
 // shared by Library and Peer Review) — a browser accept hint only, the
@@ -43,7 +49,7 @@ const DEFAULT_VALUES: CreateKnowledgeItemValues = {
   description: "",
   body: null,
   contentType: "" as KnowledgeContentType,
-  level: "" as KnowledgeLevel,
+  level: null,
   communityIds: [],
   categoryIds: [],
   tagIds: [],
@@ -63,25 +69,33 @@ const VISIBILITY_LABELS: Record<KnowledgeVisibility, string> = {
 /**
  * "Submit Resource" form (§4.9), posted from /library/new, and reused from
  * /library/[id]/edit when `existingItem` is supplied. Keeps using
- * createKnowledgeItemSchema/CreateKnowledgeItemValues in both modes (rather
- * than a separate edit-mode type) — same simplification as WritePostForm:
- * licenseConsented is a one-time consent from the original submission, so
- * it defaults to `true` and is hidden entirely when editing, and isn't sent
- * in the PATCH body (the server validates edits with updateKnowledgeItemSchema,
- * which omits it). contentType still drives the same conditional fields as
- * create: a YouTube URL input for recorded_lecture (no file/link), or for
- * every other type a `sourceMode` toggle between a file input and an
- * `externalUrl` input (mutually exclusive — toggling clears the other), with
- * an edit able to leave the existing attachment in place instead of
- * replacing it; case_study additionally requires the de-identification
- * checkbox, re-affirmed on every edit rather than carried forward silently.
+ * CreateKnowledgeItemValues as its RHF value type in every mode (rather than
+ * a separate edit-mode type) — same simplification as WritePostForm.
+ * contentType drives the same conditional fields throughout: a YouTube URL
+ * input for recorded_lecture (no file/link), or for every other type a
+ * `sourceMode` toggle between a file input and an `externalUrl` input
+ * (mutually exclusive — toggling clears the other), with an edit able to
+ * leave the existing attachment in place instead of replacing it;
+ * case_study additionally requires the de-identification checkbox,
+ * re-affirmed on every edit rather than carried forward silently.
  *
  * Restricted Knowledge Library Submissions, Objective 03: `visibility` is a
- * create-only 2-way choice (public / restricted), mirroring
- * SubmitEventForm's audience picker — edit mode hides the section entirely
- * and always submits it as public with no invitees (KnowledgeItemForEdit
- * doesn't carry the real visibility, since editing can't change it anyway;
- * see requireRestrictedKnowledgeItemInvariants in lib/validation/knowledge.ts).
+ * 2-way choice (public / restricted), mirroring SubmitEventForm's audience
+ * picker — normally create-only (edit mode hides the section and always
+ * submits it as public with no invitees, since editing an already-submitted
+ * item can't change it), EXCEPT while `existingItem.status === draft`: a
+ * draft's real first submission is deferred to when it's actually submitted
+ * for review, so this section (and licenseConsented below) stays visible
+ * and editable for as long as the item is still a draft — see
+ * `isFirstSubmission` below.
+ *
+ * Save as Draft initiative: the live RHF resolver is always the lenient
+ * `draftKnowledgeItemSchema` (only title+contentType required) so neither
+ * button is ever blocked by an incomplete form; "Submit for Review"/"Save
+ * Changes" instead runs the real strict schema (createKnowledgeItemSchema/
+ * updateKnowledgeItemSchema) by hand inside onSubmit, mapping any failures
+ * onto the form via setError. "Save Draft" skips that manual check
+ * entirely and posts with `action: "draft"`.
  */
 export function SubmitResourceForm({
   categories,
@@ -107,28 +121,41 @@ export function SubmitResourceForm({
   const [file, setFile] = useState<File | null>(null);
   const [sourceMode, setSourceMode] = useState<"file" | "link">(existingItem?.externalUrl ? "link" : "file");
   const [heroImage, setHeroImage] = useState<File | null>(null);
+  // Which button was actually clicked — read synchronously inside onSubmit
+  // (a ref, not state, since RHF's handleSubmit fires in the same
+  // click→submit cycle a state update wouldn't be visible in yet).
+  const pendingActionRef = useRef<"draft" | "submit">("submit");
+
+  // A draft's visibility/invitedUserIds/licenseConsented are genuinely
+  // still being decided — this is its real first submission, deferred from
+  // creation — so those fields behave exactly like brand-new-item mode
+  // (rendered + required) for as long as the item stays a draft.
+  const isFirstSubmission = !existingItem || existingItem.status === KnowledgeStatus.draft;
 
   const form = useForm<CreateKnowledgeItemValues>({
-    resolver: zodResolver(createKnowledgeItemSchema),
+    resolver: zodResolver(draftKnowledgeItemSchema),
     defaultValues: existingItem
       ? {
           title: existingItem.title,
-          description: existingItem.description,
+          description: existingItem.description ?? "",
           body: existingItem.body,
           contentType: existingItem.contentType,
           level: existingItem.level,
           // Genuinely editable, like categoryIds below (unlike visibility/
-          // invitedUserIds, which stay create-only).
+          // invitedUserIds, which stay create-only once past isFirstSubmission).
           communityIds: existingItem.communityIds,
           categoryIds: existingItem.categoryIds,
           tagIds: existingItem.tagIds,
           youtubeUrl: existingItem.youtubeUrl,
           externalUrl: existingItem.externalUrl,
           deidentificationConfirmed: existingItem.deidentificationConfirmed,
-          licenseConsented: true,
-          // Visibility isn't editable from this form (create-only) — hidden
-          // from the UI and hardcoded here, same "harmless placeholder"
-          // pattern as SubmitEventForm's edit-mode invitedUserIds.
+          licenseConsented: isFirstSubmission ? false : true,
+          // Visibility isn't editable past a draft's first submission —
+          // hidden from the UI and hardcoded here, same "harmless
+          // placeholder" pattern as SubmitEventForm's edit-mode
+          // invitedUserIds. While still a draft, KnowledgeItemForEdit
+          // doesn't carry the real value either (never set yet), so this
+          // starts at the same default a new item would.
           visibility: KnowledgeVisibility.public,
           invitedUserIds: [],
         }
@@ -147,18 +174,37 @@ export function SubmitResourceForm({
   const selectedCommunityIds = form.watch("communityIds");
 
   async function onSubmit(values: CreateKnowledgeItemValues) {
+    const action = pendingActionRef.current;
+
+    // The live RHF resolver (draftKnowledgeItemSchema) is deliberately
+    // lenient so neither button is ever blocked mid-edit — "Submit for
+    // Review"/"Save Changes" instead runs the real strict schema here, by
+    // hand, only when that's the button that was actually clicked.
+    if (action === "submit") {
+      const strictSchema = isFirstSubmission ? createKnowledgeItemSchema : updateKnowledgeItemSchema;
+      const result = strictSchema.safeParse(values);
+      if (!result.success) {
+        for (const issue of result.error.issues) {
+          form.setError(issue.path.join(".") as keyof CreateKnowledgeItemValues, { message: issue.message });
+        }
+        return;
+      }
+    }
+
     setSubmitting(true);
     setError(null);
     try {
       const csrfToken = await getCsrfToken();
       const formData = new FormData();
+      formData.append("action", action);
       formData.append("title", values.title);
       formData.append("description", values.description);
       if (isBlogPost && values.body) formData.append("body", values.body);
       formData.append("contentType", values.contentType);
-      formData.append("level", values.level);
+      if (values.level) formData.append("level", values.level);
       // Genuinely editable — sent unconditionally, unlike visibility/
-      // invitedUserIds below which are create-only.
+      // invitedUserIds below which stop being sent once isFirstSubmission
+      // goes false.
       values.communityIds.forEach((communityId) => formData.append("communityIds", communityId));
       values.categoryIds.forEach((categoryId) => formData.append("categoryIds", categoryId));
       values.tagIds.forEach((tagId) => formData.append("tagIds", tagId));
@@ -168,7 +214,7 @@ export function SubmitResourceForm({
         formData.append("externalUrl", values.externalUrl);
       }
       formData.append("deidentificationConfirmed", String(isCaseStudy && values.deidentificationConfirmed));
-      if (!existingItem) {
+      if (isFirstSubmission) {
         formData.append("licenseConsented", String(values.licenseConsented));
         formData.append("visibility", values.visibility);
         formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
@@ -191,6 +237,18 @@ export function SubmitResourceForm({
               : "Something went wrong. Please try again.",
         );
       }
+
+      if (action === "draft") {
+        if (!existingItem) {
+          // Brand-new draft — the id only exists now, so this is the first
+          // point a resumable edit URL is reachable from.
+          const created = (await res.json().catch(() => null)) as { id: string } | null;
+          if (created?.id) router.replace(`/library/${created.id}/edit?draft=1`);
+        }
+        router.refresh();
+        return;
+      }
+
       if (existingItem) {
         // Replace (not push) so this edit page's history entry doesn't
         // linger for BackLink's router.back() on the details page to land
@@ -210,7 +268,7 @@ export function SubmitResourceForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
-        {!existingItem && (
+        {isFirstSubmission && (
           <FormField
             control={form.control}
             name="visibility"
@@ -241,7 +299,7 @@ export function SubmitResourceForm({
           />
         )}
 
-        {!existingItem && isRestricted && (
+        {isFirstSubmission && isRestricted && (
           <FormField
             control={form.control}
             name="invitedUserIds"
@@ -289,7 +347,7 @@ export function SubmitResourceForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Career-stage level</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange}>
+                <Select value={field.value ?? ""} onValueChange={field.onChange}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a level" />
@@ -582,7 +640,7 @@ export function SubmitResourceForm({
           />
         )}
 
-        {!existingItem && (
+        {isFirstSubmission && (
           <FormField
             control={form.control}
             name="licenseConsented"
@@ -605,10 +663,40 @@ export function SubmitResourceForm({
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        <div>
-          <Button type="submit" disabled={submitting || imageUploading}>
-            {submitting ? "Saving…" : existingItem ? "Save Changes" : "Submit for Review"}
+        <div className="flex items-center gap-3">
+          {isFirstSubmission && (
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={submitting || imageUploading}
+              onClick={() => {
+                pendingActionRef.current = "draft";
+              }}
+            >
+              {submitting && pendingActionRef.current === "draft" ? "Saving…" : "Save Draft"}
+            </Button>
+          )}
+          <Button
+            type="submit"
+            disabled={submitting || imageUploading}
+            onClick={() => {
+              pendingActionRef.current = "submit";
+            }}
+          >
+            {submitting && pendingActionRef.current === "submit"
+              ? "Saving…"
+              : isFirstSubmission
+                ? "Submit for Review"
+                : "Save Changes"}
           </Button>
+          {existingItem?.status === KnowledgeStatus.draft && (
+            <DeleteLibraryItemButton
+              itemId={existingItem.id}
+              title={existingItem.title}
+              hasEarnedHours={false}
+              redirectTo="/library/mine"
+            />
+          )}
         </div>
       </form>
     </Form>

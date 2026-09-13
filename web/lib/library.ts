@@ -19,6 +19,7 @@ export const LEVEL_LABELS: Record<KnowledgeLevel, string> = {
 };
 
 export const STATUS_LABELS: Record<KnowledgeStatus, string> = {
+  [KnowledgeStatus.draft]: "Draft",
   [KnowledgeStatus.pending_review]: "Pending Review",
   [KnowledgeStatus.published]: "Published",
   [KnowledgeStatus.flagged]: "Flagged",
@@ -26,6 +27,7 @@ export const STATUS_LABELS: Record<KnowledgeStatus, string> = {
 };
 
 export const STATUS_BADGE_VARIANT: Record<KnowledgeStatus, "neutral" | "success" | "warning" | "danger" | "info"> = {
+  [KnowledgeStatus.draft]: "neutral",
   [KnowledgeStatus.pending_review]: "warning",
   [KnowledgeStatus.published]: "success",
   [KnowledgeStatus.flagged]: "danger",
@@ -135,11 +137,14 @@ export type KnowledgeItemRosterMember = {
 export type KnowledgeItemForEdit = {
   id: string;
   title: string;
-  description: string;
+  // Nullable only for a still-draft item — every other status has one
+  // (submit-time validation requires it).
+  description: string | null;
   // Full rich-text (Tiptap) content — set only for contentType = blog_post.
   body: string | null;
   contentType: KnowledgeContentType;
-  level: KnowledgeLevel;
+  // Nullable only for a still-draft item, same reason as `description`.
+  level: KnowledgeLevel | null;
   status: KnowledgeStatus;
   communityIds: string[];
   categoryIds: string[];

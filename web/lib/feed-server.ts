@@ -664,7 +664,10 @@ export async function getFeedPage(params: {
       excerpt:
         item.visibility === KnowledgeVisibility.restricted && !query
           ? `${item.contributor.name ?? "A member"} shared this with you.`
-          : excerptOf(item.description),
+          // Non-null assertion, not a fallback — the query above only ever
+          // selects published/flagged items, which submit-time validation
+          // guarantees a description for.
+          : excerptOf(item.description!),
       href: withFeedRef(`/library/${item.id}`, query),
       timestamp: item.createdAt.toISOString(),
       author: authorOf(item.contributor),

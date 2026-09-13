@@ -7,6 +7,7 @@ import { SubmitResourceForm } from "@/components/library/submit-resource-form";
 import { Role, KnowledgeStatus } from "@/lib/generated/prisma/enums";
 
 const STATUS_NOTE: Record<KnowledgeStatus, string> = {
+  [KnowledgeStatus.draft]: "This is a draft — only you can see it. Submit it for review when you're ready.",
   [KnowledgeStatus.pending_review]: "This resource is awaiting Steward review.",
   [KnowledgeStatus.published]: "This resource is live in the Library — changes are visible immediately.",
   [KnowledgeStatus.flagged]: "This resource is live but flagged for review — changes are visible immediately.",
@@ -21,7 +22,7 @@ export const metadata: Metadata = {
  * /library/[id]/edit (editing a submission, §4.9) — contributor, Library
  * Steward (moderator), or admin only. Unlike /blog/[slug]/edit, which only
  * ever loads an already-published post, a Library item is editable at any
- * status (pending_review/published/flagged/rejected) — see
+ * status (draft/pending_review/published/flagged/rejected) — see
  * getKnowledgeItemForEdit. The requester is already authenticated and
  * already knows the id, so a plain 404 for "not found or not yours" is
  * sufficient, same reasoning as the Blog edit page.

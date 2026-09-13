@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { KnowledgeItemError, createKnowledgeItem } from "@/lib/library-server";
-import { createKnowledgeItemSchema } from "@/lib/validation/knowledge";
+import { createKnowledgeItemSchema, draftKnowledgeItemSchema } from "@/lib/validation/knowledge";
 
 /**
  * POST /api/library — "Submit Resource" (§4.9), member-auth only (no tier
@@ -33,12 +33,17 @@ export async function POST(request: Request) {
     }
   }
 
-  const parsed = createKnowledgeItemSchema.safeParse({
+  // Save as Draft initiative — "draft" relaxes every completeness check via
+  // draftKnowledgeItemSchema; anything else (including absent, for older
+  // clients) is today's full "Submit Resource" validation.
+  const mode = formData.get("action") === "draft" ? "draft" : "submit";
+  const schema = mode === "draft" ? draftKnowledgeItemSchema : createKnowledgeItemSchema;
+  const parsed = schema.safeParse({
     title: formData.get("title"),
     description: formData.get("description"),
     body: formData.get("body") || null,
     contentType: formData.get("contentType"),
-    level: formData.get("level"),
+    level: formData.get("level") || null,
     communityIds: formData.getAll("communityIds"),
     categoryIds: formData.getAll("categoryIds"),
     tagIds: formData.getAll("tagIds"),
@@ -59,7 +64,7 @@ export async function POST(request: Request) {
   const heroImage = heroImageField instanceof File && heroImageField.size > 0 ? heroImageField : null;
 
   try {
-    const item = await createKnowledgeItem(user.id, { ...parsed.data, file, heroImage });
+    const item = await createKnowledgeItem(user.id, { ...parsed.data, file, heroImage }, mode);
     return NextResponse.json({ id: item.id }, { status: 201 });
   } catch (error) {
     if (error instanceof KnowledgeItemError) {

@@ -1603,6 +1603,7 @@ model Attendance {
 // Stewards/admins; `flagged` items stay visible per the "community flagging,
 // not formal peer review" model until a Steward removes them.
 enum KnowledgeStatus {
+  draft
   pending_review
   published
   flagged
@@ -1768,7 +1769,10 @@ model KnowledgeItemTag {
 model KnowledgeItem {
   id                        String               @id @default(cuid())
   title                     String
-  description               String
+  // Nullable to allow a draft row (status = draft) with no description yet
+  // — every non-draft item still requires one via application-level
+  // validation (createKnowledgeItemSchema/updateKnowledgeItemSchema).
+  description               String?
   // Full rich-text (Tiptap) article content — populated only for
   // contentType = blog_post (and any future long-form type). `description`
   // stays the short excerpt shown on cards/search, auto-derived from this
@@ -1776,7 +1780,8 @@ model KnowledgeItem {
   body                      String?
   contentType               KnowledgeContentType
   status                    KnowledgeStatus      @default(pending_review)
-  level                     KnowledgeLevel
+  // Nullable for the same draft reason as `description` above.
+  level                     KnowledgeLevel?
   visibility                KnowledgeVisibility  @default(public)
   contributorId             String
   contributor               User                 @relation("KnowledgeContributor", fields: [contributorId], references: [id])

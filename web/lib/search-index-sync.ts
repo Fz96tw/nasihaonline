@@ -98,12 +98,15 @@ export async function syncKnowledgeItemToIndex(knowledgeItemId: string): Promise
   await upsertLibraryDocument({
     id: item.id,
     title: item.title,
-    description: item.description,
+    // Non-null assertions, not fallback values — `eligible` above already
+    // requires published/flagged, which submit-time validation guarantees
+    // both fields are set for (a still-draft item never reaches here).
+    description: item.description!,
     contributorName: item.contributor.name,
     categoryNames: item.categories.map(({ category }) => category.name),
     categorySlugs: item.categories.map(({ category }) => category.slug),
     contentType: item.contentType,
-    level: item.level,
+    level: item.level!,
     tagNames: item.tags.map(({ tag }) => tag.name),
   });
 }
