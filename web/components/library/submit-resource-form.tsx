@@ -263,10 +263,22 @@ export function SubmitResourceForm({
       }
 
       if (existingItem) {
+        // A draft's real first submission, or a rejected item's
+        // resubmission, flips status to pending_review server-side (see
+        // updateKnowledgeItem's nextStatus logic) — the public detail page
+        // only ever shows published/flagged items and 404s on anything
+        // else, even for the item's own contributor. Send those back to
+        // the edit page instead; only an already-published item (a plain
+        // "Save Changes" edit that doesn't change status) is safe to send
+        // to its own detail page.
+        const willBePendingReview =
+          existingItem.status === KnowledgeStatus.draft || existingItem.status === KnowledgeStatus.rejected;
         // Replace (not push) so this edit page's history entry doesn't
         // linger for BackLink's router.back() on the details page to land
         // on — same rationale as WritePostForm/EditThreadForm.
-        router.replace(`/library/${existingItem.id}?saved=1`);
+        router.replace(
+          willBePendingReview ? `/library/${existingItem.id}/edit?saved=1` : `/library/${existingItem.id}?saved=1`,
+        );
       } else {
         router.push("/library/mine");
       }
