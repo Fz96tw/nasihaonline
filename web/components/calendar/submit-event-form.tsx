@@ -204,6 +204,11 @@ export function SubmitEventForm({
   // (a ref, not state, since RHF's handleSubmit fires in the same
   // click→submit cycle a state update wouldn't be visible in yet).
   const pendingActionRef = useRef<"draft" | "primary">("primary");
+  // "Save Draft" on an existing draft stays on this same page (no
+  // navigation, so the SavedBanner-on-redirect convention every other save
+  // in this app uses doesn't fire) — this is the only in-component
+  // confirmation for that one case. Cleared on the next submit attempt.
+  const [draftSaved, setDraftSaved] = useState(false);
 
   // A draft's audience/invitedUserIds/coHostUserIds are genuinely still
   // being decided — this is its real first submission, deferred from
@@ -294,6 +299,7 @@ export function SubmitEventForm({
 
     setSubmitting(true);
     setError(null);
+    setDraftSaved(false);
     try {
       const csrfToken = await getCsrfToken();
       const formData = new FormData();
@@ -358,10 +364,17 @@ export function SubmitEventForm({
       const { id } = await res.json();
 
       if (action === "draft") {
-        if (!existingEvent) {
+        if (existingEvent) {
+          // Same page, no navigation — the SavedBanner-on-redirect
+          // convention every other save here uses never fires, so this is
+          // the only confirmation the save actually happened.
+          setDraftSaved(true);
+        } else {
           // Brand-new draft — the id only exists now, so this is the first
-          // point a resumable edit URL is reachable from.
-          router.replace(`/calendar/${id}/edit?draft=1`);
+          // point a resumable edit URL is reachable from. Real navigation
+          // to a fresh page, so the usual ?saved=1 + SavedBanner convention
+          // applies there instead.
+          router.replace(`/calendar/${id}/edit?saved=1`);
         }
         router.refresh();
         return;
@@ -971,6 +984,7 @@ export function SubmitEventForm({
         )}
 
         {error && <p className="text-sm text-destructive">{error}</p>}
+        {draftSaved && <p className="text-sm text-success">Draft saved.</p>}
 
         <div className="flex items-center gap-3">
           {isFirstSubmission && (

@@ -125,6 +125,11 @@ export function SubmitResourceForm({
   // (a ref, not state, since RHF's handleSubmit fires in the same
   // click→submit cycle a state update wouldn't be visible in yet).
   const pendingActionRef = useRef<"draft" | "submit">("submit");
+  // "Save Draft" on an existing draft stays on this same page (no
+  // navigation, so the SavedBanner-on-redirect convention every other save
+  // in this app uses doesn't fire) — this is the only in-component
+  // confirmation for that one case. Cleared on the next submit attempt.
+  const [draftSaved, setDraftSaved] = useState(false);
 
   // A draft's visibility/invitedUserIds/licenseConsented are genuinely
   // still being decided — this is its real first submission, deferred from
@@ -193,6 +198,7 @@ export function SubmitResourceForm({
 
     setSubmitting(true);
     setError(null);
+    setDraftSaved(false);
     try {
       const csrfToken = await getCsrfToken();
       const formData = new FormData();
@@ -239,11 +245,18 @@ export function SubmitResourceForm({
       }
 
       if (action === "draft") {
-        if (!existingItem) {
+        if (existingItem) {
+          // Same page, no navigation — the SavedBanner-on-redirect
+          // convention every other save here uses never fires, so this is
+          // the only confirmation the save actually happened.
+          setDraftSaved(true);
+        } else {
           // Brand-new draft — the id only exists now, so this is the first
-          // point a resumable edit URL is reachable from.
+          // point a resumable edit URL is reachable from. Real navigation to
+          // a fresh page, so the usual ?saved=1 + SavedBanner convention
+          // applies there instead.
           const created = (await res.json().catch(() => null)) as { id: string } | null;
-          if (created?.id) router.replace(`/library/${created.id}/edit?draft=1`);
+          if (created?.id) router.replace(`/library/${created.id}/edit?saved=1`);
         }
         router.refresh();
         return;
@@ -662,6 +675,7 @@ export function SubmitResourceForm({
         )}
 
         {error && <p className="text-sm text-destructive">{error}</p>}
+        {draftSaved && <p className="text-sm text-success">Draft saved.</p>}
 
         <div className="flex items-center gap-3">
           {isFirstSubmission && (

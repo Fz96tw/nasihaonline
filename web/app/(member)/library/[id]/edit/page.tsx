@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getKnowledgeItemForEdit, getKnowledgeCategories, getKnowledgeTags } from "@/lib/library-server";
 import { getAllCommunities } from "@/lib/profile-server";
 import { SubmitResourceForm } from "@/components/library/submit-resource-form";
+import { SavedBanner } from "@/components/saved-banner";
 import { Role, KnowledgeStatus } from "@/lib/generated/prisma/enums";
 
 const STATUS_NOTE: Record<KnowledgeStatus, string> = {
@@ -46,6 +47,9 @@ export default async function EditLibraryItemPage({ params }: { params: { id: st
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-8 p-8">
+      {/* Only ever set by a brand-new draft's "Save Draft" redirecting here
+          for the first time — see submit-resource-form.tsx's onSubmit. */}
+      <SavedBanner message="Draft saved." />
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Edit Resource</h1>
         <p className="text-muted-foreground">{STATUS_NOTE[item.status]}</p>

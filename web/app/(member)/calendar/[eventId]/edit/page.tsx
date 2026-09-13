@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getEventForEdit, getEventCategories } from "@/lib/events-server";
 import { getAllCommunities } from "@/lib/profile-server";
 import { SubmitEventForm } from "@/components/calendar/submit-event-form";
+import { SavedBanner } from "@/components/saved-banner";
 import { Role } from "@/lib/generated/prisma/enums";
 
 export const metadata: Metadata = {
@@ -28,6 +29,9 @@ export default async function EditEventPage({ params }: { params: { eventId: str
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-8 p-8">
+      {/* Only ever set by a brand-new draft's "Save Draft" redirecting here
+          for the first time — see submit-event-form.tsx's onSubmit. */}
+      <SavedBanner message="Draft saved." />
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Edit Event</h1>
         <p className="text-muted-foreground">
