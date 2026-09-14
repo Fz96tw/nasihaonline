@@ -397,6 +397,7 @@ export async function getFeedPage(params: {
         startsAt: true,
         heroImageUrl: true,
         visibility: true,
+        hostId: true,
         host: { select: AUTHOR_SELECT },
         // Going RSVPs (members) plus EventRegistrations (non-members) —
         // same merge as getEventEngagementForAdmin's attendee/interest count.
@@ -426,6 +427,7 @@ export async function getFeedPage(params: {
         heroImageUrl: true,
         showTitleOverlay: true,
         visibility: true,
+        contributorId: true,
         contributor: { select: AUTHOR_SELECT },
         _count: { select: { views: true } },
         // posts includes the thread's own system-authored opening post, so
@@ -644,15 +646,17 @@ export async function getFeedPage(params: {
       type: "event",
       id: event.id,
       title: event.title,
-      // Restricted events only ever reach a viewer who is the organizer or
-      // an invited member (the where clause above), so this framing is
-      // always correct for whoever sees it — no per-viewer branching needed.
-      // Search mode is the one exception: the RSVP framing carries no hint
-      // of why this event matched the query, so a search hit shows the
-      // actual (highlightable) description instead — the viewer is already
+      // Restricted events reach a viewer who is either the organizer
+      // themselves (ownerBypass above) or an invited member — the RSVP
+      // framing only makes sense for the latter, so it's skipped for the
+      // organizer's own feed (viewerId === event.hostId), same rationale as
+      // the peer_review branch's isSubmitter check below. Search mode is a
+      // further exception: the RSVP framing carries no hint of why this
+      // event matched the query, so a search hit shows the actual
+      // (highlightable) description instead — the viewer is already
       // authorized to see it, same as clicking through would show them.
       excerpt:
-        event.visibility === EventVisibility.invited && !query
+        event.visibility === EventVisibility.invited && !query && event.hostId !== viewerId
           ? `${event.host.name ?? "The host"} has requested your attendance. Please RSVP.`
           : event.description
             ? excerptOf(event.description)
@@ -671,13 +675,14 @@ export async function getFeedPage(params: {
       type: "library",
       id: item.id,
       title: item.title,
-      // Restricted items only ever reach a viewer who is an invited member
-      // (the where clause above), so this framing is always correct for
-      // whoever sees it — no per-viewer branching needed, same rationale as
-      // the events branch's excerpt swap. Search mode exception: see the
-      // matching comment on the events branch above.
+      // Restricted items reach a viewer who is either the contributor
+      // themselves (ownerBypass above) or an invited member — the "shared
+      // with you" framing only makes sense for the latter, so it's skipped
+      // for the contributor's own feed (viewerId === item.contributorId),
+      // same rationale as the events branch's excerpt swap. Search mode
+      // exception: see the matching comment on the events branch above.
       excerpt:
-        item.visibility === KnowledgeVisibility.restricted && !query
+        item.visibility === KnowledgeVisibility.restricted && !query && item.contributorId !== viewerId
           ? `${item.contributor.name ?? "A member"} shared this with you.`
           // Non-null assertion, not a fallback — the query above only ever
           // selects published/flagged items, which submit-time validation
