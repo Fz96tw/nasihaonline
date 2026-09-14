@@ -109,7 +109,7 @@ export default async function LibraryItemDetailPage({
         )}
       </div>
 
-      <h1 className="mb-3 text-4xl font-extrabold tracking-tight">
+      <h1 className="mb-3 text-3xl font-bold tracking-tight">
         <HighlightText text={item.title} query={q} />
       </h1>
 
