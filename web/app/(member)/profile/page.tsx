@@ -39,10 +39,10 @@ export default async function ProfilePage() {
 
       {missingFields.length > 0 && (
         <div className="rounded-[10px] border border-primary/40 bg-primary/5 p-4 text-sm">
-          <p className="font-medium">Finish setting up your profile to continue</p>
+          <p className="font-medium">Finish setting up your profile</p>
           <p className="mt-1 text-muted-foreground">
-            Your application only asked for the basics. Fill in the following below before you
-            can access the rest of NASIHA:
+            Your application only asked for the basics. Fill in the following so other members
+            can find and connect with you:
           </p>
           <ul className="mt-2 list-disc space-y-0.5 pl-4 text-muted-foreground">
             {missingFields.map((field) => (

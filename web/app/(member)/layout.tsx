@@ -5,7 +5,7 @@ import { MemberSidebar } from "@/components/members/member-sidebar";
 import { ProfileCompletionGate } from "@/components/profile/profile-completion-gate";
 import { SiteHeader, SiteHeaderSkeleton } from "@/components/site-header";
 import { getSessionUser } from "@/lib/auth";
-import { getOrCreateProfile, isProfileComplete } from "@/lib/profile-server";
+import { getMissingRequiredProfileFields, getOrCreateProfile, isProfileComplete } from "@/lib/profile-server";
 
 // Explicit, not just relying on Next's automatic dynamic-API detection
 // (objective 4's original root-layout force-dynamic covered this
@@ -45,6 +45,7 @@ export default async function MemberLayout({ children }: { children: React.React
   // check entirely for them rather than gating on fields they were never
   // asked to backfill.
   const needsOnboarding = !!user && user.requiresProfileOnboarding && !!profile && !isProfileComplete(profile);
+  const missingProfileFields = needsOnboarding && profile ? getMissingRequiredProfileFields(profile) : [];
   // The flag (not just an empty row count) distinguishes "explicitly chose
   // ALL" from "hasn't chosen yet" — without it this would re-prompt an ALL
   // member forever. Independent of needsOnboarding, so pre-launch members
@@ -62,6 +63,7 @@ export default async function MemberLayout({ children }: { children: React.React
           needsOnboarding={needsOnboarding}
           isFirstSignIn={isFirstSignIn}
           needsCommunitySelection={needsCommunitySelection}
+          missingProfileFields={missingProfileFields}
         />
         <div className="flex flex-1">
           <MemberSidebar
