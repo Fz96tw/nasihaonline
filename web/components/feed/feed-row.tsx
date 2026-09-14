@@ -126,8 +126,8 @@ export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
               <div className="relative mt-2 w-full overflow-hidden rounded-md">
                 {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
                 <img src={item.imageUrl} alt="" className="max-h-48 w-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-                <p className="absolute inset-x-0 bottom-2 line-clamp-2 px-3 text-sm font-semibold text-white [text-shadow:0_1px_6px_rgba(0,0,0,.75)]">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                <p className="absolute inset-x-0 bottom-3 line-clamp-2 px-4 text-xl font-bold text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)]">
                   {item.title}
                 </p>
               </div>
