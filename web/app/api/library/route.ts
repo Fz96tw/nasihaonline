@@ -40,7 +40,6 @@ export async function POST(request: Request) {
   const schema = mode === "draft" ? draftKnowledgeItemSchema : createKnowledgeItemSchema;
   const parsed = schema.safeParse({
     title: formData.get("title"),
-    description: formData.get("description"),
     body: formData.get("body") || null,
     contentType: formData.get("contentType"),
     level: formData.get("level") || null,

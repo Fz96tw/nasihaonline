@@ -14,12 +14,10 @@ import { KnowledgeContentType, KnowledgeLevel, KnowledgeVisibility } from "@/lib
  */
 const knowledgeItemBaseSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(200),
-  // Required for every content type except blog_post, where it's
-  // auto-derived server-side from `body` (excerptFromHtml) rather than
-  // typed by the contributor — see withContentTypeRefinements below.
-  description: z.string().trim().max(2000),
-  // Full rich-text (Tiptap) article content — required only for
-  // contentType = blog_post, which has no attachment/externalUrl/youtubeUrl.
+  // Full rich-text (Tiptap) content, required for every content type — the
+  // short plain-text `description` shown on cards/search is always
+  // auto-derived from this server-side (excerptFromHtml), never typed by
+  // the contributor — see withContentTypeRefinements below.
   body: z.string().trim().nullable(),
   contentType: z.nativeEnum(KnowledgeContentType, { message: "Select a content type" }),
   // Nullable — required only when actually submitting for review (see
@@ -57,9 +55,9 @@ const knowledgeItemBaseSchema = z.object({
 
 /**
  * case_study requires the de-identification checkbox; recorded_lecture
- * requires a YouTube URL; blog_post requires body instead of description
- * (auto-derived server-side) — every other type requires description, typed
- * by the contributor as today.
+ * requires a YouTube URL; every content type requires non-empty `body`
+ * (the short `description` shown on cards/search is always auto-derived
+ * server-side from it, never typed by the contributor).
  */
 function withContentTypeRefinements<Schema extends z.ZodType<z.infer<typeof knowledgeItemBaseSchema>>>(
   schema: Schema,
@@ -89,12 +87,8 @@ function withContentTypeRefinements<Schema extends z.ZodType<z.infer<typeof know
         message: "A YouTube URL is required for a recorded lecture.",
       });
     }
-    if (data.contentType === KnowledgeContentType.blog_post) {
-      if (!data.body || data.body.replace(/<[^>]+>/g, "").trim().length === 0) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["body"], message: "Write your post before submitting." });
-      }
-    } else if (data.description.length === 0) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["description"], message: "Description is required" });
+    if (!data.body || data.body.replace(/<[^>]+>/g, "").trim().length === 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["body"], message: "Write your content before submitting." });
     }
   });
 }

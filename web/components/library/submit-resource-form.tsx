@@ -6,7 +6,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CategoryCheckboxField } from "@/components/shared/category-checkbox-field";
@@ -46,7 +45,6 @@ const DOCUMENT_ACCEPT =
 
 const DEFAULT_VALUES: CreateKnowledgeItemValues = {
   title: "",
-  description: "",
   body: null,
   contentType: "" as KnowledgeContentType,
   level: null,
@@ -70,12 +68,16 @@ const VISIBILITY_LABELS: Record<KnowledgeVisibility, string> = {
  * "Submit Resource" form (§4.9), posted from /library/new, and reused from
  * /library/[id]/edit when `existingItem` is supplied. Keeps using
  * CreateKnowledgeItemValues as its RHF value type in every mode (rather than
- * a separate edit-mode type) — same simplification as WritePostForm.
- * contentType drives the same conditional fields throughout: a YouTube URL
- * input for recorded_lecture (no file/link), or for every other type a
- * `sourceMode` toggle between a file input and an `externalUrl` input
- * (mutually exclusive — toggling clears the other), with an edit able to
- * leave the existing attachment in place instead of replacing it;
+ * a separate edit-mode type) — same simplification as WritePostForm. Every
+ * content type shares one rich-text `body` field (TiptapEditor) right after
+ * Title; the short `description` shown on cards/search is always derived
+ * from it server-side (excerptFromHtml), never typed here. contentType then
+ * drives the remaining source-specific field, mutually exclusive with body:
+ * a YouTube URL input for recorded_lecture, a `sourceMode` toggle between a
+ * file input and an `externalUrl` input for every other non-blog type
+ * (mutually exclusive — toggling clears the other, with an edit able to
+ * leave the existing attachment in place instead of replacing it), or
+ * nothing extra for blog_post (its content is fully covered by body).
  * case_study additionally requires the de-identification checkbox,
  * re-affirmed on every edit rather than carried forward silently.
  *
@@ -142,7 +144,6 @@ export function SubmitResourceForm({
     defaultValues: existingItem
       ? {
           title: existingItem.title,
-          description: existingItem.description ?? "",
           body: existingItem.body,
           contentType: existingItem.contentType,
           level: existingItem.level,
@@ -204,8 +205,7 @@ export function SubmitResourceForm({
       const formData = new FormData();
       formData.append("action", action);
       formData.append("title", values.title);
-      formData.append("description", values.description);
-      if (isBlogPost && values.body) formData.append("body", values.body);
+      if (values.body) formData.append("body", values.body);
       formData.append("contentType", values.contentType);
       if (values.level) formData.append("level", values.level);
       // Genuinely editable — sent unconditionally, unlike visibility/
@@ -406,21 +406,23 @@ export function SubmitResourceForm({
           )}
         />
 
-        {!isBlogPost && (
-          <FormField
-            control={form.control}
-            name="description"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Description</FormLabel>
-                <FormControl>
-                  <Textarea rows={4} {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
+        <FormField
+          control={form.control}
+          name="body"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Content</FormLabel>
+              <FormControl>
+                <TiptapEditor
+                  content={field.value ?? ""}
+                  onChange={field.onChange}
+                  onImageUploadStateChange={setImageUploading}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
         <FormField
           control={form.control}
@@ -503,7 +505,7 @@ export function SubmitResourceForm({
           />
         )}
 
-        {isRecordedLecture ? (
+        {!isBlogPost && (isRecordedLecture ? (
           <FormField
             control={form.control}
             name="youtubeUrl"
@@ -515,24 +517,6 @@ export function SubmitResourceForm({
                     placeholder="https://youtube.com/watch?v=…"
                     value={field.value ?? ""}
                     onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        ) : isBlogPost ? (
-          <FormField
-            control={form.control}
-            name="body"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Post</FormLabel>
-                <FormControl>
-                  <TiptapEditor
-                    content={field.value ?? ""}
-                    onChange={field.onChange}
-                    onImageUploadStateChange={setImageUploading}
                   />
                 </FormControl>
                 <FormMessage />
@@ -616,7 +600,7 @@ export function SubmitResourceForm({
               />
             )}
           </div>
-        )}
+        ))}
 
         <div className="flex flex-col gap-2">
           <label htmlFor="hero-image" className="text-sm font-medium">

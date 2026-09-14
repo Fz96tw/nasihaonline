@@ -50,8 +50,8 @@ import {
 // lib/linkify.tsx's linkifyText only turns absolute http(s) URLs into links.
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
-// blog_post's KnowledgeItem.body is rendered back via dangerouslySetInnerHTML
-// on /library/[id] (ResourcePreview) for every viewer, not just the author —
+// KnowledgeItem.body is rendered back via dangerouslySetInnerHTML on
+// /library/[id] (ResourcePreview) for every viewer, not just the author —
 // TiptapEditor's toolbar/schema is a UI affordance, not a trust boundary,
 // since createKnowledgeItem/updateKnowledgeItem are ordinary API routes any
 // client can call directly with an arbitrary `body` string. Strips every tag
@@ -61,7 +61,7 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 // (StarterKit itself never emits an attribute), which also eliminates
 // on*= handlers and javascript: URLs without needing a general URL/
 // attribute allowlist.
-const BLOG_POST_ALLOWED_TAGS = [
+const KNOWLEDGE_ITEM_BODY_ALLOWED_TAGS = [
   "p",
   "br",
   "strong",
@@ -86,7 +86,7 @@ const BLOG_POST_ALLOWED_TAGS = [
   "img",
 ];
 
-// The only src an <img> in a blog_post body is ever allowed to keep —
+// The only src an <img> in a KnowledgeItem body is ever allowed to keep —
 // same-origin proxy path returned by uploadLibraryBodyImage's
 // getLibraryBodyImageUrl (lib/storage.ts). This is the real trust boundary
 // against a direct API call: the editor's Image extension only ever
@@ -94,9 +94,9 @@ const BLOG_POST_ALLOWED_TAGS = [
 // enforce that independently since it accepts arbitrary HTML.
 const LIBRARY_BODY_IMAGE_SRC_PREFIX = "/api/library/body-image/";
 
-export function sanitizeBlogPostBody(html: string): string {
+export function sanitizeKnowledgeItemBody(html: string): string {
   return sanitizeHtml(html, {
-    allowedTags: BLOG_POST_ALLOWED_TAGS,
+    allowedTags: KNOWLEDGE_ITEM_BODY_ALLOWED_TAGS,
     allowedAttributes: { img: ["src", "alt"] },
     exclusiveFilter: (frame) =>
       frame.tag === "img" && !frame.attribs.src?.startsWith(LIBRARY_BODY_IMAGE_SRC_PREFIX),
@@ -278,7 +278,7 @@ export class KnowledgeItemError extends Error {
  * (deferred to Objective 05).
  *
  * Save as Draft initiative: `mode: "draft"` skips every completeness check
- * below (license consent, case_study de-identification, blog_post body,
+ * below (license consent, case_study de-identification, body content,
  * restricted-visibility invitee requirement, recorded_lecture YouTube URL,
  * attachment/link requirement) and persists a `draft`-status row instead of
  * `pending_review` — the row is otherwise built from whatever fields were
@@ -290,7 +290,6 @@ export async function createKnowledgeItem(
   contributorId: string,
   input: {
     title: string;
-    description: string;
     body: string | null;
     contentType: KnowledgeContentType;
     level: KnowledgeLevel | null;
@@ -318,23 +317,20 @@ export async function createKnowledgeItem(
     throw new KnowledgeItemError(400, "You must confirm all patient information has been de-identified.");
   }
   const isBlogPost = input.contentType === KnowledgeContentType.blog_post;
-  if (!isDraft && isBlogPost && !input.body?.trim()) {
-    throw new KnowledgeItemError(400, "Write your post before submitting.");
+  if (!isDraft && !input.body?.trim()) {
+    throw new KnowledgeItemError(400, "Write your content before submitting.");
   }
   // Sanitized once here (rather than inline at the db.create below) so both
   // the stored body and the excerpt derived from it below share one
   // sanitized value — a body that's nothing but disallowed markup (e.g.
   // just a <script> tag) collapses to empty and re-triggers the same
-  // "write your post" rejection, instead of silently saving a blank post.
-  const sanitizedBody = isBlogPost ? sanitizeBlogPostBody(input.body ?? "") : null;
-  if (!isDraft && isBlogPost && !sanitizedBody?.trim()) {
-    throw new KnowledgeItemError(400, "Write your post before submitting.");
+  // "write your content" rejection, instead of silently saving a blank item.
+  const sanitizedBody = sanitizeKnowledgeItemBody(input.body ?? "");
+  if (!isDraft && !sanitizedBody.trim()) {
+    throw new KnowledgeItemError(400, "Write your content before submitting.");
   }
-  if (
-    isBlogPost &&
-    countPastedImageReferences(sanitizedBody ?? "", PastedImageOwnerType.library_item) > MAX_PASTED_IMAGES_PER_BODY
-  ) {
-    throw new KnowledgeItemError(400, `A post can reference at most ${MAX_PASTED_IMAGES_PER_BODY} pasted images.`);
+  if (countPastedImageReferences(sanitizedBody, PastedImageOwnerType.library_item) > MAX_PASTED_IMAGES_PER_BODY) {
+    throw new KnowledgeItemError(400, `An item can reference at most ${MAX_PASTED_IMAGES_PER_BODY} pasted images.`);
   }
 
   const isRestricted = input.visibility === KnowledgeVisibility.restricted;
@@ -402,9 +398,9 @@ export async function createKnowledgeItem(
   const item = await db.knowledgeItem.create({
     data: {
       title: input.title,
-      // blog_post has no separate excerpt input — same "derive it from the
-      // body" UX as Blog's Post.body/excerpt split.
-      description: isBlogPost ? excerptFromHtml(sanitizedBody ?? "") : input.description,
+      // No separate excerpt input for any content type — same "derive it
+      // from the body" UX as Blog's Post.body/excerpt split.
+      description: excerptFromHtml(sanitizedBody),
       body: sanitizedBody,
       contentType: input.contentType,
       level: input.level,
@@ -425,14 +421,12 @@ export async function createKnowledgeItem(
     select: { id: true },
   });
 
-  if (isBlogPost) {
-    await linkPastedImages({
-      ownerType: PastedImageOwnerType.library_item,
-      ownerId: item.id,
-      uploaderId: contributorId,
-      body: sanitizedBody ?? "",
-    });
-  }
+  await linkPastedImages({
+    ownerType: PastedImageOwnerType.library_item,
+    ownerId: item.id,
+    uploaderId: contributorId,
+    body: sanitizedBody,
+  });
 
   await ensureCommunityMembership([contributorId, ...invitedUsers.map((user) => user.id)], input.communityIds);
 
@@ -519,7 +513,6 @@ export async function updateKnowledgeItem(
   actingUser: UserModel,
   input: {
     title: string;
-    description: string;
     body: string | null;
     contentType: KnowledgeContentType;
     level: KnowledgeLevel | null;
@@ -566,18 +559,15 @@ export async function updateKnowledgeItem(
     throw new KnowledgeItemError(400, "You must confirm all patient information has been de-identified.");
   }
   const isBlogPost = input.contentType === KnowledgeContentType.blog_post;
-  if (!isDraft && isBlogPost && !input.body?.trim()) {
-    throw new KnowledgeItemError(400, "Write your post before submitting.");
+  if (!isDraft && !input.body?.trim()) {
+    throw new KnowledgeItemError(400, "Write your content before submitting.");
   }
-  const sanitizedBody = isBlogPost ? sanitizeBlogPostBody(input.body ?? "") : null;
-  if (!isDraft && isBlogPost && !sanitizedBody?.trim()) {
-    throw new KnowledgeItemError(400, "Write your post before submitting.");
+  const sanitizedBody = sanitizeKnowledgeItemBody(input.body ?? "");
+  if (!isDraft && !sanitizedBody.trim()) {
+    throw new KnowledgeItemError(400, "Write your content before submitting.");
   }
-  if (
-    isBlogPost &&
-    countPastedImageReferences(sanitizedBody ?? "", PastedImageOwnerType.library_item) > MAX_PASTED_IMAGES_PER_BODY
-  ) {
-    throw new KnowledgeItemError(400, `A post can reference at most ${MAX_PASTED_IMAGES_PER_BODY} pasted images.`);
+  if (countPastedImageReferences(sanitizedBody, PastedImageOwnerType.library_item) > MAX_PASTED_IMAGES_PER_BODY) {
+    throw new KnowledgeItemError(400, `An item can reference at most ${MAX_PASTED_IMAGES_PER_BODY} pasted images.`);
   }
 
   const categories = await db.knowledgeCategory.findMany({
@@ -687,7 +677,7 @@ export async function updateKnowledgeItem(
       where: { id: item.id },
       data: {
         title: input.title,
-        description: isBlogPost ? excerptFromHtml(sanitizedBody ?? "") : input.description,
+        description: excerptFromHtml(sanitizedBody),
         body: sanitizedBody,
         contentType: input.contentType,
         level: input.level,
@@ -729,14 +719,12 @@ export async function updateKnowledgeItem(
     await deleteKnowledgeDocument(existingAttachment!.objectKey);
   }
 
-  if (isBlogPost) {
-    await linkPastedImages({
-      ownerType: PastedImageOwnerType.library_item,
-      ownerId: updated.id,
-      uploaderId: actingUser.id,
-      body: sanitizedBody ?? "",
-    });
-  }
+  await linkPastedImages({
+    ownerType: PastedImageOwnerType.library_item,
+    ownerId: updated.id,
+    uploaderId: actingUser.id,
+    body: sanitizedBody,
+  });
 
   if (wasDraft) {
     await ensureCommunityMembership(
