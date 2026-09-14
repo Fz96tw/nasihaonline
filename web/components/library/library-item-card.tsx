@@ -39,8 +39,8 @@ export function LibraryItemCard({ item, canEdit }: { item: LibraryCardData; canE
         <Link href={`/library/${item.id}`} className="relative block aspect-video w-full overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied or external YouTube URL, not a next/image-eligible local asset */}
           <img src={thumbnailUrl} alt="" className="h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-          <p className="absolute inset-x-0 bottom-2 line-clamp-2 px-3 text-sm font-semibold text-white [text-shadow:0_1px_6px_rgba(0,0,0,.75)]">
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
+          <p className="absolute inset-x-0 bottom-2 line-clamp-4 px-3 text-xl font-bold text-white [text-shadow:0_2px_8px_rgba(0,0,0,.85)]">
             {item.title}
           </p>
         </Link>
