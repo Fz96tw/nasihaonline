@@ -55,7 +55,7 @@ export default async function EventDetailPage({
         <BackLink fallbackHref="/calendar" />
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{FEED_TYPE_LABELS.event}</p>
-          <h1 className="mb-1 text-3xl font-bold tracking-tight">
+          <h1 className="mb-1 text-2xl font-bold tracking-tight">
             <HighlightText text={event.title} query={q} />
           </h1>
           {event.hostName ? <p className="text-sm text-muted-foreground">Hosted by {event.hostName}</p> : null}

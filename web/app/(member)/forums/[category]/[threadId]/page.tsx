@@ -89,7 +89,7 @@ export default async function ForumThreadPage({
           <div className="flex flex-wrap items-center gap-2">
             {thread.pinned && <Pin className="h-4 w-4 text-primary" />}
             {isRestricted && <Lock className="h-4 w-4 text-muted-foreground" />}
-            <h1 className="text-3xl font-bold tracking-tight">
+            <h1 className="text-2xl font-bold tracking-tight">
               <HighlightText text={thread.title} query={q} />
             </h1>
             {isRestricted && <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>}
