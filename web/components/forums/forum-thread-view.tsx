@@ -255,7 +255,10 @@ function PostNode({
   }
 
   return (
-    <div id={`post-${post.id}`} className="flex flex-col gap-3">
+    <div
+      id={`post-${post.id}`}
+      className="flex scroll-mt-[calc(var(--header-height)+var(--search-row-height)+16px)] flex-col gap-3"
+    >
       <div className="rounded-[10px] border bg-muted/40 p-3">
         <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-2">

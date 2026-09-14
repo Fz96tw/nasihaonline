@@ -468,7 +468,7 @@ export async function getFeedPage(params: {
         // the replier (not the thread creator) and show what they wrote.
         // Falls back to `author` above when the thread has no posts yet.
         posts: {
-          select: { author: { select: AUTHOR_SELECT }, body: true },
+          select: { id: true, author: { select: AUTHOR_SELECT }, body: true },
           orderBy: { createdAt: "desc" },
           take: query ? SEARCH_POST_SCAN_LIMIT : 1,
         },
@@ -721,7 +721,12 @@ export async function getFeedPage(params: {
         excerpt: isReply
           ? `Replied to a thread in ${thread.forum.name}`
           : `New thread in ${thread.forum.name}`,
-        href: withFeedRef(`/forums/${thread.forum.slug}/${thread.id}`, query),
+        // Reply-bumped threads link straight to the replying post (matching
+        // the #post-<id> convention used by @-mention notifications, see
+        // lib/forums-server.ts) instead of always landing at the thread top.
+        href:
+          withFeedRef(`/forums/${thread.forum.slug}/${thread.id}`, query) +
+          (isReply && excerptPost ? `#post-${excerptPost.id}` : ""),
         timestamp: thread.lastActivityAt.toISOString(),
         author: authorOf(excerptPost?.author ?? thread.author),
         // Forum threads have no per-thread hero image (no upload UI, no
