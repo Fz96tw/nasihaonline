@@ -53,92 +53,106 @@ export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
             </div>
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-start gap-1">
-              <div className={cn("mt-2 min-w-0 flex-1", hasThreadImage && "relative")}>
-                {hasThreadImage && (
-                  <div className="absolute right-0 top-0 aspect-square w-[9%] overflow-hidden rounded-md">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
-                    <img src={item.imageUrl!} alt="" className="h-full w-full object-cover" />
-                    <div className="absolute inset-0 bg-white/70" />
-                  </div>
-                )}
-                <div className={cn(hasThreadImage && "relative z-10")}>
-                  <div className="flex items-center gap-2">
-                    {item.isRestricted && (
-                      <Lock
-                        className={cn(
-                          "h-4 w-4 flex-shrink-0",
-                          hasThreadImage ? "text-neutral-900" : "text-muted-foreground",
-                        )}
-                        aria-label="Restricted event"
-                      />
-                    )}
-                    {!isLibraryOverlay && (
-                      <span className={cn("text-base font-semibold", hasThreadImage && "text-neutral-900")}>
-                        <HighlightText text={item.title} query={q} />
-                      </span>
-                    )}
-                    {item.titleTier && (
-                      <Badge variant={TIER_BADGE_VARIANT[item.titleTier]} className="flex-shrink-0">
-                        {DIRECTORY_TIER_LABELS[item.titleTier]}
-                      </Badge>
-                    )}
-                  </div>
-                  <div
-                    className={cn(
-                      "mt-0.5 line-clamp-2 text-sm",
-                      hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
-                    )}
-                  >
-                    <HighlightText text={item.excerpt} query={q} />
-                  </div>
-                  {item.replyExcerpt && (
-                    <div
-                      className={cn(
-                        "mt-1 line-clamp-2 text-sm italic",
-                        hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
-                      )}
-                    >
-                      &ldquo;<HighlightText text={item.replyExcerpt} query={q} />&rdquo;
-                    </div>
-                  )}
-                  {item.volunteerNote && (
-                    <div
-                      className={cn(
-                        "mt-1 line-clamp-2 text-xs italic",
-                        hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
-                      )}
-                    >
-                      Looking for: <HighlightText text={item.volunteerNote} query={q} />
-                    </div>
-                  )}
-                  {item.eventStartsAt && (
-                    <div
-                      className={cn("mt-0.5 text-xs", hasThreadImage ? "text-neutral-800" : "text-muted-foreground")}
-                    >
-                      Event Date: {formatTimestamp(item.eventStartsAt)}
-                    </div>
-                  )}
+            {isLibraryOverlay ? (
+              <>
+                {/* Banner (with the title overlaid on it) comes first for a
+                    library item with the overlay on — the excerpt reads as a
+                    caption under the banner, mirroring the detail page's
+                    image-then-content order, instead of sitting above it. */}
+                <div className="relative mt-2 w-full overflow-hidden rounded-md">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
+                  <img src={item.imageUrl!} alt="" className="max-h-48 w-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                  <p className="absolute inset-x-0 bottom-3 line-clamp-2 px-4 text-xl font-bold text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)]">
+                    {item.title}
+                  </p>
                 </div>
-              </div>
-            </div>
-            {!isForumThread && item.imageUrl && (isLibraryOverlay ? (
-              <div className="relative mt-2 w-full overflow-hidden rounded-md">
-                {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
-                <img src={item.imageUrl} alt="" className="max-h-48 w-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-                <p className="absolute inset-x-0 bottom-3 line-clamp-2 px-4 text-xl font-bold text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)]">
-                  {item.title}
-                </p>
-              </div>
+                <div className="mt-2 line-clamp-2 text-sm text-muted-foreground">
+                  <HighlightText text={item.excerpt} query={q} />
+                </div>
+              </>
             ) : (
-              // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
-              <img
-                src={item.imageUrl}
-                alt=""
-                className="mt-2 max-h-48 w-full rounded-md object-cover"
-              />
-            ))}
+              <>
+                <div className="flex items-start gap-1">
+                  <div className={cn("mt-2 min-w-0 flex-1", hasThreadImage && "relative")}>
+                    {hasThreadImage && (
+                      <div className="absolute right-0 top-0 aspect-square w-[9%] overflow-hidden rounded-md">
+                        {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
+                        <img src={item.imageUrl!} alt="" className="h-full w-full object-cover" />
+                        <div className="absolute inset-0 bg-white/70" />
+                      </div>
+                    )}
+                    <div className={cn(hasThreadImage && "relative z-10")}>
+                      <div className="flex items-center gap-2">
+                        {item.isRestricted && (
+                          <Lock
+                            className={cn(
+                              "h-4 w-4 flex-shrink-0",
+                              hasThreadImage ? "text-neutral-900" : "text-muted-foreground",
+                            )}
+                            aria-label="Restricted event"
+                          />
+                        )}
+                        <span className={cn("text-base font-semibold", hasThreadImage && "text-neutral-900")}>
+                          <HighlightText text={item.title} query={q} />
+                        </span>
+                        {item.titleTier && (
+                          <Badge variant={TIER_BADGE_VARIANT[item.titleTier]} className="flex-shrink-0">
+                            {DIRECTORY_TIER_LABELS[item.titleTier]}
+                          </Badge>
+                        )}
+                      </div>
+                      <div
+                        className={cn(
+                          "mt-0.5 line-clamp-2 text-sm",
+                          hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
+                        )}
+                      >
+                        <HighlightText text={item.excerpt} query={q} />
+                      </div>
+                      {item.replyExcerpt && (
+                        <div
+                          className={cn(
+                            "mt-1 line-clamp-2 text-sm italic",
+                            hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
+                          )}
+                        >
+                          &ldquo;<HighlightText text={item.replyExcerpt} query={q} />&rdquo;
+                        </div>
+                      )}
+                      {item.volunteerNote && (
+                        <div
+                          className={cn(
+                            "mt-1 line-clamp-2 text-xs italic",
+                            hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
+                          )}
+                        >
+                          Looking for: <HighlightText text={item.volunteerNote} query={q} />
+                        </div>
+                      )}
+                      {item.eventStartsAt && (
+                        <div
+                          className={cn(
+                            "mt-0.5 text-xs",
+                            hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
+                          )}
+                        >
+                          Event Date: {formatTimestamp(item.eventStartsAt)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {!isForumThread && item.imageUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
+                  <img
+                    src={item.imageUrl}
+                    alt=""
+                    className="mt-2 max-h-48 w-full rounded-md object-cover"
+                  />
+                )}
+              </>
+            )}
             {isForumThread && item.bodyImageUrl && (
               // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale
               <img
