@@ -424,6 +424,7 @@ export async function getFeedPage(params: {
         createdAt: true,
         youtubeUrl: true,
         heroImageUrl: true,
+        showTitleOverlay: true,
         visibility: true,
         contributor: { select: AUTHOR_SELECT },
         _count: { select: { views: true } },
@@ -689,6 +690,10 @@ export async function getFeedPage(params: {
       // falls back to its video's YouTube thumbnail as the default cover —
       // same precedence as LibraryItemCard's browse-grid thumbnail.
       imageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl) ?? (item.youtubeUrl ? youtubeThumbnailUrl(item.youtubeUrl) : null),
+      // Always false when heroImageUrl is null (server-enforced at write
+      // time), so this is never true for the YouTube-thumbnail fallback
+      // above — only ever for a real uploaded hero image.
+      showTitleOverlay: item.showTitleOverlay,
       libraryViewCount: item._count.views,
       forumReplyCount: item.forumThread ? item.forumThread._count.posts - 1 : undefined,
     })),

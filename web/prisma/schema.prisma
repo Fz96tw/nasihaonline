@@ -1802,6 +1802,12 @@ model KnowledgeItem {
   // so leaving it blank is a legitimate "just use the default" choice, not
   // a missing-data state.
   heroImageUrl              String?
+  // Overlays the title in white, on a dark bottom-gradient scrim, directly
+  // on heroImageUrl instead of rendering it separately below/beside the
+  // image (browse card, detail page, and What's New feed row). Forced back
+  // to false server-side whenever there's no hero image to overlay onto —
+  // see createKnowledgeItem/updateKnowledgeItem.
+  showTitleOverlay          Boolean              @default(false)
   // Alternative to a KnowledgeAttachment for article/case_study/guideline
   // items — a link to a resource hosted elsewhere (e.g. a Google Doc),
   // mutually exclusive with an attachment, same "store the link, not the

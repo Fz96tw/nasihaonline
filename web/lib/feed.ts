@@ -34,6 +34,8 @@ export type FeedItem = {
   author: { name: string | null; avatarUrl: string | null; titleSpecialty: string | null; countryRegion: string | null };
   /** Events, blog posts, announcements, and surveys carry a hero image; library items get one only for recorded lectures (YouTube thumbnail) — null otherwise. Forum threads always carry the same static default (/images/forum-thread.jpg), rendered by FeedRow as a small left-side thumbnail rather than the full-width image used by other types. */
   imageUrl: string | null;
+  /** Only "library" items carry this — when true, FeedRow overlays the title in white on a dark gradient directly on imageUrl instead of rendering the full-width image below the title block. Undefined for every other type; always false/undefined when imageUrl is null. */
+  showTitleOverlay?: boolean;
   /** Only forum threads carry the combined eye/reply count shown on their detail page — undefined for every other type. Library items (including blog_post) carry libraryViewCount + forumReplyCount separately instead. */
   stats?: { views: number; comments: number };
   /** Only events carry a registered/RSVP'd count — undefined for every other type. */

@@ -76,6 +76,11 @@ export type LibraryCard = {
   // null means "no custom image", which renderers fall back to the video's
   // YouTube thumbnail for, not "broken image".
   heroImageUrl: string | null;
+  // Overlay the title (white text, dark bottom-gradient scrim) directly on
+  // heroImageUrl instead of rendering it separately — always false when
+  // heroImageUrl is null (server-enforced, see createKnowledgeItem/
+  // updateKnowledgeItem).
+  showTitleOverlay: boolean;
   // Alternative to `attachment` for article/case_study/guideline items — a
   // link to a resource hosted elsewhere, mutually exclusive with it.
   externalUrl: string | null;
@@ -151,6 +156,7 @@ export type KnowledgeItemForEdit = {
   tagIds: string[];
   youtubeUrl: string | null;
   heroImageUrl: string | null;
+  showTitleOverlay: boolean;
   externalUrl: string | null;
   deidentificationConfirmed: boolean;
   contributorId: string;

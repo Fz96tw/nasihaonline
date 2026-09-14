@@ -20,6 +20,10 @@ export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
   // dropped to avoid showing two images for the same row.
   const isForumThread = item.type === "forum_thread";
   const hasThreadImage = isForumThread && !!item.imageUrl && !item.bodyImageUrl;
+  // Library items opted into the title-overlay treatment (§ Library hero
+  // banner title overlay option) show the title on the image instead of in
+  // the text block above it, mirroring the detail page/browse card.
+  const isLibraryOverlay = item.type === "library" && !!item.showTitleOverlay && !!item.imageUrl;
 
   return (
     <li>
@@ -69,9 +73,11 @@ export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
                         aria-label="Restricted event"
                       />
                     )}
-                    <span className={cn("text-base font-semibold", hasThreadImage && "text-neutral-900")}>
-                      <HighlightText text={item.title} query={q} />
-                    </span>
+                    {!isLibraryOverlay && (
+                      <span className={cn("text-base font-semibold", hasThreadImage && "text-neutral-900")}>
+                        <HighlightText text={item.title} query={q} />
+                      </span>
+                    )}
                     {item.titleTier && (
                       <Badge variant={TIER_BADGE_VARIANT[item.titleTier]} className="flex-shrink-0">
                         {DIRECTORY_TIER_LABELS[item.titleTier]}
@@ -116,14 +122,23 @@ export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
                 </div>
               </div>
             </div>
-            {!isForumThread && item.imageUrl && (
+            {!isForumThread && item.imageUrl && (isLibraryOverlay ? (
+              <div className="relative mt-2 w-full overflow-hidden rounded-md">
+                {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
+                <img src={item.imageUrl} alt="" className="max-h-48 w-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+                <p className="absolute inset-x-0 bottom-2 line-clamp-2 px-3 text-sm font-semibold text-white [text-shadow:0_1px_6px_rgba(0,0,0,.75)]">
+                  {item.title}
+                </p>
+              </div>
+            ) : (
               // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
               <img
                 src={item.imageUrl}
                 alt=""
                 className="mt-2 max-h-48 w-full rounded-md object-cover"
               />
-            )}
+            ))}
             {isForumThread && item.bodyImageUrl && (
               // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale
               <img

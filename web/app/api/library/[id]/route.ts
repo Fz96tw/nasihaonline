@@ -49,6 +49,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     youtubeUrl: formData.get("youtubeUrl") || null,
     externalUrl: formData.get("externalUrl") || null,
     deidentificationConfirmed: formData.get("deidentificationConfirmed") === "true",
+    showTitleOverlay: formData.get("showTitleOverlay") === "true",
     licenseConsented: formData.get("licenseConsented") === "true",
     visibility: formData.get("visibility") || "public",
     invitedUserIds,

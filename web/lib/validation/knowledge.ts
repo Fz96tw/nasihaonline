@@ -51,6 +51,11 @@ const knowledgeItemBaseSchema = z.object({
     .refine((value) => /^https?:\/\//i.test(value), "Enter a valid URL (starting with http:// or https://)")
     .nullable(),
   deidentificationConfirmed: z.boolean(),
+  // Only meaningful when a hero image is present — the form disables the
+  // checkbox otherwise, and library-server.ts forces this back to false
+  // server-side whenever no heroImageUrl actually resolves, same "was a
+  // file actually attached" caveat as heroImage itself.
+  showTitleOverlay: z.boolean(),
 });
 
 /**

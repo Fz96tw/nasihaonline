@@ -35,10 +35,19 @@ export function LibraryItemCard({ item, canEdit }: { item: LibraryCardData; canE
 
   return (
     <Card className="flex flex-col overflow-hidden">
-      {thumbnailUrl && (
+      {thumbnailUrl && (item.showTitleOverlay ? (
+        <Link href={`/library/${item.id}`} className="relative block aspect-video w-full overflow-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied or external YouTube URL, not a next/image-eligible local asset */}
+          <img src={thumbnailUrl} alt="" className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+          <p className="absolute inset-x-0 bottom-2 line-clamp-2 px-3 text-sm font-semibold text-white [text-shadow:0_1px_6px_rgba(0,0,0,.75)]">
+            {item.title}
+          </p>
+        </Link>
+      ) : (
         // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied or external YouTube URL, not a next/image-eligible local asset
         <img src={thumbnailUrl} alt="" className="aspect-video w-full object-cover" />
-      )}
+      ))}
       <CardHeader>
         <div className="flex flex-wrap items-center gap-2">
           {item.communities.map((community) => (
@@ -53,11 +62,15 @@ export function LibraryItemCard({ item, canEdit }: { item: LibraryCardData; canE
           ))}
           {item.status === KnowledgeStatus.flagged && <Badge variant="danger">Flagged</Badge>}
         </div>
-        <CardTitle className="text-lg">
-          <Link href={`/library/${item.id}`} className="hover:underline">
-            {item.title}
-          </Link>
-        </CardTitle>
+        {/* Title already rendered as the hero image's overlay above — skip
+            duplicating it here when that's active. */}
+        {!(thumbnailUrl && item.showTitleOverlay) && (
+          <CardTitle className="text-lg">
+            <Link href={`/library/${item.id}`} className="hover:underline">
+              {item.title}
+            </Link>
+          </CardTitle>
+        )}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
           <Icon className="h-4 w-4 flex-shrink-0" />
           <span>{CONTENT_TYPE_LABELS[item.contentType]}</span>

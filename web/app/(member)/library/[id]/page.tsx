@@ -87,9 +87,19 @@ export default async function LibraryItemDetailPage({
       )}
 
       {heroImageUrl && (
-        <div className="mb-6 flex h-72 w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
+        <div className="relative mb-6 flex h-72 w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
           {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied or external YouTube URL, not a next/image-eligible local asset */}
           <img src={heroImageUrl} alt={item.title} className="h-full w-full object-cover" />
+          {item.showTitleOverlay && (
+            <>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+              {/* Decorative-on-image — skips HighlightText, unlike the plain
+                  below-image <h1> below, which still supports it. */}
+              <h1 className="absolute inset-x-0 bottom-4 px-4 text-3xl font-extrabold text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)]">
+                {item.title}
+              </h1>
+            </>
+          )}
         </div>
       )}
 
@@ -109,9 +119,11 @@ export default async function LibraryItemDetailPage({
         )}
       </div>
 
-      <h1 className="mb-3 text-4xl font-extrabold tracking-tight">
-        <HighlightText text={item.title} query={q} />
-      </h1>
+      {!(heroImageUrl && item.showTitleOverlay) && (
+        <h1 className="mb-3 text-4xl font-extrabold tracking-tight">
+          <HighlightText text={item.title} query={q} />
+        </h1>
+      )}
 
       <div className="mb-8 flex items-center justify-between gap-3">
         {authorProfile ? (

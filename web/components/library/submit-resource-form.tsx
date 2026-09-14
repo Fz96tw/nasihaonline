@@ -54,6 +54,7 @@ const DEFAULT_VALUES: CreateKnowledgeItemValues = {
   youtubeUrl: null,
   externalUrl: null,
   deidentificationConfirmed: false,
+  showTitleOverlay: false,
   licenseConsented: false,
   visibility: KnowledgeVisibility.public,
   invitedUserIds: [],
@@ -155,6 +156,7 @@ export function SubmitResourceForm({
           youtubeUrl: existingItem.youtubeUrl,
           externalUrl: existingItem.externalUrl,
           deidentificationConfirmed: existingItem.deidentificationConfirmed,
+          showTitleOverlay: existingItem.showTitleOverlay,
           licenseConsented: isFirstSubmission ? false : true,
           // Visibility isn't editable past a draft's first submission —
           // hidden from the UI and hardcoded here, same "harmless
@@ -178,6 +180,7 @@ export function SubmitResourceForm({
   const visibility = form.watch("visibility");
   const isRestricted = visibility === KnowledgeVisibility.restricted;
   const selectedCommunityIds = form.watch("communityIds");
+  const hasHeroImage = Boolean(heroImage || existingItem?.heroImageUrl);
 
   async function onSubmit(values: CreateKnowledgeItemValues) {
     const action = pendingActionRef.current;
@@ -220,6 +223,7 @@ export function SubmitResourceForm({
         formData.append("externalUrl", values.externalUrl);
       }
       formData.append("deidentificationConfirmed", String(isCaseStudy && values.deidentificationConfirmed));
+      formData.append("showTitleOverlay", String(values.showTitleOverlay));
       if (isFirstSubmission) {
         formData.append("licenseConsented", String(values.licenseConsented));
         formData.append("visibility", values.visibility);
@@ -630,6 +634,30 @@ export function SubmitResourceForm({
             </p>
           )}
         </div>
+
+        <FormField
+          control={form.control}
+          name="showTitleOverlay"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-start gap-2 space-y-0">
+              <FormControl>
+                <Checkbox
+                  checked={field.value}
+                  disabled={!hasHeroImage}
+                  onCheckedChange={(c) => field.onChange(c === true)}
+                />
+              </FormControl>
+              <div className="space-y-1">
+                <FormLabel className="!mt-0">Show title on banner</FormLabel>
+                <FormDescription>
+                  {hasHeroImage
+                    ? "Overlay the title in white text on a dark gradient at the bottom of the hero image, instead of showing it separately below."
+                    : "Add a hero image above to enable this."}
+                </FormDescription>
+              </div>
+            </FormItem>
+          )}
+        />
 
         {isCaseStudy && (
           <FormField

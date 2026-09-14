@@ -114,6 +114,7 @@ const LIBRARY_CARD_SELECT = {
   createdAt: true,
   youtubeUrl: true,
   heroImageUrl: true,
+  showTitleOverlay: true,
   externalUrl: true,
   categories: { select: { category: { select: { name: true, slug: true } } } },
   communities: { select: { community: { select: { id: true, name: true, slug: true } } } },
@@ -140,6 +141,7 @@ function toLibraryCard(item: {
   createdAt: Date;
   youtubeUrl: string | null;
   heroImageUrl: string | null;
+  showTitleOverlay: boolean;
   externalUrl: string | null;
   categories: { category: { name: string; slug: string } }[];
   communities: { community: { id: string; name: string; slug: string } }[];
@@ -169,6 +171,7 @@ function toLibraryCard(item: {
     // card, detail page, feed), not resolved here since those already
     // have their own youtubeThumbnailUrl(youtubeUrl) fallback logic.
     heroImageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl),
+    showTitleOverlay: item.showTitleOverlay,
     externalUrl: item.externalUrl,
     attachment: item.attachments[0]
       ? {
@@ -301,6 +304,7 @@ export async function createKnowledgeItem(
     youtubeUrl: string | null;
     externalUrl: string | null;
     deidentificationConfirmed: boolean;
+    showTitleOverlay: boolean;
     licenseConsented: boolean;
     visibility: KnowledgeVisibility;
     invitedUserIds: string[];
@@ -407,6 +411,10 @@ export async function createKnowledgeItem(
       contributorId,
       youtubeUrl: isRecordedLecture ? input.youtubeUrl : null,
       heroImageUrl,
+      // Belt-and-suspenders against a client that submits the checkbox
+      // checked with no image actually attached — never trust the
+      // disabled-checkbox UI alone.
+      showTitleOverlay: heroImageUrl ? input.showTitleOverlay : false,
       externalUrl: requiresAttachmentOrLink ? input.externalUrl : null,
       deidentificationConfirmed: input.deidentificationConfirmed,
       licenseConsented: isDraft ? false : true,
@@ -455,6 +463,7 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
       categories: { select: { categoryId: true } },
       youtubeUrl: true,
       heroImageUrl: true,
+      showTitleOverlay: true,
       externalUrl: true,
       deidentificationConfirmed: true,
       contributorId: true,
@@ -477,6 +486,7 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
     tagIds: item.tags.map(({ tagId }) => tagId),
     youtubeUrl: item.youtubeUrl,
     heroImageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl),
+    showTitleOverlay: item.showTitleOverlay,
     externalUrl: item.externalUrl,
     deidentificationConfirmed: item.deidentificationConfirmed,
     contributorId: item.contributorId,
@@ -523,6 +533,7 @@ export async function updateKnowledgeItem(
     youtubeUrl: string | null;
     externalUrl: string | null;
     deidentificationConfirmed: boolean;
+    showTitleOverlay: boolean;
     file: File | null;
     heroImage: File | null;
     /** Only meaningful while the row is still `status: draft` — see doc comment above. */
@@ -683,6 +694,9 @@ export async function updateKnowledgeItem(
         level: input.level,
         youtubeUrl: isRecordedLecture ? input.youtubeUrl : null,
         heroImageUrl,
+        // Same belt-and-suspenders as createKnowledgeItem — never trust the
+        // disabled-checkbox UI alone.
+        showTitleOverlay: heroImageUrl ? input.showTitleOverlay : false,
         externalUrl: requiresAttachmentOrLink ? input.externalUrl : null,
         deidentificationConfirmed: input.deidentificationConfirmed,
         status: nextStatus,
