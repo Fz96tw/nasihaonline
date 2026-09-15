@@ -1819,6 +1819,10 @@ model KnowledgeItem {
   // one-way for the flagger, only a Steward resolving it clears this"
   // convention as Post.flagReason.
   flagReason                String?
+  // Null = not yet published; set when status first transitions to
+  // `published`. Mirrors Event.publishedAt — used by the feed to show/sort
+  // by the real publish date rather than the draft creation date.
+  publishedAt               DateTime?
   createdAt                 DateTime             @default(now())
   updatedAt                 DateTime             @updatedAt
 

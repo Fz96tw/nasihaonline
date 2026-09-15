@@ -1478,7 +1478,10 @@ export async function reviewKnowledgeItem(id: string, action: "publish" | "rejec
   const { updated, invitees } = await db.$transaction(async (tx) => {
     const result = await tx.knowledgeItem.update({
       where: { id },
-      data: { status },
+      data: {
+        status,
+        ...(action === "publish" ? { publishedAt: new Date() } : {}),
+      },
       select: { id: true, status: true },
     });
 
