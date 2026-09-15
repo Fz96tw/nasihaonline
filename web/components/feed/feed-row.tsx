@@ -93,7 +93,17 @@ export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
                             aria-label="Restricted event"
                           />
                         )}
-                        <span className={cn("text-base font-semibold", hasThreadImage && "text-neutral-900")}>
+                        <span
+                          className={cn(
+                            // Library items without the title-overlay banner
+                            // treatment (isLibraryOverlay above) still get the
+                            // overlay's text-2xl/font-bold size — the title
+                            // shouldn't read smaller just because there's no
+                            // hero image/overlay to put it on.
+                            item.type === "library" ? "text-2xl font-bold" : "text-base font-semibold",
+                            hasThreadImage && "text-neutral-900",
+                          )}
+                        >
                           <HighlightText text={item.title} query={q} />
                         </span>
                         {item.titleTier && (
