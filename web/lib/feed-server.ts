@@ -423,6 +423,7 @@ export async function getFeedPage(params: {
         title: true,
         description: true,
         createdAt: true,
+        publishedAt: true,
         youtubeUrl: true,
         heroImageUrl: true,
         showTitleOverlay: true,
@@ -435,7 +436,7 @@ export async function getFeedPage(params: {
         // events branch above.
         forumThread: { select: { _count: { select: { posts: true } } } },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { publishedAt: "desc" },
       take: pageSize,
     }),
     !wants("forum_thread") || forumHitIds?.length === 0 ? Promise.resolve([]) : db.forumThread.findMany({
@@ -689,7 +690,7 @@ export async function getFeedPage(params: {
           // guarantees a description for.
           : excerptOf(item.description!),
       href: withFeedRef(`/library/${item.id}`, query),
-      timestamp: item.createdAt.toISOString(),
+      timestamp: (item.publishedAt ?? item.createdAt).toISOString(),
       author: authorOf(item.contributor),
       // A custom hero image always wins; a recorded_lecture with none set
       // falls back to its video's YouTube thumbnail as the default cover —
