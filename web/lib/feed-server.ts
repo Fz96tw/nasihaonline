@@ -264,8 +264,13 @@ export async function getFeedPage(params: {
     status: query ? { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] } : KnowledgeStatus.published,
     ...(before ? { createdAt: { lt: before } } : {}),
     ...(libraryHitIds ? { id: { in: libraryHitIds } } : {}),
+    // Queries the direct KnowledgeItemCommunity relation, same as
+    // getLibraryCards' communityFilter (lib/library-server.ts) — deriving
+    // the community through `categories` instead made an item tagged with a
+    // community but zero categories (categories became optional in the
+    // standardization objective) invisible to this filter.
     ...(params.communityIds?.length
-      ? { categories: { some: { category: { communityId: { in: params.communityIds } } } } }
+      ? { communities: { some: { communityId: { in: params.communityIds } } } }
       : {}),
     // Same suspended-author exclusion as eventWhere above.
     contributor: { suspended: false },
