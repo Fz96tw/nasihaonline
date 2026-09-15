@@ -99,8 +99,12 @@ export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
                             // treatment (isLibraryOverlay above) still get the
                             // overlay's text-2xl/font-bold size — the title
                             // shouldn't read smaller just because there's no
-                            // hero image/overlay to put it on.
-                            item.type === "library" ? "text-2xl font-bold" : "text-base font-semibold",
+                            // hero image/overlay to put it on. Events match
+                            // the same size (confirmed with user) so the two
+                            // hero-image-bearing feed types read consistently.
+                            item.type === "library" || item.type === "event"
+                              ? "text-2xl font-bold"
+                              : "text-base font-semibold",
                             hasThreadImage && "text-neutral-900",
                           )}
                         >
