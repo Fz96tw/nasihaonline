@@ -64,6 +64,9 @@ export async function upsertUserFromClerkData(
         requiresProfileOnboarding: true,
         profile: {
           create: {
+            // New members start in every community (and any added later);
+            // they narrow it themselves via the header's community edit.
+            followsAllCommunities: true,
             countryRegion: approvedApplication?.countryRegion || undefined,
             titleSpecialty: approvedApplication?.professionalTitle || undefined,
             linkedinUrl: approvedApplication?.linkedinUrl || undefined,

@@ -29,7 +29,8 @@ export type ProfileWithAvatarUrl = Omit<ProfileWithSkills, "avatarUrl"> & { avat
 export async function getOrCreateProfile(userId: string): Promise<ProfileWithSkills> {
   const existing = await db.profile.findUnique({ where: { userId }, include: PROFILE_INCLUDE });
   if (existing) return existing;
-  return db.profile.create({ data: { userId }, include: PROFILE_INCLUDE });
+  // Same default as upsertUserFromClerkData's nested create.
+  return db.profile.create({ data: { userId, followsAllCommunities: true }, include: PROFILE_INCLUDE });
 }
 
 export function withResolvedAvatarUrl(profile: ProfileWithSkills): ProfileWithAvatarUrl {
