@@ -30,15 +30,8 @@ export default async function MemberLayout({ children }: { children: React.React
   // (§4.15) is blocked from all of them, without needing each page to check.
   if (user?.suspended) redirect("/account-suspended");
 
-  // welcomeAnnouncementSentAt is null only on the request that fires the
-  // first-sign-in welcome shout-out (see maybeSendWelcomeAnnouncement in
-  // lib/auth.ts) — reused here as the same "first authenticated request
-  // ever" signal to send a brand-new member to the /welcome splash instead
-  // of straight to /profile.
-  const isFirstSignIn = !!user && !user.welcomeAnnouncementSentAt;
-  // Fetched once and reused for both gates below — needsCommunitySelection
-  // applies to every member (including ones grandfathered past
-  // needsOnboarding), so it can't reuse that flag's early-out.
+  // Fetched once and reused for both checks below — needsCommunitySelection
+  // applies to every member, including ones grandfathered past needsOnboarding.
   const profile = user ? await getOrCreateProfile(user.id) : null;
   // requiresProfileOnboarding is false for every member grandfathered in
   // from before the /join field-reduction (§3.1) — skip the completeness
@@ -61,7 +54,6 @@ export default async function MemberLayout({ children }: { children: React.React
       <QueryProvider>
         <ProfileCompletionGate
           needsOnboarding={needsOnboarding}
-          isFirstSignIn={isFirstSignIn}
           needsCommunitySelection={needsCommunitySelection}
           missingProfileFields={missingProfileFields}
         />

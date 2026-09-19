@@ -14,25 +14,22 @@ import { AlertTriangle } from "lucide-react";
  * their profile whenever. `needsOnboarding`/`missingProfileFields` are
  * recomputed from the DB on every navigation (the (member) layout re-renders
  * per nav — see its comment), so the banner's field list stays accurate as
- * fields get saved, without a page reload. `isFirstSignIn` only controls the
- * one-time redirect to the celebratory /welcome splash (outside this route
- * group) on a member's very first authenticated request — every later visit
- * while still incomplete renders the banner in place instead of redirecting.
+ * fields get saved, without a page reload. There is no first-sign-in
+ * splash: a new member lands straight on /whats-new and only sees the banner.
  *
  * `needsCommunitySelection` (community-based-categorization initiative,
  * objective 2) is a second, independent gate — still a hard redirect,
- * unchanged by this soft-gate work — checked only once profile onboarding
- * is satisfied, same priority order as before so the two never race for the
- * same redirect.
+ * unaffected by the profile banner above (the two never compete: the banner
+ * renders in place, this one navigates away). New members start out
+ * following all communities, so in practice it only catches a profile with
+ * no selection at all.
  */
 export function ProfileCompletionGate({
   needsOnboarding,
-  isFirstSignIn,
   needsCommunitySelection,
   missingProfileFields,
 }: {
   needsOnboarding: boolean;
-  isFirstSignIn: boolean;
   needsCommunitySelection: boolean;
   missingProfileFields: string[];
 }) {
@@ -40,14 +37,10 @@ export function ProfileCompletionGate({
   const router = useRouter();
 
   useEffect(() => {
-    if (needsOnboarding) {
-      if (isFirstSignIn && pathname !== "/welcome") router.replace("/welcome");
-      return;
-    }
     if (needsCommunitySelection && pathname !== "/welcome/communities") {
       router.replace("/welcome/communities");
     }
-  }, [needsOnboarding, isFirstSignIn, needsCommunitySelection, pathname, router]);
+  }, [needsCommunitySelection, pathname, router]);
 
   // The Profile page itself already surfaces the missing-fields list inline
   // (app/(member)/profile/page.tsx) — showing this banner there too would

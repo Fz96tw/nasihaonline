@@ -17,11 +17,14 @@ export const metadata: Metadata = {
  */
 export default async function AcceptInvitePage() {
   const user = await getSessionUser();
-  if (user) redirect("/dashboard");
+  if (user) redirect("/whats-new");
 
+  // No AFTER_SIGN_UP env exists (only AFTER_SIGN_IN), so without this
+  // Clerk sends a freshly-registered invitee to "/", the marketing landing
+  // page, instead of into the app. Same destination as the sign-in path.
   return (
     <main className="flex min-h-screen items-center justify-center p-8">
-      <SignUp routing="hash" />
+      <SignUp routing="hash" forceRedirectUrl="/whats-new" />
     </main>
   );
 }
