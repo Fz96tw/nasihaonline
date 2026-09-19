@@ -354,12 +354,13 @@ A new public page introducing the people behind Nasiha — founders, board membe
 | Forum | Purpose |
 |---|---|
 | General | Community announcements, introductions, open discussion |
-| Clinical Discussions | Case-based learning, diagnostic questions, treatment approaches |
 | Research & Resources | Sharing articles, tools, guidelines, curated learning materials |
 | Teaching & Mentorship | Advice on teaching, mentorship requests, pedagogical discussion |
 | Students & Trainees | Dedicated space for early-career members |
 | Organizational | Board updates, policy discussions, credit system questions |
 | Peer Review & Feedback | Constructive, evidence-based critique of work, research, and educational content across disciplines |
+
+**Retired forums:** Peer Review & Feedback (replaced by `/review-feedback`, §4.13) and Clinical Discussions (retired after the broader-scope pivot; not medical-only) are deactivated rather than deleted, so historical threads stay intact but the forums no longer appear on `/forums` or accept new threads. Neither is seeded any more.
 
 Categories should be admin-manageable (not hardcoded), same rationale as Our Team (§4.12) and Events — an org this size will want to add/retire categories over time.
 

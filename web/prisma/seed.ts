@@ -414,13 +414,11 @@ for (const name of KNOWLEDGE_CATEGORIES) {
 // /review-feedback feature (ReviewItem et al.) — the existing seeded Forum
 // row is deactivated (active=false) rather than deleted, so any historical
 // threads in it stay intact but the category no longer appears on /forums.
+// "Clinical Discussions" was retired the same way (scripts/deactivate-forum.sh
+// clinical-discussions) and is no longer seeded; its slug constant in
+// lib/forums.ts stays so any surviving threads keep their de-identification gate.
 const FORUMS: { name: string; description: string; displayOrder: number }[] = [
   { name: "General", description: "Community announcements, introductions, open discussion.", displayOrder: 0 },
-  {
-    name: "Clinical Discussions",
-    description: "Case-based learning, diagnostic questions, treatment approaches.",
-    displayOrder: 1,
-  },
   {
     name: "Research & Resources",
     description: "Sharing articles, tools, guidelines, curated learning materials.",
@@ -667,22 +665,6 @@ async function seedForums() {
       },
     });
     console.log("Seeded 1 sample forum thread in General.");
-  }
-
-  const clinical = forumsByName.get("Clinical Discussions")!;
-  const existingCase = await db.forumThread.findFirst({ where: { title: "De-identified case: unusual ECG pattern" } });
-  if (!existingCase) {
-    const thread = await db.forumThread.create({
-      data: { forumId: clinical.id, authorId: members[0].id, title: "De-identified case: unusual ECG pattern" },
-    });
-    await db.forumPost.create({
-      data: {
-        threadId: thread.id,
-        authorId: members[0].id,
-        body: "Sharing a de-identified ECG pattern I'd like the group's thoughts on.",
-      },
-    });
-    console.log("Seeded 1 sample forum thread in Clinical Discussions.");
   }
 }
 
