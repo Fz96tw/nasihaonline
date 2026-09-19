@@ -30,7 +30,11 @@ APPLY=0
 if [ "${1:-}" = "--apply" ]; then APPLY=1; shift; fi
 TARGET="${1:-ubuntu@50.6.224.185}"
 
-PSQL="cd ~/nasiha && docker compose exec -T postgres psql -U nasiha -d nasiha"
+# SQL goes to psql over stdin (not via -c "...") so the double-quoted camelCase column
+# names below survive the local shell, ssh and the remote shell untouched.
+run_sql() {
+  printf '%s\n' "$1" | ssh "$TARGET" "cd ~/nasiha && docker compose exec -T postgres psql -U nasiha -d nasiha"
+}
 
 SHOW="SELECT f.slug, f.name, f.active,
   (SELECT count(*) FROM forum_threads t WHERE t.\"forumId\" = f.id AND NOT t.removed) AS live_threads,
@@ -38,7 +42,7 @@ SHOW="SELECT f.slug, f.name, f.active,
 FROM forums f WHERE f.slug = '$SLUG';"
 
 echo "== Current state =="
-ssh "$TARGET" "$PSQL -c \"$SHOW\""
+run_sql "$SHOW"
 
 if [ "$APPLY" -eq 0 ]; then
   echo "Dry run only. If exactly one row is shown above, re-run with --apply."
@@ -46,7 +50,7 @@ if [ "$APPLY" -eq 0 ]; then
 fi
 
 echo "== Deactivating =="
-ssh "$TARGET" "$PSQL -c \"BEGIN; UPDATE forums SET active = false WHERE slug = '$SLUG'; COMMIT;\""
+run_sql "BEGIN; UPDATE forums SET active = false WHERE slug = '$SLUG'; COMMIT;"
 
 echo "== After =="
-ssh "$TARGET" "$PSQL -c \"$SHOW\""
+run_sql "$SHOW"
