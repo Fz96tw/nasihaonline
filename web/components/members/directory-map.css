@@ -1,0 +1,93 @@
+/* Styles for components/members/directory-map.tsx. Colors come from the theme
+   tokens in app/globals.css so the map follows the site palette. */
+
+.dm-map .leaflet-container {
+  background: hsl(var(--muted));
+  font-family: inherit;
+}
+
+/* Mute the OSM basemap a little so the markers carry the eye. */
+.dm-map .leaflet-tile-pane {
+  filter: saturate(0.55) brightness(1.04);
+}
+
+/* Dark mode: OSM has no dark tile set, so invert the tiles instead. */
+.dark .dm-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) saturate(0.5) brightness(0.9) contrast(0.95);
+}
+
+.dm-marker-icon {
+  background: transparent;
+  border: 0;
+}
+
+.dm-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 2px solid hsl(var(--background));
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 6px rgb(0 0 0 / 0.35);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.dm-marker:hover {
+  background: hsl(var(--primary-hover));
+}
+
+.dm-marker:focus-visible {
+  outline: 3px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+.dm-marker--selected,
+.dm-marker--selected:hover {
+  background: hsl(var(--brand-accent));
+  color: hsl(var(--brand-accent-foreground));
+  box-shadow:
+    0 0 0 4px hsl(var(--brand-accent) / 0.35),
+    0 2px 8px rgb(0 0 0 / 0.4);
+  transform: scale(1.12);
+}
+
+.dm-marker--dim {
+  opacity: 0.45;
+}
+
+.dm-marker--dim:hover,
+.dm-marker--dim:focus-visible {
+  opacity: 1;
+}
+
+/* Leaflet's zoom buttons and attribution are hard-coded white. */
+.dark .dm-map .leaflet-bar a {
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border-color: hsl(var(--border));
+}
+
+.dark .dm-map .leaflet-control-attribution {
+  background: hsl(var(--card) / 0.8);
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .dm-map .leaflet-control-attribution a {
+  color: hsl(var(--foreground));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dm-marker {
+    transition: none;
+  }
+}
