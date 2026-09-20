@@ -1,55 +1,26 @@
 "use client";
 
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MemberCard } from "@/components/members/member-card";
 import { type DirectoryMember } from "@/lib/members";
-import { useDirectoryFilters } from "@/lib/stores/directory-filters";
-import { useDebouncedValue } from "@/lib/use-debounced-value";
 
-const SEARCH_DEBOUNCE_MS = 250;
-
-async function fetchDirectoryMembers(query: string): Promise<DirectoryMember[]> {
-  const response = await fetch(`/api/members${query ? `?q=${encodeURIComponent(query)}` : ""}`);
-  if (!response.ok) throw new Error("Failed to load the member directory");
-  const data = (await response.json()) as { members: DirectoryMember[] };
-  return data.members;
-}
-
+/**
+ * The member cards for an already-filtered list — data fetching and filtering
+ * live in DirectoryView. `summaryExtra` sits next to the "N members found"
+ * line (used for the active-country chip).
+ */
 export function DirectoryGrid({
-  initialMembers,
+  members,
+  isLoading,
   currentUserId,
+  summaryExtra,
 }: {
-  initialMembers: DirectoryMember[];
+  members: DirectoryMember[];
+  isLoading: boolean;
   currentUserId: string;
+  summaryExtra?: ReactNode;
 }) {
-  const search = useDirectoryFilters((state) => state.search);
-  const tier = useDirectoryFilters((state) => state.tier);
-  const skillIds = useDirectoryFilters((state) => state.skillIds);
-  const interestAreas = useDirectoryFilters((state) => state.interestAreas);
-  const debouncedSearch = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
-
-  const { data: members, isLoading } = useQuery({
-    queryKey: ["directory-members", debouncedSearch],
-    queryFn: () => fetchDirectoryMembers(debouncedSearch),
-    initialData: debouncedSearch ? undefined : initialMembers,
-  });
-
-  const filtered = useMemo(() => {
-    if (!members) return [];
-    return members.filter((member) => {
-      if (tier !== "all" && member.tier !== tier) return false;
-      if (skillIds.length > 0 && !member.skills.some((skill) => skillIds.includes(skill.id))) return false;
-      if (
-        interestAreas.length > 0 &&
-        !member.interestAreas.some((area) => interestAreas.includes(area))
-      )
-        return false;
-      return true;
-    });
-  }, [members, tier, skillIds, interestAreas]);
-
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -62,15 +33,18 @@ export function DirectoryGrid({
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">
-        {filtered.length} {filtered.length === 1 ? "member" : "members"} found
-      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-sm text-muted-foreground">
+          {members.length} {members.length === 1 ? "member" : "members"} found
+        </p>
+        {summaryExtra}
+      </div>
 
-      {filtered.length === 0 ? (
+      {members.length === 0 ? (
         <p className="py-16 text-center text-muted-foreground">No members match your search and filter.</p>
       ) : (
         <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filtered.map((member) => (
+          {members.map((member) => (
             <MemberCard key={member.id} member={member} currentUserId={currentUserId} />
           ))}
         </div>

@@ -4,7 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getDirectoryMembers } from "@/lib/members-server";
 import { getAllSkills } from "@/lib/skills-server";
 import { DirectoryFiltersBar } from "@/components/members/directory-filters-bar";
-import { DirectoryGrid } from "@/components/members/directory-grid";
+import { DirectoryView } from "@/components/members/directory-view";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 
 export const metadata: Metadata = {
@@ -32,7 +32,7 @@ export default async function MembersPage() {
 
       <section className="mx-auto flex max-w-[1120px] flex-col gap-8 px-8 py-16">
         <DirectoryFiltersBar availableSkills={skills} />
-        <DirectoryGrid initialMembers={members} currentUserId={user.id} />
+        <DirectoryView initialMembers={members} currentUserId={user.id} />
       </section>
     </main>
   );

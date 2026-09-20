@@ -272,6 +272,13 @@ for (const country of COUNTRIES) {
   for (const alias of country.aliases ?? []) BY_KEY.set(normalize(alias), country);
 }
 
+const BY_ISO2 = new Map(COUNTRIES.map((country) => [country.iso2, country]));
+
+/** Look a country up by its ISO 3166-1 alpha-2 code (e.g. for a filter chip label). */
+export function getCountryByIso2(iso2: string | null | undefined): Country | null {
+  return iso2 ? (BY_ISO2.get(iso2) ?? null) : null;
+}
+
 const cache = new Map<string, Country | null>();
 
 function lookup(candidate: string): Country | null {
