@@ -6,13 +6,18 @@
   font-family: inherit;
 }
 
-/* Mute the OSM basemap a little so the markers carry the eye. */
+/* Mute the OSM basemap a little so the markers carry the eye. Opacity rather
+   than a saturate() filter: a CSS filter on the tile pane forces the whole map
+   to be re-rendered every frame while any marker animates (measured: ~2x frame
+   time with 200 markers), opacity doesn't. */
 .dm-map .leaflet-tile-pane {
-  filter: saturate(0.55) brightness(1.04);
+  opacity: 0.85;
 }
 
-/* Dark mode: OSM has no dark tile set, so invert the tiles instead. */
+/* Dark mode: OSM has no dark tile set, so invert the tiles instead. That
+   filter has the same cost problem, so dark mode drops the pulse ring below. */
 .dark .dm-map .leaflet-tile-pane {
+  opacity: 1;
   filter: invert(1) hue-rotate(180deg) saturate(0.5) brightness(0.9) contrast(0.95);
 }
 
@@ -22,6 +27,7 @@
 }
 
 .dm-marker {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -86,8 +92,72 @@
   color: hsl(var(--foreground));
 }
 
+/* Pulse: a soft ring that expands off the largest markers (see
+   PULSE_MAX_MARKERS). Dimmed markers hold still so the selected country is the
+   only thing drawing the eye. */
+.dm-marker--pulse::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border: 2px solid hsl(var(--primary) / 0.55);
+  border-radius: 9999px;
+  pointer-events: none;
+  animation: dm-pulse var(--dm-pulse, 2.6s) ease-out var(--dm-pulse-offset, 0s) infinite;
+}
+
+.dm-marker--pulse.dm-marker--selected::after {
+  border-color: hsl(var(--brand-accent) / 0.7);
+}
+
+.dm-marker--pulse.dm-marker--dim::after {
+  animation: none;
+  opacity: 0;
+}
+
+.dark .dm-marker--pulse::after {
+  display: none;
+}
+
+@keyframes dm-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  70%,
+  100% {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+}
+
+/* Pop-in for markers new to the map; --dm-delay staggers them. `backwards`
+   holds the hidden first frame during the delay and then hands control back
+   to the marker's normal styles (e.g. the selected scale). */
+.dm-marker--enter {
+  animation: dm-pop 450ms cubic-bezier(0.34, 1.56, 0.64, 1) var(--dm-delay, 0ms) backwards;
+}
+
+@keyframes dm-pop {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dm-marker {
     transition: none;
+  }
+
+  .dm-marker--pulse::after {
+    display: none;
+  }
+
+  .dm-marker--enter {
+    animation: none;
   }
 }
