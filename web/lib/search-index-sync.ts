@@ -55,6 +55,7 @@ export async function syncProfileToIndex(userId: string): Promise<void> {
     skillNames: profile.skills.map(({ skill }) => skill.name),
     titleSpecialty: profile.showSpecialtyLocation ? profile.titleSpecialty : null,
     countryRegion: profile.showSpecialtyLocation ? profile.countryRegion : null,
+    city: profile.showSpecialtyLocation ? profile.city : null,
   });
 }
 

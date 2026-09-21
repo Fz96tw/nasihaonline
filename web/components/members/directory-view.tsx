@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { DirectoryGrid } from "@/components/members/directory-grid";
 import { DirectoryMap, type MapBucket } from "@/components/members/directory-map-loader";
-import { getCountryByIso2, resolveCountry } from "@/lib/country-centroids";
+import { countryNameFor, memberPlace } from "@/lib/cities";
 import { type DirectoryMember } from "@/lib/members";
 import { useDirectoryFilters } from "@/lib/stores/directory-filters";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
@@ -21,12 +21,13 @@ async function fetchDirectoryMembers(query: string): Promise<DirectoryMember[]> 
 
 /**
  * The directory's results area: a world map of where the listed members are,
- * above the member grid. The map doubles as a country filter — picking a
- * country narrows the grid, clicking the map elsewhere clears it.
+ * above the member grid. The map doubles as a place filter — picking a marker
+ * narrows the grid to it, clicking the map elsewhere clears it. A marker is a
+ * member's city when they've set one, otherwise their country.
  *
- * No server work is added for this: `DirectoryMember.countryRegion` is already
- * null for members who hid their location (lib/members-server.ts), so they
- * stay in the grid but simply can't be placed on the map.
+ * No server work is added for this: `DirectoryMember.city` and `countryRegion`
+ * are already null for members who hid their location (lib/members-server.ts),
+ * so they stay in the grid but simply can't be placed on the map.
  */
 export function DirectoryView({
   initialMembers,
@@ -39,8 +40,8 @@ export function DirectoryView({
   const tier = useDirectoryFilters((state) => state.tier);
   const skillIds = useDirectoryFilters((state) => state.skillIds);
   const interestAreas = useDirectoryFilters((state) => state.interestAreas);
-  const selectedCountry = useDirectoryFilters((state) => state.selectedCountry);
-  const setSelectedCountry = useDirectoryFilters((state) => state.setSelectedCountry);
+  const selectedPlace = useDirectoryFilters((state) => state.selectedPlace);
+  const setSelectedPlace = useDirectoryFilters((state) => state.setSelectedPlace);
   const debouncedSearch = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
 
   const { data: members, isLoading } = useQuery({
@@ -56,8 +57,8 @@ export function DirectoryView({
   if (members) lastMembers.current = members;
   const source = members ?? lastMembers.current;
 
-  // Everything except the country: this is what the map counts, so the markers
-  // always show how many members each country would contribute under the
+  // Everything except the place: this is what the map counts, so the markers
+  // always show how many members each place would contribute under the
   // current search / tier / skill / interest-area filters.
   const baseFiltered = useMemo(
     () =>
@@ -75,27 +76,20 @@ export function DirectoryView({
   );
 
   const { buckets, unmappedCount } = useMemo(() => {
-    const byCountry = new Map<string, MapBucket>();
+    const byPlace = new Map<string, MapBucket>();
     let unmapped = 0;
     for (const member of baseFiltered) {
-      const country = resolveCountry(member.countryRegion);
-      if (!country) {
+      const place = memberPlace(member);
+      if (!place) {
         unmapped += 1;
         continue;
       }
-      const bucket = byCountry.get(country.iso2);
+      const bucket = byPlace.get(place.key);
       if (bucket) bucket.count += 1;
-      else
-        byCountry.set(country.iso2, {
-          iso2: country.iso2,
-          name: country.name,
-          lat: country.lat,
-          lng: country.lng,
-          count: 1,
-        });
+      else byPlace.set(place.key, { ...place, count: 1 });
     }
     return {
-      buckets: Array.from(byCountry.values()).sort(
+      buckets: Array.from(byPlace.values()).sort(
         (a, b) => b.count - a.count || a.name.localeCompare(b.name),
       ),
       unmappedCount: unmapped,
@@ -104,22 +98,22 @@ export function DirectoryView({
 
   const filtered = useMemo(
     () =>
-      selectedCountry
-        ? baseFiltered.filter((member) => resolveCountry(member.countryRegion)?.iso2 === selectedCountry)
+      selectedPlace
+        ? baseFiltered.filter((member) => memberPlace(member)?.key === selectedPlace)
         : baseFiltered,
-    [baseFiltered, selectedCountry],
+    [baseFiltered, selectedPlace],
   );
 
-  // Clicking the already-selected country again clears it, like a toggle chip.
+  // Clicking the already-selected marker again clears it, like a toggle chip.
   const handleSelect = useCallback(
-    (iso2: string | null) => setSelectedCountry(iso2 !== null && iso2 === selectedCountry ? null : iso2),
-    [selectedCountry, setSelectedCountry],
+    (key: string | null) => setSelectedPlace(key !== null && key === selectedPlace ? null : key),
+    [selectedPlace, setSelectedPlace],
   );
 
-  // Esc clears the country filter — unless the key is meant for something else:
+  // Esc clears the place filter — unless the key is meant for something else:
   // a text field, or an open dialog/menu/popover that will use Esc to close.
   useEffect(() => {
-    if (!selectedCountry) return;
+    if (!selectedPlace) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
       const target = event.target as HTMLElement | null;
@@ -130,19 +124,29 @@ export function DirectoryView({
         )
       )
         return;
-      setSelectedCountry(null);
+      setSelectedPlace(null);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [selectedCountry, setSelectedCountry]);
+  }, [selectedPlace, setSelectedPlace]);
 
-  const selectedName = getCountryByIso2(selectedCountry)?.name ?? selectedCountry;
+  // The chip's name comes from a member in the selection (the selected marker
+  // can drop off the map when another filter empties it), falling back to the
+  // country for a "country:XX" key.
+  const selectedName = useMemo(() => {
+    if (!selectedPlace) return null;
+    for (const member of source) {
+      const place = memberPlace(member);
+      if (place?.key === selectedPlace) return place.name;
+    }
+    return selectedPlace.startsWith("country:") ? countryNameFor(selectedPlace.slice("country:".length)) : "this place";
+  }, [source, selectedPlace]);
 
   return (
     <div className="flex flex-col gap-6">
       <DirectoryMap
         buckets={buckets}
-        selected={selectedCountry}
+        selected={selectedPlace}
         onSelect={handleSelect}
         unmappedCount={unmappedCount}
       />
@@ -151,15 +155,15 @@ export function DirectoryView({
         isLoading={isLoading}
         currentUserId={currentUserId}
         summaryExtra={
-          selectedCountry && (
+          selectedPlace && (
             <button
               type="button"
-              onClick={() => setSelectedCountry(null)}
+              onClick={() => setSelectedPlace(null)}
               className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-sm font-medium text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Showing {filtered.length} {filtered.length === 1 ? "member" : "members"} in {selectedName}
               <X className="h-3.5 w-3.5" aria-hidden="true" />
-              <span className="sr-only">, clear country filter</span>
+              <span className="sr-only">, clear location filter</span>
             </button>
           )
         }

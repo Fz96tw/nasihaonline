@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
+import { cityLabel } from "@/lib/cities";
+import { getCityById } from "@/lib/cities-server";
 import { getOrCreateProfile, getMissingRequiredProfileFields, withResolvedAvatarUrl } from "@/lib/profile-server";
 import { getAllSkills } from "@/lib/skills-server";
 import { ProfileForm } from "@/components/profile/profile-form";
@@ -21,6 +23,8 @@ export default async function ProfilePage() {
   const missingFields = getMissingRequiredProfileFields(rawProfile);
   const profile = withResolvedAvatarUrl(rawProfile);
   const skills = await getAllSkills();
+  const savedCity = getCityById(rawProfile.cityGeonameId);
+  const initialCity = savedCity ? { id: savedCity.id, label: cityLabel(savedCity), iso2: savedCity.iso2 } : null;
 
   return (
     <main className="mx-auto flex max-w-[960px] flex-col gap-8 p-8">
@@ -57,10 +61,12 @@ export default async function ProfilePage() {
         avatarUrl={profile.avatarUrl}
         availableSkills={skills}
         isOnboarding={user.requiresProfileOnboarding}
+        initialCity={initialCity}
         defaultValues={{
           name: user.name ?? "",
           bio: profile.bio ?? "",
           countryRegion: profile.countryRegion ?? "",
+          cityId: initialCity ? initialCity.id : null,
           titleSpecialty: profile.titleSpecialty ?? "",
           careerStage: profile.careerStage ?? "",
           linkedinUrl: profile.linkedinUrl ?? "",

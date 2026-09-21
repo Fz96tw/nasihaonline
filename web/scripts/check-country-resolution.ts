@@ -85,11 +85,11 @@ check(
 
 // Directory store.
 const initial = useDirectoryFilters.getState();
-check("store selectedCountry defaults to null", initial.selectedCountry === null);
-initial.setSelectedCountry("PK");
-check("setSelectedCountry sets the code", useDirectoryFilters.getState().selectedCountry === "PK");
-useDirectoryFilters.getState().setSelectedCountry(null);
-check("setSelectedCountry(null) resets", useDirectoryFilters.getState().selectedCountry === null);
+check("store selectedPlace defaults to null", initial.selectedPlace === null);
+initial.setSelectedPlace("country:PK");
+check("setSelectedPlace sets the key", useDirectoryFilters.getState().selectedPlace === "country:PK");
+useDirectoryFilters.getState().setSelectedPlace(null);
+check("setSelectedPlace(null) resets", useDirectoryFilters.getState().selectedPlace === null);
 
 console.log(`\n${COUNTRIES.length} countries in table; ${failures === 0 ? "all checks passed" : `${failures} check(s) failed`}`);
 process.exit(failures === 0 ? 0 : 1);

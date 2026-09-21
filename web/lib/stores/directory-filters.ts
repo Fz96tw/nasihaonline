@@ -11,15 +11,16 @@ type DirectoryFilterState = {
   skillIds: string[];
   // Selected Interest Areas — same ANY-match semantics as skillIds.
   interestAreas: InterestArea[];
-  // ISO 3166-1 alpha-2 code of the country picked on the directory map, or
-  // null for "all countries". Member countryRegion is free text, so callers
-  // compare via resolveCountry() (lib/country-centroids.ts), not raw strings.
-  selectedCountry: string | null;
+  // Key of the place picked on the directory map ("city:<geonameId>" or
+  // "country:<ISO2>", see Place in lib/cities.ts), or null for everywhere.
+  // Member countryRegion is free text, so callers derive a member's key via
+  // memberPlace() rather than comparing raw strings.
+  selectedPlace: string | null;
   setSearch: (search: string) => void;
   setTier: (tier: DirectoryTierFilter) => void;
   toggleSkill: (skillId: string) => void;
   toggleInterestArea: (area: InterestArea) => void;
-  setSelectedCountry: (iso2: string | null) => void;
+  setSelectedPlace: (key: string | null) => void;
 };
 
 export const useDirectoryFilters = create<DirectoryFilterState>((set) => ({
@@ -27,7 +28,7 @@ export const useDirectoryFilters = create<DirectoryFilterState>((set) => ({
   tier: "all",
   skillIds: [],
   interestAreas: [],
-  selectedCountry: null,
+  selectedPlace: null,
   setSearch: (search) => set({ search }),
   setTier: (tier) => set({ tier }),
   toggleSkill: (skillId) =>
@@ -42,5 +43,5 @@ export const useDirectoryFilters = create<DirectoryFilterState>((set) => ({
         ? state.interestAreas.filter((value) => value !== area)
         : [...state.interestAreas, area],
     })),
-  setSelectedCountry: (selectedCountry) => set({ selectedCountry }),
+  setSelectedPlace: (selectedPlace) => set({ selectedPlace }),
 }));

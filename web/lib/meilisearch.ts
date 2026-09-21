@@ -30,6 +30,7 @@ export type ProfileSearchDocument = {
   skillNames: string[];
   titleSpecialty: string | null;
   countryRegion: string | null;
+  city: string | null;
 };
 
 // Library search document (§4.9/§7.2) — written for both `published` and
@@ -180,6 +181,7 @@ export async function ensureProfilesIndexConfigured(): Promise<void> {
     "name",
     "titleSpecialty",
     "countryRegion",
+    "city",
     "expertiseAreas",
     "skillNames",
   ]);

@@ -21,6 +21,7 @@ function isProtectedApiRoute(pathname: string) {
     pathname.startsWith("/api/admin") ||
     pathname.startsWith("/api/profile") ||
     pathname.startsWith("/api/members") ||
+    pathname.startsWith("/api/cities") ||
     pathname.startsWith("/api/contributions") ||
     pathname.startsWith("/api/inbox") ||
     pathname.startsWith("/api/notifications") ||

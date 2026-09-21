@@ -61,6 +61,7 @@ export default async function AdminUserDetailPage({ params }: { params: { id: st
             <Field label="Email" value={user.email} />
             <Field label="Title / Occupation" value={user.profile?.titleSpecialty} />
             <Field label="Country / Region" value={user.profile?.countryRegion} />
+            <Field label="City" value={user.profile?.city} />
             <Field label="Career stage" value={user.profile?.careerStage} />
             <Field label="Joined" value={user.createdAt.toLocaleString()} />
             {user.suspended && (

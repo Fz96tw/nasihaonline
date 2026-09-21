@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
+import { getCityById } from "@/lib/cities-server";
+import { resolveCountry } from "@/lib/country-centroids";
 import { db } from "@/lib/db";
 import { getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
 import { profilePatchSchema } from "@/lib/validation/profile";
@@ -48,6 +50,18 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "One or more selected skills are invalid." }, { status: 400 });
   }
 
+  // The client only sends the picked city's id; the name is resolved here so it
+  // can't drift from the bundled list, and a city that contradicts the stated
+  // country is rejected rather than plotted somewhere the member didn't mean.
+  const city = parsed.data.cityId == null ? null : getCityById(parsed.data.cityId);
+  if (parsed.data.cityId != null) {
+    if (!city) return NextResponse.json({ error: "That city isn't recognized. Please pick one from the list." }, { status: 400 });
+    const country = resolveCountry(parsed.data.countryRegion);
+    if (country && country.iso2 !== city.iso2) {
+      return NextResponse.json({ error: "The selected city isn't in the country you entered." }, { status: 400 });
+    }
+  }
+
   const [, , profile] = await db.$transaction([
     db.user.update({ where: { id: user.id }, data: { name: parsed.data.name } }),
     db.profileSkill.deleteMany({
@@ -58,6 +72,8 @@ export async function PATCH(request: Request) {
       data: {
         bio: parsed.data.bio,
         countryRegion: parsed.data.countryRegion,
+        city: city?.name ?? null,
+        cityGeonameId: city?.id ?? null,
         titleSpecialty: parsed.data.titleSpecialty,
         careerStage: parsed.data.careerStage,
         linkedinUrl: parsed.data.linkedinUrl || null,

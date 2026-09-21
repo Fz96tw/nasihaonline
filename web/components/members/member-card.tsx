@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
+import { memberLocation } from "@/lib/cities";
 import { Tier } from "@/lib/generated/prisma/enums";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT, type DirectoryMember } from "@/lib/members";
 import { MemberCardActions } from "@/components/members/member-card-actions";
@@ -15,7 +16,7 @@ export function MemberCard({
 }) {
   const name = member.name ?? "NASIHA Member";
 
-  const subtitle = [member.titleSpecialty, member.countryRegion].filter(Boolean).join(" · ");
+  const subtitle = [member.titleSpecialty, memberLocation(member)].filter(Boolean).join(" · ");
 
   return (
     <Card className="flex flex-col gap-2 p-3">

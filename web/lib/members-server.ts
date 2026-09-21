@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { getCityById } from "@/lib/cities-server";
 import { getProfileAvatarUrl } from "@/lib/storage";
 import { searchProfileDocuments } from "@/lib/meilisearch";
 import { DIRECTORY_TIERS, type DirectoryMember } from "@/lib/members";
@@ -34,6 +35,7 @@ function toDirectoryMember(profile: ProfileWithUser): DirectoryMember {
     expertiseAreas: profile.expertiseAreas,
     titleSpecialty: profile.showSpecialtyLocation ? profile.titleSpecialty : null,
     countryRegion: profile.showSpecialtyLocation ? profile.countryRegion : null,
+    city: profile.showSpecialtyLocation ? getCityById(profile.cityGeonameId) : null,
     careerStage: profile.careerStage,
     linkedinUrl: profile.linkedinUrl,
     learningTopics: profile.learningTopics,

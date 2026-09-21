@@ -2,6 +2,7 @@ import { ExternalLink } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { memberLocation } from "@/lib/cities";
 import { Tier } from "@/lib/generated/prisma/enums";
 import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT, type DirectoryMember } from "@/lib/members";
@@ -33,8 +34,8 @@ export function MemberProfileView({
             {member.titleSpecialty && (
               <div className="text-sm text-muted-foreground">{member.titleSpecialty}</div>
             )}
-            {member.countryRegion && (
-              <div className="text-xs text-muted-foreground">{member.countryRegion}</div>
+            {memberLocation(member) && (
+              <div className="text-xs text-muted-foreground">{memberLocation(member)}</div>
             )}
             {member.linkedinUrl && (
               <a

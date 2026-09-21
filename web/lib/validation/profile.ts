@@ -29,6 +29,9 @@ export const profileFormSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
   bio: z.string().trim().max(2000),
   countryRegion: z.string().trim().max(120),
+  // GeoNames id picked from the City autocomplete (null = no city). The
+  // display name is not part of the form schema: the server resolves the id.
+  cityId: z.number().int().positive().nullable(),
   titleSpecialty: z.string().trim().max(120),
   careerStage: z.string().trim().max(120),
   linkedinUrl: linkedinUrlSchema,
@@ -66,6 +69,7 @@ export const profilePatchSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
   bio: z.string().trim().max(2000),
   countryRegion: z.string().trim().max(120),
+  cityId: z.number().int().positive().nullable(),
   titleSpecialty: z.string().trim().max(120),
   careerStage: z.string().trim().max(120),
   linkedinUrl: linkedinUrlSchema,

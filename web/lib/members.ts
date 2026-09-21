@@ -2,6 +2,7 @@
 // members-server.ts so client components can import them without pulling
 // in the "server-only" query logic.
 import { ApplicationAvailability, InterestArea, Tier } from "@/lib/generated/prisma/enums";
+import type { City } from "@/lib/cities";
 import { TIER_LABELS } from "@/lib/validation/application-review";
 
 // Friend tier is excluded from the Directory entirely (§2.2/§4.5) — not
@@ -25,6 +26,9 @@ export type DirectoryMember = {
   expertiseAreas: string[];
   titleSpecialty: string | null;
   countryRegion: string | null;
+  // Resolved from Profile.cityGeonameId (lib/cities-server.ts); null, like
+  // countryRegion, when the member hid their location.
+  city: City | null;
   careerStage: string | null;
   linkedinUrl: string | null;
   learningTopics: string | null;

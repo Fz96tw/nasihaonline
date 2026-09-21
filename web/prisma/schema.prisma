@@ -183,6 +183,12 @@ model Profile {
   // same convention as TeamMember.photoUrl.
   avatarUrl             String?
   countryRegion         String?
+  // Optional city, picked from the bundled GeoNames list (lib/data/cities.json)
+  // so the Directory map can place the member. `city` is the display-name
+  // snapshot; `cityGeonameId` is the stable key that lib/cities-server.ts
+  // resolves to coordinates — lat/lng are deliberately not duplicated here.
+  city                  String?
+  cityGeonameId         Int?
   titleSpecialty        String?
   careerStage           String?
   // Public profile link (e.g. LinkedIn) — shown on the full profile page,

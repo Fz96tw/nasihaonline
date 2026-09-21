@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -18,6 +18,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { CityPicker, type SelectedCity } from "@/components/profile/city-picker";
 import { ProfilePhotoUpload } from "@/components/profile/profile-photo-upload";
 import { TagPicker, type TagOption } from "@/components/tag-picker";
 import { InterestArea, ApplicationAvailability } from "@/lib/generated/prisma/enums";
@@ -28,6 +29,8 @@ import {
   splitList,
   type ProfileFormValues,
 } from "@/lib/validation/profile";
+import { countryNameFor } from "@/lib/cities";
+import { resolveCountry } from "@/lib/country-centroids";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { isProfileComplete } from "@/lib/profile-completeness";
 
@@ -40,12 +43,16 @@ export function ProfileForm({
   email,
   avatarUrl,
   defaultValues,
+  initialCity,
   availableSkills,
   isOnboarding,
 }: {
   email: string;
   avatarUrl: string | null;
   defaultValues: ProfileFormValues;
+  // The already-saved city, resolved server-side — the form values only carry
+  // its id, and the picker needs a label + country to display and validate it.
+  initialCity: SelectedCity | null;
   availableSkills: TagOption[];
   // True while this member is still subject to the first-sign-in onboarding
   // gate (User.requiresProfileOnboarding, §4.3) — only then does a save that
@@ -58,12 +65,36 @@ export function ProfileForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [city, setCity] = useState<SelectedCity | null>(initialCity);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
     defaultValues,
     mode: "onTouched",
   });
+
+  const countryRegion = form.watch("countryRegion");
+
+  function selectCity(next: SelectedCity | null) {
+    setCity(next);
+    form.setValue("cityId", next?.id ?? null, { shouldDirty: true });
+    // A member who picks a city before typing a country shouldn't have to
+    // retype the country the city already implies.
+    if (next && !form.getValues("countryRegion").trim()) {
+      form.setValue("countryRegion", countryNameFor(next.iso2), { shouldDirty: true, shouldValidate: true });
+    }
+  }
+
+  // Changing the country to a different (recognized) one invalidates the
+  // picked city — the server rejects that mismatch, so drop it here instead.
+  useEffect(() => {
+    if (!city) return;
+    const country = resolveCountry(countryRegion);
+    if (country && country.iso2 !== city.iso2) {
+      setCity(null);
+      form.setValue("cityId", null, { shouldDirty: true });
+    }
+  }, [countryRegion, city, form]);
 
   async function onSubmit(values: ProfileFormValues) {
     setSubmitting(true);
@@ -78,6 +109,7 @@ export function ProfileForm({
           name: values.name,
           bio: values.bio,
           countryRegion: values.countryRegion,
+          cityId: values.cityId,
           titleSpecialty: values.titleSpecialty,
           careerStage: values.careerStage,
           linkedinUrl: values.linkedinUrl,
@@ -164,6 +196,15 @@ export function ProfileForm({
                 </FormItem>
               )}
             />
+
+            <FormItem>
+              <FormLabel>City</FormLabel>
+              <CityPicker value={city} country={countryRegion} onChange={selectCity} />
+              <FormDescription>
+                Optional. Places you on the Member Directory map — shown only if you share your location
+                below.
+              </FormDescription>
+            </FormItem>
 
             <FormField
               control={form.control}
@@ -378,8 +419,8 @@ export function ProfileForm({
                 <div>
                   <FormLabel>Show my occupation and location</FormLabel>
                   <FormDescription>
-                    When off, your title/occupation and country/region are hidden from your
-                    Directory card.
+                    When off, your title/occupation, city and country/region are hidden from
+                    your Directory card and the Directory map.
                   </FormDescription>
                 </div>
                 <FormControl>

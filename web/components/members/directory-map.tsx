@@ -2,12 +2,15 @@
 
 import "leaflet/dist/leaflet.css";
 import "@/components/members/directory-map.css";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
-import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { animateNumber, prefersReducedMotion, useCountUp } from "@/lib/count-up";
 
 export type MapBucket = {
+  /** Unique marker id and selection key — a city ("city:<id>") or a country ("country:<ISO2>"). */
+  key: string;
+  /** Country the marker is in (used for the "across N countries" summary). */
   iso2: string;
   name: string;
   lat: number;
@@ -17,11 +20,11 @@ export type MapBucket = {
 
 export type DirectoryMapProps = {
   buckets: MapBucket[];
-  /** ISO2 of the currently selected country, or null when nothing is selected. */
+  /** Key of the currently selected marker, or null when nothing is selected. */
   selected: string | null;
-  /** Called with an ISO2 when a marker is chosen, or null when the map background is clicked. */
-  onSelect: (iso2: string | null) => void;
-  /** Members in the current result set who have no plottable country. */
+  /** Called with a marker's key when it is chosen, or null when the map background is clicked. */
+  onSelect: (key: string | null) => void;
+  /** Members in the current result set who have no plottable location. */
   unmappedCount: number;
 };
 
@@ -36,6 +39,10 @@ const DEFAULT_CENTER: L.LatLngTuple = [22, 10];
 
 // Animation tuning (all of it is skipped under prefers-reduced-motion).
 const FLY_ZOOM = 4;
+// A city is a much smaller target than a country, and at FLY_ZOOM its neighbours
+// could still be clustered with it, so selecting a city flies in to the zoom
+// where clustering switches off (CLUSTER_OFF_ZOOM).
+const CITY_FLY_ZOOM = 5;
 const FLY_DURATION_S = 1.2;
 // Newly appearing markers pop in largest-first, one every POP_STAGGER_MS, but
 // the delay stops growing at POP_MAX_DELAY_MS so the whole entrance stays
@@ -47,12 +54,71 @@ const POP_MAX_DELAY_MS = 600;
 // largest communities pulse; on a map with this many markers a ripple on every
 // one would just be noise anyway.
 const PULSE_MAX_MARKERS = 12;
+// Cities in the same region overlap badly at world zoom (a handful of cities in
+// one country can sit within a few pixels of each other), so markers closer
+// than CLUSTER_RADIUS_PX merge into one bubble showing their combined member
+// count; zooming in splits it, and from CLUSTER_OFF_ZOOM every marker stands alone.
+// (Hand-rolled rather than leaflet.markercluster: that plugin drops lone
+// markers when the map's minZoom is fractional, which FitWorld makes it.)
+const CLUSTER_RADIUS_PX = 42;
+const CLUSTER_OFF_ZOOM = 5;
 const COUNT_UP_MS = 800;
 
 // Marker diameter grows with sqrt(count) so area tracks member count, clamped
 // so one huge country can't swallow its neighbours.
 function markerSize(count: number) {
   return Math.round(28 + Math.min(40, Math.sqrt(Math.max(count - 1, 0)) * 8));
+}
+
+type Cluster = { buckets: MapBucket[]; lat: number; lng: number; count: number };
+
+// Greedy pixel-radius clustering at an integer zoom level, biggest markers
+// first (buckets arrive sorted by count) so a cluster forms around the largest
+// community and its centre is weighted by member count.
+function clusterBuckets(map: L.Map, buckets: MapBucket[], level: number): Cluster[] {
+  const alone = (bucket: MapBucket): Cluster => ({ buckets: [bucket], lat: bucket.lat, lng: bucket.lng, count: bucket.count });
+  if (level >= CLUSTER_OFF_ZOOM) return buckets.map(alone);
+
+  const groups: { buckets: MapBucket[]; count: number; x: number; y: number }[] = [];
+  for (const bucket of buckets) {
+    const point = map.project([bucket.lat, bucket.lng], level);
+    const near = groups.find((group) => Math.hypot(group.x - point.x, group.y - point.y) < CLUSTER_RADIUS_PX);
+    if (near) {
+      const total = near.count + bucket.count;
+      near.x = (near.x * near.count + point.x * bucket.count) / total;
+      near.y = (near.y * near.count + point.y * bucket.count) / total;
+      near.count = total;
+      near.buckets.push(bucket);
+    } else {
+      groups.push({ buckets: [bucket], count: bucket.count, x: point.x, y: point.y });
+    }
+  }
+  return groups.map((group) => {
+    if (group.buckets.length === 1) return alone(group.buckets[0]);
+    const center = map.unproject([group.x, group.y], level);
+    return { buckets: group.buckets, lat: center.lat, lng: center.lng, count: group.count };
+  });
+}
+
+function clusterLabel(cluster: Cluster) {
+  return `${cluster.count} ${cluster.count === 1 ? "member" : "members"} in ${cluster.buckets.length} places, zoom in to see them`;
+}
+
+function clusterIcon(cluster: Cluster) {
+  // Sized by members like a single marker, plus a little extra so it reads as a group.
+  const size = markerSize(cluster.count) + 6;
+  return L.divIcon({
+    className: "dm-marker-icon",
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    html: `<div class="dm-marker dm-cluster" style="width:${size}px;height:${size}px"><span class="dm-marker__count" aria-hidden="true">${cluster.count}</span></div>`,
+  });
+}
+
+// A marker that's re-created because the zoom level changed (not because it's
+// new to the map) shouldn't replay its pop-in.
+function withoutEntrance(icon: L.DivIcon) {
+  return L.divIcon({ ...icon.options, html: String(icon.options.html).replace(" dm-marker--enter", "") });
 }
 
 function escapeHtml(value: string) {
@@ -68,10 +134,12 @@ function memberLabel(name: string, count: number) {
 }
 
 // Bigger communities breathe more slowly, and each marker starts at its own
-// phase (derived from its code) so the whole map doesn't pulse in lockstep.
+// phase (derived from its key) so the whole map doesn't pulse in lockstep.
 function pulseStyle(bucket: MapBucket) {
   const duration = 2.2 + Math.min(1.8, Math.sqrt(bucket.count) * 0.25);
-  const phase = ((bucket.iso2.charCodeAt(0) + bucket.iso2.charCodeAt(1)) % 25) / 10;
+  let hash = 0;
+  for (let i = 0; i < bucket.key.length; i++) hash = (hash * 31 + bucket.key.charCodeAt(i)) % 251;
+  const phase = (hash % 25) / 10;
   return `--dm-pulse:${duration.toFixed(2)}s;--dm-pulse-offset:-${phase.toFixed(1)}s`;
 }
 
@@ -81,7 +149,7 @@ function pulseStyle(bucket: MapBucket) {
 // scale in after that delay; markers that were already on it just re-render.
 function buildIcon(bucket: MapBucket, selected: string | null, popDelayMs: number | null, pulses: boolean) {
   const size = markerSize(bucket.count);
-  const isSelected = bucket.iso2 === selected;
+  const isSelected = bucket.key === selected;
   const classes = [
     "dm-marker",
     isSelected ? "dm-marker--selected" : "",
@@ -104,7 +172,7 @@ function buildIcon(bucket: MapBucket, selected: string | null, popDelayMs: numbe
     className: "dm-marker-icon",
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
-    html: `<button type="button" class="${classes}" data-iso="${escapeHtml(bucket.iso2)}" aria-pressed="${isSelected}" aria-label="${escapeHtml(memberLabel(bucket.name, bucket.count))}" style="${style}"><span class="dm-marker__count" aria-hidden="true">${bucket.count}</span></button>`,
+    html: `<button type="button" class="${classes}" data-key="${escapeHtml(bucket.key)}" aria-pressed="${isSelected}" aria-label="${escapeHtml(memberLabel(bucket.name, bucket.count))}" style="${style}"><span class="dm-marker__count" aria-hidden="true">${bucket.count}</span></button>`,
   });
 }
 
@@ -117,10 +185,10 @@ function worldFitZoom(map: L.Map) {
   return Math.max(0, Math.log2(Math.max(x, y) / 256));
 }
 
-// Clicks on the map itself (ocean, other countries, anywhere that isn't a
-// marker) reset the country filter. Marker clicks never reach here — they
-// stop propagation in the Marker handler below.
-function BackgroundClick({ onSelect }: { onSelect: (iso2: string | null) => void }) {
+// Clicks on the map itself (ocean, anywhere that isn't a marker) reset the
+// place filter. Marker clicks never reach here — they stop propagation in the
+// Marker handler below.
+function BackgroundClick({ onSelect }: { onSelect: (key: string | null) => void }) {
   useMapEvents({ click: () => onSelect(null) });
   return null;
 }
@@ -150,9 +218,90 @@ function FitWorld() {
   return null;
 }
 
-// Must render AFTER the <Marker>s: it reaches into their DOM, and effects run
-// in tree order, so by the time these run react-leaflet has (re)built them.
-//   * Fly-to: choosing a country flies to it; clearing flies back out to the
+// Owns the markers: at the current zoom level, nearby ones are merged into a
+// cluster bubble (click to zoom in on its members). Must render BEFORE
+// MapEffects, which reaches into the markers' DOM: effects run in tree order,
+// so the markers exist by the time those effects run.
+function ClusterLayer({
+  buckets,
+  icons,
+  selected,
+  onSelect,
+  onRebuilt,
+}: {
+  buckets: MapBucket[];
+  icons: L.DivIcon[];
+  selected: string | null;
+  onSelect: (key: string | null) => void;
+  /** Called after the markers were re-created (the parent re-applies selection styling to them). */
+  onRebuilt: () => void;
+}) {
+  const map = useMap();
+  const [level, setLevel] = useState(() => Math.round(map.getZoom()));
+  useMapEvents({ zoomend: () => setLevel(Math.round(map.getZoom())) });
+
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+  const onRebuiltRef = useRef(onRebuilt);
+  onRebuiltRef.current = onRebuilt;
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  const markers = useRef(new Map<string, L.Marker>());
+  const lastIcons = useRef<L.DivIcon[] | null>(null);
+
+  const clusters = useMemo(() => clusterBuckets(map, buckets, level), [map, buckets, level]);
+
+  useEffect(() => {
+    const isNewIconSet = lastIcons.current !== icons;
+    lastIcons.current = icons;
+    const iconByKey = new Map(buckets.map((bucket, index) => [bucket.key, icons[index]]));
+
+    const layer = L.layerGroup();
+    const byKey = new Map<string, L.Marker>();
+    for (const cluster of clusters) {
+      if (cluster.buckets.length === 1) {
+        const [bucket] = cluster.buckets;
+        const icon = iconByKey.get(bucket.key)!;
+        const marker = L.marker([bucket.lat, bucket.lng], {
+          icon: isNewIconSet ? icon : withoutEntrance(icon),
+          keyboard: false,
+          zIndexOffset: bucket.key === selectedRef.current ? 10000 : 0,
+        });
+        marker.on("click", (event) => {
+          L.DomEvent.stopPropagation(event.originalEvent);
+          onSelectRef.current(bucket.key);
+        });
+        byKey.set(bucket.key, marker);
+        layer.addLayer(marker);
+      } else {
+        const label = clusterLabel(cluster);
+        const marker = L.marker([cluster.lat, cluster.lng], { icon: clusterIcon(cluster), title: label, alt: label });
+        marker.on("click", (event) => {
+          L.DomEvent.stopPropagation(event.originalEvent);
+          const bounds = L.latLngBounds(cluster.buckets.map((bucket) => [bucket.lat, bucket.lng] as L.LatLngTuple));
+          map.fitBounds(bounds, { maxZoom: CLUSTER_OFF_ZOOM, padding: [60, 60], animate: !prefersReducedMotion() });
+        });
+        layer.addLayer(marker);
+      }
+    }
+    markers.current = byKey;
+    layer.addTo(map);
+    onRebuiltRef.current();
+    return () => {
+      layer.remove();
+    };
+  }, [map, clusters, buckets, icons]);
+
+  useEffect(() => {
+    markers.current.forEach((marker, key) => marker.setZIndexOffset(key === selected ? 10000 : 0));
+  }, [selected, clusters]);
+
+  return null;
+}
+
+// Must render AFTER the ClusterLayer: it reaches into the markers' DOM, and
+// effects run in tree order, so by the time these run they've been built.
+//   * Fly-to: choosing a marker flies to it; clearing flies back out to the
 //     fitted world view. The first run (selection restored on page load) and
 //     reduced-motion users get an instant jump instead.
 //   * Count-up: each marker's number tweens from what it last showed (0 for a
@@ -169,14 +318,15 @@ function MapEffects({ buckets, selected }: { buckets: MapBucket[]; selected: str
     if (!first && lastSelected.current === selected) return;
     lastSelected.current = selected;
 
-    const target = selected ? bucketsRef.current.find((bucket) => bucket.iso2 === selected) : null;
-    if (selected && !target) return; // selected country has no marker under the current filters
+    const target = selected ? bucketsRef.current.find((bucket) => bucket.key === selected) : null;
+    if (selected && !target) return; // selected place has no marker under the current filters
     if (!selected && first) return; // nothing selected on open: FitWorld already framed the world
 
     const instant = first || prefersReducedMotion();
     const center: L.LatLngExpression = target ? [target.lat, target.lng] : DEFAULT_CENTER;
+    const flyZoom = target?.key.startsWith("city:") ? CITY_FLY_ZOOM : FLY_ZOOM;
     const zoom = target
-      ? Math.min(map.getMaxZoom(), Math.max(map.getZoom(), FLY_ZOOM))
+      ? Math.min(map.getMaxZoom(), Math.max(map.getZoom(), flyZoom))
       : worldFitZoom(map);
     if (instant) map.setView(center, zoom, { animate: false });
     else map.flyTo(center, zoom, { duration: FLY_DURATION_S });
@@ -189,17 +339,17 @@ function MapEffects({ buckets, selected }: { buckets: MapBucket[]; selected: str
     const root = map.getContainer();
     for (const bucket of buckets) {
       const label = root.querySelector<HTMLElement>(
-        `button.dm-marker[data-iso="${bucket.iso2}"] .dm-marker__count`,
+        `button.dm-marker[data-key="${bucket.key}"] .dm-marker__count`,
       );
       if (!label) continue;
-      running.current.get(bucket.iso2)?.();
-      const from = shown.current.get(bucket.iso2) ?? 0;
+      running.current.get(bucket.key)?.();
+      const from = shown.current.get(bucket.key) ?? 0;
       label.textContent = String(from);
       running.current.set(
-        bucket.iso2,
+        bucket.key,
         animateNumber(from, bucket.count, COUNT_UP_MS, (value) => {
           label.textContent = String(value);
-          shown.current.set(bucket.iso2, value);
+          shown.current.set(bucket.key, value);
         }),
       );
     }
@@ -220,14 +370,16 @@ const summaryText = (members: number, countries: number) =>
 // this line, not the map and all of its markers.
 function MapSummary({ buckets }: { buckets: MapBucket[] }) {
   const members = useMemo(() => buckets.reduce((sum, bucket) => sum + bucket.count, 0), [buckets]);
+  // Markers are cities now, so several can share a country.
+  const countries = useMemo(() => new Set(buckets.map((bucket) => bucket.iso2)).size, [buckets]);
   const animatedMembers = useCountUp(members, COUNT_UP_MS);
-  const animatedCountries = useCountUp(buckets.length, COUNT_UP_MS);
+  const animatedCountries = useCountUp(countries, COUNT_UP_MS);
 
   // Screen readers get the settled sentence; the ticking one is hidden so they
   // aren't read every intermediate number.
   return (
     <p className="text-sm font-medium">
-      <span className="sr-only">{summaryText(members, buckets.length)}</span>
+      <span className="sr-only">{summaryText(members, countries)}</span>
       <span aria-hidden="true" data-testid="map-summary">
         {summaryText(animatedMembers, animatedCountries)}
       </span>
@@ -245,28 +397,32 @@ export function DirectoryMap({ buckets, selected, onSelect, unmappedCount }: Dir
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
 
-  // Only countries that weren't on the map before get the pop-in, so typing in
+  // Bumped whenever the cluster layer re-creates its markers (zoom changed), so
+  // the selection styling below is re-applied to the fresh DOM nodes.
+  const [layoutVersion, setLayoutVersion] = useState(0);
+
+  // Only places that weren't on the map before get the pop-in, so typing in
   // the search box or changing a filter doesn't make every marker re-pop.
   const seen = useRef(new Set<string>());
   const icons = useMemo(() => {
     const entering = buckets
-      .filter((bucket) => !seen.current.has(bucket.iso2))
+      .filter((bucket) => !seen.current.has(bucket.key))
       .sort((a, b) => b.count - a.count);
     const delays = new Map(
-      entering.map((bucket, rank) => [bucket.iso2, Math.min(rank * POP_STAGGER_MS, POP_MAX_DELAY_MS)]),
+      entering.map((bucket, rank) => [bucket.key, Math.min(rank * POP_STAGGER_MS, POP_MAX_DELAY_MS)]),
     );
     const pulsing = new Set(
       [...buckets]
         .sort((a, b) => b.count - a.count)
         .slice(0, PULSE_MAX_MARKERS)
-        .map((bucket) => bucket.iso2),
+        .map((bucket) => bucket.key),
     );
     return buckets.map((bucket) =>
-      buildIcon(bucket, selectedRef.current, delays.get(bucket.iso2) ?? null, pulsing.has(bucket.iso2)),
+      buildIcon(bucket, selectedRef.current, delays.get(bucket.key) ?? null, pulsing.has(bucket.key)),
     );
   }, [buckets]);
   useEffect(() => {
-    buckets.forEach((bucket) => seen.current.add(bucket.iso2));
+    buckets.forEach((bucket) => seen.current.add(bucket.key));
   }, [buckets]);
 
 
@@ -274,12 +430,12 @@ export function DirectoryMap({ buckets, selected, onSelect, unmappedCount }: Dir
     const root = containerRef.current;
     if (!root) return;
     root.querySelectorAll<HTMLButtonElement>("button.dm-marker").forEach((button) => {
-      const isSelected = button.dataset.iso === selected;
+      const isSelected = button.dataset.key === selected;
       button.setAttribute("aria-pressed", String(isSelected));
       button.classList.toggle("dm-marker--selected", isSelected);
       button.classList.toggle("dm-marker--dim", selected !== null && !isSelected);
     });
-  }, [selected, buckets]);
+  }, [selected, buckets, layoutVersion]);
 
   return (
     <div className="flex flex-col gap-2">
@@ -308,25 +464,17 @@ export function DirectoryMap({ buckets, selected, onSelect, unmappedCount }: Dir
           <TileLayer
             url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
             noWrap
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &middot; City data &copy; <a href="https://www.geonames.org/">GeoNames</a> (CC BY 4.0)'
           />
           <FitWorld />
           <BackgroundClick onSelect={onSelect} />
-          {buckets.map((bucket, index) => (
-            <Marker
-              key={bucket.iso2}
-              position={[bucket.lat, bucket.lng]}
-              icon={icons[index]}
-              keyboard={false}
-              zIndexOffset={bucket.iso2 === selected ? 10000 : 0}
-              eventHandlers={{
-                click: (event) => {
-                  L.DomEvent.stopPropagation(event.originalEvent);
-                  onSelect(bucket.iso2);
-                },
-              }}
-            />
-          ))}
+          <ClusterLayer
+            buckets={buckets}
+            icons={icons}
+            selected={selected}
+            onSelect={onSelect}
+            onRebuilt={() => setLayoutVersion((version) => version + 1)}
+          />
           <MapEffects buckets={buckets} selected={selected} />
         </MapContainer>
       </div>
