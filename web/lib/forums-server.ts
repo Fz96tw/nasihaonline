@@ -1399,13 +1399,17 @@ const TRENDING_WINDOW_DAYS = 30;
 
 /**
  * Dashboard "What's Trending" — forum threads with the most replies posted
- * in the last 30 days. Mirrors isThreadVisible's three gates (own-thread
+ * in the last 30 days. Mirrors isThreadVisible's four gates (own-thread
  * `invited` visibility, event-inherited restriction, knowledge-item-
- * inherited restriction) as a per-viewer Prisma filter: each gate passes if
- * it isn't restricted, or the viewer is the author/host/contributor/an
- * invitee. isPrivileged (admin/moderator) bypasses every gate, including the
- * event-inherited one, which isThreadVisible itself doesn't bypass — for
- * this dashboard-wide surface an admin should always see what's trending.
+ * inherited restriction, and the forum's community gate — see
+ * isForumAccessibleToMember) as a per-viewer Prisma filter: each of the
+ * first three passes if it isn't restricted, or the viewer is the
+ * author/host/contributor/an invitee; the community gate passes for a
+ * community-less forum, a member of the forum's community, or a
+ * followsAllCommunities member. isPrivileged (admin/moderator) bypasses every
+ * gate, including the event-inherited one, which isThreadVisible itself
+ * doesn't bypass — for this dashboard-wide surface an admin should always see
+ * what's trending.
  */
 export async function getTrendingForumThreads(
   userId: string,
@@ -1422,6 +1426,8 @@ export async function getTrendingForumThreads(
   });
   if (grouped.length === 0) return [];
 
+  const member = isPrivileged ? null : await getMemberCommunityContext(userId);
+
   const threads = await db.forumThread.findMany({
     where: {
       id: { in: grouped.map((group) => group.threadId) },
@@ -1434,6 +1440,21 @@ export async function getTrendingForumThreads(
         ? {}
         : {
             AND: [
+              // Same hard community gate as isForumAccessibleToMember: a
+              // category-less forum is universal, otherwise the viewer must
+              // belong to the forum's community (or followsAllCommunities).
+              ...(member?.followsAllCommunities
+                ? []
+                : [
+                    {
+                      forum: {
+                        OR: [
+                          { categoryId: null },
+                          { category: { communityId: { in: member?.communityIds ?? [] } } },
+                        ],
+                      },
+                    },
+                  ]),
               {
                 OR: [
                   { visibility: ForumThreadVisibility.community },
