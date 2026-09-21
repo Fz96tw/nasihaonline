@@ -85,8 +85,16 @@ export function DirectoryView({
         continue;
       }
       const bucket = byPlace.get(place.key);
-      if (bucket) bucket.count += 1;
-      else byPlace.set(place.key, { ...place, count: 1 });
+      if (bucket) {
+        bucket.count += 1;
+        bucket.avatar = null; // more than one member: back to a plain count
+      } else {
+        byPlace.set(place.key, {
+          ...place,
+          count: 1,
+          avatar: member.avatarUrl ? { url: member.avatarUrl, name: member.name ?? "NASIHA Member" } : null,
+        });
+      }
     }
     return {
       buckets: Array.from(byPlace.values()).sort(

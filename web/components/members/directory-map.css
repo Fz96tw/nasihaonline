@@ -162,6 +162,20 @@
   }
 }
 
+/* A single-member marker's photo. It covers the count bubble (the opaque
+   background hides the number behind a transparent PNG) and is rounded itself
+   rather than clipping the button, so the pulse ring can still extend outside. */
+.dm-marker__photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  object-fit: cover;
+  background: hsl(var(--background));
+  pointer-events: none;
+}
+
 /* A cluster bubble (several nearby markers merged): the marker look plus a
    halo so it reads as a group. It isn't a <button> — Leaflet's own marker
    handling makes the icon element focusable and clickable (zoom in). */

@@ -16,6 +16,8 @@ export type MapBucket = {
   lat: number;
   lng: number;
   count: number;
+  /** Set only for a single-member marker whose member has a photo: the marker shows it instead of the count. */
+  avatar?: { url: string; name: string } | null;
 };
 
 export type DirectoryMapProps = {
@@ -63,6 +65,10 @@ const PULSE_MAX_MARKERS = 12;
 const CLUSTER_RADIUS_PX = 42;
 const CLUSTER_OFF_ZOOM = 5;
 const COUNT_UP_MS = 800;
+
+// A single-member marker showing a photo is a bit larger than the smallest
+// count bubble (28px) so the face is recognisable.
+const AVATAR_MARKER_SIZE = 38;
 
 // Marker diameter grows with sqrt(count) so area tracks member count, clamped
 // so one huge country can't swallow its neighbours.
@@ -129,8 +135,9 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;");
 }
 
-function memberLabel(name: string, count: number) {
-  return `${name}, ${count} ${count === 1 ? "member" : "members"}`;
+function memberLabel(bucket: MapBucket) {
+  if (bucket.avatar) return `${bucket.avatar.name}, ${bucket.name}`;
+  return `${bucket.name}, ${bucket.count} ${bucket.count === 1 ? "member" : "members"}`;
 }
 
 // Bigger communities breathe more slowly, and each marker starts at its own
@@ -148,7 +155,7 @@ function pulseStyle(bucket: MapBucket) {
 // `popDelayMs` is set only for markers that are new to the map, which then
 // scale in after that delay; markers that were already on it just re-render.
 function buildIcon(bucket: MapBucket, selected: string | null, popDelayMs: number | null, pulses: boolean) {
-  const size = markerSize(bucket.count);
+  const size = bucket.avatar ? AVATAR_MARKER_SIZE : markerSize(bucket.count);
   const isSelected = bucket.key === selected;
   const classes = [
     "dm-marker",
@@ -168,11 +175,17 @@ function buildIcon(bucket: MapBucket, selected: string | null, popDelayMs: numbe
     .filter(Boolean)
     .join(";");
 
+  // The photo sits over the count; if it fails to load it removes itself and
+  // the count bubble underneath takes over.
+  const photo = bucket.avatar
+    ? `<img class="dm-marker__photo" src="${escapeHtml(bucket.avatar.url)}" alt="" draggable="false" onerror="this.remove()">`
+    : "";
+
   return L.divIcon({
     className: "dm-marker-icon",
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
-    html: `<button type="button" class="${classes}" data-key="${escapeHtml(bucket.key)}" aria-pressed="${isSelected}" aria-label="${escapeHtml(memberLabel(bucket.name, bucket.count))}" style="${style}"><span class="dm-marker__count" aria-hidden="true">${bucket.count}</span></button>`,
+    html: `<button type="button" class="${classes}" data-key="${escapeHtml(bucket.key)}" aria-pressed="${isSelected}" aria-label="${escapeHtml(memberLabel(bucket))}" style="${style}"><span class="dm-marker__count" aria-hidden="true">${bucket.count}</span>${photo}</button>`,
   });
 }
 
