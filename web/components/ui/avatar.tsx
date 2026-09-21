@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/team";
 
@@ -30,6 +30,17 @@ export function Avatar({
   // instance gets a fresh chance to load instead of staying stuck on the
   // initials fallback.
   const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  // A server-rendered <img> can finish failing (e.g. the photo proxy 404s for
+  // a profile whose stored object is missing) before React hydrates, so its
+  // onError never reaches our handler and the browser paints the alt text —
+  // the member's full name, clipped by the circle — instead of the initials.
+  // Catch that case on mount: an already-complete image with no pixels failed.
+  useEffect(() => {
+    const img = imgRef.current;
+    if (src && img && img.complete && img.naturalWidth === 0) setBrokenSrc(src);
+  }, [src]);
 
   if (src && src !== brokenSrc) {
     return (
@@ -38,6 +49,7 @@ export function Avatar({
       // configured remote pattern per host).
       // eslint-disable-next-line @next/next/no-img-element
       <img
+        ref={imgRef}
         src={src}
         alt={name}
         onError={() => setBrokenSrc(src)}
