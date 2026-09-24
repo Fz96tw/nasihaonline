@@ -719,14 +719,14 @@ function ParticipantsControl({
   );
 }
 
-/** Shared top-left overlay slot for Record, Participants, and Present with camera — see RecordingControl's doc comment for why this corner (never the right, which LiveKit's chat panel can claim). Only used for non-quick-recording meetings — see QuickRecordingOverlay for the quick-recording equivalent. */
+/** Shared top-left overlay slot for Record, Participants, and Present with camera — see RecordingControl's doc comment for why this corner (never the right, which LiveKit's chat panel can claim). Only used for non-quick-recording meetings — see QuickRecordingOverlay for the quick-recording equivalent (which also carries Present with camera). */
 function TopLeftOverlay({ children }: { children: ReactNode }) {
   return <div className="pointer-events-none absolute left-4 top-4 z-50 flex flex-col items-start gap-2">{children}</div>;
 }
 
 /**
- * Quick-recording-only replacement for TopLeftOverlay — Record, Reset, and
- * Exit anchored bottom-right, positioned directly above LiveKit's own
+ * Quick-recording-only replacement for TopLeftOverlay — Record, Reset,
+ * Present with camera, and Exit anchored bottom-right, positioned directly above LiveKit's own
  * bottom `.lk-control-bar` rather than overlapping it. Bottom-left was
  * tried first and reported (live testing) to collide with content already
  * occupying that corner — LiveKit's own per-tile participant metadata
@@ -762,6 +762,7 @@ function QuickRecordingOverlay({
   onReset,
   onExit,
   onError,
+  room,
 }: {
   recording: boolean;
   secondsRemaining: number | null;
@@ -772,6 +773,7 @@ function QuickRecordingOverlay({
   onReset: () => void;
   onExit: () => void;
   onError: (message: string) => void;
+  room: Room | null;
 }) {
   return (
     <div
@@ -784,6 +786,7 @@ function QuickRecordingOverlay({
           <RecordingControl recording={recording} startEndpoint={startEndpoint} stopEndpoint={stopEndpoint} onError={onError} />
         )}
         {recording && <ResetControl pending={resetPending} onClick={onReset} />}
+        <PresenterOverlayControl room={room} onError={onError} panelPlacement="above-right" />
         <ExitControl onClick={onExit} />
       </div>
     </div>
@@ -1044,6 +1047,7 @@ export function LiveKitMeetingScreen({
           resetPending={resetPending}
           onReset={handleReset}
           onExit={() => room?.disconnect()}
+          room={room}
           onError={pushToast}
         />
       ) : (

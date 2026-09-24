@@ -43,7 +43,16 @@ type Session = {
  * unpublishes the ScreenShare publication out from under us —
  * LocalTrackUnpublished) all funnel into the same teardown.
  */
-export function PresenterOverlayControl({ room, onError }: { room: Room | null; onError: (message: string) => void }) {
+export function PresenterOverlayControl({
+  room,
+  onError,
+  panelPlacement = "below-left",
+}: {
+  room: Room | null;
+  onError: (message: string) => void;
+  /** Where the settings panel opens: under the button (TopLeftOverlay), or above it for the bottom-right quick-recording controls, which sit right on top of LiveKit's control bar. */
+  panelPlacement?: "below-left" | "above-right";
+}) {
   const [supported, setSupported] = useState(false);
   const [status, setStatus] = useState<"idle" | "starting" | "active">("idle");
   const [panelOpen, setPanelOpen] = useState(true);
@@ -284,7 +293,7 @@ export function PresenterOverlayControl({ room, onError }: { room: Room | null; 
       </div>
       {/* Collapsed with `hidden` rather than unmounted — the preview <video> must stay mounted or an open pop-out closes. */}
       <div
-        className={`absolute left-0 top-full mt-2 w-72 space-y-3 rounded-lg border p-3 shadow-lg ${LK_PANEL_CLASS} ${panelOpen ? "" : "hidden"}`}
+        className={`absolute ${panelPlacement === "above-right" ? "bottom-full right-0 mb-2" : "left-0 top-full mt-2"} w-72 space-y-3 rounded-lg border p-3 shadow-lg ${LK_PANEL_CLASS} ${panelOpen ? "" : "hidden"}`}
       >
         <div className="space-y-1">
           {/* Unmirrored on purpose: this is exactly what viewers see. */}
