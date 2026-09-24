@@ -55,7 +55,8 @@ export function PresenterOverlayControl({
 }) {
   const [supported, setSupported] = useState(false);
   const [status, setStatus] = useState<"idle" | "starting" | "active">("idle");
-  const [panelOpen, setPanelOpen] = useState(true);
+  // Starts collapsed — it sits over the meeting view; the "Presenting with camera" button toggles it.
+  const [panelOpen, setPanelOpen] = useState(false);
   // Mirrors of the compositor's mutable settings, for rendering the controls.
   const [opacity, setOpacity] = useState(0.5);
   const [scale, setScale] = useState(1);
@@ -183,7 +184,7 @@ export function PresenterOverlayControl({
       });
 
       setCaption("");
-      setPanelOpen(true);
+      setPanelOpen(false);
       setStatus("active");
     } catch (error) {
       console.error("[presenter-overlay] failed to start", error);
@@ -277,6 +278,16 @@ export function PresenterOverlayControl({
 
   return (
     <div className="pointer-events-auto relative">
+      {/*
+        Pop-out preview source: rendered invisibly rather than inline (an
+        inline preview covered the meeting view, and the main tile already
+        shows the combined share while this tab is open). It only needs to
+        exist and be playing for picture-in-picture, whose floating window
+        the browser lets the presenter move and resize. Not CSS-mirrored:
+        it's exactly what viewers see (any mirroring is baked in by the
+        compositor).
+      */}
+      <video ref={previewRef} muted playsInline aria-hidden className="pointer-events-none fixed left-0 top-0 h-px w-px opacity-0" />
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -287,28 +298,23 @@ export function PresenterOverlayControl({
           <Presentation className="h-4 w-4 text-red-400" />
           <span className="hidden sm:inline">Presenting with camera</span>
         </button>
+        <button
+          type="button"
+          onClick={() => previewRef.current?.requestPictureInPicture().catch(() => onError("Couldn't open the pop-out preview."))}
+          className={LK_BUTTON_CLASS}
+          title="Pop out a preview that stays on top of other apps while you present"
+        >
+          <PictureInPicture2 className="h-4 w-4" />
+          <span className="hidden sm:inline">Pop out preview</span>
+        </button>
         <button type="button" onClick={() => teardown()} className={LK_BUTTON_CLASS}>
           <X className="h-4 w-4" />
           <span className="hidden sm:inline">Stop</span>
         </button>
       </div>
-      {/* Collapsed with `hidden` rather than unmounted — the preview <video> must stay mounted or an open pop-out closes. */}
       <div
-        className={`absolute ${panelPlacement === "above-right" ? "bottom-full right-0 mb-2" : "left-0 top-full mt-2"} w-72 space-y-3 rounded-lg border p-3 shadow-lg ${LK_PANEL_CLASS} ${panelOpen ? "" : "hidden"}`}
+        className={`absolute ${panelPlacement === "above-right" ? "bottom-full right-0 mb-2" : "left-0 top-full mt-2"} max-h-[60vh] w-72 space-y-3 overflow-y-auto rounded-lg border p-3 shadow-lg ${LK_PANEL_CLASS} ${panelOpen ? "" : "hidden"}`}
       >
-        <div className="space-y-1">
-          {/* Not CSS-mirrored: this is exactly what viewers see (any mirroring is baked in by the compositor). */}
-          <video ref={previewRef} muted playsInline className="aspect-video w-full rounded-md bg-black object-contain" />
-          <button
-            type="button"
-            onClick={() => previewRef.current?.requestPictureInPicture().catch(() => onError("Couldn't open the pop-out preview."))}
-            className="inline-flex items-center gap-1.5 text-xs text-white/70 hover:text-white"
-          >
-            <PictureInPicture2 className="h-3.5 w-3.5" />
-            Pop out preview (stays on top while you present)
-          </button>
-        </div>
-
         <label className={labelClass}>
           Visibility ({Math.round(opacity * 100)}%)
           <input
