@@ -70,6 +70,15 @@ export type PresenterOverlaySettings = {
   scale: number;
   /** Horizontal anchor of the cut-out (always bottom-aligned, like someone standing in front of the slide). */
   position: "left" | "center" | "right";
+  /**
+   * Flip the cut-out horizontally, like a mirror — on by default, because
+   * the presenter aims by watching their own image over the slide: when it
+   * moves the way a mirror would, reaching toward something on their screen
+   * lands their image's hand on it (the weather-presenter setup). Viewers
+   * see the hand on the same item, so pointing reads correctly for them
+   * too; the only visible cost is reversed text on clothing.
+   */
+  mirror: boolean;
   caption: string;
   image: ImageBitmap | null;
   imageCorner: OverlayCorner;
@@ -79,6 +88,7 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   opacity: 0.5,
   scale: 1,
   position: "center",
+  mirror: true,
   caption: "",
   image: null,
   imageCorner: "top-right",
@@ -278,15 +288,21 @@ export async function startPresenterOverlayCompositor({
       outputCtx.fillRect(0, 0, width, height);
     }
 
-    // Presenter cut-out: bottom-aligned, never mirrored — raw camera frames
-    // are already the viewer's-eye orientation (only self-view previews mirror),
-    // so pointing to the presenter's right lands on the viewer's right too.
+    // Presenter cut-out: bottom-aligned, mirrored unless turned off (see settings.mirror).
     const personHeight = height * settings.scale;
     const personWidth = personHeight * (CAMERA_WIDTH / CAMERA_HEIGHT);
     const x =
       settings.position === "left" ? 0 : settings.position === "right" ? width - personWidth : (width - personWidth) / 2;
     outputCtx.globalAlpha = settings.opacity;
-    outputCtx.drawImage(cutoutCanvas, x, height - personHeight, personWidth, personHeight);
+    if (settings.mirror) {
+      outputCtx.save();
+      outputCtx.translate(x + personWidth, 0);
+      outputCtx.scale(-1, 1);
+      outputCtx.drawImage(cutoutCanvas, 0, height - personHeight, personWidth, personHeight);
+      outputCtx.restore();
+    } else {
+      outputCtx.drawImage(cutoutCanvas, x, height - personHeight, personWidth, personHeight);
+    }
     outputCtx.globalAlpha = 1;
 
     if (settings.image) drawImageOverlay(width, height, settings.image, settings.imageCorner);

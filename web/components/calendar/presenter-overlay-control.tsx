@@ -60,6 +60,7 @@ export function PresenterOverlayControl({
   const [opacity, setOpacity] = useState(0.5);
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState<PresenterOverlaySettings["position"]>("center");
+  const [mirror, setMirror] = useState(true);
   const [caption, setCaption] = useState("");
   const [imageName, setImageName] = useState<string | null>(null);
   const [imageCorner, setImageCorner] = useState<OverlayCorner>("top-right");
@@ -162,7 +163,7 @@ export function PresenterOverlayControl({
           teardown();
         },
       });
-      Object.assign(compositor.settings, { opacity, scale, position, caption: "", image: null, imageCorner });
+      Object.assign(compositor.settings, { opacity, scale, position, mirror, caption: "", image: null, imageCorner });
       // Favor sharpness over smoothness — slide text matters more than motion.
       compositor.track.contentHint = "detail";
 
@@ -201,7 +202,7 @@ export function PresenterOverlayControl({
     }
   }
 
-  // Attach the unmirrored self-preview once the panel's <video> is mounted.
+  // Attach the self-preview once the panel's <video> is mounted.
   useEffect(() => {
     const video = previewRef.current;
     const session = sessionRef.current;
@@ -296,7 +297,7 @@ export function PresenterOverlayControl({
         className={`absolute ${panelPlacement === "above-right" ? "bottom-full right-0 mb-2" : "left-0 top-full mt-2"} w-72 space-y-3 rounded-lg border p-3 shadow-lg ${LK_PANEL_CLASS} ${panelOpen ? "" : "hidden"}`}
       >
         <div className="space-y-1">
-          {/* Unmirrored on purpose: this is exactly what viewers see. */}
+          {/* Not CSS-mirrored: this is exactly what viewers see (any mirroring is baked in by the compositor). */}
           <video ref={previewRef} muted playsInline className="aspect-video w-full rounded-md bg-black object-contain" />
           <button
             type="button"
@@ -338,6 +339,18 @@ export function PresenterOverlayControl({
               updateSettings({ scale: value });
             }}
           />
+        </label>
+
+        <label className="flex items-center gap-2 text-xs text-white/70">
+          <input
+            type="checkbox"
+            checked={mirror}
+            onChange={(e) => {
+              setMirror(e.target.checked);
+              updateSettings({ mirror: e.target.checked });
+            }}
+          />
+          Mirror me (point at things naturally)
         </label>
 
         <div className={labelClass}>
