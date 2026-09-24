@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { ImagePlus, PictureInPicture2, Presentation, X } from "lucide-react";
 import { RoomEvent, Track, type LocalTrackPublication, type Room } from "livekit-client";
 import {
@@ -20,6 +21,44 @@ type Session = {
   /** Whether the presenter's regular camera tile was on before presenting — restored on stop. */
   cameraWasEnabled: boolean;
 };
+
+/** Chrome 116+ Document Picture-in-Picture — not in TS's DOM lib yet. */
+type DocumentPictureInPicture = {
+  requestWindow(options?: { width?: number; height?: number }): Promise<Window>;
+};
+
+function documentPictureInPicture(): DocumentPictureInPicture | undefined {
+  return (window as unknown as { documentPictureInPicture?: DocumentPictureInPicture }).documentPictureInPicture;
+}
+
+/** Pop-out size: a 16:9 preview, grown by PIP_PANEL_HEIGHT while its settings panel is open. */
+const PIP_WIDTH = 360;
+const PIP_HEIGHT = 203;
+const PIP_PANEL_HEIGHT = 420;
+
+/**
+ * A Document PiP window starts as a blank document — copy this page's
+ * stylesheets in so the Tailwind classes on the portaled preview/settings
+ * resolve there too. Same-origin sheets are copied rule by rule; any
+ * sheet whose rules can't be read (cross-origin) is linked instead.
+ */
+function copyStyleSheets(target: Window) {
+  for (const sheet of Array.from(document.styleSheets)) {
+    try {
+      const style = target.document.createElement("style");
+      style.textContent = Array.from(sheet.cssRules)
+        .map((rule) => rule.cssText)
+        .join("\n");
+      target.document.head.appendChild(style);
+    } catch {
+      if (!sheet.href) continue;
+      const link = target.document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = sheet.href;
+      target.document.head.appendChild(link);
+    }
+  }
+}
 
 /**
  * "Present with camera" (objective 961a9322) — a screen share with the
@@ -66,6 +105,12 @@ export function PresenterOverlayControl({
   const sessionRef = useRef<Session | null>(null);
   const previewRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Pop-out preview (Document PiP): the window, its own <video>/file input, and whether its settings panel is showing.
+  const [pipWindow, setPipWindow] = useState<Window | null>(null);
+  const [pipPanelOpen, setPipPanelOpen] = useState(false);
+  const pipWindowRef = useRef<Window | null>(null);
+  const pipVideoRef = useRef<HTMLVideoElement | null>(null);
+  const pipFileInputRef = useRef<HTMLInputElement | null>(null);
   // teardown() runs from listeners/unmount cleanups registered on earlier renders — read the room through a ref so it's never stale.
   const roomRef = useRef(room);
   roomRef.current = room;
@@ -86,6 +131,7 @@ export function PresenterOverlayControl({
     const room = roomRef.current;
     setStatus("idle");
     if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {});
+    pipWindowRef.current?.close();
     if (previewRef.current) previewRef.current.srcObject = null;
     session.compositor.settings.image?.close();
     setImageName(null);
@@ -204,7 +250,61 @@ export function PresenterOverlayControl({
     }
   }
 
-  // Attach the self-preview once the panel's <video> is mounted.
+  /**
+   * Opens the pop-out preview. Prefers Document Picture-in-Picture (Chrome
+   * 116+), a floating always-on-top window that holds real page content:
+   * the preview video, which toggles the settings panel when clicked, so
+   * the presenter can adjust things without leaving their slides app.
+   * Falls back to plain video picture-in-picture (preview only) where it's
+   * unavailable. Either window can be moved and resized.
+   */
+  async function openPreview() {
+    if (pipWindowRef.current) {
+      pipWindowRef.current.focus();
+      return;
+    }
+    const documentPip = documentPictureInPicture();
+    if (documentPip) {
+      try {
+        const pip = await documentPip.requestWindow({ width: PIP_WIDTH, height: PIP_HEIGHT });
+        copyStyleSheets(pip);
+        pip.document.title = "Presenter preview";
+        pip.document.body.style.margin = "0";
+        pip.document.body.style.background = "#000";
+        pip.addEventListener("pagehide", () => {
+          pipWindowRef.current = null;
+          setPipWindow(null);
+          setPipPanelOpen(false);
+        });
+        pipWindowRef.current = pip;
+        setPipWindow(pip);
+        return;
+      } catch (error) {
+        console.warn("[presenter-overlay] document picture-in-picture failed, using video picture-in-picture", error);
+      }
+    }
+    try {
+      await previewRef.current?.requestPictureInPicture();
+    } catch {
+      onError("Couldn't open the pop-out preview.");
+    }
+  }
+
+  // Clicking the pop-out's preview shows/hides its settings panel, growing
+  // the window to fit it (and shrinking it back). The click is the user
+  // activation Document PiP requires for resizing; if the resize is
+  // refused anyway, the panel just scrolls within the current size.
+  function togglePipPanel() {
+    const next = !pipPanelOpen;
+    setPipPanelOpen(next);
+    try {
+      pipWindowRef.current?.resizeBy(0, next ? PIP_PANEL_HEIGHT : -PIP_PANEL_HEIGHT);
+    } catch {
+      // see above
+    }
+  }
+
+  // Attach the (hidden, fallback-PiP) preview once presenting starts.
   useEffect(() => {
     const video = previewRef.current;
     const session = sessionRef.current;
@@ -212,15 +312,15 @@ export function PresenterOverlayControl({
     video.srcObject = new MediaStream([session.compositor.track]);
     video.play().catch(() => {});
 
-    // Chrome auto-enters picture-in-picture for this video when the
-    // presenter switches away from the tab (camera-using sites only), so
-    // the preview follows them into their slides app without a click.
+    // Chrome auto-opens the pop-out when the presenter switches away from
+    // the tab (camera-using sites only), so the preview follows them into
+    // their slides app without a click.
     const mediaSession = navigator.mediaSession as MediaSession & {
       setActionHandler(action: string, handler: (() => void) | null): void;
     };
     try {
       mediaSession.setActionHandler("enterpictureinpicture", () => {
-        video.requestPictureInPicture().catch(() => {});
+        openPreview();
       });
     } catch {
       // Action not supported in this browser version — manual Pop out still works.
@@ -232,7 +332,17 @@ export function PresenterOverlayControl({
         // see above
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
+
+  // Attach the pop-out window's own preview video once it's portaled in.
+  useEffect(() => {
+    const video = pipVideoRef.current;
+    const session = sessionRef.current;
+    if (!pipWindow || !video || !session) return;
+    video.srcObject = new MediaStream([session.compositor.track]);
+    video.play().catch(() => {});
+  }, [pipWindow]);
 
   async function handleImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -277,16 +387,138 @@ export function PresenterOverlayControl({
   const segmentClass = (selected: boolean) =>
     `flex-1 rounded-md px-2 py-1 text-xs ${selected ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"}`;
 
+  // Rendered twice when the pop-out is open (page panel + pop-out panel), each with its own file input.
+  const settingsFields = (fileInput: RefObject<HTMLInputElement>) => (
+    <>
+      <label className={labelClass}>
+        Visibility ({Math.round(opacity * 100)}%)
+        <input
+          type="range"
+          min={0.15}
+          max={1}
+          step={0.05}
+          value={opacity}
+          onChange={(e) => {
+            const value = Number(e.target.value);
+            setOpacity(value);
+            updateSettings({ opacity: value });
+          }}
+        />
+      </label>
+
+      <label className={labelClass}>
+        Size ({Math.round(scale * 100)}%)
+        <input
+          type="range"
+          min={0.3}
+          max={1}
+          step={0.05}
+          value={scale}
+          onChange={(e) => {
+            const value = Number(e.target.value);
+            setScale(value);
+            updateSettings({ scale: value });
+          }}
+        />
+      </label>
+
+      <label className="flex items-center gap-2 text-xs text-white/70">
+        <input
+          type="checkbox"
+          checked={mirror}
+          onChange={(e) => {
+            setMirror(e.target.checked);
+            updateSettings({ mirror: e.target.checked });
+          }}
+        />
+        Mirror me (point at things naturally)
+      </label>
+
+      <div className={labelClass}>
+        Position
+        <div className="flex gap-1">
+          {(["left", "center", "right"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => {
+                setPosition(value);
+                updateSettings({ position: value });
+              }}
+              className={segmentClass(position === value)}
+            >
+              {value[0].toUpperCase() + value.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <label className={labelClass}>
+        Caption
+        <input
+          type="text"
+          value={caption}
+          maxLength={120}
+          placeholder="Shown along the bottom"
+          onChange={(e) => {
+            setCaption(e.target.value);
+            updateSettings({ caption: e.target.value });
+          }}
+          className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-sm text-white placeholder:text-white/40"
+        />
+      </label>
+
+      <div className={labelClass}>
+        Image
+        <input ref={fileInput} type="file" accept="image/*" className="hidden" onChange={handleImage} />
+        {imageName ? (
+          <div className="flex items-center gap-2">
+            <span className="flex-1 truncate text-white">{imageName}</span>
+            <button type="button" onClick={clearImage} aria-label="Remove image" className="text-white/70 hover:text-white">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInput.current?.click()}
+            className="inline-flex items-center gap-1.5 self-start rounded-md bg-white/5 px-2 py-1 text-white/80 hover:bg-white/10"
+          >
+            <ImagePlus className="h-3.5 w-3.5" />
+            Add from your computer
+          </button>
+        )}
+        {imageName && (
+          <div className="grid grid-cols-2 gap-1">
+            {(["top-left", "top-right", "bottom-left", "bottom-right"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => {
+                  setImageCorner(value);
+                  updateSettings({ imageCorner: value });
+                }}
+                className={segmentClass(imageCorner === value)}
+              >
+                {value.replace("-", " ")}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+
   return (
     <div className="pointer-events-auto relative">
       {/*
-        Pop-out preview source: rendered invisibly rather than inline (an
-        inline preview covered the meeting view, and the main tile already
-        shows the combined share while this tab is open). It only needs to
-        exist and be playing for picture-in-picture, whose floating window
-        the browser lets the presenter move and resize. Not CSS-mirrored:
-        it's exactly what viewers see (any mirroring is baked in by the
-        compositor).
+        Fallback pop-out source for browsers without Document PiP: rendered
+        invisibly rather than inline (an inline preview covered the meeting
+        view, and the main tile already shows the combined share while this
+        tab is open). It only needs to exist and be playing for video
+        picture-in-picture. Not CSS-mirrored — here or in the Document PiP
+        window — since it's exactly what viewers see (any mirroring is baked
+        in by the compositor).
       */}
       <video ref={previewRef} muted playsInline aria-hidden className="pointer-events-none fixed left-0 top-0 h-px w-px opacity-0" />
       <div className="flex items-center gap-2">
@@ -301,9 +533,9 @@ export function PresenterOverlayControl({
         </button>
         <button
           type="button"
-          onClick={() => previewRef.current?.requestPictureInPicture().catch(() => onError("Couldn't open the pop-out preview."))}
+          onClick={openPreview}
           className={LK_BUTTON_CLASS}
-          title="Pop out a preview that stays on top of other apps while you present"
+          title="Pop out a preview that stays on top of other apps while you present — click it for settings"
         >
           <PictureInPicture2 className="h-4 w-4" />
           <span className="hidden sm:inline">Pop out preview</span>
@@ -313,126 +545,40 @@ export function PresenterOverlayControl({
           <span className="hidden sm:inline">Stop</span>
         </button>
       </div>
-      <div
-        className={`absolute ${panelPlacement === "above-right" ? "bottom-full right-0 mb-2" : "left-0 top-full mt-2"} max-h-[60vh] w-72 space-y-3 overflow-y-auto rounded-lg border p-3 shadow-lg ${LK_PANEL_CLASS} ${panelOpen ? "" : "hidden"}`}
-      >
-        <label className={labelClass}>
-          Visibility ({Math.round(opacity * 100)}%)
-          <input
-            type="range"
-            min={0.15}
-            max={1}
-            step={0.05}
-            value={opacity}
-            onChange={(e) => {
-              const value = Number(e.target.value);
-              setOpacity(value);
-              updateSettings({ opacity: value });
-            }}
-          />
-        </label>
-
-        <label className={labelClass}>
-          Size ({Math.round(scale * 100)}%)
-          <input
-            type="range"
-            min={0.3}
-            max={1}
-            step={0.05}
-            value={scale}
-            onChange={(e) => {
-              const value = Number(e.target.value);
-              setScale(value);
-              updateSettings({ scale: value });
-            }}
-          />
-        </label>
-
-        <label className="flex items-center gap-2 text-xs text-white/70">
-          <input
-            type="checkbox"
-            checked={mirror}
-            onChange={(e) => {
-              setMirror(e.target.checked);
-              updateSettings({ mirror: e.target.checked });
-            }}
-          />
-          Mirror me (point at things naturally)
-        </label>
-
-        <div className={labelClass}>
-          Position
-          <div className="flex gap-1">
-            {(["left", "center", "right"] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => {
-                  setPosition(value);
-                  updateSettings({ position: value });
-                }}
-                className={segmentClass(position === value)}
-              >
-                {value[0].toUpperCase() + value.slice(1)}
-              </button>
-            ))}
-          </div>
+      {panelOpen && (
+        <div
+          className={`absolute ${panelPlacement === "above-right" ? "bottom-full right-0 mb-2" : "left-0 top-full mt-2"} max-h-[60vh] w-72 space-y-3 overflow-y-auto rounded-lg border p-3 shadow-lg ${LK_PANEL_CLASS}`}
+        >
+          {settingsFields(fileInputRef)}
         </div>
-
-        <label className={labelClass}>
-          Caption
-          <input
-            type="text"
-            value={caption}
-            maxLength={120}
-            placeholder="Shown along the bottom"
-            onChange={(e) => {
-              setCaption(e.target.value);
-              updateSettings({ caption: e.target.value });
-            }}
-            className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-sm text-white placeholder:text-white/40"
-          />
-        </label>
-
-        <div className={labelClass}>
-          Image
-          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImage} />
-          {imageName ? (
-            <div className="flex items-center gap-2">
-              <span className="flex-1 truncate text-white">{imageName}</span>
-              <button type="button" onClick={clearImage} aria-label="Remove image" className="text-white/70 hover:text-white">
-                <X className="h-3.5 w-3.5" />
-              </button>
+      )}
+      {pipWindow &&
+        createPortal(
+          <div className="flex h-screen flex-col bg-black font-sans text-white">
+            <div className="relative min-h-0 flex-1">
+              <video
+                ref={pipVideoRef}
+                muted
+                playsInline
+                autoPlay
+                onClick={togglePipPanel}
+                title={pipPanelOpen ? "Click to hide settings" : "Click for settings"}
+                className="absolute inset-0 h-full w-full cursor-pointer object-contain"
+              />
+              {!pipPanelOpen && (
+                <span className="pointer-events-none absolute bottom-1 right-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white/70">
+                  Click for settings
+                </span>
+              )}
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 self-start rounded-md bg-white/5 px-2 py-1 text-white/80 hover:bg-white/10"
-            >
-              <ImagePlus className="h-3.5 w-3.5" />
-              Add from your computer
-            </button>
-          )}
-          {imageName && (
-            <div className="grid grid-cols-2 gap-1">
-              {(["top-left", "top-right", "bottom-left", "bottom-right"] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => {
-                    setImageCorner(value);
-                    updateSettings({ imageCorner: value });
-                  }}
-                  className={segmentClass(imageCorner === value)}
-                >
-                  {value.replace("-", " ")}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+            {pipPanelOpen && (
+              <div className={`max-h-[70%] flex-none space-y-3 overflow-y-auto border-t p-3 ${LK_PANEL_CLASS}`}>
+                {settingsFields(pipFileInputRef)}
+              </div>
+            )}
+          </div>,
+          pipWindow.document.body,
+        )}
     </div>
   );
 }
