@@ -9,6 +9,8 @@ import { LiveKitRoom, VideoConference, useChat, useParticipants, useRoomContext 
 import "@livekit/components-styles";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { getPublicMeetingClosingNote } from "@/lib/legal";
+import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/components/calendar/livekit-control-styles";
+import { PresenterOverlayControl } from "@/components/calendar/presenter-overlay-control";
 
 /**
  * Title/host banner pinned to the top of the call — per-viewer local state
@@ -395,27 +397,6 @@ function ChatCaptureListener({ chatEndpoint }: { chatEndpoint: string | null | u
   return null;
 }
 
-/**
- * Dark-theme control styling matching LiveKit's own `.lk-button` (from
- * `--lk-control-bg`/`--lk-control-hover-bg`/`--lk-border-radius` in
- * `data-lk-theme="default"`, which is always dark regardless of the app's
- * own light/dark mode). Hardcoded rather than reusing the `.lk-button`
- * class directly: that class's colors come from CSS custom properties
- * scoped to `[data-lk-theme]`, which is set on <LiveKitRoom>'s own root —
- * these controls render as siblings of it (see TopLeftOverlay), outside
- * that scope, so the variables wouldn't resolve. Reported 2026-08-26: the
- * previous light pill/backdrop-blur look read as visually disconnected
- * from the actual control bar right below it.
- */
-// px shrinks on mobile since the label text collapses to icon-only there
-// (see each button's own `hidden sm:inline` span) — same `sm` (640px)
-// breakpoint LiveKit's own ControlBar auto-switches to icon-only around.
-const LK_BUTTON_CLASS =
-  "inline-flex items-center gap-2 rounded-lg bg-[#1d1d1d] px-2.5 py-2.5 sm:px-4 text-sm text-white hover:bg-[#2a2a2a] disabled:opacity-50";
-const LK_BUTTON_ACTIVE_CLASS = "bg-[#373737] hover:bg-[#373737]";
-/** Matches `--lk-border-color: rgba(255,255,255,.1)` — for the dropdown panel and badges below, same dark-theme-consistency rationale as LK_BUTTON_CLASS. */
-const LK_PANEL_CLASS = "border-white/10 bg-[#1d1d1d] text-white";
-
 /** "4:59" / "0:07" — always minutes:seconds, no hours (recording limits are short, per-minute at most). */
 function formatSecondsRemaining(totalSeconds: number): string {
   const seconds = Math.max(0, totalSeconds);
@@ -738,7 +719,7 @@ function ParticipantsControl({
   );
 }
 
-/** Shared top-left overlay slot for Record and Participants — see RecordingControl's doc comment for why this corner (never the right, which LiveKit's chat panel can claim). Only used for non-quick-recording meetings — see QuickRecordingOverlay for the quick-recording equivalent. */
+/** Shared top-left overlay slot for Record, Participants, and Present with camera — see RecordingControl's doc comment for why this corner (never the right, which LiveKit's chat panel can claim). Only used for non-quick-recording meetings — see QuickRecordingOverlay for the quick-recording equivalent. */
 function TopLeftOverlay({ children }: { children: ReactNode }) {
   return <div className="pointer-events-none absolute left-4 top-4 z-50 flex flex-col items-start gap-2">{children}</div>;
 }
@@ -1083,6 +1064,7 @@ export function LiveKitMeetingScreen({
             kickEndpoint={kickEndpoint}
             onError={pushToast}
           />
+          <PresenterOverlayControl room={room} onError={pushToast} />
         </TopLeftOverlay>
       )}
       <LiveKitRoom
