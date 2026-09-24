@@ -79,6 +79,13 @@ export type PresenterOverlaySettings = {
    * too; the only visible cost is reversed text on clothing.
    */
   mirror: boolean;
+  /**
+   * Master switch for everything drawn over the screen (presenter, caption,
+   * image). Off = a plain screen share, e.g. to step away briefly mid-meeting;
+   * the other settings are kept for when it's turned back on. Segmentation
+   * is skipped while off, so it also saves the CPU/GPU cost.
+   */
+  enabled: boolean;
   caption: string;
   image: ImageBitmap | null;
   imageCorner: OverlayCorner;
@@ -89,6 +96,7 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   scale: 1,
   position: "center",
   mirror: true,
+  enabled: true,
   caption: "",
   image: null,
   imageCorner: "top-right",
@@ -288,6 +296,8 @@ export async function startPresenterOverlayCompositor({
       outputCtx.fillRect(0, 0, width, height);
     }
 
+    if (!settings.enabled) return new VideoFrame(outputCanvas, { timestamp });
+
     // Presenter cut-out: bottom-aligned, mirrored unless turned off (see settings.mirror).
     const personHeight = height * settings.scale;
     const personWidth = personHeight * (CAMERA_WIDTH / CAMERA_HEIGHT);
@@ -327,7 +337,7 @@ export async function startPresenterOverlayCompositor({
         drawCameraCover(frame);
         const timestamp = frame.timestamp;
         frame.close();
-        updateCutout();
+        if (settings.enabled) updateCutout();
         output = compose(timestamp);
         await writer.write(output);
       } catch (error) {

@@ -99,6 +99,7 @@ export function PresenterOverlayControl({
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState<PresenterOverlaySettings["position"]>("center");
   const [mirror, setMirror] = useState(true);
+  const [overlayEnabled, setOverlayEnabled] = useState(true);
   const [caption, setCaption] = useState("");
   const [imageName, setImageName] = useState<string | null>(null);
   const [imageCorner, setImageCorner] = useState<OverlayCorner>("top-right");
@@ -211,7 +212,7 @@ export function PresenterOverlayControl({
           teardown();
         },
       });
-      Object.assign(compositor.settings, { opacity, scale, position, mirror, caption: "", image: null, imageCorner });
+      Object.assign(compositor.settings, { opacity, scale, position, mirror, enabled: true, caption: "", image: null, imageCorner });
       // Favor sharpness over smoothness — slide text matters more than motion.
       compositor.track.contentHint = "detail";
 
@@ -231,6 +232,7 @@ export function PresenterOverlayControl({
       });
 
       setCaption("");
+      setOverlayEnabled(true); // a new session always starts with the overlay showing
       setPanelOpen(false);
       setStatus("active");
     } catch (error) {
@@ -390,6 +392,26 @@ export function PresenterOverlayControl({
   // Rendered twice when the pop-out is open (page panel + pop-out panel), each with its own file input.
   const settingsFields = (fileInput: RefObject<HTMLInputElement>) => (
     <>
+      <label className="flex items-center justify-between gap-2 border-b border-white/10 pb-3 text-sm font-medium text-white">
+        Overlay {overlayEnabled ? "on" : "off"}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={overlayEnabled}
+          aria-label="Show overlay"
+          onClick={() => {
+            const next = !overlayEnabled;
+            setOverlayEnabled(next);
+            updateSettings({ enabled: next });
+          }}
+          className={`relative h-5 w-9 flex-none rounded-full transition-colors ${overlayEnabled ? "bg-red-500" : "bg-white/20"}`}
+        >
+          <span
+            className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${overlayEnabled ? "translate-x-4" : "translate-x-0"}`}
+          />
+        </button>
+      </label>
+      {!overlayEnabled && <p className="text-[11px] text-white/50">Viewers see a plain screen share until you turn it back on.</p>}
       <label className={labelClass}>
         Visibility ({Math.round(opacity * 100)}%)
         <input
