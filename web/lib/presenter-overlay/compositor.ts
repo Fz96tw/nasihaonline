@@ -2,9 +2,10 @@
  * Presenter camera overlay (objective 961a9322): combines the presenter's
  * screen capture with a background-removed, semi-transparent cut-out of
  * their webcam (plus an optional caption and local image) into a single
- * video track, which the caller publishes as the LiveKit ScreenShare source
- * — so the existing VideoConference focus layout and the "speaker" egress
- * layout (lib/livekit-egress.ts) show it with no server-side changes.
+ * video track, which the caller swaps into the presenter's already-published
+ * ScreenShare track — so the existing VideoConference focus layout and the
+ * "speaker" egress layout (lib/livekit-egress.ts) show it with no
+ * server-side changes.
  *
  * Runs entirely in the presenter's browser; nothing here talks to our
  * server (the caption/image never leave the page except as pixels in the
@@ -79,13 +80,6 @@ export type PresenterOverlaySettings = {
    * too; the only visible cost is reversed text on clothing.
    */
   mirror: boolean;
-  /**
-   * Master switch for everything drawn over the screen (presenter, caption,
-   * image). Off = a plain screen share, e.g. to step away briefly mid-meeting;
-   * the other settings are kept for when it's turned back on. Segmentation
-   * is skipped while off, so it also saves the CPU/GPU cost.
-   */
-  enabled: boolean;
   caption: string;
   image: ImageBitmap | null;
   imageCorner: OverlayCorner;
@@ -96,7 +90,6 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   scale: 1,
   position: "center",
   mirror: true,
-  enabled: true,
   caption: "",
   image: null,
   imageCorner: "top-right",
@@ -107,7 +100,7 @@ export type PresenterOverlayCompositor = {
   track: MediaStreamTrack;
   /** Mutated in place by the UI; read fresh on every frame, so changes apply without a restart. */
   settings: PresenterOverlaySettings;
-  /** Stops both readers, the output track, and the segmenter. Does NOT stop the input tracks — the caller owns those. */
+  /** Stops both readers and the output track (the segmenter is kept for reuse). Does NOT stop the input tracks — the caller owns those. */
   stop: () => void;
 };
 
@@ -296,8 +289,6 @@ export async function startPresenterOverlayCompositor({
       outputCtx.fillRect(0, 0, width, height);
     }
 
-    if (!settings.enabled) return new VideoFrame(outputCanvas, { timestamp });
-
     // Presenter cut-out: bottom-aligned, mirrored unless turned off (see settings.mirror).
     const personHeight = height * settings.scale;
     const personWidth = personHeight * (CAMERA_WIDTH / CAMERA_HEIGHT);
@@ -337,7 +328,7 @@ export async function startPresenterOverlayCompositor({
         drawCameraCover(frame);
         const timestamp = frame.timestamp;
         frame.close();
-        if (settings.enabled) updateCutout();
+        updateCutout();
         output = compose(timestamp);
         await writer.write(output);
       } catch (error) {

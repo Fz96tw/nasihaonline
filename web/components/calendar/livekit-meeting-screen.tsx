@@ -719,14 +719,14 @@ function ParticipantsControl({
   );
 }
 
-/** Shared top-left overlay slot for Record, Participants, and Present with camera — see RecordingControl's doc comment for why this corner (never the right, which LiveKit's chat panel can claim). Only used for non-quick-recording meetings — see QuickRecordingOverlay for the quick-recording equivalent (which also carries Present with camera). */
+/** Shared top-left overlay slot for Record, Participants, and the camera overlay controls (shown while sharing) — see RecordingControl's doc comment for why this corner (never the right, which LiveKit's chat panel can claim). Only used for non-quick-recording meetings — see QuickRecordingOverlay for the quick-recording equivalent (which also carries the camera overlay controls). */
 function TopLeftOverlay({ children }: { children: ReactNode }) {
   return <div className="pointer-events-none absolute left-4 top-4 z-50 flex flex-col items-start gap-2">{children}</div>;
 }
 
 /**
  * Quick-recording-only replacement for TopLeftOverlay — Record, Reset,
- * Present with camera, and Exit anchored bottom-right, positioned directly above LiveKit's own
+ * the camera overlay controls, and Exit anchored bottom-right, positioned directly above LiveKit's own
  * bottom `.lk-control-bar` rather than overlapping it. Bottom-left was
  * tried first and reported (live testing) to collide with content already
  * occupying that corner — LiveKit's own per-tile participant metadata
