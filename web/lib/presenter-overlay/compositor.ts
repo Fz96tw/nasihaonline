@@ -68,12 +68,7 @@ export type PresenterOverlaySettings = {
   opacity: number;
   /** 0.3–1, cut-out height as a fraction of the output height. */
   scale: number;
-  /**
-   * Where the presenter's *body* sits horizontally (always bottom-aligned,
-   * like someone standing in front of the slide) — see POSITION_TARGETS.
-   * Anchors the person, not the camera frame: the frame is as wide as the
-   * output at full size, so anchoring the frame barely moved anyone.
-   */
+  /** Horizontal anchor of the cut-out (always bottom-aligned, like someone standing in front of the slide). */
   position: "left" | "center" | "right";
   /**
    * Flip the cut-out horizontally, like a mirror — on by default, because
@@ -88,17 +83,6 @@ export type PresenterOverlaySettings = {
   image: ImageBitmap | null;
   imageCorner: OverlayCorner;
 };
-
-/**
- * Fraction of the output width the presenter's body center is placed at.
- * Left/right sit close to the edges — the empty parts of the camera frame
- * (and, at large sizes, part of the presenter) may fall off-screen.
- */
-const POSITION_TARGETS: Record<PresenterOverlaySettings["position"], number> = { left: 0.1, center: 0.5, right: 0.9 };
-/** Min fraction of the frame that must be "person" before we trust the body-center estimate (otherwise keep the last one). */
-const MIN_PERSON_COVERAGE = 0.01;
-/** Smoothing for the body-center estimate, so the cut-out doesn't jitter as the presenter gestures. */
-const PERSON_CENTER_SMOOTHING = 0.15;
 
 export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   opacity: 0.5,
@@ -191,8 +175,6 @@ export async function startPresenterOverlayCompositor({
   let stopped = false;
   let lastOutputAt = 0;
   let lastSegmentTimestamp = 0;
-  /** Presenter's body center within the (unmirrored) camera frame, 0–1 across; smoothed. */
-  let personCenter = 0.5;
 
   const screenReader = new Processor({ track: screenTrack }).readable.getReader();
   const cameraReader = new Processor({ track: cameraTrack }).readable.getReader();
@@ -247,18 +229,9 @@ export async function startPresenterOverlayCompositor({
       }
       const confidence = mask.getAsFloat32Array();
       const data = maskImage.data;
-      const maskWidth = mask.width;
-      let personTotal = 0;
-      let personX = 0;
       for (let i = 0; i < confidence.length; i++) {
         const person = single ? confidence[i] : 1 - confidence[i];
         data[i * 4 + 3] = person * 255;
-        personTotal += person;
-        personX += person * (i % maskWidth);
-      }
-      if (personTotal > confidence.length * MIN_PERSON_COVERAGE) {
-        const measured = personX / personTotal / maskWidth;
-        personCenter += (measured - personCenter) * PERSON_CENTER_SMOOTHING;
       }
     });
     maskCtx.putImageData(maskImage, 0, 0);
@@ -318,9 +291,8 @@ export async function startPresenterOverlayCompositor({
     // Presenter cut-out: bottom-aligned, mirrored unless turned off (see settings.mirror).
     const personHeight = height * settings.scale;
     const personWidth = personHeight * (CAMERA_WIDTH / CAMERA_HEIGHT);
-    // Line the body center (flipped along with the image when mirrored) up with the target.
-    const centerInImage = settings.mirror ? 1 - personCenter : personCenter;
-    const x = POSITION_TARGETS[settings.position] * width - centerInImage * personWidth;
+    const x =
+      settings.position === "left" ? 0 : settings.position === "right" ? width - personWidth : (width - personWidth) / 2;
     outputCtx.globalAlpha = settings.opacity;
     if (settings.mirror) {
       outputCtx.save();

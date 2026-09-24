@@ -377,14 +377,6 @@ export function PresenterOverlayControl({
               </button>
             ))}
           </div>
-          {position !== "center" && (
-            // Placing the body near an edge leaves only the camera's view on
-            // the far side of the presenter for reaching across the slide.
-            <p className="text-[11px] leading-snug text-white/50">
-              Tip: stand toward the {position} side of your camera&apos;s view (as you see yourself on screen) so your arm has
-              room to reach across the slide.
-            </p>
-          )}
         </div>
 
         <label className={labelClass}>
