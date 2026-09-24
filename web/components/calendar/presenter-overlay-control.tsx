@@ -4,8 +4,6 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { ImagePlus, PictureInPicture2, Presentation, X } from "lucide-react";
 import { RoomEvent, Track, type LocalTrackPublication, type Room } from "livekit-client";
 import {
-  CAMERA_HEIGHT,
-  CAMERA_WIDTH,
   isPresenterOverlaySupported,
   startPresenterOverlayCompositor,
   type OverlayCorner,
@@ -140,15 +138,18 @@ export function PresenterOverlayControl({
       const display = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 20 }, audio: false });
       screenTrack = display.getVideoTracks()[0];
 
-      // Our own capture of the same camera the room is using, at the
-      // segmentation size — independent of the published camera track,
-      // so turning that one off below doesn't cut this feed.
+      // Our own capture of the same camera the room is using — independent
+      // of the published camera track, so turning that one off below
+      // doesn't cut this feed. Asks for 720p (the compositor downscales to
+      // its segmentation size) because some webcams, laptop ones
+      // especially, serve low-res modes by cropping the sensor, which
+      // narrows the view and clips an arm reached out toward the slide.
       const deviceId = room.getActiveDevice("videoinput");
       const camera = await navigator.mediaDevices.getUserMedia({
         video: {
           ...(deviceId && deviceId !== "default" ? { deviceId: { exact: deviceId } } : {}),
-          width: { ideal: CAMERA_WIDTH },
-          height: { ideal: CAMERA_HEIGHT },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
           frameRate: { ideal: 20 },
         },
         audio: false,
@@ -376,6 +377,14 @@ export function PresenterOverlayControl({
               </button>
             ))}
           </div>
+          {position !== "center" && (
+            // Placing the body near an edge leaves only the camera's view on
+            // the far side of the presenter for reaching across the slide.
+            <p className="text-[11px] leading-snug text-white/50">
+              Tip: stand toward the {position} side of your camera&apos;s view (as you see yourself on screen) so your arm has
+              room to reach across the slide.
+            </p>
+          )}
         </div>
 
         <label className={labelClass}>

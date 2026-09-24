@@ -58,8 +58,8 @@ const MAX_OUTPUT_WIDTH = 1280;
 const MAX_OUTPUT_HEIGHT = 720;
 const MIN_FRAME_INTERVAL_MS = 1000 / 20;
 /** Webcam is segmented at this size — plenty for a translucent cut-out, and keeps the per-frame mask readback cheap. */
-export const CAMERA_WIDTH = 640;
-export const CAMERA_HEIGHT = 360;
+const CAMERA_WIDTH = 640;
+const CAMERA_HEIGHT = 360;
 
 export type OverlayCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
