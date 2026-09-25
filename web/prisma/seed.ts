@@ -417,7 +417,12 @@ for (const name of KNOWLEDGE_CATEGORIES) {
 // "Clinical Discussions" was retired the same way (scripts/deactivate-forum.sh
 // clinical-discussions) and is no longer seeded; its slug constant in
 // lib/forums.ts stays so any surviving threads keep their de-identification gate.
-const FORUMS: { name: string; description: string; displayOrder: number }[] = [
+// `slug` overrides slugify(name) for a forum the app looks up by a fixed
+// slug constant whose name has since changed — and, unlike every other
+// field here, is also re-applied to an existing row, so a deployment
+// seeded from the new name (e.g. the VPS, which got `events-discussion`)
+// heals to the slug the code actually queries.
+const FORUMS: { name: string; description: string; displayOrder: number; slug?: string }[] = [
   { name: "General", description: "Community announcements, introductions, open discussion.", displayOrder: 0 },
   {
     name: "Research & Resources",
@@ -439,6 +444,9 @@ const FORUMS: { name: string; description: string; displayOrder: number }[] = [
     name: "Events Discussion",
     description: "Auto-created discussion threads for events that opt in at submission time.",
     displayOrder: 6,
+    // Kept from the forum's original "Events" name — slugify would give
+    // "events-discussion", which createEvent/getForumCategories never match.
+    slug: EVENTS_FORUM_SLUG,
   },
   {
     name: "Library Discussions",
@@ -593,8 +601,13 @@ async function seedForums() {
   for (const sample of FORUMS) {
     const forum = await db.forum.upsert({
       where: { name: sample.name },
-      update: {},
-      create: { name: sample.name, slug: slugify(sample.name), description: sample.description, displayOrder: sample.displayOrder },
+      update: sample.slug ? { slug: sample.slug } : {},
+      create: {
+        name: sample.name,
+        slug: sample.slug ?? slugify(sample.name),
+        description: sample.description,
+        displayOrder: sample.displayOrder,
+      },
     });
     forumsByName.set(sample.name, forum);
   }
