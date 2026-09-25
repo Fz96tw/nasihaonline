@@ -46,6 +46,10 @@
 #   host exclusion. The event's forum thread, recording and chat transcript
 #   inherit that restriction. Public guest registrations are left behind in
 #   this mode, since a restricted event can't be open to the public.
+#   USER_ID_MAP="<source-id>=<target-id>[,...]" rewrites a user id on every
+#   transferred row, for a member whose prod `users` row has a different id
+#   (e.g. they signed up on prod directly instead of being moved by
+#   migrate-members-to-vps.sh).
 set -euo pipefail
 
 EVENT_ID="${1:?Usage: $0 <event-id> [ssh-target] [remote-dir]}"
@@ -146,7 +150,35 @@ for entry in "${TABLES[@]}"; do
   echo "$table|$cols" >> "$BUNDLE_DIR/.cols"
 done
 
+if [ -n "${USER_ID_MAP:-}" ]; then
+  IFS=',' read -ra PAIRS <<< "$USER_ID_MAP"
+  for pair in "${PAIRS[@]}"; do
+    from="${pair%%=*}"; to="${pair#*=}"
+    if ! [[ "$from" =~ ^[A-Za-z0-9_-]+$ && "$to" =~ ^[A-Za-z0-9_-]+$ ]]; then
+      echo "error: bad USER_ID_MAP entry '$pair' (want <source-id>=<target-id>)" >&2
+      exit 1
+    fi
+    echo "==> USER_ID_MAP: $from -> $to"
+    cat >> "$SQL" <<EOF
+UPDATE _t_events SET "hostId" = '$to' WHERE "hostId" = '$from';
+UPDATE _t_event_co_hosts SET "userId" = '$to' WHERE "userId" = '$from';
+UPDATE _t_rsvps SET "userId" = '$to' WHERE "userId" = '$from';
+UPDATE _t_forum_threads SET "authorId" = '$to' WHERE "authorId" = '$from';
+UPDATE _t_forum_posts SET "authorId" = '$to' WHERE "authorId" = '$from';
+UPDATE _t_pasted_images SET "uploaderId" = '$to' WHERE "uploaderId" = '$from';
+EOF
+  done
+fi
+
 cat >> "$SQL" <<'EOF'
+-- A fresh deployment seeded the forum from its current "Events Discussion"
+-- name, giving slug `events-discussion` instead of the `events` the app
+-- queries (EVENTS_FORUM_SLUG) — fixed in prisma/seed.ts too, but correct it
+-- here so this transfer doesn't depend on that deploy having happened.
+UPDATE forums SET slug = 'events'
+ WHERE name = 'Events Discussion' AND slug = 'events-discussion'
+   AND NOT EXISTS (SELECT 1 FROM forums WHERE slug = 'events');
+
 -- Forums are seeded per deployment, so point the thread at the target's own
 -- `events` forum rather than the source's id.
 DO $$
