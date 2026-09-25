@@ -6,7 +6,7 @@ Showup is a free, no-account, code-based screen-share meeting service built on L
 
 - **Self-contained.** Never import from `../web/` (or anything outside `showup/`). If you need something from Nasiha, copy it in. This is what keeps the later repo split a plain move.
 - **Not Nasiha.** No Clerk, no Prisma/Postgres, no medical/community framing, no Nasiha branding or legal copy. Anonymous users only; there are no accounts.
-- **Working name: Showup.** Name, domain and trademark clearance is a separate Planwright objective ("Showup 03"). Don't hardcode a final domain yet.
+- **Name: Showup. Domain: `showup.cloudcurio.com`** (decided in Showup 03; see `NAMING.md` for clearance findings and the DNS setup). DNS for `cloudcurio.com` is at Namecheap; the A record for `showup` -> VPS `50.6.224.185` is added during the deploy objective (Showup 05). Read the domain from env (`NEXT_PUBLIC_APP_URL`) rather than hardcoding it.
 - **Ports.** Run dev on 3012 (`npm run dev -- -p 3012`). Never bind 3010 (live Nasiha app) or 3011 (where `web/` dev runs).
 - **Commits** start with `showup:` and don't mix `showup/` changes with `web/` changes.
 - **Planwright:** work is tracked as the "Showup — Standalone Screen-Share Service" initiative in the Nasihaonline project (objectives are numbered "Showup 01".."Showup 10" in build order). The approved plan is `/home/nadeem/.claude/plans/i-want-to-make-composed-dragonfly.md`.
