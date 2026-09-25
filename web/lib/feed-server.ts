@@ -73,6 +73,34 @@ function authorOf(user: {
   };
 }
 
+// An event's/Library item's discussion thread, as its parent's feed row
+// needs it: the reply count (posts includes the auto-created opening post)
+// plus the newest post, to credit and quote the latest replier when the
+// parent was bumped by discussion activity.
+const DISCUSSION_THREAD_FEED_SELECT = {
+  _count: { select: { posts: true } },
+  posts: {
+    select: { id: true, author: { select: AUTHOR_SELECT }, body: true },
+    orderBy: { createdAt: "desc" },
+    take: 1,
+  },
+} as const;
+
+type DiscussionThreadForFeed = {
+  _count: { posts: number };
+  posts: { id: string; author: Parameters<typeof authorOf>[0]; body: string }[];
+} | null;
+
+/**
+ * The latest reply that bumped an event/Library item's feed row, or null
+ * when the row sits at its original position (lastActivityAt still equals
+ * `baseTime`, or the thread holds only its auto-created opening post).
+ */
+function latestDiscussionReply(thread: DiscussionThreadForFeed, lastActivityAt: Date, baseTime: Date) {
+  if (!thread || thread._count.posts < 2 || lastActivityAt.getTime() <= baseTime.getTime()) return null;
+  return thread.posts[0] ?? null;
+}
+
 // Every admin-broadcast content type (Board Announcements, Surveys)
 // deliberately masks the sending admin behind a fixed institutional
 // identity on every member-facing surface (feed row, detail page, email) —
@@ -228,7 +256,10 @@ export async function getFeedPage(params: {
   // shares the exact same where clause its findMany uses, rather than
   // drifting out of sync with it over time.
   const eventWhere = {
-    ...(before ? { createdAt: { lt: before } } : {}),
+    // lastActivityAt (createdAt, bumped by every post in the event's
+    // discussion thread — see createForumPost) is the sort/cursor field,
+    // same as the forum_thread branch below.
+    ...(before ? { lastActivityAt: { lt: before } } : {}),
     ...(eventHitIds ? { id: { in: eventHitIds } } : {}),
     cancelledAt: null,
     // A suspended member can't log in at all (lib/auth.ts), so they're never
@@ -262,7 +293,9 @@ export async function getFeedPage(params: {
     // too, and this is a deliberate "find anything you can view" tool, not
     // a "what's new" one.
     status: query ? { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] } : KnowledgeStatus.published,
-    ...(before ? { createdAt: { lt: before } } : {}),
+    // Same lastActivityAt sort/cursor field as eventWhere above (publish
+    // time, bumped by every post in the item's discussion thread).
+    ...(before ? { lastActivityAt: { lt: before } } : {}),
     ...(libraryHitIds ? { id: { in: libraryHitIds } } : {}),
     // Queries the direct KnowledgeItemCommunity relation, same as
     // getLibraryCards' communityFilter (lib/library-server.ts) — deriving
@@ -416,9 +449,10 @@ export async function getFeedPage(params: {
         // posts includes the thread's own system-authored opening post, so
         // forumReplyCount below subtracts one — same convention as the
         // forumThreads feed query and getMemberEventById's forumReplyCount.
-        forumThread: { select: { _count: { select: { posts: true } } } },
+        forumThread: { select: DISCUSSION_THREAD_FEED_SELECT },
+        lastActivityAt: true,
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { lastActivityAt: "desc" },
       take: pageSize,
     }),
     !wants("library") || libraryHitIds?.length === 0 ? Promise.resolve([]) : db.knowledgeItem.findMany({
@@ -439,9 +473,10 @@ export async function getFeedPage(params: {
         // posts includes the thread's own system-authored opening post, so
         // forumReplyCount below subtracts one — same convention as the
         // events branch above.
-        forumThread: { select: { _count: { select: { posts: true } } } },
+        forumThread: { select: DISCUSSION_THREAD_FEED_SELECT },
+        lastActivityAt: true,
       },
-      orderBy: { publishedAt: "desc" },
+      orderBy: { lastActivityAt: "desc" },
       take: pageSize,
     }),
     !wants("forum_thread") || forumHitIds?.length === 0 ? Promise.resolve([]) : db.forumThread.findMany({
@@ -648,66 +683,85 @@ export async function getFeedPage(params: {
         });
 
   const merged: FeedItem[] = [
-    ...events.map((event): FeedItem => ({
-      type: "event",
-      id: event.id,
-      title: event.title,
-      // Restricted events reach a viewer who is either the organizer
-      // themselves (ownerBypass above) or an invited member — the RSVP
-      // framing only makes sense for the latter, so it's skipped for the
-      // organizer's own feed (viewerId === event.hostId), same rationale as
-      // the peer_review branch's isSubmitter check below. Search mode is a
-      // further exception: the RSVP framing carries no hint of why this
-      // event matched the query, so a search hit shows the actual
-      // (highlightable) description instead — the viewer is already
-      // authorized to see it, same as clicking through would show them.
-      excerpt:
-        event.visibility === EventVisibility.invited && !query && event.hostId !== viewerId
-          ? `${event.host.name ?? "The host"} has requested your attendance. Please RSVP.`
-          : event.description
-            ? excerptOf(event.description)
-            : "No description provided.",
-      href: withFeedRef(`/calendar/${event.id}`, query),
-      timestamp: event.createdAt.toISOString(),
-      author: authorOf(event.host),
-      imageUrl: getEventHeroImageUrl(event.heroImageUrl),
-      attendeeCount: event._count.rsvps + event._count.registrations,
-      forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : undefined,
-      eventStartsAt: event.startsAt.toISOString(),
-      eventViewCount: event._count.views,
-      isRestricted: event.visibility === EventVisibility.invited,
-    })),
-    ...libraryItems.map((item): FeedItem => ({
-      type: "library",
-      id: item.id,
-      title: item.title,
-      // Restricted items reach a viewer who is either the contributor
-      // themselves (ownerBypass above) or an invited member — the "shared
-      // with you" framing only makes sense for the latter, so it's skipped
-      // for the contributor's own feed (viewerId === item.contributorId),
-      // same rationale as the events branch's excerpt swap. Search mode
-      // exception: see the matching comment on the events branch above.
-      excerpt:
-        item.visibility === KnowledgeVisibility.restricted && !query && item.contributorId !== viewerId
-          ? `${item.contributor.name ?? "A member"} shared this with you.`
-          // Non-null assertion, not a fallback — the query above only ever
-          // selects published/flagged items, which submit-time validation
-          // guarantees a description for.
-          : excerptOf(item.description!),
-      href: withFeedRef(`/library/${item.id}`, query),
-      timestamp: (item.publishedAt ?? item.createdAt).toISOString(),
-      author: authorOf(item.contributor),
-      // A custom hero image always wins; a recorded_lecture with none set
-      // falls back to its video's YouTube thumbnail as the default cover —
-      // same precedence as LibraryItemCard's browse-grid thumbnail.
-      imageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl) ?? (item.youtubeUrl ? youtubeThumbnailUrl(item.youtubeUrl) : null),
-      // Always false when heroImageUrl is null (server-enforced at write
-      // time), so this is never true for the YouTube-thumbnail fallback
-      // above — only ever for a real uploaded hero image.
-      showTitleOverlay: item.showTitleOverlay,
-      libraryViewCount: item._count.views,
-      forumReplyCount: item.forumThread ? item.forumThread._count.posts - 1 : undefined,
-    })),
+    ...events.map((event): FeedItem => {
+      // Browse mode only: a row bumped by discussion activity credits and
+      // quotes the latest replier, same as a bumped forum_thread row. Search
+      // mode keeps the host/description framing below, which is what the
+      // query matched against.
+      const reply = query ? null : latestDiscussionReply(event.forumThread, event.lastActivityAt, event.createdAt);
+      return {
+        type: "event",
+        id: event.id,
+        title: event.title,
+        // Restricted events reach a viewer who is either the organizer
+        // themselves (ownerBypass above) or an invited member — the RSVP
+        // framing only makes sense for the latter, so it's skipped for the
+        // organizer's own feed (viewerId === event.hostId), same rationale as
+        // the peer_review branch's isSubmitter check below. Search mode is a
+        // further exception: the RSVP framing carries no hint of why this
+        // event matched the query, so a search hit shows the actual
+        // (highlightable) description instead — the viewer is already
+        // authorized to see it, same as clicking through would show them.
+        excerpt: reply
+          ? "Replied in the event discussion"
+          : event.visibility === EventVisibility.invited && !query && event.hostId !== viewerId
+            ? `${event.host.name ?? "The host"} has requested your attendance. Please RSVP.`
+            : event.description
+              ? excerptOf(event.description)
+              : "No description provided.",
+        // The event page embeds its discussion thread, so a bumped row links
+        // straight to the reply (same #post-<id> anchor as forum_thread rows).
+        href: withFeedRef(`/calendar/${event.id}`, query) + (reply ? `#post-${reply.id}` : ""),
+        timestamp: event.lastActivityAt.toISOString(),
+        author: authorOf(reply?.author ?? event.host),
+        replyExcerpt: reply ? excerptOf(stripPastedImageTokens(reply.body)) || undefined : undefined,
+        imageUrl: getEventHeroImageUrl(event.heroImageUrl),
+        attendeeCount: event._count.rsvps + event._count.registrations,
+        forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : undefined,
+        eventStartsAt: event.startsAt.toISOString(),
+        eventViewCount: event._count.views,
+        isRestricted: event.visibility === EventVisibility.invited,
+      };
+    }),
+    ...libraryItems.map((item): FeedItem => {
+      // Same bumped-row treatment as the events branch above.
+      const reply = query
+        ? null
+        : latestDiscussionReply(item.forumThread, item.lastActivityAt, item.publishedAt ?? item.createdAt);
+      return {
+        type: "library",
+        id: item.id,
+        title: item.title,
+        // Restricted items reach a viewer who is either the contributor
+        // themselves (ownerBypass above) or an invited member — the "shared
+        // with you" framing only makes sense for the latter, so it's skipped
+        // for the contributor's own feed (viewerId === item.contributorId),
+        // same rationale as the events branch's excerpt swap. Search mode
+        // exception: see the matching comment on the events branch above.
+        excerpt: reply
+          ? "Replied in the resource discussion"
+          : item.visibility === KnowledgeVisibility.restricted && !query && item.contributorId !== viewerId
+            ? `${item.contributor.name ?? "A member"} shared this with you.`
+            // Non-null assertion, not a fallback — the query above only ever
+            // selects published/flagged items, which submit-time validation
+            // guarantees a description for.
+            : excerptOf(item.description!),
+        href: withFeedRef(`/library/${item.id}`, query) + (reply ? `#post-${reply.id}` : ""),
+        timestamp: item.lastActivityAt.toISOString(),
+        author: authorOf(reply?.author ?? item.contributor),
+        replyExcerpt: reply ? excerptOf(stripPastedImageTokens(reply.body)) || undefined : undefined,
+        // A custom hero image always wins; a recorded_lecture with none set
+        // falls back to its video's YouTube thumbnail as the default cover —
+        // same precedence as LibraryItemCard's browse-grid thumbnail.
+        imageUrl: getKnowledgeItemHeroImageUrl(item.heroImageUrl) ?? (item.youtubeUrl ? youtubeThumbnailUrl(item.youtubeUrl) : null),
+        // Always false when heroImageUrl is null (server-enforced at write
+        // time), so this is never true for the YouTube-thumbnail fallback
+        // above — only ever for a real uploaded hero image.
+        showTitleOverlay: item.showTitleOverlay,
+        libraryViewCount: item._count.views,
+        forumReplyCount: item.forumThread ? item.forumThread._count.posts - 1 : undefined,
+      };
+    }),
     ...forumThreads.map((thread): FeedItem => {
       // A thread bumped up by a fresh reply (lastActivityAt > createdAt)
       // reads as "Replied to" rather than "New thread" — it isn't new,

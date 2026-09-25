@@ -1172,6 +1172,13 @@ model Event {
   publishedAt                     DateTime?
   createdAt                       DateTime        @default(now())
   updatedAt                       DateTime        @updatedAt
+  // What's New feed sort key for this event's row — starts at createdAt
+  // (the feed's original sort key for events), then bumped by
+  // createForumPost (lib/forums-server.ts) on every post in the event's
+  // discussion thread, including the compiled chat transcript, so fresh
+  // discussion resurfaces the event instead of it only ever appearing once
+  // at its creation time. Same convention as ForumThread.lastActivityAt.
+  lastActivityAt                  DateTime        @default(now())
 
   recurrence             EventRecurrence?
   rsvps                  RSVP[]
@@ -1221,6 +1228,7 @@ model Event {
 
   @@index([startsAt])
   @@index([publishedAt])
+  @@index([lastActivityAt])
   @@map("events")
 }
 
@@ -1831,6 +1839,12 @@ model KnowledgeItem {
   publishedAt               DateTime?
   createdAt                 DateTime             @default(now())
   updatedAt                 DateTime             @updatedAt
+  // What's New feed sort key for this item's row — set to publishedAt when
+  // a Steward publishes it, then bumped by createForumPost
+  // (lib/forums-server.ts) on every post in its discussion thread, so fresh
+  // discussion resurfaces the item instead of it only ever appearing once
+  // at its publish date. Same convention as ForumThread.lastActivityAt.
+  lastActivityAt            DateTime             @default(now())
 
   categories              KnowledgeItemCategory[]
   // Required, multi-select top-level classification (standardized onto
@@ -1866,6 +1880,7 @@ model KnowledgeItem {
 
   @@index([contributorId])
   @@index([status])
+  @@index([lastActivityAt])
   @@map("knowledge_items")
 }
 

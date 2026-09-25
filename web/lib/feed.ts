@@ -29,7 +29,7 @@ export type FeedItem = {
   title: string;
   excerpt: string;
   href: string;
-  /** ISO timestamp this item was published/created — the feed's sort key. */
+  /** ISO timestamp this item was published/created — or, for a forum thread, event, or library item, its latest discussion activity — the feed's sort key. */
   timestamp: string;
   author: { name: string | null; avatarUrl: string | null; titleSpecialty: string | null; countryRegion: string | null };
   /** Events, blog posts, announcements, and surveys carry a hero image; library items get one only for recorded lectures (YouTube thumbnail) — null otherwise. Forum threads always carry the same static default (/images/forum-thread.jpg), rendered by FeedRow as a small left-side thumbnail rather than the full-width image used by other types. */
@@ -58,7 +58,7 @@ export type FeedItem = {
   myOfferStatus?: ReviewVolunteerStatus | null;
   /** Only "peer_review" items carry this — the submitter's optional note on what kind of feedback they're after, shown to prospective volunteers. Undefined for every other type; null when the submitter left it blank. */
   volunteerNote?: string | null;
-  /** Only "forum_thread" items carry this — a truncated snippet of the previewed post's body (the opening post for a fresh thread, the newest reply for a bumped one, the matched post in search), so the feed row shows what was actually written rather than just the "new activity" label. Pasted-image markdown tokens are stripped first; undefined when nothing prose is left, and for every other type. */
+  /** "forum_thread" items carry this — a truncated snippet of the previewed post's body (the opening post for a fresh thread, the newest reply for a bumped one, the matched post in search), so the feed row shows what was actually written rather than just the "new activity" label. "event" and "library" items carry it only when their row was bumped by a reply in their discussion thread (browse mode), quoting that newest reply. Pasted-image markdown tokens are stripped first; undefined when nothing prose is left, and otherwise. */
   replyExcerpt?: string;
   /** Only "forum_thread" items whose previewed post body embeds one of our own pasted images (a `![](/api/forums/post-image/…)` token) carry this — the first such image's proxied URL, rendered inline in the feed row the way other feed types render their hero image. Undefined when the post has no pasted image, and for every other type. */
   bodyImageUrl?: string;

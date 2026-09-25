@@ -1475,12 +1475,16 @@ export async function reviewKnowledgeItem(id: string, action: "publish" | "rejec
       ? await db.contributionRule.findUnique({ where: { activityKey: CURATE_RESOURCE_ACTIVITY_KEY } })
       : null;
 
+  const now = new Date();
   const { updated, invitees } = await db.$transaction(async (tx) => {
     const result = await tx.knowledgeItem.update({
       where: { id },
       data: {
         status,
-        ...(action === "publish" ? { publishedAt: new Date() } : {}),
+        // lastActivityAt starts at the publish time — the item's first
+        // What's New appearance — rather than its (possibly much earlier)
+        // draft creation time.
+        ...(action === "publish" ? { publishedAt: now, lastActivityAt: now } : {}),
       },
       select: { id: true, status: true },
     });

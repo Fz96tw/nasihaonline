@@ -980,6 +980,16 @@ export async function createForumPost(
   // forum_thread branch sorts on this) so fresh replies resurface it
   // instead of it only ever appearing once at its original creation time.
   await db.forumThread.update({ where: { id: threadId }, data: { lastActivityAt: post.createdAt } });
+  // An event's or Library item's discussion thread never gets its own feed
+  // row (feed-server.ts excludes it in favor of the parent's row), so bump
+  // the parent's feed position instead — otherwise a reply there never
+  // resurfaces anything. The feed's visibility filters are unchanged, so a
+  // restricted parent still only resurfaces for viewers who can see it.
+  if (thread.eventId) {
+    await db.event.update({ where: { id: thread.eventId }, data: { lastActivityAt: post.createdAt } });
+  } else if (thread.knowledgeItemId) {
+    await db.knowledgeItem.update({ where: { id: thread.knowledgeItemId }, data: { lastActivityAt: post.createdAt } });
+  }
 
   // Auto-join rule (community-based-categorization initiative, see
   // ensureCommunityMembership's doc comment): commenting on an item tagged
