@@ -22,3 +22,7 @@ Showup is a free, no-account, code-based screen-share meeting service built on L
 ## Environment
 
 See `.env.example`. LiveKit is the shared self-hosted instance; Showup room names are prefixed `showup-`.
+
+## Running locally
+
+See `README.md`. Short version: start Redis (`docker run -d --name showup-redis -p 6380:6379 redis:7-alpine`), `cp .env.example .env.local` and add the LiveKit key/secret, then `npm run dev -- -p 3012`. LiveKit webhooks can't reach localhost, so `room_finished` cleanup and `egress_ended` recording readiness can only be tested on the VPS or through a tunnel.
