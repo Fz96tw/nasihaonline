@@ -9,6 +9,8 @@ import { LiveKitRoom, VideoConference, useChat, useParticipants, useRoomContext 
 import "@livekit/components-styles";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { getPublicMeetingClosingNote } from "@/lib/legal";
+import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/components/calendar/livekit-control-styles";
+import { PresenterOverlayControl } from "@/components/calendar/presenter-overlay-control";
 
 /**
  * Title/host banner pinned to the top of the call — per-viewer local state
@@ -395,27 +397,6 @@ function ChatCaptureListener({ chatEndpoint }: { chatEndpoint: string | null | u
   return null;
 }
 
-/**
- * Dark-theme control styling matching LiveKit's own `.lk-button` (from
- * `--lk-control-bg`/`--lk-control-hover-bg`/`--lk-border-radius` in
- * `data-lk-theme="default"`, which is always dark regardless of the app's
- * own light/dark mode). Hardcoded rather than reusing the `.lk-button`
- * class directly: that class's colors come from CSS custom properties
- * scoped to `[data-lk-theme]`, which is set on <LiveKitRoom>'s own root —
- * these controls render as siblings of it (see TopLeftOverlay), outside
- * that scope, so the variables wouldn't resolve. Reported 2026-08-26: the
- * previous light pill/backdrop-blur look read as visually disconnected
- * from the actual control bar right below it.
- */
-// px shrinks on mobile since the label text collapses to icon-only there
-// (see each button's own `hidden sm:inline` span) — same `sm` (640px)
-// breakpoint LiveKit's own ControlBar auto-switches to icon-only around.
-const LK_BUTTON_CLASS =
-  "inline-flex items-center gap-2 rounded-lg bg-[#1d1d1d] px-2.5 py-2.5 sm:px-4 text-sm text-white hover:bg-[#2a2a2a] disabled:opacity-50";
-const LK_BUTTON_ACTIVE_CLASS = "bg-[#373737] hover:bg-[#373737]";
-/** Matches `--lk-border-color: rgba(255,255,255,.1)` — for the dropdown panel and badges below, same dark-theme-consistency rationale as LK_BUTTON_CLASS. */
-const LK_PANEL_CLASS = "border-white/10 bg-[#1d1d1d] text-white";
-
 /** "4:59" / "0:07" — always minutes:seconds, no hours (recording limits are short, per-minute at most). */
 function formatSecondsRemaining(totalSeconds: number): string {
   const seconds = Math.max(0, totalSeconds);
@@ -738,14 +719,14 @@ function ParticipantsControl({
   );
 }
 
-/** Shared top-left overlay slot for Record and Participants — see RecordingControl's doc comment for why this corner (never the right, which LiveKit's chat panel can claim). Only used for non-quick-recording meetings — see QuickRecordingOverlay for the quick-recording equivalent. */
+/** Shared top-left overlay slot for Record, Participants, and the camera overlay controls (shown while sharing) — see RecordingControl's doc comment for why this corner (never the right, which LiveKit's chat panel can claim). Only used for non-quick-recording meetings — see QuickRecordingOverlay for the quick-recording equivalent (which also carries the camera overlay controls). */
 function TopLeftOverlay({ children }: { children: ReactNode }) {
   return <div className="pointer-events-none absolute left-4 top-4 z-50 flex flex-col items-start gap-2">{children}</div>;
 }
 
 /**
- * Quick-recording-only replacement for TopLeftOverlay — Record, Reset, and
- * Exit anchored bottom-right, positioned directly above LiveKit's own
+ * Quick-recording-only replacement for TopLeftOverlay — Record, Reset,
+ * the camera overlay controls, and Exit anchored bottom-right, positioned directly above LiveKit's own
  * bottom `.lk-control-bar` rather than overlapping it. Bottom-left was
  * tried first and reported (live testing) to collide with content already
  * occupying that corner — LiveKit's own per-tile participant metadata
@@ -781,6 +762,7 @@ function QuickRecordingOverlay({
   onReset,
   onExit,
   onError,
+  room,
 }: {
   recording: boolean;
   secondsRemaining: number | null;
@@ -791,6 +773,7 @@ function QuickRecordingOverlay({
   onReset: () => void;
   onExit: () => void;
   onError: (message: string) => void;
+  room: Room | null;
 }) {
   return (
     <div
@@ -803,6 +786,7 @@ function QuickRecordingOverlay({
           <RecordingControl recording={recording} startEndpoint={startEndpoint} stopEndpoint={stopEndpoint} onError={onError} />
         )}
         {recording && <ResetControl pending={resetPending} onClick={onReset} />}
+        <PresenterOverlayControl room={room} onError={onError} panelPlacement="above-right" />
         <ExitControl onClick={onExit} />
       </div>
     </div>
@@ -1063,6 +1047,7 @@ export function LiveKitMeetingScreen({
           resetPending={resetPending}
           onReset={handleReset}
           onExit={() => room?.disconnect()}
+          room={room}
           onError={pushToast}
         />
       ) : (
@@ -1083,6 +1068,7 @@ export function LiveKitMeetingScreen({
             kickEndpoint={kickEndpoint}
             onError={pushToast}
           />
+          <PresenterOverlayControl room={room} onError={pushToast} />
         </TopLeftOverlay>
       )}
       <LiveKitRoom
