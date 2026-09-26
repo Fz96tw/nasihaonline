@@ -1,14 +1,18 @@
 import "server-only";
+import { Readable } from "node:stream";
 import { Client as MinioClient } from "minio";
 import sharp from "sharp";
 
 const BUCKET_AVATARS = process.env.MINIO_BUCKET_AVATARS || "avatars";
-// Knowledge Library document/article/case-study binaries (§4.9) — never video.
+// Knowledge Library / Peer Review attachment binaries (§4.9): documents and images under
+// library/, browser-playable video (mp4/webm/mov) under review-video/.
 const BUCKET_DOCUMENTS = process.env.MINIO_BUCKET_DOCUMENTS || "documents";
 // Blog post hero images (§4.8) and other non-avatar image attachments.
 const BUCKET_ATTACHMENTS = process.env.MINIO_BUCKET_ATTACHMENTS || "attachments";
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB
 const MAX_DOCUMENT_UPLOAD_BYTES = 20 * 1024 * 1024; // 20MB
+/** Cap for video attachments: a few minutes of webcam/screen-capture footage. The reverse proxy's client_max_body_size must allow at least this much. */
+export const MAX_VIDEO_UPLOAD_BYTES = 500 * 1024 * 1024; // 500MB
 
 // Profile avatars are always resized/cropped to this square thumbnail before
 // storage — the original upload is never persisted or served at avatar size
@@ -177,16 +181,17 @@ export async function deleteAvatarObject(key: string | null): Promise<void> {
   await minio.removeObject(BUCKET_AVATARS, key).catch(() => undefined);
 }
 
-// KnowledgeAttachment binaries are "document/article/case-study only —
-// never for video" (§4.9). No fixed magic-byte check (unlike
+// KnowledgeAttachment / ReviewItemAttachment binaries are documents, images
+// and (browser-playable) video. No fixed magic-byte check (unlike
 // validateImageUpload) since legitimate documents come in many binary
 // formats pdf.js/the OS can't sniff from a handful of header bytes — instead
 // this validates the browser-declared MIME type against an explicit
 // allowlist. That allowlist doubles as XSS hardening: without it, an
 // uploaded .html/.svg file would be stored and later served back by
 // /api/library/document with a Content-Type that renders/executes in the
-// browser rather than downloading.
-const VIDEO_EXTENSIONS = ["mp4", "mov", "avi", "mkv", "webm", "wmv", "flv", "m4v"];
+// browser rather than downloading. Only mp4/webm/mov containers are allowed
+// as video, none of which execute script when rendered in a <video> tag.
+const ALLOWED_VIDEO_MIME_TYPES = new Set(["video/mp4", "video/webm", "video/quicktime"]);
 const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
   "application/pdf",
   "application/msword",
@@ -202,36 +207,36 @@ const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
 ]);
 
 /**
- * Validates a Knowledge Library document upload (size, not-a-video, and
- * MIME allowlist), then stores it in the documents/ bucket. Returns the
- * fields needed to populate a KnowledgeAttachment row — objectKey is not a
- * servable URL, same convention as Profile.avatarUrl.
+ * Validates a Knowledge Library / Peer Review attachment upload (MIME
+ * allowlist, then a size cap by kind: 20MB documents, 500MB video), then
+ * stores it in the documents/ bucket. Video is streamed to MinIO rather than
+ * buffered so a large file doesn't sit in server memory. Returns the fields
+ * needed to populate an attachment row — objectKey is not a servable URL,
+ * same convention as Profile.avatarUrl.
  */
 export async function uploadKnowledgeDocument(
   file: File,
 ): Promise<{ objectKey: string; fileName: string; mimeType: string; sizeBytes: number }> {
-  if (file.size > MAX_DOCUMENT_UPLOAD_BYTES) {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const isVideo = ALLOWED_VIDEO_MIME_TYPES.has(file.type);
+  if (!isVideo && !ALLOWED_DOCUMENT_MIME_TYPES.has(file.type)) {
+    throw new UploadValidationError(
+      "Unsupported file type — upload a PDF, Word, PowerPoint, plain text, image (JPEG/PNG/WebP/GIF/BMP) or video (MP4/WebM/MOV) file.",
+    );
+  }
+  if (isVideo && file.size > MAX_VIDEO_UPLOAD_BYTES) {
+    throw new UploadValidationError(`Video exceeds the ${MAX_VIDEO_UPLOAD_BYTES / (1024 * 1024)}MB size limit.`);
+  }
+  if (!isVideo && file.size > MAX_DOCUMENT_UPLOAD_BYTES) {
     throw new UploadValidationError("File exceeds the 20MB size limit.");
   }
 
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  if (file.type.startsWith("video/") || VIDEO_EXTENSIONS.includes(ext)) {
-    throw new UploadValidationError(
-      "Video files are not accepted here — submit a recorded lecture as a YouTube link instead.",
-    );
-  }
-  if (!ALLOWED_DOCUMENT_MIME_TYPES.has(file.type)) {
-    throw new UploadValidationError(
-      "Unsupported file type — upload a PDF, Word, PowerPoint, plain text, or image (JPEG/PNG/WebP/GIF/BMP) file.",
-    );
-  }
-
-  const buffer = Buffer.from(await file.arrayBuffer());
   await ensureBucket(BUCKET_DOCUMENTS);
-  const objectKey = `library/${crypto.randomUUID()}${ext ? `.${ext}` : ""}`;
+  const objectKey = `${isVideo ? "review-video" : "library"}/${crypto.randomUUID()}${ext ? `.${ext}` : ""}`;
   const minio = getClient();
   const mimeType = file.type || "application/octet-stream";
-  await minio.putObject(BUCKET_DOCUMENTS, objectKey, buffer, buffer.length, {
+  // Streamed, not buffered: fine for small files and required for video.
+  await minio.putObject(BUCKET_DOCUMENTS, objectKey, Readable.fromWeb(file.stream() as never), file.size, {
     "Content-Type": mimeType,
   });
   return { objectKey, fileName: file.name, mimeType, sizeBytes: file.size };
@@ -260,13 +265,28 @@ export function getReviewDocumentUrl(objectKey: string): string {
  */
 export async function getKnowledgeDocumentObject(
   objectKey: string,
-): Promise<{ stream: NodeJS.ReadableStream; contentType: string } | null> {
+): Promise<{ stream: NodeJS.ReadableStream; contentType: string; size: number } | null> {
   await ensureBucket(BUCKET_DOCUMENTS);
   const minio = getClient();
   try {
     const stat = await minio.statObject(BUCKET_DOCUMENTS, objectKey);
     const stream = await minio.getObject(BUCKET_DOCUMENTS, objectKey);
-    return { stream, contentType: stat.metaData["content-type"] || "application/octet-stream" };
+    return { stream, contentType: stat.metaData["content-type"] || "application/octet-stream", size: stat.size };
+  } catch {
+    return null;
+  }
+}
+
+/** Inclusive byte range [start, end] of a stored document, for HTTP Range requests (video seeking). */
+export async function getKnowledgeDocumentObjectRange(
+  objectKey: string,
+  start: number,
+  end: number,
+): Promise<NodeJS.ReadableStream | null> {
+  await ensureBucket(BUCKET_DOCUMENTS);
+  const minio = getClient();
+  try {
+    return await minio.getPartialObject(BUCKET_DOCUMENTS, objectKey, start, end - start + 1);
   } catch {
     return null;
   }

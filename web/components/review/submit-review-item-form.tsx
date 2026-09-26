@@ -27,9 +27,10 @@ import { InviteePicker } from "@/components/members/invitee-picker";
 
 // Mirrors ALLOWED_DOCUMENT_MIME_TYPES in lib/storage.ts (uploadKnowledgeDocument,
 // shared by Library and Peer Review) — a browser accept hint only, the
-// server re-validates regardless.
+// server re-validates regardless. Video (mp4/webm/mov) has a higher size cap
+// than documents (see MAX_VIDEO_UPLOAD_BYTES there).
 const DOCUMENT_ACCEPT =
-  "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,image/jpeg,image/png,image/webp,image/gif,image/bmp";
+  "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,image/jpeg,image/png,image/webp,image/gif,image/bmp,video/mp4,video/webm,video/quicktime";
 
 const DEFAULT_VALUES: CreateReviewItemValues = {
   title: "",
@@ -437,7 +438,9 @@ export function SubmitReviewItemForm({
                   className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
                 />
                 <p className="text-xs text-muted-foreground">
-                  PDF, Word, PowerPoint, plain text, or image (JPEG/PNG/WebP/GIF/BMP) — up to 20MB.
+                  {file?.type.startsWith("video/")
+                    ? "Video (MP4/WebM/MOV) — up to 500MB."
+                    : "PDF, Word, PowerPoint, plain text, or image (JPEG/PNG/WebP/GIF/BMP) up to 20MB, or video (MP4/WebM/MOV) up to 500MB."}
                 </p>
                 {existingItem?.attachment && (
                   <p className="text-xs text-muted-foreground">Choose a new file to replace the current one.</p>

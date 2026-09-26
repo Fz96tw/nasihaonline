@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { Readable } from "node:stream";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getKnowledgeDocumentObject } from "@/lib/storage";
+import { getKnowledgeDocumentObject, getKnowledgeDocumentObjectRange } from "@/lib/storage";
+import { parseByteRange } from "@/lib/http-range";
 import { canViewReviewItem } from "@/lib/review-server";
 
 /**
@@ -14,7 +15,7 @@ import { canViewReviewItem } from "@/lib/review-server";
  * is a separate table from KnowledgeAttachment and Peer Review has no
  * "published" visibility tier of its own.
  */
-export async function GET(_request: Request, { params }: { params: { key: string[] } }) {
+export async function GET(request: Request, { params }: { params: { key: string[] } }) {
   let user;
   try {
     user = await requireUser();
@@ -41,10 +42,25 @@ export async function GET(_request: Request, { params }: { params: { key: string
     return new NextResponse(null, { status: 404 });
   }
 
-  return new NextResponse(Readable.toWeb(object.stream as Readable) as ReadableStream, {
-    headers: {
-      "Content-Type": object.contentType,
-      "Cache-Control": "private, max-age=3600",
-    },
-  });
+  // Range support so a <video> can seek; the full-object path also advertises it.
+  const range = parseByteRange(request.headers.get("range"), object.size);
+  if (range === "unsatisfiable") {
+    (object.stream as Readable).destroy();
+    return new NextResponse(null, { status: 416, headers: { "Content-Range": `bytes */${object.size}` } });
+  }
+  const headers: Record<string, string> = {
+    "Content-Type": object.contentType,
+    "Cache-Control": "private, max-age=3600",
+    "Accept-Ranges": "bytes",
+  };
+  if (range) {
+    (object.stream as Readable).destroy();
+    const partial = await getKnowledgeDocumentObjectRange(objectKey, range.start, range.end);
+    if (!partial) return new NextResponse(null, { status: 404 });
+    headers["Content-Range"] = `bytes ${range.start}-${range.end}/${object.size}`;
+    headers["Content-Length"] = String(range.end - range.start + 1);
+    return new NextResponse(Readable.toWeb(partial as Readable) as ReadableStream, { status: 206, headers });
+  }
+  headers["Content-Length"] = String(object.size);
+  return new NextResponse(Readable.toWeb(object.stream as Readable) as ReadableStream, { headers });
 }

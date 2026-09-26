@@ -83,6 +83,35 @@ function isImageFile(mimeType: string, fileName: string): boolean {
   return mimeType.startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp|svg)$/i.test(fileName);
 }
 
+/** True for a browser-playable video upload (mp4/webm/mov) — rendered inline via VideoPreview. */
+function isVideoFile(mimeType: string, fileName: string): boolean {
+  return mimeType.startsWith("video/") || /\.(mp4|webm|mov)$/i.test(fileName);
+}
+
+/** Plays a video attachment inline with the native controls (seeking works via the proxy's Range support), with a Download button below. */
+function VideoPreview({ url, fileName }: { url: string; fileName: string }) {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return <UnsupportedFilePreview url={url} fileName={fileName} />;
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <video
+        src={url}
+        controls
+        preload="metadata"
+        className="max-h-[70vh] w-full rounded-md border bg-black"
+        onError={() => setFailed(true)}
+      >
+        {fileName}
+      </video>
+      <DownloadButton url={url} fileName={fileName} />
+    </div>
+  );
+}
+
 /** Renders an image attachment inline via the browser's native decoder, with a Download button below — same shape as TextPreview. */
 function ImagePreview({ url, fileName }: { url: string; fileName: string }) {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -450,6 +479,9 @@ export function ResourcePreview({
   }
 
   if (attachment) {
+    if (isVideoFile(attachment.mimeType, attachment.fileName)) {
+      return <VideoPreview url={attachment.url} fileName={attachment.fileName} />;
+    }
     if (isImageFile(attachment.mimeType, attachment.fileName)) {
       return <ImagePreview url={attachment.url} fileName={attachment.fileName} />;
     }

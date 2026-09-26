@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { Readable } from "node:stream";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getKnowledgeDocumentObject } from "@/lib/storage";
+import { getKnowledgeDocumentObject, getKnowledgeDocumentObjectRange } from "@/lib/storage";
+import { parseByteRange } from "@/lib/http-range";
 import { KnowledgeStatus } from "@/lib/generated/prisma/enums";
 
 /**
@@ -14,7 +15,7 @@ import { KnowledgeStatus } from "@/lib/generated/prisma/enums";
  * checks the owning KnowledgeItem's status/contributor, not just whether the
  * object exists.
  */
-export async function GET(_request: Request, { params }: { params: { key: string[] } }) {
+export async function GET(request: Request, { params }: { params: { key: string[] } }) {
   let user;
   try {
     user = await requireUser();
@@ -59,17 +60,36 @@ export async function GET(_request: Request, { params }: { params: { key: string
   // treated as a download instead, breaking the in-app preview. That's safe
   // to skip only because uploadKnowledgeDocument's MIME allowlist already
   // limits image/* uploads to raster formats (jpeg/png/webp/gif/bmp), none
-  // of which execute script when painted into an <img>.
+  // of which execute script when painted into an <img>. Video is exempted
+  // for the same reason: <video src> is likewise refused (treated as a
+  // download) under Content-Disposition: attachment, and the allowlist
+  // limits video/* to mp4/webm/mov, which don't execute script either.
   const headers: Record<string, string> = {
     "Content-Type": object.contentType,
     "X-Content-Type-Options": "nosniff",
     "Cache-Control": "private, max-age=3600",
+    "Accept-Ranges": "bytes",
   };
-  if (!object.contentType.startsWith("image/")) {
+  if (!object.contentType.startsWith("image/") && !object.contentType.startsWith("video/")) {
     const asciiFallbackName = attachment.fileName.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "'");
     headers["Content-Disposition"] =
       `attachment; filename="${asciiFallbackName}"; filename*=UTF-8''${encodeURIComponent(attachment.fileName)}`;
   }
 
+  // Range support so a <video> can seek.
+  const range = parseByteRange(request.headers.get("range"), object.size);
+  if (range === "unsatisfiable") {
+    (object.stream as Readable).destroy();
+    return new NextResponse(null, { status: 416, headers: { "Content-Range": `bytes */${object.size}` } });
+  }
+  if (range) {
+    (object.stream as Readable).destroy();
+    const partial = await getKnowledgeDocumentObjectRange(objectKey, range.start, range.end);
+    if (!partial) return new NextResponse(null, { status: 404 });
+    headers["Content-Range"] = `bytes ${range.start}-${range.end}/${object.size}`;
+    headers["Content-Length"] = String(range.end - range.start + 1);
+    return new NextResponse(Readable.toWeb(partial as Readable) as ReadableStream, { status: 206, headers });
+  }
+  headers["Content-Length"] = String(object.size);
   return new NextResponse(Readable.toWeb(object.stream as Readable) as ReadableStream, { headers });
 }
