@@ -1,7 +1,7 @@
 "use client";
 
 import { Download } from "lucide-react";
-import { formatDuration, formatSize, type RecordingViewJson } from "@/lib/recording-client";
+import { formatDuration, formatSize, markRecordingDownloaded, type RecordingViewJson } from "@/lib/recording-client";
 
 /** Download list for one recording. Links are single-use-ish presigned URLs (15 minutes), so a reload gets fresh ones. */
 export function RecordingParts({ view }: { view: RecordingViewJson }) {
@@ -32,6 +32,7 @@ export function RecordingParts({ view }: { view: RecordingViewJson }) {
                 <a
                   href={part.url}
                   download
+                  onClick={() => markRecordingDownloaded(view.recId)}
                   className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
                 >
                   <Download className="h-4 w-4" /> Download

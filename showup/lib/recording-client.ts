@@ -26,13 +26,37 @@ export function readSavedRecordings(): SavedRecording[] {
   }
 }
 
-/** Remembers a recording's recovery link on this device (newest first, 24-hour expiry, capped). */
-export function saveRecording(entry: Omit<SavedRecording, "savedAt">) {
+/**
+ * Remembers a recording's recovery link on this device (newest first, capped). Re-saving an entry keeps its
+ * original savedAt (so revisiting never extends the 24-hour life), its downloaded mark, and any known code.
+ */
+export function saveRecording(entry: Omit<SavedRecording, "savedAt" | "downloadedAt">) {
   try {
-    const kept = readSavedRecordings().filter((r) => r.recId !== entry.recId);
-    localStorage.setItem(SAVED_RECORDINGS_KEY, JSON.stringify([{ ...entry, savedAt: Date.now() }, ...kept].slice(0, 20)));
+    const all = readSavedRecordings();
+    const existing = all.find((r) => r.recId === entry.recId);
+    const merged: SavedRecording = {
+      ...existing,
+      ...entry,
+      code: entry.code || existing?.code || "",
+      savedAt: existing?.savedAt ?? Date.now(),
+    };
+    localStorage.setItem(SAVED_RECORDINGS_KEY, JSON.stringify([merged, ...all.filter((r) => r.recId !== entry.recId)].slice(0, 20)));
   } catch {
     // Storage unavailable: the link on screen (and the passcode) still work.
+  }
+}
+
+/** Marks a saved recording as downloaded on this device. No-op if it isn't saved here (e.g. opened via /recover). */
+export function markRecordingDownloaded(recId: string) {
+  try {
+    const all = readSavedRecordings();
+    if (!all.some((r) => r.recId === recId)) return;
+    localStorage.setItem(
+      SAVED_RECORDINGS_KEY,
+      JSON.stringify(all.map((r) => (r.recId === recId ? { ...r, downloadedAt: Date.now() } : r))),
+    );
+  } catch {
+    // Storage unavailable: the mark just isn't remembered.
   }
 }
 

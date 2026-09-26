@@ -27,7 +27,7 @@ export type RoomRecordingMetadata = { recording: boolean; egressId: string | nul
 
 /** localStorage key for the host's saved recording links on this device. */
 export const SAVED_RECORDINGS_KEY = "showup:recordings";
-export type SavedRecording = { recId: string; hostSecret: string; code: string; savedAt: number };
+export type SavedRecording = { recId: string; hostSecret: string; code: string; savedAt: number; downloadedAt?: number };
 
 /** sessionStorage key the landing page writes and the room page reads. Per-tab, so a second tab never inherits a meeting. */
 export const CREDENTIALS_STORAGE_KEY = "showup:credentials";

@@ -21,6 +21,9 @@ export function RecentRecordings() {
                 <Link href={recordingLink(rec.recId, rec.hostSecret)} className="underline">
                   Recording from {new Date(rec.savedAt).toLocaleString()}
                 </Link>
+                {rec.downloadedAt && (
+                  <span className="text-muted-foreground"> · downloaded {new Date(rec.downloadedAt).toLocaleString()}</span>
+                )}
               </li>
             ))}
           </ul>
