@@ -42,11 +42,11 @@ export default function RecoverPage() {
         <header className="flex flex-col gap-1">
           <PageHeading>Get my recording</PageHeading>
           <p className="text-sm text-muted-foreground">
-            Enter the code you used to start the meeting and the four-word passcode shown when it started. Only the host has these.
+            Enter the code you used to start the showup session and the four-word passcode shown when it started. Only the host has these.
           </p>
         </header>
         <form onSubmit={onSubmit} className="flex flex-col gap-3 rounded-xl border border-border bg-muted/40 p-5">
-          <label htmlFor="code" className="text-sm font-medium">Meeting code</label>
+          <label htmlFor="code" className="text-sm font-medium">Session code</label>
           <input id="code" value={code} onChange={(e) => setCode(e.target.value)} required autoComplete="off" spellCheck={false} className="rounded-md border border-border bg-background px-3 py-2 text-sm" />
           <label htmlFor="passcode" className="text-sm font-medium">Passcode</label>
           <input id="passcode" value={passcode} onChange={(e) => setPasscode(e.target.value)} required autoComplete="off" spellCheck={false} placeholder="four-words-like-this" className="rounded-md border border-border bg-background px-3 py-2 text-sm" />

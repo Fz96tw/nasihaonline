@@ -61,7 +61,7 @@ export async function POST(request: Request) {
     const room = await getLiveRoomStatus(roomName);
     if (!room) return unavailableResponse();
     if (!room.exists || room.numParticipants === 0) {
-      return NextResponse.json({ error: "Join the meeting before recording." }, { status: 409 });
+      return NextResponse.json({ error: "Join the showup session before recording." }, { status: 409 });
     }
 
     await ensureRecording({

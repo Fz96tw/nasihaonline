@@ -17,7 +17,7 @@ export function RecordingParts({ view }: { view: RecordingViewJson }) {
           {view.error}
         </p>
       )}
-      {view.status === "none" && <p className="text-sm text-muted-foreground">No recording was made in this meeting.</p>}
+      {view.status === "none" && <p className="text-sm text-muted-foreground">No recording was made in this showup session.</p>}
       {view.parts.length > 0 && (
         <ul className="flex flex-col gap-2">
           {view.parts.map((part) => (

@@ -80,7 +80,7 @@ function LobbyGuestInner({ credentials, onAdmitted, onLeave }: Props) {
         finished.current = true;
         onAdmitted(payload.credentials as RoomCredentials);
       } else if (payload?.status === "full") {
-        setNotice("You're approved, but the meeting is full right now. Waiting for a spot…");
+        setNotice("You're approved, but the showup session is full right now. Waiting for a spot…");
       }
     } catch {
       // Network blip: the next poll retries.
@@ -158,7 +158,7 @@ function LobbyGuestInner({ credentials, onAdmitted, onLeave }: Props) {
         </p>
         <p className="mt-2 text-sm text-muted-foreground">
           Turn on your webcam so the host can see who&apos;s asking to join. Only the host sees it, and you can&apos;t see or hear
-          the meeting until you&apos;re approved.
+          the showup session until you&apos;re approved.
         </p>
         <div className="mx-auto mt-4 aspect-video w-full max-w-xs overflow-hidden rounded-lg bg-black">
           {isCameraEnabled && cameraTrack ? (

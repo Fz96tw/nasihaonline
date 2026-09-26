@@ -43,7 +43,7 @@ export function RecordingBanner({ room }: { room: Room | null }) {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-14 z-50 flex justify-center px-2">
       <div role="status" className="flex items-center gap-2 rounded-full bg-red-600 px-4 py-1.5 text-sm font-medium text-white shadow-lg">
-        <Circle className="h-3 w-3 animate-pulse fill-white" /> This meeting is being recorded
+        <Circle className="h-3 w-3 animate-pulse fill-white" /> This showup session is being recorded
       </div>
     </div>
   );

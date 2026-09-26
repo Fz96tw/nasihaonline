@@ -749,7 +749,7 @@ export function PresenterOverlayControl({
             </select>
           </label>
           {guests.length === 0 ? (
-            <span className="text-white/50">Nobody else is in the meeting yet.</span>
+            <span className="text-white/50">Nobody else is in the showup session yet.</span>
           ) : (
             <ul className="space-y-1">
               {guests.map((guest) => {

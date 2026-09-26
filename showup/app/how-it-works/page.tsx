@@ -7,7 +7,7 @@ const STEPS = [
   { title: "Start with a code", body: "Pick any code you like (or tap Random) and share your screen." },
   { title: "Share the code", body: "Send the code to whoever should join. There are no accounts and no invites." },
   { title: "Guests join", body: "They enter the code and their name, and see your screen. Guests can ask to appear on it too." },
-  { title: "Record and download", body: "Optional. Hosts can record the meeting and download it when it ends. Recordings are deleted after 24 hours." },
+  { title: "Record and download", body: "Optional. Hosts can record the showup session and download it when it ends. Recordings are deleted after 24 hours." },
 ];
 
 export default function HowItWorksPage() {

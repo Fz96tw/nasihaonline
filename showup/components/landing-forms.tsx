@@ -200,8 +200,8 @@ function RoomCard({
 
         <p className="text-xs text-muted-foreground" data-testid="recording-disclosure">
           {isStart
-            ? "You can record your meeting. While it records, everyone sees a red \u201cThis meeting is being recorded\u201d banner. Recordings are deleted after 24 hours."
-            : "This meeting may be recorded by the host. If it is, you\u2019ll see a red banner for as long as it records. Recordings are deleted after 24 hours."}
+            ? "You can record your showup session. While it records, everyone sees a red \u201cThis showup session is being recorded\u201d banner. Recordings are deleted after 24 hours."
+            : "This showup session may be recorded by the host. If it is, you\u2019ll see a red banner for as long as it records. Recordings are deleted after 24 hours."}
         </p>
       </form>
     </div>

@@ -47,10 +47,10 @@ export async function POST(request: Request) {
     const room = await getLiveRoomStatus(roomName);
     if (!room) return unavailableResponse();
     if (!room.exists || room.numParticipants === 0) {
-      return NextResponse.json({ error: "This meeting has ended." }, { status: 404 });
+      return NextResponse.json({ error: "This showup session has ended." }, { status: 404 });
     }
     if (room.numParticipants >= MAX_PARTICIPANTS) {
-      return NextResponse.json({ status: "full", error: "The meeting is full right now. Trying again…" });
+      return NextResponse.json({ status: "full", error: "The showup session is full right now. Trying again…" });
     }
 
     // Mint first, consume second: a mint failure leaves the ticket intact for a retry, and a lost

@@ -115,7 +115,7 @@ export default function RecordingPage({ params }: { params: { recId: string } })
               <form onSubmit={requestEmail} className="flex flex-col gap-2 rounded-xl border border-border bg-muted/40 p-4">
                 <label htmlFor="email" className="text-sm font-medium">Email me the link</label>
                 <p className="text-xs text-muted-foreground">
-                  One email with this recording link, sent when the meeting has ended. We delete your address as soon as it&apos;s sent.
+                  One email with this recording link, sent when the showup session has ended. We delete your address as soon as it&apos;s sent.
                 </p>
                 <div className="flex gap-2">
                   <input

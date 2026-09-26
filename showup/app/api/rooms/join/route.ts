@@ -48,17 +48,17 @@ export async function POST(request: Request) {
     if (!status.exists || status.numParticipants === 0) {
       await rateLimit(badCodeKey, BAD_CODE_LIMIT);
       return NextResponse.json(
-        { error: "No live meeting with that code. Check the code, or ask the host to start it first." },
+        { error: "No live showup session with that code. Check the code, or ask the host to start it first." },
         { status: 404 },
       );
     }
     if (status.numParticipants >= MAX_PARTICIPANTS) {
-      return NextResponse.json({ error: "This meeting is full." }, { status: 409 });
+      return NextResponse.json({ error: "This showup session is full." }, { status: 409 });
     }
 
     // A guest the host rejected can't retry for a while, lobby on or not.
     if (await isBlocked(codeDigest(code), ip)) {
-      return NextResponse.json({ error: "The host declined your request to join this meeting." }, { status: 403 });
+      return NextResponse.json({ error: "The host declined your request to join this showup session." }, { status: 403 });
     }
 
     const identity = `guest-${randomUUID()}`;
