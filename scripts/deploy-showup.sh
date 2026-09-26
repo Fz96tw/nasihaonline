@@ -93,7 +93,7 @@ else
   esac
 fi
 
-echo "==> Deployed Showup $GIT_SHA."
+if [ "$DRY_RUN" = "1" ]; then echo "==> Dry run complete for $GIT_SHA (nothing was pushed or deployed)."; else echo "==> Deployed Showup $GIT_SHA."; fi
 
 echo "==> Cleaning up old local images..."
 docker images "$IMAGE" --format '{{.Tag}}' | grep -v -E "^(latest|$GIT_SHA)$" | while read -r tag; do
