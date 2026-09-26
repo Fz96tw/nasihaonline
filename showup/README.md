@@ -59,11 +59,11 @@ google-chrome --user-data-dir=/tmp/showup-guest --incognito \
 
 ## Recording (host only)
 
-The host's **Record** button (top right in the meeting) starts a LiveKit egress into the `showup-recordings` MinIO bucket; everyone sees a red "being recorded" banner while it runs. Each start/stop is one part of the host's recording; the host leaving stops it. When the host leaves, they land on `/recording/{recId}#{hostSecret}`, which polls until the parts are ready and lists 15-minute download links (the bucket is never public). Ways back to it:
+The host's **Record** button (top right in the showup session) starts a LiveKit egress into the `showup-recordings` MinIO bucket; everyone sees a red "being recorded" banner while it runs. Each start/stop is one part of the host's recording; the host leaving stops it. When the host leaves, they land on `/recording/{recId}#{hostSecret}`, which polls until the parts are ready and lists 15-minute download links (the bucket is never public). Ways back to it:
 
 1. the saved link (`/recording/{recId}#{hostSecret}`, also kept in this browser's localStorage and listed on the landing page);
-2. `/recover`: the meeting code plus the four-word passcode shown when recording starts (wrong guesses are throttled per code and per IP);
-3. "Email me the link" on the recording page (needs `RESEND_API_KEY`; one email per recording, sent once the meeting has ended and all parts are ready, then the address is deleted).
+2. `/recover`: the session code plus the four-word passcode shown when recording starts (wrong guesses are throttled per code and per IP);
+3. "Email me the link" on the recording page (needs `RESEND_API_KEY`; one email per recording, sent once the showup session has ended and all parts are ready, then the address is deleted).
 
 Guests and any other host who later reuses the code cannot see or download it: access needs the hostSecret (or the passcode). Files are deleted after 24 hours by the bucket's lifecycle rule (see the timing note in `vps/showup/README.md`); the recording page and its links stop working at 24 hours regardless.
 

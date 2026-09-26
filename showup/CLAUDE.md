@@ -1,6 +1,6 @@
 # CLAUDE.md (showup/)
 
-Showup is a free, no-account, code-based screen-share meeting service built on LiveKit, with the presenter webcam overlay. It lives in this folder of the Nasiha repo for now but is meant to be split into its own repo later.
+Showup is a free, no-account, code-based screen-share service built on LiveKit (each one is a "showup session" in user-facing text), with the presenter webcam overlay. It lives in this folder of the Nasiha repo for now but is meant to be split into its own repo later.
 
 ## Rules for this folder
 
@@ -16,7 +16,7 @@ Showup is a free, no-account, code-based screen-share meeting service built on L
 - `app/` Next.js App Router: landing page (`page.tsx`), room page (`room/`), API routes (`api/rooms/start`, `api/rooms/join`, `api/health`).
 - `lib/livekit.ts` server-only LiveKit helpers (token mint, room service, webhook verify). `lib/room-code.ts` code normalization and room naming.
 - `lib/presenter-overlay/compositor.ts` and `components/presenter-overlay-control.tsx` the client-side webcam overlay, copied from Nasiha's `web/`. The overlay is composited in the sharer's browser; no server involvement.
-- `components/showup-room.tsx` the in-meeting screen (LiveKit `VideoConference` plus overlay controls).
+- `components/showup-room.tsx` the in-session screen (LiveKit `VideoConference` plus overlay controls).
 - `lib/redis.ts` / `lib/rate-limit.ts` (copied from Nasiha, then adapted): Redis client that tolerates Redis being down, and the rate limiter. `lib/room-state.ts` holds the `showup:room:{digest}` code claims (SET NX, hostSecret reclaim). Routes catch dependency failures and answer 503 + Retry-After (`unavailableResponse`), never a 500. `api/webhooks/livekit` frees a code on `room_finished`. `api/health` always returns 200 with per-dependency status.
 - Recording (Showup 06): `lib/livekit-egress.ts` (start/stop/status), `lib/recordings.ts` (Redis hash per recording; hostSecret/passcode auth; reconcile with LiveKit so it works even if the webhook never arrives), `lib/recordings-storage.ts` (egress writes to the internal `MINIO_ENDPOINT`, downloads are presigned for `MINIO_PUBLIC_ENDPOINT`), `lib/recording-email.ts` (Resend). Routes: `api/rooms/recording` (host start/stop), `api/recordings/[recId]` (status + links), `api/recordings/lookup` (code + passcode), `api/recordings/[recId]/email`. Pages: `/recording/[recId]` (exit screen + recovery link), `/recover`. Never let a route return recording details without the hostSecret or matching passcode; unknown id and wrong secret must look identical (404).
 - Follow-the-speaker overlay (Showup 08): the compositor takes a list of camera sources (`addSource`/`removeSource`/`setVisible`), each with its own cut-out canvas, drawn at its real aspect ratio; only the host's own camera is mirrored, and only visible (or fading) sources are segmented, guests at most ~12 fps. `lib/presenter-overlay/speaker-follow.ts` is the pure, clock-free rule set for who is shown (sustained speech takeover, loudness margin, minimum dwell, silence keeps the last speaker, no-camera speakers ignored, pin, follow toggle); `components/presenter-overlay-control.tsx` samples the room every 100 ms and feeds it. `npm test` runs the unit tests (`node --test`). Not done: normalizing size by the person's mask height (the spec allows it to slip).
