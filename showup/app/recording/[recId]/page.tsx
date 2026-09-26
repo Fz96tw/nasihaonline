@@ -83,7 +83,7 @@ export default function RecordingPage({ params }: { params: { recId: string } })
     <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center gap-6 px-4 py-10">
       <header className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold tracking-tight">Your recording</h1>
-        <p className="text-sm text-muted-foreground">Bookmark this page: this link is your way back to the recording for 7 days.</p>
+        <p className="text-sm text-muted-foreground">Bookmark this page: this link is your way back to the recording for 24 hours.</p>
       </header>
 
       {state.kind === "loading" && <p className="text-sm text-muted-foreground">Loading…</p>}
@@ -95,7 +95,7 @@ export default function RecordingPage({ params }: { params: { recId: string } })
       )}
       {state.kind === "not-found" && (
         <p className="text-sm">
-          We couldn&apos;t find that recording. It may have expired (recordings are kept for 7 days) or the link is wrong. You can also{" "}
+          We couldn&apos;t find that recording. It may have expired (recordings are kept for 24 hours) or the link is wrong. You can also{" "}
           <Link href="/recover" className="underline">recover it with your code and passcode</Link>.
         </p>
       )}

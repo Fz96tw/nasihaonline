@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Idempotent provisioning of Showup's own MinIO recordings bucket: a separate
 # bucket, a scoped (non-root) user that can only touch that bucket, and a
-# 7-day expiry rule. Adapted from setup-minio-recordings.sh (Nasiha's), but
+# 1-day expiry rule. Adapted from setup-minio-recordings.sh (Nasiha's), but
 # Showup's credentials live in its own .env (vps/showup/.env.example) and the
 # MinIO container belongs to the Nasiha stack, so we find it by its compose
 # labels and `docker exec` into it directly, never through Nasiha's compose file.
@@ -26,7 +26,7 @@ MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-nasiha123}"
 BUCKET="$(get_env MINIO_RECORDINGS_BUCKET)"
 ACCESS_KEY="$(get_env MINIO_RECORDINGS_ACCESS_KEY)"
 SECRET_KEY="$(get_env MINIO_RECORDINGS_SECRET_KEY)"
-EXPIRE_DAYS="${EXPIRE_DAYS:-7}"
+EXPIRE_DAYS="${EXPIRE_DAYS:-1}"
 POLICY_NAME="showup-recordings-policy"
 
 : "${BUCKET:?MINIO_RECORDINGS_BUCKET not set in $ENV_FILE}"

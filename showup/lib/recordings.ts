@@ -16,9 +16,9 @@ import { presignRecordingDownload } from "@/lib/recordings-storage";
  *   e:{egressId}    JSON (PartRecord), one per egress
  *   finished        "1" once the LiveKit room has closed
  *   emailClaimed    "1" once one process owns sending the email (HSETNX)
- * Everything expires 7 days after creation, matching the bucket's lifecycle rule.
+ * Everything expires 24 hours after creation, matching the bucket's lifecycle rule.
  */
-export const RECORDING_TTL_SECONDS = 7 * 24 * 60 * 60;
+export const RECORDING_TTL_SECONDS = 24 * 60 * 60;
 
 const recKey = (recId: string) => `showup:rec:${recId}`;
 const egressKey = (egressId: string) => `showup:egress:${egressId}`;

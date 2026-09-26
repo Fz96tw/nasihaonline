@@ -65,7 +65,7 @@ The host's **Record** button (top right in the meeting) starts a LiveKit egress 
 2. `/recover`: the meeting code plus the four-word passcode shown when recording starts (wrong guesses are throttled per code and per IP);
 3. "Email me the link" on the recording page (needs `RESEND_API_KEY`; one email per recording, sent once the meeting has ended and all parts are ready, then the address is deleted).
 
-Guests and any other host who later reuses the code cannot see or download it: access needs the hostSecret (or the passcode). Files are deleted after 7 days by the bucket's lifecycle rule.
+Guests and any other host who later reuses the code cannot see or download it: access needs the hostSecret (or the passcode). Files are deleted after 24 hours by the bucket's lifecycle rule (see the timing note in `vps/showup/README.md`); the recording page and its links stop working at 24 hours regardless.
 
 Locally, recording needs real storage credentials and an egress that can reach the bucket, so it is only fully testable on the VPS. With fake credentials you can still exercise the banner, host-only control and the "recording failed" path.
 

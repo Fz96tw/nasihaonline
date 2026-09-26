@@ -18,11 +18,13 @@ Steps marked **(affects Nasiha)** touch shared production pieces, so do them whe
    scp vps/showup/docker-compose.yml 50.6.224.185:/home/ubuntu/showup/
    scp vps/showup/.env.example 50.6.224.185:/home/ubuntu/showup/.env   # then edit: LiveKit key/secret, MinIO secret (openssl rand -hex 24)
    ```
-3. **MinIO bucket + scoped user + 7-day expiry** (adds a bucket to the shared MinIO; touches nothing existing):
+3. **MinIO bucket + scoped user + 1-day expiry** (adds a bucket to the shared MinIO; touches nothing existing):
    ```bash
    scp scripts/setup-minio-showup-recordings.sh 50.6.224.185:/home/ubuntu/showup/
    ssh 50.6.224.185 '/home/ubuntu/showup/setup-minio-showup-recordings.sh'
    ```
+   **Recording retention is 24 hours.** The app enforces it itself: the recording's Redis keys expire 24 hours after it is created (`RECORDING_TTL_SECONDS`), after which the recording page, download links and recovery by code all stop working. The bucket rule removes the files. MinIO lifecycle rules work in whole days and run on a daily sweep, so the bytes can linger for up to about a day after the recording becomes unreachable.
+   The script only adds the rule when none exists, so a bucket created earlier keeps its old 7-day rule. To change a live bucket, on the VPS: `mc ilm rule ls local/showup-recordings`, then `mc ilm rule edit --id <rule-id> --expire-days 1 local/showup-recordings` (run through the MinIO container, as the script does).
 4. **Start Showup's Redis**: `ssh 50.6.224.185 'cd /home/ubuntu/showup && docker compose up -d showup-redis'`
 5. **nginx-proxy-manager alias (affects Nasiha)**: the hairpin-NAT fix, so LiveKit's webhook to `showup.cloudcurio.com` reaches the proxy from inside the host. `../docker-compose.yml` already lists the alias; copy it up and recreate only the proxy (a few seconds of blip for every site on it):
    ```bash

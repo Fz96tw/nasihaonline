@@ -5,7 +5,7 @@ import { formatDuration, formatSize, type RecordingViewJson } from "@/lib/record
 
 /** Download list for one recording. Links are single-use-ish presigned URLs (15 minutes), so a reload gets fresh ones. */
 export function RecordingParts({ view }: { view: RecordingViewJson }) {
-  const expires = new Date(view.expiresAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const expires = new Date(view.expiresAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   return (
     <div className="flex flex-col gap-3">
       {view.status === "processing" && (

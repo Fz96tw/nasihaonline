@@ -43,8 +43,8 @@ export async function maybeSendRecordingEmail(recId: string): Promise<"sent" | "
       to: pending.email,
       subject: ok ? "Your Showup recording is ready" : "Your Showup recording",
       text: ok
-        ? `Your screen-share recording is ready to download:\n\n${link}\n\nThe link and the recording expire 7 days after the meeting. Anyone with this link can download the recording, so keep it private.\n\n- Showup`
-        : `Showup couldn't finish your recording. Details and any recovered parts:\n\n${link}\n\nThe link expires 7 days after the meeting.\n\n- Showup`,
+        ? `Your screen-share recording is ready to download:\n\n${link}\n\nThe link and the recording expire 24 hours after the recording started. Anyone with this link can download the recording, so keep it private.\n\n- Showup`
+        : `Showup couldn't finish your recording. Details and any recovered parts:\n\n${link}\n\nThe link expires 24 hours after the recording started.\n\n- Showup`,
     });
     if (error) throw new Error(error.message);
     await deletePendingEmail(recId);

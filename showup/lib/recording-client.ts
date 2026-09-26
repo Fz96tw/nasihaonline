@@ -21,11 +21,11 @@ export function readSavedRecordings(): SavedRecording[] {
   }
 }
 
-/** Remembers a recording's recovery link on this device (newest first, 7-day expiry, capped). */
+/** Remembers a recording's recovery link on this device (newest first, 24-hour expiry, capped). */
 export function saveRecording(entry: Omit<SavedRecording, "savedAt">) {
   try {
-    const week = 7 * 24 * 60 * 60 * 1000;
-    const kept = readSavedRecordings().filter((r) => r.recId !== entry.recId && Date.now() - r.savedAt < week);
+    const day = 24 * 60 * 60 * 1000;
+    const kept = readSavedRecordings().filter((r) => r.recId !== entry.recId && Date.now() - r.savedAt < day);
     localStorage.setItem(SAVED_RECORDINGS_KEY, JSON.stringify([{ ...entry, savedAt: Date.now() }, ...kept].slice(0, 20)));
   } catch {
     // Storage unavailable: the link on screen (and the passcode) still work.
