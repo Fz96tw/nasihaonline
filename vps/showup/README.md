@@ -29,7 +29,7 @@ Steps marked **(affects Nasiha)** touch shared production pieces, so do them whe
    scp vps/docker-compose.yml 50.6.224.185:/home/ubuntu/nasiha/docker-compose.yml
    ssh 50.6.224.185 'cd /home/ubuntu/nasiha && docker compose up -d --no-deps nginxproxymanager'
    ```
-6. **Proxy host** (NPM admin UI, via SSH tunnel to 127.0.0.1:81): domain `showup.cloudcurio.com` → scheme `http`, forward host `showup`, port `3000`, enable **Websockets Support**, SSL tab: request a Let's Encrypt cert, **Force SSL**. (Needs step 1's DNS to resolve first.)
+6. **Proxy host**: run `scripts/setup-nginx-showup-proxy.sh` on the VPS (`scp` it up, then `ssh -t 50.6.224.185 /home/ubuntu/showup/setup-nginx-showup-proxy.sh`; it prompts for the NPM admin login and is idempotent). Or by hand in the NPM admin UI (SSH tunnel to 127.0.0.1:81): domain `showup.cloudcurio.com` → scheme `http`, forward host `showup`, port `3000`, enable **Websockets Support**, SSL tab: request a Let's Encrypt cert, **Force SSL**. (Needs step 1's DNS to resolve first.)
 7. **First deploy**: `scripts/deploy-showup.sh`. It builds, pushes, recreates `showup` only, and passes when `https://showup.cloudcurio.com/api/health` returns 200.
 8. **LiveKit webhook (affects Nasiha; restarts LiveKit, which drops live meetings)**: add `https://showup.cloudcurio.com/api/webhooks/livekit` under `webhook.urls` (see `../livekit.yaml.example`). The real file is sops-encrypted:
    ```bash
