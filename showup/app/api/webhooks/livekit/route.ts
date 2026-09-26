@@ -4,6 +4,7 @@ import { stopEgress } from "@/lib/livekit-egress";
 import { digestFromRoomName } from "@/lib/room-code";
 import { maybeSendRecordingEmail } from "@/lib/recording-email";
 import { applyEgressResult, markRoomFinished } from "@/lib/recordings";
+import { clearLobbyFlag } from "@/lib/lobby";
 import { getRoomState, refreshRoom, releaseRoom } from "@/lib/room-state";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +43,7 @@ export async function POST(request: Request) {
 
     if (event.event === "room_finished") {
       await releaseRoom(digest);
+      await clearLobbyFlag(digest);
       const recId = await markRoomFinished(digest);
       if (recId) await maybeSendRecordingEmail(recId);
     } else if (event.event === "participant_joined" || event.event === "participant_left") {

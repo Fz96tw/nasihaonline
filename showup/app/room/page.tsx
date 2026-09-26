@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { LobbyGuestScreen } from "@/components/lobby-guest-screen";
 import { ShowupRoom } from "@/components/showup-room";
 import { RECORDED_FLAG } from "@/components/recording-controls";
 import { recordingLink } from "@/lib/recording-client";
@@ -104,6 +105,27 @@ export default function RoomPage() {
       <div className="flex min-h-screen items-center justify-center p-8 text-center">
         <p className="text-muted-foreground">Connecting…</p>
       </div>
+    );
+  }
+
+  if (credentials.lobby) {
+    const leaveLobby = () => {
+      try {
+        sessionStorage.removeItem(CREDENTIALS_STORAGE_KEY);
+      } catch {
+        // Storage unavailable: nothing to clear.
+      }
+      router.replace("/");
+    };
+    return (
+      <LobbyGuestScreen
+        credentials={credentials}
+        onLeave={leaveLobby}
+        onAdmitted={(admitted) => {
+          storeCredentials(admitted);
+          setCredentials(admitted);
+        }}
+      />
     );
   }
 

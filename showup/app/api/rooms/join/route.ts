@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { getLiveRoomStatus, MAX_PARTICIPANTS, mintLiveKitToken } from "@/lib/livekit";
+import { getLiveRoomStatus, MAX_PARTICIPANTS, mintLiveKitToken, mintLobbyGuestToken } from "@/lib/livekit";
+import { addPendingGuest, isBlocked, isLobbyEnabled, lobbyRoomName } from "@/lib/lobby";
 import { codeDigest, roomNameForCode } from "@/lib/room-code";
 import { clientIp, isRateLimited, rateLimit } from "@/lib/rate-limit";
 import { isSameOrigin } from "@/lib/same-origin";
@@ -55,7 +56,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "This meeting is full." }, { status: 409 });
     }
 
+    // A guest the host rejected can't retry for a while, lobby on or not.
+    if (await isBlocked(codeDigest(code), ip)) {
+      return NextResponse.json({ error: "The host declined your request to join this meeting." }, { status: 403 });
+    }
+
     const identity = `guest-${randomUUID()}`;
+
+    // Lobby on: the guest gets a lobby token only, never a main-room token. That
+    // holds for late joiners too, since this is the only place a guest token is minted.
+    if (await isLobbyEnabled(codeDigest(code))) {
+      const lobbyCredentials = await mintLobbyGuestToken(lobbyRoomName(codeDigest(code)), identity, name);
+      if (!lobbyCredentials) return unavailableResponse();
+      const lobbySecret = await addPendingGuest(codeDigest(code), identity, name, ip);
+      const lobbyBody: RoomCredentials = { ...lobbyCredentials, role: "guest", identity, code, name, lobby: true, lobbySecret };
+      return NextResponse.json(lobbyBody);
+    }
+
     const credentials = await mintLiveKitToken(roomName, identity, name, "guest");
     if (!credentials) return unavailableResponse();
 

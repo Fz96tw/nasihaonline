@@ -1,5 +1,5 @@
 import "server-only";
-import { AccessToken, RoomServiceClient, WebhookReceiver } from "livekit-server-sdk";
+import { AccessToken, DataPacket_Kind, RoomServiceClient, TrackSource, WebhookReceiver } from "livekit-server-sdk";
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
@@ -200,5 +200,75 @@ export async function removeLiveKitParticipant(roomName: string, identity: strin
   } catch (error) {
     console.error("[livekit] Failed to remove participant", error);
     return false;
+  }
+}
+
+/** How long a lobby token (and so a guest's wait) is valid. */
+const LOBBY_TOKEN_TTL_SECONDS = 2 * 60 * 60;
+
+/**
+ * Mints a token for the lobby room. A waiting guest can publish their camera
+ * and nothing else (no mic, no screen, no data) and subscribes to nothing, so
+ * they can't see or hear the lobby's other guests, let alone the main meeting.
+ */
+export async function mintLobbyGuestToken(lobbyRoomName: string, identity: string, name: string): Promise<LiveKitJoinCredentials | null> {
+  if (!LIVEKIT_URL || !LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) return null;
+  try {
+    const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+      identity,
+      name,
+      ttl: LOBBY_TOKEN_TTL_SECONDS,
+      metadata: JSON.stringify({ role: "lobby" }),
+    });
+    token.addGrant({
+      room: lobbyRoomName,
+      roomJoin: true,
+      canPublish: true,
+      canPublishSources: [TrackSource.CAMERA],
+      canPublishData: false,
+      canSubscribe: false,
+    });
+    return { token: await token.toJwt(), serverUrl: LIVEKIT_URL };
+  } catch (error) {
+    console.error("[livekit] Failed to mint lobby guest token", error);
+    return null;
+  }
+}
+
+/** The host's lobby connection: hidden from guests, subscribe-only (it publishes nothing, so it can't be mistaken for a participant). */
+export async function mintLobbyHostToken(lobbyRoomName: string, identity: string): Promise<LiveKitJoinCredentials | null> {
+  if (!LIVEKIT_URL || !LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) return null;
+  try {
+    const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+      identity: `${identity}-lobby`,
+      ttl: TOKEN_TTL_SECONDS,
+      metadata: JSON.stringify({ role: "lobby-host" }),
+    });
+    token.addGrant({
+      room: lobbyRoomName,
+      roomJoin: true,
+      hidden: true,
+      canPublish: false,
+      canPublishData: false,
+      canSubscribe: true,
+    });
+    return { token: await token.toJwt(), serverUrl: LIVEKIT_URL };
+  } catch (error) {
+    console.error("[livekit] Failed to mint lobby host token", error);
+    return null;
+  }
+}
+
+/** Sends a small JSON message to one lobby guest (sent by the server, so a guest can't forge an approval). Best-effort: guests also poll. */
+export async function sendLobbyMessage(lobbyRoomName: string, identity: string, message: { type: "approved" | "rejected" }): Promise<void> {
+  const roomService = getRoomServiceClient();
+  if (!roomService) return;
+  try {
+    await roomService.sendData(lobbyRoomName, new TextEncoder().encode(JSON.stringify(message)), DataPacket_Kind.RELIABLE, {
+      destinationIdentities: [identity],
+      topic: "lobby",
+    });
+  } catch (error) {
+    console.error("[livekit] Failed to send lobby message", error);
   }
 }

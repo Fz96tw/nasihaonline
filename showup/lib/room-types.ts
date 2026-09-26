@@ -14,6 +14,10 @@ export type RoomCredentials = {
   hostSecret?: string;
   /** Host only. Id of this meeting's recording (which exists once the host first records). */
   recId?: string;
+  /** Guest only. True while `token` is a lobby token (camera-only, no access to the meeting) rather than a main-room token. */
+  lobby?: boolean;
+  /** Guest in the lobby only. Presented with `identity` to /api/rooms/lobby/redeem to collect an approval. */
+  lobbySecret?: string;
   /** Host only. Four-word passcode shown once at start; with the code it recovers the recording if the link is lost. */
   passcode?: string;
 };
@@ -27,3 +31,7 @@ export type SavedRecording = { recId: string; hostSecret: string; code: string; 
 
 /** sessionStorage key the landing page writes and the room page reads. Per-tab, so a second tab never inherits a meeting. */
 export const CREDENTIALS_STORAGE_KEY = "showup:credentials";
+
+/** Data message the server sends a lobby guest on the "lobby" topic when the host decides. */
+export type LobbyMessage = { type: "approved" | "rejected" };
+export const LOBBY_TOPIC = "lobby";
