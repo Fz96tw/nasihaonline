@@ -17,10 +17,12 @@ export default function HomePage() {
           </h1>
         </div>
         <p className="-mt-3 text-balance text-lg font-medium">Show up. Share your screen. Step in.</p>
-        <p className="-mt-2 text-muted-foreground">Share your screen with anyone using just a code. Free, no account needed.</p>
       </header>
 
-      <LandingForms />
+      <div className="flex flex-col gap-4">
+        <p className="text-center text-muted-foreground">Share your screen with anyone using just a code. Free, no account needed.</p>
+        <LandingForms />
+      </div>
 
       <RecentRecordings />
 
