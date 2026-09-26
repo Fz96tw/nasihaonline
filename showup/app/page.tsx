@@ -6,15 +6,13 @@ import { RecentRecordings } from "@/components/recent-recordings";
 export default function HomePage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-10 px-4 py-10 sm:py-14">
-      <header className="flex flex-col items-center gap-4 text-center">
-        <div className="flex flex-col items-center gap-4 sm:flex-row sm:gap-5 sm:text-left">
-          {/* Slightly shorter than the title and tagline together, centred beside them. */}
-          <Logo className="h-[4.5rem] w-auto sm:h-16" />
-          <div className="flex flex-col">
-            <h1 className="text-4xl font-bold leading-none tracking-tight text-purple-600">Showup</h1>
-            <p className="-mt-0.5 text-balance text-lg font-medium">Show up. Share your screen. Step into it.</p>
-          </div>
+      <header className="flex flex-col items-center gap-3 text-center">
+        <div className="flex items-center gap-3 sm:gap-4">
+          {/* The title is sized so its letters are as tall as the logo. */}
+          <Logo className="h-[3.25rem] w-auto sm:h-16" />
+          <h1 className="-translate-y-1.5 text-[3.4rem] font-bold leading-none tracking-tight text-purple-600 sm:-translate-y-2 sm:text-[4.25rem]">Showup</h1>
         </div>
+        <p className="text-balance text-lg font-medium">Show up. Share your screen. Step in.</p>
         <p className="text-muted-foreground">Share your screen with anyone using just a code. Free, no account needed.</p>
       </header>
 
