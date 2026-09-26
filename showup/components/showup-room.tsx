@@ -7,6 +7,7 @@ import { LiveKitRoom, VideoConference, useLocalParticipant, useRoomContext } fro
 import "@livekit/components-styles";
 import { PresenterOverlayControl } from "@/components/presenter-overlay-control";
 import { LK_BUTTON_CLASS } from "@/components/livekit-control-styles";
+import { HostRecordingPanel, RecordingBanner } from "@/components/recording-controls";
 import { isPresenterOverlaySupported } from "@/lib/presenter-overlay/compositor";
 import type { RoomCredentials } from "@/lib/room-types";
 
@@ -240,6 +241,8 @@ export function ShowupRoom({ credentials, onLeave }: { credentials: RoomCredenti
   return (
     <div className="fixed inset-0 z-[60] bg-background">
       <MeetingBanner code={credentials.code} isHost={isHost} />
+      <RecordingBanner room={room} />
+      {isHost && <HostRecordingPanel credentials={credentials} room={room} />}
       {isHost && !sharing && <SharePrompt room={room} onError={pushToast} />}
       <Toasts toasts={toasts} />
       <TopLeftOverlay>

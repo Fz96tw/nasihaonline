@@ -9,6 +9,11 @@ export type RoomState = {
   hostSecret: string;
   /** Epoch ms. Used to tell a fresh claim (host still connecting) from a stale one. */
   createdAt: number;
+  /** This meeting's recording id, fixed at start so the host can be told it before any recording exists. */
+  recId: string;
+  /** Recovery passcode (host sees the plain text once at start; only the salted hash is kept). */
+  passcodeSalt: string;
+  passcodeHash: string;
 };
 
 /**

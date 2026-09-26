@@ -95,6 +95,7 @@ function RoomForm({ mode }: { mode: Mode }) {
           )}
         </div>
         {isStart && <p className="text-xs text-muted-foreground">At least 6 characters. Anyone with the code can join.</p>}
+        {!isStart && <p className="text-xs text-muted-foreground">This meeting may be recorded by the host. You&apos;ll see a banner if it is.</p>}
       </div>
 
       <div className="flex flex-col gap-1.5">

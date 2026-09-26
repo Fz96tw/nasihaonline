@@ -1,4 +1,5 @@
 import { LandingForms } from "@/components/landing-forms";
+import { RecentRecordings } from "@/components/recent-recordings";
 
 export default function HomePage() {
   return (
@@ -10,6 +11,7 @@ export default function HomePage() {
         </p>
       </header>
       <LandingForms />
+      <RecentRecordings />
     </main>
   );
 }

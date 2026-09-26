@@ -57,12 +57,24 @@ google-chrome --user-data-dir=/tmp/showup-guest --incognito \
   http://localhost:3012
 ```
 
+## Recording (host only)
+
+The host's **Record** button (top right in the meeting) starts a LiveKit egress into the `showup-recordings` MinIO bucket; everyone sees a red "being recorded" banner while it runs. Each start/stop is one part of the host's recording; the host leaving stops it. When the host leaves, they land on `/recording/{recId}#{hostSecret}`, which polls until the parts are ready and lists 15-minute download links (the bucket is never public). Ways back to it:
+
+1. the saved link (`/recording/{recId}#{hostSecret}`, also kept in this browser's localStorage and listed on the landing page);
+2. `/recover`: the meeting code plus the four-word passcode shown when recording starts (wrong guesses are throttled per code and per IP);
+3. "Email me the link" on the recording page (needs `RESEND_API_KEY`; one email per recording, sent once the meeting has ended and all parts are ready, then the address is deleted).
+
+Guests and any other host who later reuses the code cannot see or download it: access needs the hostSecret (or the passcode). Files are deleted after 7 days by the bucket's lifecycle rule.
+
+Locally, recording needs real storage credentials and an egress that can reach the bucket, so it is only fully testable on the VPS. With fake credentials you can still exercise the banner, host-only control and the "recording failed" path.
+
 ## What can't be tested locally
 
 | Feature | Why | Fallback |
 | --- | --- | --- |
 | Instant code cleanup on `room_finished` (`/api/webhooks/livekit`) | LiveKit sends webhooks to its configured public URLs (the VPS), which can't reach `localhost` | The abandoned-claim takeover and the claim TTL free the code instead (see above). To test the real path, deploy to the VPS, or post a signed webhook to localhost yourself |
-| Recording readiness on `egress_ended` | Same webhook limitation, so the "recording is ready" event never arrives | Test recording on the VPS after deploy, or expose the dev server with a tunnel (e.g. `ngrok http 3012`) and point a LiveKit webhook at it |
+| Recording readiness via the `egress_ended` webhook | Same webhook limitation, so the "recording is ready" event never arrives | Test recording on the VPS after deploy, or expose the dev server with a tunnel (e.g. `ngrok http 3012`) and point a LiveKit webhook at it |
 | Anything needing the public domain or HTTPS from a LAN device | `localhost` is the only secure context | Use a tunnel, or test on the VPS |
 
 Start/join, the room screen, the webcam overlay and host controls all work locally.

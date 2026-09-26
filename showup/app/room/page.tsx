@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ShowupRoom } from "@/components/showup-room";
+import { RECORDED_FLAG } from "@/components/recording-controls";
+import { recordingLink } from "@/lib/recording-client";
 import { CREDENTIALS_STORAGE_KEY, type RoomCredentials } from "@/lib/room-types";
 
 function storeCredentials(credentials: RoomCredentials) {
@@ -27,7 +29,7 @@ async function reclaimHost(stored: RoomCredentials): Promise<RoomCredentials | "
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ code: stored.code, name: stored.name, hostSecret: stored.hostSecret }),
     });
-    if (res.ok) return (await res.json()) as RoomCredentials;
+    if (res.ok) return { ...((await res.json()) as RoomCredentials), passcode: stored.passcode };
     if (res.status === 409) return "lost";
   } catch {
     // Network problem: keep the stored credentials.
@@ -110,10 +112,24 @@ export default function RoomPage() {
       credentials={credentials}
       onLeave={() => {
         if (unloading.current) return;
+        let recorded = false;
         try {
+          recorded = credentials.role === "host" && sessionStorage.getItem(RECORDED_FLAG) === "1";
           sessionStorage.removeItem(CREDENTIALS_STORAGE_KEY);
+          sessionStorage.removeItem(RECORDED_FLAG);
         } catch {
           // Storage unavailable: nothing to clear.
+        }
+        if (recorded && credentials.recId && credentials.hostSecret) {
+          // Leaving ends any recording in progress; go straight to the download screen.
+          void fetch("/api/rooms/recording", {
+            method: "POST",
+            keepalive: true,
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ code: credentials.code, hostSecret: credentials.hostSecret, action: "stop" }),
+          }).catch(() => undefined);
+          router.replace(recordingLink(credentials.recId, credentials.hostSecret));
+          return;
         }
         router.replace("/");
       }}

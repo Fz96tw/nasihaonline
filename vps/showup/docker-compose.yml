@@ -57,6 +57,14 @@ services:
       MINIO_RECORDINGS_BUCKET: ${MINIO_RECORDINGS_BUCKET:-showup-recordings}
       MINIO_RECORDINGS_ACCESS_KEY: ${MINIO_RECORDINGS_ACCESS_KEY:-}
       MINIO_RECORDINGS_SECRET_KEY: ${MINIO_RECORDINGS_SECRET_KEY:-}
+      # Downloads are presigned for the address the host's BROWSER can reach (the
+      # existing vps-s3 proxy host), while egress writes over MINIO_ENDPOINT above.
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-vps-s3.nasihaforyou.org}
+      MINIO_PUBLIC_PORT: ${MINIO_PUBLIC_PORT:-443}
+      MINIO_PUBLIC_USE_SSL: ${MINIO_PUBLIC_USE_SSL:-true}
+      # "Email me the link" (optional; the button is hidden when unset).
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Showup <no-reply@mail.nasihaforyou.org>}
     depends_on:
       showup-redis:
         condition: service_healthy

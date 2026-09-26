@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { createLiveKitRoom, getLiveRoomStatus, mintLiveKitToken } from "@/lib/livekit";
 import { codeDigest, roomNameForCode } from "@/lib/room-code";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
@@ -14,6 +14,7 @@ import {
   secretsMatch,
   type RoomState,
 } from "@/lib/room-state";
+import { generatePasscode, hashPasscode, newRecordingId } from "@/lib/recordings";
 import { isSameOrigin } from "@/lib/same-origin";
 import { firstIssueMessage, roomRequestSchema, tooManyRequestsResponse, unavailableResponse } from "@/lib/rooms-api";
 import type { RoomCredentials } from "@/lib/room-types";
@@ -65,6 +66,8 @@ export async function POST(request: Request) {
         code,
         name,
         hostSecret: existing.hostSecret,
+        // The passcode isn't recoverable from its hash; the tab keeps the plain text it was shown at start.
+        recId: existing.recId,
       };
       return NextResponse.json(body);
     }
@@ -73,7 +76,16 @@ export async function POST(request: Request) {
     if (!limited.success) return tooManyRequestsResponse(limited.reset);
 
     const identity = `host-${randomUUID()}`;
-    const state: RoomState = { hostIdentity: identity, hostSecret: newHostSecret(), createdAt: Date.now() };
+    const passcode = generatePasscode();
+    const passcodeSalt = randomBytes(16).toString("hex");
+    const state: RoomState = {
+      hostIdentity: identity,
+      hostSecret: newHostSecret(),
+      createdAt: Date.now(),
+      recId: newRecordingId(),
+      passcodeSalt,
+      passcodeHash: hashPasscode(passcode, passcodeSalt),
+    };
 
     let claimed = await claimRoom(digest, state);
     if (!claimed) {
@@ -119,6 +131,8 @@ export async function POST(request: Request) {
       code,
       name,
       hostSecret: state.hostSecret,
+      recId: state.recId,
+      passcode,
     };
     return NextResponse.json(body);
   } catch (error) {

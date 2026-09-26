@@ -12,7 +12,18 @@ export type RoomCredentials = {
   name: string;
   /** Host only. Proves this tab started the meeting; presented to /api/rooms/start to reclaim host. Never sent to guests. */
   hostSecret?: string;
+  /** Host only. Id of this meeting's recording (which exists once the host first records). */
+  recId?: string;
+  /** Host only. Four-word passcode shown once at start; with the code it recovers the recording if the link is lost. */
+  passcode?: string;
 };
+
+/** Metadata LiveKit pushes to everyone in the room (see RoomMetadata in lib/livekit.ts); read by the recording banner. */
+export type RoomRecordingMetadata = { recording: boolean; egressId: string | null };
+
+/** localStorage key for the host's saved recording links on this device. */
+export const SAVED_RECORDINGS_KEY = "showup:recordings";
+export type SavedRecording = { recId: string; hostSecret: string; code: string; savedAt: number };
 
 /** sessionStorage key the landing page writes and the room page reads. Per-tab, so a second tab never inherits a meeting. */
 export const CREDENTIALS_STORAGE_KEY = "showup:credentials";
