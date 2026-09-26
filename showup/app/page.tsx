@@ -7,9 +7,9 @@ export default function HomePage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-10 px-4 py-10 sm:py-14">
       <header className="flex flex-col items-center gap-3 text-center">
-        {/* The logo sits on the title's baseline and is a little taller than its capital letters; the p's tail hangs below both. */}
+        {/* The logo sits on the title's baseline and is as tall as the title's font size, taller than its capital letters. */}
         <div className="flex items-baseline gap-3 text-[3.4rem] leading-none sm:gap-4 sm:text-[4.25rem]">
-          <Logo className="h-[0.9em] w-auto shrink-0" />
+          <Logo className="h-[1em] w-auto shrink-0" />
           <h1 className="font-bold tracking-tight text-purple-600">Showup</h1>
         </div>
         <p className="text-balance text-lg font-medium">Show up. Share your screen. Step in.</p>
