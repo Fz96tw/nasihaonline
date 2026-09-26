@@ -3,8 +3,6 @@ import { Logo } from "@/components/logo";
 import { LandingForms } from "@/components/landing-forms";
 import { RecentRecordings } from "@/components/recent-recordings";
 
-const NASIHA_URL = "https://nasihaforyou.org";
-
 export default function HomePage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-10 px-4 py-10 sm:py-14">
@@ -36,12 +34,6 @@ export default function HomePage() {
             Privacy and recording
           </Link>
         </nav>
-        <p>
-          From the makers of{" "}
-          <a href={NASIHA_URL} className="font-medium underline underline-offset-2 hover:text-foreground">
-            Nasiha
-          </a>
-        </p>
       </footer>
     </main>
   );
