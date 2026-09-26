@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
+import { PageHeading } from "@/components/page-heading";
 
 /** Shared frame for the small text pages linked from the landing page footer. */
 export function InfoPage({ title, children }: { title: string; children: ReactNode }) {
@@ -10,7 +11,7 @@ export function InfoPage({ title, children }: { title: string; children: ReactNo
         <ArrowLeft className="h-4 w-4" aria-hidden />
         Back to Showup
       </Link>
-      <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+      <PageHeading>{title}</PageHeading>
       {children}
     </main>
   );
