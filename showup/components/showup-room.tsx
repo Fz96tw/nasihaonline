@@ -2,8 +2,23 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Check, Copy, MonitorUp, X } from "lucide-react";
-import { RoomEvent, VideoPreset, VideoPresets, type RemoteParticipant, type Room } from "livekit-client";
-import { LiveKitRoom, VideoConference, useLocalParticipant, useRoomContext } from "@livekit/components-react";
+import { RoomEvent, Track, VideoPreset, VideoPresets, type RemoteParticipant, type Room } from "livekit-client";
+import {
+  Chat,
+  ConnectionStateToast,
+  ControlBar,
+  GridLayout,
+  LayoutContextProvider,
+  LiveKitRoom,
+  ParticipantTile,
+  RoomAudioRenderer,
+  useCreateLayoutContext,
+  useSpeakingParticipants,
+  useLocalParticipant,
+  useRoomContext,
+  useTracks,
+  type WidgetState,
+} from "@livekit/components-react";
 import "@livekit/components-styles";
 import { OverlayGuestControl } from "@/components/overlay-guest-control";
 import { PresenterOverlayControl } from "@/components/presenter-overlay-control";
@@ -213,6 +228,79 @@ function Toasts({ toasts }: { toasts: Toast[] }) {
   );
 }
 
+const SPEAKER_CHIP_HOLD_MS = 1_500;
+
+/**
+ * Who is talking, as a small label over the bottom-left of the meeting view. Cameras have no tiles to
+ * highlight, so this is the only sign of who is speaking when the overlay is off. It lives on the page,
+ * not in the composited share, so viewers' video and the recording stay clean. Remote speakers only (you
+ * know when you're talking), and a name lingers briefly so pauses between words don't make it flicker.
+ */
+function SpeakerChip() {
+  const speaking = useSpeakingParticipants();
+  const [names, setNames] = useState<string[]>([]);
+
+  useEffect(() => {
+    const current = speaking.filter((participant) => !participant.isLocal).map((participant) => participant.name || "Someone");
+    if (current.length > 0) {
+      setNames(current.slice(0, 2));
+      return;
+    }
+    const timer = setTimeout(() => setNames([]), SPEAKER_CHIP_HOLD_MS);
+    return () => clearTimeout(timer);
+  }, [speaking]);
+
+  if (names.length === 0) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={`pointer-events-none absolute bottom-20 left-4 z-10 max-w-[70%] truncate rounded-lg px-3 py-1.5 text-sm ${LK_BUTTON_CLASS}`}
+    >
+      {names.join(" & ")} {names.length > 1 ? "are" : "is"} speaking
+    </div>
+  );
+}
+
+/**
+ * The meeting view: only screen shares get a tile. Cameras are never shown as
+ * participant tiles because hosts and guests appear on the share itself (the
+ * webcam overlay); their camera tracks are still published and subscribed,
+ * which is what the overlay reads. Replaces the prefab VideoConference, whose
+ * grid always tiles every camera; the rest (control bar, chat, audio, toasts)
+ * mirrors it.
+ */
+function ShareStage({ isHost }: { isHost: boolean }) {
+  const layoutContext = useCreateLayoutContext();
+  const [widgetState, setWidgetState] = useState<WidgetState>({ showChat: false, unreadMessages: 0, showSettings: false });
+  const screenShares = useTracks([{ source: Track.Source.ScreenShare, withPlaceholder: false }], { onlySubscribed: false });
+
+  return (
+    <div className="lk-video-conference">
+      <LayoutContextProvider value={layoutContext} onWidgetChange={setWidgetState}>
+        <div className="lk-video-conference-inner">
+          {screenShares.length > 0 ? (
+            <div className="lk-grid-layout-wrapper">
+              <GridLayout tracks={screenShares}>
+                <ParticipantTile />
+              </GridLayout>
+            </div>
+          ) : (
+            <div className="flex flex-1 items-center justify-center p-6 text-center text-white/60">
+              {!isHost && "Waiting for the host to share their screen…"}
+            </div>
+          )}
+          <ControlBar controls={{ chat: true, settings: false }} />
+        </div>
+        <Chat style={{ display: widgetState.showChat ? "grid" : "none" }} />
+      </LayoutContextProvider>
+      <SpeakerChip />
+      <RoomAudioRenderer />
+      <ConnectionStateToast />
+    </div>
+  );
+}
+
 /**
  * Full-viewport LiveKit call. The banner, share prompt and toast stack are
  * absolutely-positioned siblings layered over <LiveKitRoom> (not children of it)
@@ -273,7 +361,7 @@ export function ShowupRoom({ credentials, onLeave }: { credentials: RoomCredenti
       >
         <ParticipantActivityListener onEvent={pushToast} />
         <RoomBridge onRoom={setRoom} onSharing={setSharing} />
-        <VideoConference />
+        <ShareStage isHost={isHost} />
       </LiveKitRoom>
     </div>
   );
