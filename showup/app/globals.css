@@ -15,6 +15,13 @@
   --destructive: 0 75% 62%;
 }
 
+/* Inter for reading, Plus Jakarta Sans for headings (and anything with font-heading). */
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading), var(--font-body), ui-sans-serif, system-ui, sans-serif;
+}
+
 /*
  * One knob for the size of everything: Tailwind sizes text, spacing and widths
  * in rem, so this scales the whole page together. The in-meeting screen keeps
@@ -30,7 +37,7 @@ html:has([data-showup-room]) {
 body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
-  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-body), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 /* The chosen landing card fades in as it expands into its form. */
