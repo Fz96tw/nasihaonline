@@ -143,6 +143,9 @@ export function PresenterOverlayControl({
   const [position, setPosition] = useState<PresenterOverlaySettings["position"]>("center");
   const [span, setSpan] = useState(false);
   const [normalizeSize, setNormalizeSize] = useState(true);
+  // Host hand gestures (default off) and what's recognized right now — for the host's own indicator, never drawn into the stream.
+  const [gestures, setGestures] = useState(false);
+  const [gestureLabel, setGestureLabel] = useState<"pointing" | "zooming" | "reset" | "unavailable" | null>(null);
   const [background, setBackground] = useState<PresenterOverlaySettings["background"]>("remove");
   const [panelShape, setPanelShape] = useState<PanelShape>("rounded");
   const [softEdge, setSoftEdge] = useState(false);
@@ -185,7 +188,7 @@ export function PresenterOverlayControl({
   }, []);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, span, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
+    return { opacity, scale, position, span, gestures, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -200,6 +203,7 @@ export function PresenterOverlayControl({
     overlayRef.current = null;
     setOverlayStatus("off");
     clearInterval(overlay.tick);
+    setGestureLabel(null);
     setPeople([]);
     setGuests([]);
     // Everyone who was on the overlay, or waiting to be, is told it's gone.
@@ -246,6 +250,7 @@ export function PresenterOverlayControl({
         screenTrack: screenClone,
         cameraTrack,
         cameraLabel: room.localParticipant.name || "",
+        onGesture: setGestureLabel,
         onError: (error) => {
           console.error("[presenter-overlay] compositor failed", error);
           onError("The camera overlay stopped unexpectedly.");
@@ -889,6 +894,49 @@ export function PresenterOverlayControl({
         />
         Match everyone&apos;s size (evens out how close people sit)
       </label>
+
+      <div className={labelClass}>
+        <label className="flex items-center gap-2 text-xs text-white/70">
+          <input
+            type="checkbox"
+            data-testid="overlay-gestures"
+            checked={gestures}
+            onChange={(e) => {
+              setGestures(e.target.checked);
+              updateSettings({ gestures: e.target.checked });
+            }}
+          />
+          Hand gestures (point, pinch to zoom)
+        </label>
+        {gestures && gestureLabel && (
+          <span data-testid="overlay-gesture-label" className="text-[11px] text-emerald-300">
+            {gestureLabel === "pointing"
+              ? "Pointing: laser on"
+              : gestureLabel === "zooming"
+                ? "Pinch: zoomed, move your hand to pan"
+                : gestureLabel === "reset"
+                  ? "Palm: zoom reset"
+                  : "Couldn't load the hand model — gestures are off"}
+          </span>
+        )}
+        <details className="text-[11px] text-white/60">
+          <summary className="cursor-pointer select-none">Which gestures?</summary>
+          <ul className="mt-1 list-disc space-y-1 pl-4">
+            <li>Point with your index finger, other fingers curled, and hold for a moment: a red laser dot follows your fingertip.</li>
+            <li>Pinch thumb and index finger together and hold half a second: the screen zooms 2x toward your pinch. Move your pinched hand to pan.</li>
+            <li>Show an open palm for half a second: back to the whole screen.</li>
+            <li>Keep your hand fully in the camera frame. Only the screen zooms, not you.</li>
+          </ul>
+        </details>
+        <div className="flex gap-1">
+          <button type="button" data-testid="overlay-zoom-in" onClick={() => overlayRef.current?.compositor.zoomIn()} className={segmentClass(false)}>
+            Zoom in
+          </button>
+          <button type="button" data-testid="overlay-zoom-reset" onClick={() => overlayRef.current?.compositor.resetZoom()} className={segmentClass(false)}>
+            Reset zoom
+          </button>
+        </div>
+      </div>
 
       <label className={`${labelClass} ${span ? "opacity-40" : ""}`}>
         Size ({Math.round(scale * 100)}%)

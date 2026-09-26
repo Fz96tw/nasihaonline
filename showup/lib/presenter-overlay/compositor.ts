@@ -28,7 +28,9 @@
  * isPresenterOverlaySupported().
  */
 
-import type { ImageSegmenter } from "@mediapipe/tasks-vision";
+import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
+import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement } from "./gestures.ts";
+import { ScreenViewport } from "./screen-zoom.ts";
 import { SizeNormalizer, measureFromRows } from "./size-normalize.ts";
 import { WindowSmoother, clampWindow, panelAspect, personBounds, targetCentre, tracePanelPath, windowSize, type PanelShape, type PersonBounds } from "./panel.ts";
 
@@ -56,10 +58,17 @@ const MEDIAPIPE_WASM_BASE = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-visio
 const SELFIE_SEGMENTER_MODEL =
   "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite";
 
+const HAND_LANDMARKER_MODEL =
+  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task";
+
 /** Output cap — matches the recording's EncodingOptions (1280×720 @ 20fps) in lib/livekit-egress.ts. */
 const MAX_OUTPUT_WIDTH = 1280;
 const MAX_OUTPUT_HEIGHT = 720;
 const MIN_FRAME_INTERVAL_MS = 1000 / 20;
+/** Hand detection runs at most ~14 times a second, and slower still if a detection ever takes long. */
+const HAND_INTERVAL_MS = 70;
+/** The laser dot's trail lasts this long. */
+const LASER_TRAIL_MS = 250;
 /** Each camera is segmented within this box (keeping its own aspect ratio) — plenty for a translucent cut-out, and keeps the per-frame mask readback cheap. */
 const CAMERA_WIDTH = 640;
 const CAMERA_HEIGHT = 360;
@@ -85,6 +94,11 @@ export type PresenterOverlaySettings = {
    * or sides of the frame may be cropped. Only applies to one ghost — a group keeps the normal layout.
    */
   span: boolean;
+  /**
+   * Host hand gestures: point to show a laser dot, pinch to zoom the screen (pan by moving the pinched hand),
+   * open palm to reset. Off by default; loads the hand model the first time it is switched on.
+   */
+  gestures: boolean;
   /**
    * Scale each cut-out by how far its person sits from their camera, so everyone looks the same size.
    * Host-controlled; on by default. Off = every camera frame is scaled the same (zoom 1).
@@ -124,6 +138,7 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   scale: 1,
   position: "center",
   span: false,
+  gestures: false,
   normalizeSize: true,
   background: "remove",
   panelShape: "rounded",
@@ -155,6 +170,10 @@ export type PresenterOverlayCompositor = {
   removeSource: (id: string) => void;
   /** Which sources are shown, spaced out in this order (one ghost follows `position`); auto caption names them all. Others fade out over ~300 ms. */
   setVisible: (ids: string[]) => void;
+  /** Zooms the screen layer 2x toward its centre (the same zoom a pinch gives). No-op when already zoomed. */
+  zoomIn: () => void;
+  /** Back to the whole screen. */
+  resetZoom: () => void;
   /** Stops all readers and the output track (the segmenter is kept for reuse). Does NOT stop the input tracks — the caller owns those. */
   stop: () => void;
 };
@@ -179,6 +198,27 @@ function loadSegmenter(): Promise<ImageSegmenter> {
     });
   }
   return segmenterPromise;
+}
+
+let handLandmarkerPromise: Promise<HandLandmarker> | null = null;
+
+/** Lazily loads MediaPipe's hand model the first time gestures are switched on; reused afterwards. */
+function loadHandLandmarker(): Promise<HandLandmarker> {
+  if (!handLandmarkerPromise) {
+    handLandmarkerPromise = (async () => {
+      const { FilesetResolver, HandLandmarker } = await import("@mediapipe/tasks-vision");
+      const fileset = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_BASE);
+      return HandLandmarker.createFromOptions(fileset, {
+        baseOptions: { modelAssetPath: HAND_LANDMARKER_MODEL, delegate: "GPU" },
+        runningMode: "VIDEO",
+        numHands: 1,
+      });
+    })().catch((error) => {
+      handLandmarkerPromise = null; // allow a retry the next time gestures are switched on
+      throw error;
+    });
+  }
+  return handLandmarkerPromise;
 }
 
 function context2d(canvas: OffscreenCanvas): OffscreenCanvasRenderingContext2D {
@@ -272,6 +312,8 @@ type Source = {
   panelCanvas: OffscreenCanvas;
   panelCtx: OffscreenCanvasRenderingContext2D;
   panelShape: PanelShape;
+  /** The part of the camera frame the panel shows (0–1 of the frame), so a fingertip can be mapped onto it. */
+  panelCrop: { x: number; y: number; width: number; height: number } | null;
   /** Latest person location (panel mode); null when nobody was found. */
   person: PersonBounds | null;
   smoother: WindowSmoother;
@@ -286,12 +328,15 @@ export async function startPresenterOverlayCompositor({
   cameraTrack,
   cameraLabel = "",
   onError,
+  onGesture,
 }: {
   screenTrack: MediaStreamTrack;
   /** The host's own camera. Its frames drive the output, so it must stay live for as long as the overlay does. */
   cameraTrack: MediaStreamTrack;
   cameraLabel?: string;
   onError: (error: unknown) => void;
+  /** Tells the host's UI what gesture is recognized (or that the hand model couldn't load). Not drawn into the stream. */
+  onGesture?: (label: GestureState["label"] | "unavailable") => void;
 }): Promise<PresenterOverlayCompositor> {
   const { Processor, Generator } = insertableStreams();
   if (!Processor || !Generator) throw new Error("This browser can't combine video tracks. Try Chrome or Edge.");
@@ -317,6 +362,19 @@ export async function startPresenterOverlayCompositor({
   let visibleIds: string[] = [];
   const sources = new Map<string, Source>();
   const LOCAL_ID = "local";
+
+  // Gestures: the tracker, the screen zoom, the laser dot and the hand model (loaded on first use).
+  const viewport = new ScreenViewport();
+  let tracker = new GestureTracker();
+  let hand: HandLandmarker | null = null;
+  let handLoading = false;
+  let lastHandAt = 0;
+  let lastHandMs = 0;
+  let lastHandTimestamp = 0;
+  let lastLabel: GestureState["label"] | "unavailable" = null;
+  let pointer: GestureState["pointer"] = null;
+  let lastPan: { x: number; y: number } | null = null;
+  let trail: { x: number; y: number; t: number }[] = [];
 
   const screenReader = new Processor({ track: screenTrack }).readable.getReader();
 
@@ -366,6 +424,7 @@ export async function startPresenterOverlayCompositor({
       panelCanvas,
       panelCtx: context2d(panelCanvas),
       panelShape: "rounded",
+      panelCrop: null,
       person: null,
       smoother: new WindowSmoother(CAMERA_WIDTH / 2, CAMERA_HEIGHT / 2),
       smootherKey: "",
@@ -492,6 +551,7 @@ export async function startPresenterOverlayCompositor({
     panelCtx.filter = "none";
     panelCtx.globalCompositeOperation = "source-over";
     source.panelShape = shape;
+    source.panelCrop = { x: win.x / camW, y: win.y / camH, width: win.width / camW, height: win.height / camH };
     source.hasCutout = true;
     source.mode = "panel";
   }
@@ -565,13 +625,17 @@ export async function startPresenterOverlayCompositor({
     return source.mode === "panel" ? panelAspect(source.panelShape) : source.aspect;
   }
 
+  /** The top edge a ghost is drawn at: bottom-aligned, and a panel circle floats a little above the bottom edge (only if there's room). */
+  function ghostTop(source: Source, box: GhostBox, height: number): number {
+    let y = height - box.height;
+    if (source.mode === "panel" && source.panelShape === "circle") y -= Math.min(height * 0.03, y);
+    return y;
+  }
+
   function drawGhost(source: Source, box: GhostBox, height: number) {
     outputCtx.globalAlpha = settings.opacity * source.alpha;
-    const panel = source.mode === "panel";
-    const image = panel ? source.panelCanvas : source.cutoutCanvas;
-    let y = height - box.height;
-    // A circle floats a little above the bottom edge so it doesn't look cut off (only if there's room).
-    if (panel && source.panelShape === "circle") y -= Math.min(height * 0.03, y);
+    const image = source.mode === "panel" ? source.panelCanvas : source.cutoutCanvas;
+    const y = ghostTop(source, box, height);
     // Bottom-aligned; only the host's own camera is mirrored (see settings.mirror).
     if (settings.mirror && source.isLocal) {
       outputCtx.save();
@@ -585,6 +649,135 @@ export async function startPresenterOverlayCompositor({
     outputCtx.globalAlpha = 1;
   }
 
+  /** Where the host's ghost is drawn, for mapping a fingertip onto it; null when the host isn't on the share. */
+  function hostPlacement(): GhostPlacement | null {
+    const source = sources.get(LOCAL_ID);
+    if (!source || !source.box || source.target <= 0 || !source.hasCutout) return null;
+    return {
+      x: source.box.x,
+      y: ghostTop(source, source.box, outputCanvas.height),
+      width: source.box.width,
+      height: source.box.height,
+      mirror: settings.mirror,
+      crop: source.mode === "panel" ? source.panelCrop : null,
+    };
+  }
+
+  /** The glowing red laser dot at the host's fingertip, with a short fading trail. */
+  function drawLaser(now: number, height: number) {
+    const placement = hostPlacement();
+    if (!pointer || !placement) {
+      trail = [];
+      return;
+    }
+    const at = cameraToOutput(pointer.u, pointer.v, placement);
+    trail.push({ x: at.x, y: at.y, t: now });
+    trail = trail.filter((point) => now - point.t <= LASER_TRAIL_MS);
+    const radius = Math.max(5, height * 0.012);
+    outputCtx.save();
+    for (const point of trail) {
+      const age = (now - point.t) / LASER_TRAIL_MS;
+      outputCtx.globalAlpha = (1 - age) * 0.35 * pointer.fade;
+      outputCtx.fillStyle = "#ff2a2a";
+      outputCtx.beginPath();
+      outputCtx.arc(point.x, point.y, radius * (1 - age * 0.5), 0, Math.PI * 2);
+      outputCtx.fill();
+    }
+    outputCtx.globalAlpha = pointer.fade;
+    const glow = outputCtx.createRadialGradient(at.x, at.y, 0, at.x, at.y, radius * 3);
+    glow.addColorStop(0, "rgba(255, 60, 60, 0.9)");
+    glow.addColorStop(0.35, "rgba(255, 40, 40, 0.45)");
+    glow.addColorStop(1, "rgba(255, 0, 0, 0)");
+    outputCtx.fillStyle = glow;
+    outputCtx.beginPath();
+    outputCtx.arc(at.x, at.y, radius * 3, 0, Math.PI * 2);
+    outputCtx.fill();
+    outputCtx.fillStyle = "#ff3030";
+    outputCtx.beginPath();
+    outputCtx.arc(at.x, at.y, radius, 0, Math.PI * 2);
+    outputCtx.fill();
+    outputCtx.fillStyle = "#fff";
+    outputCtx.beginPath();
+    outputCtx.arc(at.x, at.y, radius * 0.4, 0, Math.PI * 2);
+    outputCtx.fill();
+    outputCtx.restore();
+  }
+
+  function setLabel(label: GestureState["label"] | "unavailable") {
+    if (label === lastLabel) return;
+    lastLabel = label;
+    onGesture?.(label);
+  }
+
+  /** Runs hand detection on the host's latest camera frame (throttled) and applies what it recognizes. */
+  function runGestures(source: Source, now: number) {
+    if (!settings.gestures) {
+      if (pointer || lastLabel) {
+        tracker = new GestureTracker();
+        pointer = null;
+        lastPan = null;
+        setLabel(null);
+      }
+      return;
+    }
+    if (!hand) {
+      if (!handLoading) {
+        handLoading = true;
+        loadHandLandmarker()
+          .then((loaded) => {
+            hand = loaded;
+          })
+          .catch((error) => {
+            console.warn("[presenter-overlay] the hand model didn't load", error);
+            setLabel("unavailable");
+          })
+          .finally(() => {
+            handLoading = false;
+          });
+      }
+      return;
+    }
+    // Skip detection frames rather than delay output frames when the machine is struggling.
+    if (now - lastHandAt < Math.max(HAND_INTERVAL_MS, lastHandMs * 3)) return;
+    lastHandAt = now;
+    const placement = hostPlacement();
+    let landmarks: { x: number; y: number }[] | null = null;
+    if (placement) {
+      const started = performance.now();
+      lastHandTimestamp = Math.max(started, lastHandTimestamp + 1);
+      try {
+        landmarks = hand.detectForVideo(source.cameraCanvas, lastHandTimestamp).landmarks[0] ?? null;
+      } catch (error) {
+        console.warn("[presenter-overlay] hand detection failed", error);
+      }
+      lastHandMs = performance.now() - started;
+    }
+    // With the host's ghost off the share there's nothing for a gesture to point at, so it sees no hand.
+    const state = tracker.update(now, placement ? landmarks : null, source.aspect);
+    pointer = state.pointer;
+    let panned = false;
+    for (const action of state.actions) {
+      if (!placement) break;
+      if (action.type === "reset") {
+        viewport.reset(now);
+        continue;
+      }
+      const out = cameraToOutput(action.u, action.v, placement);
+      const at = { x: Math.min(1, Math.max(0, out.x / outputCanvas.width)), y: Math.min(1, Math.max(0, out.y / outputCanvas.height)) };
+      if (action.type === "zoom") {
+        viewport.zoomIn(now, at.x, at.y);
+        lastPan = at;
+        panned = true;
+      } else {
+        if (lastPan) viewport.pan(at.x - lastPan.x, at.y - lastPan.y);
+        lastPan = at;
+        panned = true;
+      }
+    }
+    if (!panned) lastPan = null;
+    setLabel(state.label);
+  }
+
   function compose(timestamp: number) {
     const { width, height } = hasScreenFrame ? screenCanvas : { width: MAX_OUTPUT_WIDTH, height: MAX_OUTPUT_HEIGHT };
     if (outputCanvas.width !== width || outputCanvas.height !== height) {
@@ -592,8 +785,12 @@ export async function startPresenterOverlayCompositor({
       outputCanvas.height = height;
     }
     outputCtx.globalAlpha = 1;
+    const now = performance.now();
     if (hasScreenFrame) {
-      outputCtx.drawImage(screenCanvas, 0, 0);
+      // Only the screen layer is zoomed; the ghosts and the laser dot are drawn on top at their normal size.
+      const view = viewport.rect(now);
+      if (view.width >= 1) outputCtx.drawImage(screenCanvas, 0, 0);
+      else outputCtx.drawImage(screenCanvas, view.x * width, view.y * height, view.width * width, view.height * height, 0, 0, width, height);
     } else {
       outputCtx.fillStyle = "#000";
       outputCtx.fillRect(0, 0, width, height);
@@ -602,7 +799,6 @@ export async function startPresenterOverlayCompositor({
     // Fading-out sources first, then the ones on their way in, so a new speaker fades in over the old one.
     // Each real camera keeps its own aspect ratio; the visible ones are spaced out in the order given.
     const shown = visibleIds.map((id) => sources.get(id)).filter((source): source is Source => !!source);
-    const now = performance.now();
     // The host's keep-background panel isn't a cut-out of a person to size, so it stays at zoom 1.
     const zooms = shown.map((source) => (source.mode === "panel" ? 1 : source.normalizer.zoom(now, settings.normalizeSize)));
     const boxes = layoutGhosts(shown.map(layoutAspect), width, height, settings.scale, settings.position, settings.span, zooms);
@@ -613,6 +809,7 @@ export async function startPresenterOverlayCompositor({
       .filter((source) => source.hasCutout && source.alpha > 0.003 && source.box)
       .sort((a, b) => a.target - b.target);
     for (const source of drawable) drawGhost(source, source.box as GhostBox, height);
+    drawLaser(now, height);
 
     if (settings.image) drawImageOverlay(width, height, settings.image, settings.imageCorner);
     let caption = settings.caption.trim();
@@ -642,6 +839,7 @@ export async function startPresenterOverlayCompositor({
       try {
         const timestamp = frame.timestamp;
         processFrame(source, frame, now, 0);
+        runGestures(source, now);
         stepFades(now);
         output = compose(timestamp);
         await writer.write(output);
@@ -694,6 +892,14 @@ export async function startPresenterOverlayCompositor({
     for (const source of Array.from(sources.values())) source.target = ids.includes(source.id) ? 1 : 0;
   }
 
+  function zoomIn() {
+    viewport.zoomIn(performance.now(), 0.5, 0.5);
+  }
+
+  function resetZoom() {
+    viewport.reset(performance.now());
+  }
+
   function stop() {
     if (stopped) return;
     stopped = true;
@@ -712,5 +918,5 @@ export async function startPresenterOverlayCompositor({
     onError(error);
   });
 
-  return { track: generator, settings, addSource, removeSource, setVisible, stop };
+  return { track: generator, settings, addSource, removeSource, setVisible, zoomIn, resetZoom, stop };
 }
