@@ -17,7 +17,7 @@ export default function HomePage() {
           </h1>
         </div>
         <p className="text-balance text-lg font-medium">Show up. Share your screen. Step in.</p>
-        <p className="text-muted-foreground">Share your screen with anyone using just a code. Free, no account needed.</p>
+        <p className="-mt-2 text-muted-foreground">Share your screen with anyone using just a code. Free, no account needed.</p>
       </header>
 
       <LandingForms />
