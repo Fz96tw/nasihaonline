@@ -13,7 +13,7 @@ const STEPS = [
 export default function HowItWorksPage() {
   return (
     <InfoPage title="How it works">
-      <ol className="flex flex-col gap-4">
+      <ol className="flex max-w-md flex-col gap-4">
         {STEPS.map((step, index) => (
           <li key={step.title} className="flex flex-col gap-1 rounded-xl border border-border p-4">
             <span className="text-sm font-semibold text-purple-400">Step {index + 1}</span>
