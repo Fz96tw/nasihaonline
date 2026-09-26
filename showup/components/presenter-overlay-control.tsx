@@ -876,10 +876,11 @@ export function PresenterOverlayControl({
         Reach the whole screen (fills a wide window)
       </label>
 
-      <label className="flex items-center gap-2 text-xs text-white/70">
+      <label className={`flex items-center gap-2 text-xs text-white/70 ${span ? "opacity-40" : ""}`} title={span ? "Not used while the ghost fills the screen" : undefined}>
         <input
           type="checkbox"
           data-testid="overlay-normalize-size"
+          disabled={span}
           checked={normalizeSize}
           onChange={(e) => {
             setNormalizeSize(e.target.checked);
