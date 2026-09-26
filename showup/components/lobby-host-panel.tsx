@@ -294,9 +294,12 @@ export function LobbyHostPanel({ credentials, room, sharing, onToast }: Props) {
   return (
     <>
       {lobby && (
-        <LiveKitRoom token={lobby.token} serverUrl={lobby.serverUrl} connect audio={false} video={false}>
-          <LobbyWatcher onPending={setPending} />
-        </LiveKitRoom>
+        // LiveKitRoom renders a full-height block; kept in flow it pushes the real meeting room below the viewport.
+        <div aria-hidden className="pointer-events-none absolute h-0 w-0 overflow-hidden">
+          <LiveKitRoom token={lobby.token} serverUrl={lobby.serverUrl} connect audio={false} video={false}>
+            <LobbyWatcher onPending={setPending} />
+          </LiveKitRoom>
+        </div>
       )}
       <div className="pointer-events-none absolute bottom-24 right-4 z-50 flex max-w-[22rem] flex-col items-end gap-2">
         {open && (visible.length > 0 || pip) && (
