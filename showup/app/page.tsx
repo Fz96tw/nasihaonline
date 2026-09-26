@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo } from "@/components/logo";
 import { LandingForms } from "@/components/landing-forms";
 import { RecentRecordings } from "@/components/recent-recordings";
 
@@ -7,7 +8,8 @@ const NASIHA_URL = "https://nasihaforyou.org";
 export default function HomePage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-10 px-4 py-10 sm:py-14">
-      <header className="flex flex-col gap-2 text-center">
+      <header className="flex flex-col items-center gap-2 text-center">
+        <Logo className="mb-2 h-16 w-auto" />
         <h1 className="text-4xl font-bold tracking-tight">Showup</h1>
         <p className="text-balance text-lg font-medium">Show up. Share your screen. Appear on it.</p>
         <p className="text-muted-foreground">Share your screen with anyone using just a code. Free, no account needed.</p>
