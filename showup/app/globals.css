@@ -34,37 +34,6 @@ html:has([data-showup-room]) {
   font-size: 100%;
 }
 
-/*
- * A large shared window has a big intrinsic size, and LiveKit's focus layout lets that size stretch its grid row
- * past the space it was given, which pushes the control bar off the bottom of the fixed-height room (or paints
- * the tile over it). Cap the video area to its box and keep the bar above it.
- */
-[data-showup-room] .lk-video-conference,
-[data-showup-room] .lk-video-conference-inner {
-  min-height: 0;
-  overflow: hidden;
-}
-[data-showup-room] .lk-focus-layout-wrapper,
-[data-showup-room] .lk-grid-layout-wrapper {
-  min-height: 0;
-  overflow: hidden;
-}
-[data-showup-room] .lk-focus-layout {
-  height: 100%;
-  grid-template-rows: minmax(0, 1fr);
-}
-[data-showup-room] .lk-focused-participant,
-[data-showup-room] .lk-carousel {
-  min-width: 0;
-  min-height: 0;
-}
-[data-showup-room] .lk-control-bar {
-  position: relative;
-  z-index: 1;
-  flex-shrink: 0;
-  background: var(--lk-bg);
-}
-
 body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
