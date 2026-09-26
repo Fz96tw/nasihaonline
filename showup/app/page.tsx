@@ -10,7 +10,11 @@ export default function HomePage() {
         {/* The logo sits on the title's baseline and is as tall as the title's font size, taller than its capital letters. */}
         <div className="flex items-baseline gap-3 text-[3.4rem] leading-none sm:gap-4 sm:text-[4.25rem]">
           <Logo className="h-[1em] w-auto shrink-0" />
-          <h1 className="font-bold tracking-tight text-purple-600">Showup</h1>
+          <h1 className="font-bold tracking-tight text-purple-600">
+            Show
+            {/* "UP" rises above the line and fades, like the presenter ghost stepping up out of the screen. */}
+            <span className="inline-block -translate-y-[0.32em] opacity-50 [text-shadow:0_0_0.35em_rgb(168_85_247_/_0.85)]">UP</span>
+          </h1>
         </div>
         <p className="text-balance text-lg font-medium">Show up. Share your screen. Step in.</p>
         <p className="text-muted-foreground">Share your screen with anyone using just a code. Free, no account needed.</p>
