@@ -60,16 +60,22 @@ function copyStyles(target: Document) {
 /** Reports the lobby room's waiting guests (everyone but the host's own hidden connection) as ghost-tile data. */
 function LobbyWatcher({ onPending }: { onPending: (pending: Pending[]) => void }) {
   const refs = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }]);
+  // useTracks hands back a fresh array on every render, so only report when who is waiting
+  // (or their camera) actually changed; reporting every time re-renders the parent, which
+  // re-renders this, in a loop.
+  const lastSignature = useRef("");
   useEffect(() => {
-    onPending(
-      refs
-        .filter((ref) => !ref.participant.isLocal)
-        .map((ref) => ({
-          identity: ref.participant.identity,
-          name: ref.participant.name || "Guest",
-          track: isTrackReference(ref) ? ref : null,
-        })),
-    );
+    const pending: Pending[] = refs
+      .filter((ref) => !ref.participant.isLocal)
+      .map((ref) => ({
+        identity: ref.participant.identity,
+        name: ref.participant.name || "Guest",
+        track: isTrackReference(ref) ? ref : null,
+      }));
+    const signature = pending.map((guest) => `${guest.identity}|${guest.name}|${guest.track?.publication?.trackSid ?? ""}`).join(",");
+    if (signature === lastSignature.current) return;
+    lastSignature.current = signature;
+    onPending(pending);
   }, [refs, onPending]);
   return null;
 }
