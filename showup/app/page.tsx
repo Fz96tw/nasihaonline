@@ -10,9 +10,9 @@ export default function HomePage() {
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:gap-5 sm:text-left">
           {/* Slightly shorter than the title and tagline together, centred beside them. */}
           <Logo className="h-[4.5rem] w-auto sm:h-16" />
-          <div className="flex flex-col gap-1.5">
-            <h1 className="text-4xl font-bold tracking-tight text-purple-600">Showup</h1>
-            <p className="text-balance text-lg font-medium">Show up. Share your screen. Step into it.</p>
+          <div className="flex flex-col">
+            <h1 className="text-4xl font-bold leading-none tracking-tight text-purple-600">Showup</h1>
+            <p className="-mt-0.5 text-balance text-lg font-medium">Show up. Share your screen. Step into it.</p>
           </div>
         </div>
         <p className="text-muted-foreground">Share your screen with anyone using just a code. Free, no account needed.</p>
