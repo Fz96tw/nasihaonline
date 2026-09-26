@@ -27,7 +27,7 @@ export function RecentRecordings() {
         </div>
       )}
       <p className="text-center text-muted-foreground">
-        Hosts can record a meeting; everyone sees a banner while it runs.{" "}
+        Hosts can record a showup session; everyone sees a banner while it runs.{" "}
         <Link href="/recover" className="underline">
           Get my recording
         </Link>
