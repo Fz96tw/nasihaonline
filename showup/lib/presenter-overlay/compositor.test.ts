@@ -42,3 +42,21 @@ test("a group is drawn smaller than a lone ghost", () => {
   const [grouped] = layoutGhosts([1, 1, 1], 1000, 500, 1, "center");
   assert.ok(grouped.height < alone.height);
 });
+
+test("span makes a lone ghost cover the frame, whichever edge needs the larger scale", () => {
+  // Wide share, 16:9 camera: scaled to the share's width, taller than the frame (head cropped).
+  const [wide] = layoutGhosts([16 / 9], 2000, 500, 0.5, "left", true);
+  assert.ok(Math.abs(wide.width - 2000) < 1e-6 && Math.abs(wide.x) < 1e-6);
+  assert.ok(wide.height > 500);
+  // Tall share: scaled to the share's height, wider than the frame, centred.
+  const [tall] = layoutGhosts([16 / 9], 500, 2000, 0.5, "left", true);
+  assert.equal(tall.height, 2000);
+  assert.ok(Math.abs(tall.x + tall.width / 2 - 250) < 1e-6);
+  // Same shape as the camera: exactly the frame.
+  const [same] = layoutGhosts([16 / 9], 1600, 900, 0.5, "left", true);
+  assert.ok(Math.abs(same.width - 1600) < 1e-6 && Math.abs(same.height - 900) < 1e-6);
+});
+
+test("span leaves a group's layout alone", () => {
+  assert.deepEqual(layoutGhosts([1, 1], 1000, 500, 1, "left", true), layoutGhosts([1, 1], 1000, 500, 1, "left", false));
+});

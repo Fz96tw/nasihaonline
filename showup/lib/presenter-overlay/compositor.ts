@@ -76,6 +76,12 @@ export type PresenterOverlaySettings = {
   /** Horizontal anchor of the cut-out (always bottom-aligned, like someone standing in front of the slide). */
   position: "left" | "center" | "right";
   /**
+   * Scale a lone ghost so the camera frame covers the whole shared frame (whichever edge needs the larger
+   * scale), so the presenter can reach any part of a wide window. Ignores `scale` and `position`; the top
+   * or sides of the frame may be cropped. Only applies to one ghost — a group keeps the normal layout.
+   */
+  span: boolean;
+  /**
    * Flip the cut-out horizontally, like a mirror — on by default, because
    * the presenter aims by watching their own image over the slide: when it
    * moves the way a mirror would, reaching toward something on their screen
@@ -99,6 +105,7 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   opacity: 0.5,
   scale: 1,
   position: "center",
+  span: false,
   mirror: true,
   caption: "",
   autoCaption: true,
@@ -179,7 +186,8 @@ const GROUP_SCALE = [1, 1, 0.85, 0.7];
 /**
  * Lays ghosts out bottom-aligned. One ghost follows the `position` setting;
  * two or three are spaced evenly across the width in the order given (the
- * order they were added), each centred in its own slot. Pure, for testing.
+ * order they were added), each centred in its own slot. With `span`, a lone
+ * ghost instead covers the whole frame. Pure, for testing.
  */
 export function layoutGhosts(
   aspects: number[],
@@ -187,8 +195,15 @@ export function layoutGhosts(
   outputHeight: number,
   scale: number,
   position: PresenterOverlaySettings["position"],
+  span = false,
 ): GhostBox[] {
   const count = aspects.length;
+  if (count === 1 && span) {
+    // Cover fit, bottom-aligned and centred: the camera frame's edges land on (or past) the share's edges.
+    const height = Math.max(outputHeight, outputWidth / aspects[0]);
+    const width = height * aspects[0];
+    return [{ x: (outputWidth - width) / 2, width, height }];
+  }
   const height = outputHeight * scale * (GROUP_SCALE[Math.min(count, GROUP_SCALE.length - 1)] ?? 1);
   return aspects.map((aspect, index) => {
     const width = height * aspect;
@@ -452,7 +467,7 @@ export async function startPresenterOverlayCompositor({
     // Fading-out sources first, then the ones on their way in, so a new speaker fades in over the old one.
     // Each real camera keeps its own aspect ratio; the visible ones are spaced out in the order given.
     const shown = visibleIds.map((id) => sources.get(id)).filter((source): source is Source => !!source);
-    const boxes = layoutGhosts(shown.map((source) => source.aspect), width, height, settings.scale, settings.position);
+    const boxes = layoutGhosts(shown.map((source) => source.aspect), width, height, settings.scale, settings.position, settings.span);
     shown.forEach((source, index) => {
       source.box = boxes[index];
     });

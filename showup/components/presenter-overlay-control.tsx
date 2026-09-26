@@ -137,6 +137,7 @@ export function PresenterOverlayControl({
   const [opacity, setOpacity] = useState(0.5);
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState<PresenterOverlaySettings["position"]>("center");
+  const [span, setSpan] = useState(false);
   const [mirror, setMirror] = useState(true);
   const [caption, setCaption] = useState("");
   // Follow-the-speaker (default on) and an optional pinned person, who overrides it. Kept for the whole page like the other settings.
@@ -174,7 +175,7 @@ export function PresenterOverlayControl({
   }, []);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
+    return { opacity, scale, position, span, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -821,9 +822,22 @@ export function PresenterOverlayControl({
         />
       </label>
 
-      <label className={labelClass}>
+      <label className="flex items-center gap-2 text-xs text-white/70">
+        <input
+          type="checkbox"
+          checked={span}
+          onChange={(e) => {
+            setSpan(e.target.checked);
+            updateSettings({ span: e.target.checked });
+          }}
+        />
+        Reach the whole screen (fills a wide window)
+      </label>
+
+      <label className={`${labelClass} ${span ? "opacity-40" : ""}`}>
         Size ({Math.round(scale * 100)}%)
         <input
+          disabled={span}
           type="range"
           min={0.3}
           max={1}
@@ -849,12 +863,13 @@ export function PresenterOverlayControl({
         Mirror me (point at things naturally)
       </label>
 
-      <div className={labelClass}>
+      <div className={`${labelClass} ${span ? "opacity-40" : ""}`}>
         Position
         <div className="flex gap-1">
           {(["left", "center", "right"] as const).map((value) => (
             <button
               key={value}
+              disabled={span}
               type="button"
               onClick={() => {
                 setPosition(value);
