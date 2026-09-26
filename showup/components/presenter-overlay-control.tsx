@@ -85,6 +85,15 @@ function copyStyleSheets(target: Window) {
 }
 
 /**
+ * LocalTrack.replaceTrack detaches every <video> showing the old track but never attaches the new one,
+ * so the presenter's own tile in the meeting (the prefab's) goes black while remote viewers see the
+ * swapped track fine. Attaching again points each still-registered element at the new track.
+ */
+function reattachLocalTiles(track: LocalVideoTrack) {
+  for (const element of [...track.attachedElements]) track.attach(element);
+}
+
+/**
  * Presenter camera overlay (objective 961a9322) — an add-on to the regular
  * screen share, not a separate way to share. While the presenter is
  * sharing (via LiveKit's own Share screen button), "Add me to the share"
@@ -253,6 +262,7 @@ export function PresenterOverlayControl({
       // userProvidedTrack: true — otherwise LiveKit stops the track it's
       // replacing, and we need the raw capture to swap back to later.
       await share.track.replaceTrack(compositor.track, { userProvidedTrack: true });
+      reattachLocalTiles(share.track);
       setOverlayStatus("on");
     } catch (error) {
       console.error("[presenter-overlay] failed to start", error);
@@ -455,6 +465,7 @@ export function PresenterOverlayControl({
       await share.track.replaceTrack(share.rawScreen, { userProvidedTrack: false }).catch((error) => {
         console.error("[presenter-overlay] failed to restore the plain screen share", error);
       });
+      reattachLocalTiles(share.track);
     }
     await disposeOverlay();
   }
