@@ -67,3 +67,13 @@ export class ScreenViewport {
     this.startedAt = now;
   }
 }
+
+/** A point on the output frame (fractions 0–1) → where it is on the captured screen, given the part of the screen currently shown. */
+export function outputToScreen(view: ViewRect, fx: number, fy: number): { x: number; y: number } {
+  return { x: view.x + fx * view.width, y: view.y + fy * view.height };
+}
+
+/** A point on the captured screen (fractions 0–1) → where it is drawn on the output frame (fractions; outside 0–1 when scrolled out of view). */
+export function screenToOutput(view: ViewRect, sx: number, sy: number): { x: number; y: number } {
+  return { x: (sx - view.x) / view.width, y: (sy - view.y) / view.height };
+}

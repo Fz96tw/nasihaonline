@@ -145,7 +145,8 @@ export function PresenterOverlayControl({
   const [normalizeSize, setNormalizeSize] = useState(true);
   // Host hand gestures (default off) and what's recognized right now — for the host's own indicator, never drawn into the stream.
   const [gestures, setGestures] = useState(false);
-  const [gestureLabel, setGestureLabel] = useState<"pointing" | "zooming" | "reset" | "unavailable" | null>(null);
+  const [gestureLabel, setGestureLabel] = useState<"pointing" | "zooming" | "reset" | "drawing" | "unavailable" | null>(null);
+  const [penColor, setPenColor] = useState<PresenterOverlaySettings["penColor"]>("red");
   const [background, setBackground] = useState<PresenterOverlaySettings["background"]>("remove");
   const [panelShape, setPanelShape] = useState<PanelShape>("rounded");
   const [softEdge, setSoftEdge] = useState(false);
@@ -188,7 +189,7 @@ export function PresenterOverlayControl({
   }, []);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, span, gestures, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
+    return { opacity, scale, position, span, gestures, penColor, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -916,7 +917,9 @@ export function PresenterOverlayControl({
                 ? "Pinch: zoomed, move your hand to pan"
                 : gestureLabel === "reset"
                   ? "Palm: zoom reset"
-                  : "Couldn't load the hand model — gestures are off"}
+                  : gestureLabel === "drawing"
+                    ? "Drawing"
+                    : "Couldn't load the hand model — gestures are off"}
           </span>
         )}
         <details className="text-[11px] text-white/60">
@@ -925,6 +928,7 @@ export function PresenterOverlayControl({
             <li>Point with your index finger, other fingers curled, and hold for a moment: a red laser dot follows your fingertip.</li>
             <li>Pinch thumb and index finger together and hold half a second: the screen zooms 2x toward your pinch. Move your pinched hand to pan.</li>
             <li>Show an open palm for half a second: back to the whole screen.</li>
+            <li>Hold two fingers together (index and middle, others curled) for a moment to draw in the air; lower them to stop. Drawings fade after a few seconds.</li>
             <li>Keep your hand fully in the camera frame. Only the screen zooms, not you.</li>
           </ul>
         </details>
@@ -934,6 +938,27 @@ export function PresenterOverlayControl({
           </button>
           <button type="button" data-testid="overlay-zoom-reset" onClick={() => overlayRef.current?.compositor.resetZoom()} className={segmentClass(false)}>
             Reset zoom
+          </button>
+        </div>
+        <div className="flex items-center gap-1">
+          <span>Pen</span>
+          {(["red", "yellow", "green"] as const).map((color) => (
+            <button
+              key={color}
+              type="button"
+              data-testid={`overlay-pen-${color}`}
+              aria-label={`${color} pen`}
+              aria-pressed={penColor === color}
+              onClick={() => {
+                setPenColor(color);
+                updateSettings({ penColor: color });
+              }}
+              className={`h-5 w-5 rounded-full border-2 ${penColor === color ? "border-white" : "border-white/20"}`}
+              style={{ backgroundColor: color === "red" ? "#ff3030" : color === "yellow" ? "#ffd60a" : "#30d158" }}
+            />
+          ))}
+          <button type="button" data-testid="overlay-clear-drawing" onClick={() => overlayRef.current?.compositor.clearDrawing()} className={`${segmentClass(false)} ml-1`}>
+            Clear drawing
           </button>
         </div>
       </div>

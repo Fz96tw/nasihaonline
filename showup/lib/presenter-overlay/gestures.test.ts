@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   COOLDOWN_MS,
+  PEN_HOLD_MS,
   GRACE_MS,
   GestureTracker,
   PALM_HOLD_MS,
@@ -13,12 +14,12 @@ import {
   type GestureAction,
   type Landmark,
 } from "./gestures.ts";
-import { ScreenViewport, ZOOM, ZOOM_GLIDE_MS } from "./screen-zoom.ts";
+import { ScreenViewport, ZOOM, ZOOM_GLIDE_MS, outputToScreen, screenToOutput } from "./screen-zoom.ts";
 
 type Finger = "ext" | "curl" | "half";
 
 /** A right-side-up hand with the wrist at the bottom; `ox` shifts it sideways. Fingers: index, middle, ring, pinky. */
-function hand(fingers: [Finger, Finger, Finger, Finger], opts: { pinch?: boolean; ox?: number; oy?: number } = {}): Landmark[] {
+function hand(fingers: [Finger, Finger, Finger, Finger], opts: { pinch?: boolean; ox?: number; oy?: number; apart?: boolean } = {}): Landmark[] {
   const ox = opts.ox ?? 0;
   const oy = opts.oy ?? 0;
   const points: Landmark[] = Array.from({ length: 21 }, () => ({ x: 0.5 + ox, y: 0.9 + oy }));
@@ -31,7 +32,8 @@ function hand(fingers: [Finger, Finger, Finger, Finger], opts: { pinch?: boolean
   const columns = [0.5, 0.55, 0.6, 0.65];
   const bases = [5, 9, 13, 17];
   fingers.forEach((state, i) => {
-    const x = columns[i] + ox - 0.05;
+    // `apart` spreads the other fingers away from the index finger (a peace sign rather than two fingers together).
+    const x = columns[i] + ox - 0.05 + (opts.apart && i >= 1 ? 0.1 : 0);
     const mcp = { x, y: 0.7 + oy };
     const pip = state === "curl" ? { x, y: 0.62 + oy } : { x, y: 0.6 + oy };
     const dip = state === "curl" ? { x, y: 0.68 + oy } : { x, y: 0.55 + oy };
@@ -50,6 +52,8 @@ function hand(fingers: [Finger, Finger, Finger, Finger], opts: { pinch?: boolean
 const POINT = () => hand(["ext", "curl", "curl", "curl"]);
 const PINCH = () => hand(["curl", "curl", "curl", "curl"], { pinch: true });
 const PALM = () => hand(["ext", "ext", "ext", "ext"]);
+const PEN = () => hand(["ext", "ext", "curl", "curl"]);
+const PEACE = () => hand(["ext", "ext", "curl", "curl"], { apart: true });
 const TALK = () => hand(["half", "half", "curl", "half"]);
 
 test("classifies pointing, pinching and an open palm", () => {
@@ -57,7 +61,9 @@ test("classifies pointing, pinching and an open palm", () => {
   assert.equal(classifyPose(PINCH()).pose, "pinch");
   assert.equal(classifyPose(PALM()).pose, "palm");
   assert.equal(classifyPose(hand(["curl", "curl", "curl", "curl"])).pose, "none", "a fist is nothing");
-  assert.equal(classifyPose(hand(["ext", "ext", "curl", "curl"])).pose, "none", "a peace sign is nothing");
+  assert.equal(classifyPose(PEN()).pose, "pen", "two fingers together is the pen");
+  assert.equal(classifyPose(PEACE()).pose, "none", "a peace sign is nothing");
+  assert.equal(classifyPose(hand(["ext", "ext", "ext", "curl"])).pose, "none", "three fingers is nothing");
   assert.equal(classifyPose(TALK()).pose, "none", "half-curled talking hands are nothing");
 });
 
@@ -116,7 +122,7 @@ test("a brief misread frame does not restart the pointing hold", () => {
 
 test("normal talking gestures trigger nothing", () => {
   const tracker = new GestureTracker();
-  const shapes = [TALK, () => hand(["curl", "curl", "curl", "curl"]), () => hand(["ext", "ext", "curl", "curl"]), TALK];
+  const shapes = [TALK, () => hand(["curl", "curl", "curl", "curl"]), () => PEACE(), TALK];
   let t = 0;
   for (let i = 0; i < 60; i++) {
     const shape = shapes[i % shapes.length];
@@ -246,4 +252,52 @@ test("reset glides back to the whole screen", () => {
   assert.ok(view.rect(1000 + ZOOM_GLIDE_MS / 2).width > 0.5);
   assert.deepEqual(view.rect(1000 + ZOOM_GLIDE_MS), { x: 0, y: 0, width: 1, height: 1 });
   assert.equal(view.zoomed, false);
+});
+
+test("two fingers held together start a stroke after the hold and follow the fingertip", () => {
+  const tracker = new GestureTracker();
+  let state = run(tracker, 0, PEN_HOLD_MS - 100, PEN).state;
+  assert.equal(state.pen, null, "too early");
+  state = run(tracker, PEN_HOLD_MS - 67, PEN_HOLD_MS + 300, PEN).state;
+  const p = PEN();
+  assert.ok(state.pen && Math.abs(state.pen.u - p[8].x) < 1e-6 && Math.abs(state.pen.v - p[8].y) < 1e-6);
+  assert.equal(state.label, "drawing");
+  const moved = hand(["ext", "ext", "curl", "curl"], { ox: 0.15 });
+  const first = tracker.update(PEN_HOLD_MS + 333, moved).pen as { u: number };
+  assert.ok(first.u > p[8].x && first.u < moved[8].x, "smoothed");
+});
+
+test("ending the pose (or losing the hand) ends the stroke after the grace period", () => {
+  const tracker = new GestureTracker();
+  run(tracker, 0, PEN_HOLD_MS + 300, PEN);
+  assert.ok(tracker.update(PEN_HOLD_MS + 320, PEN()).pen);
+  const gone = run(tracker, PEN_HOLD_MS + 340, PEN_HOLD_MS + 340 + GRACE_MS + 100, () => null).state;
+  assert.equal(gone.pen, null);
+  assert.equal(gone.label, null);
+  const other = new GestureTracker();
+  run(other, 0, PEN_HOLD_MS + 300, PEN);
+  const changed = run(other, PEN_HOLD_MS + 320, PEN_HOLD_MS + 320 + GRACE_MS + 100, PALM).state;
+  assert.equal(changed.pen, null, "a different pose ends it too");
+});
+
+test("the pen pose does not trigger pointing, zoom or reset, and a brief two-finger flash draws nothing", () => {
+  const tracker = new GestureTracker();
+  const { actions, state } = run(tracker, 0, 3000, PEN);
+  assert.equal(actions.length, 0);
+  assert.equal(state.pointer, null);
+  const brief = new GestureTracker();
+  const flash = run(brief, 0, PEN_HOLD_MS - 120, PEN);
+  assert.equal(flash.state.pen, null);
+  assert.equal(run(brief, PEN_HOLD_MS - 100, 1500, () => null).state.pen, null);
+});
+
+test("output and screen coordinates convert both ways through the current zoom view", () => {
+  const whole = { x: 0, y: 0, width: 1, height: 1 };
+  assert.deepEqual(outputToScreen(whole, 0.3, 0.7), { x: 0.3, y: 0.7 });
+  const zoomed = { x: 0.25, y: 0.5, width: 0.5, height: 0.5 };
+  assert.deepEqual(outputToScreen(zoomed, 0.5, 0.5), { x: 0.5, y: 0.75 });
+  const there = outputToScreen(zoomed, 0.2, 0.9);
+  const back = screenToOutput(zoomed, there.x, there.y);
+  assert.ok(Math.abs(back.x - 0.2) < 1e-9 && Math.abs(back.y - 0.9) < 1e-9);
+  assert.ok(screenToOutput(zoomed, 0.1, 0.1).x < 0, "content scrolled out of view lands outside the frame");
 });

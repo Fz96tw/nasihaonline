@@ -30,7 +30,8 @@
 
 import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
 import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement } from "./gestures.ts";
-import { ScreenViewport } from "./screen-zoom.ts";
+import { PEN_COLORS, StrokeBoard, type PenColor } from "./drawing.ts";
+import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
 import { SizeNormalizer, measureFromRows } from "./size-normalize.ts";
 import { WindowSmoother, clampWindow, panelAspect, personBounds, targetCentre, tracePanelPath, windowSize, type PanelShape, type PersonBounds } from "./panel.ts";
 
@@ -99,6 +100,8 @@ export type PresenterOverlaySettings = {
    * open palm to reset. Off by default; loads the hand model the first time it is switched on.
    */
   gestures: boolean;
+  /** Colour of the air-draw pen (the two-finger gesture, part of `gestures`). */
+  penColor: PenColor;
   /**
    * Scale each cut-out by how far its person sits from their camera, so everyone looks the same size.
    * Host-controlled; on by default. Off = every camera frame is scaled the same (zoom 1).
@@ -139,6 +142,7 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   position: "center",
   span: false,
   gestures: false,
+  penColor: "red",
   normalizeSize: true,
   background: "remove",
   panelShape: "rounded",
@@ -174,6 +178,8 @@ export type PresenterOverlayCompositor = {
   zoomIn: () => void;
   /** Back to the whole screen. */
   resetZoom: () => void;
+  /** Removes every air-drawn stroke at once. */
+  clearDrawing: () => void;
   /** Stops all readers and the output track (the segmenter is kept for reuse). Does NOT stop the input tracks — the caller owns those. */
   stop: () => void;
 };
@@ -365,6 +371,7 @@ export async function startPresenterOverlayCompositor({
 
   // Gestures: the tracker, the screen zoom, the laser dot and the hand model (loaded on first use).
   const viewport = new ScreenViewport();
+  const board = new StrokeBoard();
   let tracker = new GestureTracker();
   let hand: HandLandmarker | null = null;
   let handLoading = false;
@@ -663,6 +670,43 @@ export async function startPresenterOverlayCompositor({
     };
   }
 
+  /** Air-drawn strokes, on top of the screen layer and under the ghosts. They live in screen coordinates, so they follow the zoom view. */
+  function drawStrokes(now: number, width: number, height: number) {
+    const shown = board.visible(now);
+    if (shown.length === 0) return;
+    const view = viewport.rect(now);
+    outputCtx.save();
+    outputCtx.lineCap = "round";
+    outputCtx.lineJoin = "round";
+    outputCtx.lineWidth = Math.max(3, height * 0.006);
+    for (const { stroke, alpha } of shown) {
+      if (stroke.points.length === 0) continue;
+      const points = stroke.points.map((point) => {
+        const at = screenToOutput(view, point.x, point.y);
+        return { x: at.x * width, y: at.y * height };
+      });
+      const color = PEN_COLORS[stroke.color];
+      outputCtx.globalAlpha = alpha;
+      outputCtx.strokeStyle = color;
+      outputCtx.shadowColor = color;
+      outputCtx.shadowBlur = outputCtx.lineWidth * 2;
+      outputCtx.beginPath();
+      outputCtx.moveTo(points[0].x, points[0].y);
+      if (points.length === 1) {
+        outputCtx.lineTo(points[0].x + 0.1, points[0].y);
+      } else {
+        // Curve through the midpoints, so the coarse ~14 Hz samples don't show as corners.
+        for (let i = 1; i < points.length - 1; i++) {
+          outputCtx.quadraticCurveTo(points[i].x, points[i].y, (points[i].x + points[i + 1].x) / 2, (points[i].y + points[i + 1].y) / 2);
+        }
+        const last = points[points.length - 1];
+        outputCtx.lineTo(last.x, last.y);
+      }
+      outputCtx.stroke();
+    }
+    outputCtx.restore();
+  }
+
   /** The glowing red laser dot at the host's fingertip, with a short fading trail. */
   function drawLaser(now: number, height: number) {
     const placement = hostPlacement();
@@ -712,6 +756,7 @@ export async function startPresenterOverlayCompositor({
   /** Runs hand detection on the host's latest camera frame (throttled) and applies what it recognizes. */
   function runGestures(source: Source, now: number) {
     if (!settings.gestures) {
+      board.end(now);
       if (pointer || lastLabel) {
         tracker = new GestureTracker();
         pointer = null;
@@ -755,6 +800,15 @@ export async function startPresenterOverlayCompositor({
     // With the host's ghost off the share there's nothing for a gesture to point at, so it sees no hand.
     const state = tracker.update(now, placement ? landmarks : null, source.aspect);
     pointer = state.pointer;
+    // Air-draw: the pen tip goes through the same ghost mapping as the laser, then to screen coordinates through the current zoom view.
+    if (placement && state.pen) {
+      const out = cameraToOutput(state.pen.u, state.pen.v, placement);
+      const onScreen = outputToScreen(viewport.rect(now), out.x / outputCanvas.width, out.y / outputCanvas.height);
+      if (!board.drawing) board.begin(now, settings.penColor);
+      board.add(onScreen.x, onScreen.y);
+    } else {
+      board.end(now);
+    }
     let panned = false;
     for (const action of state.actions) {
       if (!placement) break;
@@ -795,6 +849,8 @@ export async function startPresenterOverlayCompositor({
       outputCtx.fillStyle = "#000";
       outputCtx.fillRect(0, 0, width, height);
     }
+
+    drawStrokes(now, width, height);
 
     // Fading-out sources first, then the ones on their way in, so a new speaker fades in over the old one.
     // Each real camera keeps its own aspect ratio; the visible ones are spaced out in the order given.
@@ -900,6 +956,10 @@ export async function startPresenterOverlayCompositor({
     viewport.reset(performance.now());
   }
 
+  function clearDrawing() {
+    board.clear();
+  }
+
   function stop() {
     if (stopped) return;
     stopped = true;
@@ -918,5 +978,5 @@ export async function startPresenterOverlayCompositor({
     onError(error);
   });
 
-  return { track: generator, settings, addSource, removeSource, setVisible, zoomIn, resetZoom, stop };
+  return { track: generator, settings, addSource, removeSource, setVisible, zoomIn, resetZoom, clearDrawing, stop };
 }
