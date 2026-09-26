@@ -1,7 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#4f46e5"/>
-  <rect x="10" y="14" width="44" height="30" rx="4" fill="#ffffff"/>
-  <circle cx="32" cy="27" r="6" fill="#4f46e5" fill-opacity="0.55"/>
-  <path d="M20 44c1.5-7 6-10 12-10s10.500 3 12 10z" fill="#4f46e5" fill-opacity="0.55"/>
-  <rect x="24" y="48" width="16" height="4" rx="2" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80">
+  <defs>
+    <radialGradient id="glow" cx="0.85" cy="0.12" r="0.9">
+      <stop offset="0" stop-color="#c084fc" stop-opacity="0.95"/>
+      <stop offset="0.45" stop-color="#8800f5" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#8800f5" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="clip"><rect width="80" height="80" rx="20"/></clipPath>
+  </defs>
+  <g clip-path="url(#clip)">
+    <rect width="80" height="80" fill="#1b1730"/>
+    <rect width="80" height="80" fill="url(#glow)"/>
+  </g>
+  <rect x="2" y="2" width="76" height="76" rx="18" fill="none" stroke="#a855f7" stroke-opacity="0.7" stroke-width="4"/>
+  <!-- Heavier than the page logo so it holds up at 16px -->
+  <rect x="11" y="24" width="24" height="6" rx="3" fill="#fff" fill-opacity="0.65"/>
+  <rect x="11" y="35" width="16" height="6" rx="3" fill="#fff" fill-opacity="0.5"/>
+  <rect x="11" y="46" width="20" height="6" rx="3" fill="#fff" fill-opacity="0.35"/>
+  <circle cx="50" cy="27" r="9" fill="#e9d5ff" fill-opacity="0.9"/>
+  <path d="M29 63c0-12 9-20 21-20s21 8 21 20z" fill="#e9d5ff" fill-opacity="0.9"/>
 </svg>
