@@ -13,7 +13,7 @@ export default function HomePage() {
           <h1 className="font-bold tracking-tight text-purple-600">
             Show
             {/* "up" rises above the line and fades, like the presenter ghost stepping up out of the screen. */}
-            <span className="-ml-[0.18em] inline-block -translate-y-[0.25em] opacity-50 [text-shadow:0_0_0.35em_rgb(168_85_247_/_0.85)]">up</span>
+            <span className="-ml-[0.18em] inline-block -translate-y-[0.17em] opacity-50 [text-shadow:0_0_0.35em_rgb(168_85_247_/_0.85)]">up</span>
           </h1>
         </div>
         <p className="text-balance text-lg font-medium">Show up. Share your screen. Step in.</p>
