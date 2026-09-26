@@ -31,3 +31,23 @@ body {
   color: hsl(var(--foreground));
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
+
+/* The chosen landing card fades in as it expands into its form. */
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.card-in {
+  animation: card-in 250ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-in {
+    animation: none;
+  }
+}
