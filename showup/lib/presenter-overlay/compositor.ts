@@ -70,6 +70,11 @@ const MIN_FRAME_INTERVAL_MS = 1000 / 20;
 const HAND_INTERVAL_MS = 70;
 /** The laser dot's trail lasts this long. */
 const LASER_TRAIL_MS = 250;
+/** The dimmed area's darkness, and the spotlight's radius as a fraction of the frame height. */
+const SPOTLIGHT_DIM = 0.65;
+const SPOTLIGHT_RADIUS = 0.12;
+/** The sticky spotlight fades over this long. */
+const SPOTLIGHT_FADE_MS = 500;
 /** Each camera is segmented within this box (keeping its own aspect ratio) — plenty for a translucent cut-out, and keeps the per-frame mask readback cheap. */
 const CAMERA_WIDTH = 640;
 const CAMERA_HEIGHT = 360;
@@ -180,6 +185,8 @@ export type PresenterOverlayCompositor = {
   resetZoom: () => void;
   /** Removes every air-drawn stroke at once. */
   clearDrawing: () => void;
+  /** Turns the sticky spotlight (screen dimmed except around the host's hand, or the screen centre) on or off. */
+  setSpotlight: (on: boolean) => void;
   /** Stops all readers and the output track (the segmenter is kept for reuse). Does NOT stop the input tracks — the caller owns those. */
   stop: () => void;
 };
@@ -372,6 +379,13 @@ export async function startPresenterOverlayCompositor({
   // Gestures: the tracker, the screen zoom, the laser dot and the hand model (loaded on first use).
   const viewport = new ScreenViewport();
   const board = new StrokeBoard();
+  // Spotlight: the fist gesture's fade (from the tracker) and the sticky button's own fade; where the light last was, for fading out.
+  let gestureSpotlight = 0;
+  let handPoint: { u: number; v: number } | null = null;
+  let stickyTarget = 0;
+  let stickyAlpha = 0;
+  let lastStickyAt = 0;
+  let lastSpotAt: { x: number; y: number } | null = null;
   let tracker = new GestureTracker();
   let hand: HandLandmarker | null = null;
   let handLoading = false;
@@ -670,6 +684,28 @@ export async function startPresenterOverlayCompositor({
     };
   }
 
+  /** Dims everything but a soft circle around the host's hand (or the screen centre for the sticky button); under the strokes, ghosts and laser. */
+  function drawSpotlight(now: number, width: number, height: number) {
+    const dt = lastStickyAt === 0 ? 0 : now - lastStickyAt;
+    lastStickyAt = now;
+    const step = dt / SPOTLIGHT_FADE_MS;
+    stickyAlpha = stickyAlpha < stickyTarget ? Math.min(stickyTarget, stickyAlpha + step) : Math.max(stickyTarget, stickyAlpha - step);
+    const alpha = Math.max(gestureSpotlight, stickyAlpha);
+    if (alpha <= 0.003) {
+      lastSpotAt = null;
+      return;
+    }
+    const placement = hostPlacement();
+    if (placement && handPoint) lastSpotAt = cameraToOutput(handPoint.u, handPoint.v, placement);
+    else if (!lastSpotAt) lastSpotAt = { x: width / 2, y: height / 2 };
+    const radius = height * SPOTLIGHT_RADIUS;
+    const gradient = outputCtx.createRadialGradient(lastSpotAt.x, lastSpotAt.y, radius * 0.7, lastSpotAt.x, lastSpotAt.y, radius * 1.3);
+    gradient.addColorStop(0, "rgba(0, 0, 0, 0)");
+    gradient.addColorStop(1, `rgba(0, 0, 0, ${SPOTLIGHT_DIM * alpha})`);
+    outputCtx.fillStyle = gradient;
+    outputCtx.fillRect(0, 0, width, height);
+  }
+
   /** Air-drawn strokes, on top of the screen layer and under the ghosts. They live in screen coordinates, so they follow the zoom view. */
   function drawStrokes(now: number, width: number, height: number) {
     const shown = board.visible(now);
@@ -757,6 +793,8 @@ export async function startPresenterOverlayCompositor({
   function runGestures(source: Source, now: number) {
     if (!settings.gestures) {
       board.end(now);
+      gestureSpotlight = 0;
+      handPoint = null;
       if (pointer || lastLabel) {
         tracker = new GestureTracker();
         pointer = null;
@@ -800,6 +838,8 @@ export async function startPresenterOverlayCompositor({
     // With the host's ghost off the share there's nothing for a gesture to point at, so it sees no hand.
     const state = tracker.update(now, placement ? landmarks : null, source.aspect);
     pointer = state.pointer;
+    gestureSpotlight = state.spotlight ? state.spotlight.alpha : 0;
+    handPoint = state.hand;
     // Air-draw: the pen tip goes through the same ghost mapping as the laser, then to screen coordinates through the current zoom view.
     if (placement && state.pen) {
       const out = cameraToOutput(state.pen.u, state.pen.v, placement);
@@ -850,6 +890,7 @@ export async function startPresenterOverlayCompositor({
       outputCtx.fillRect(0, 0, width, height);
     }
 
+    drawSpotlight(now, width, height);
     drawStrokes(now, width, height);
 
     // Fading-out sources first, then the ones on their way in, so a new speaker fades in over the old one.
@@ -960,6 +1001,10 @@ export async function startPresenterOverlayCompositor({
     board.clear();
   }
 
+  function setSpotlight(on: boolean) {
+    stickyTarget = on ? 1 : 0;
+  }
+
   function stop() {
     if (stopped) return;
     stopped = true;
@@ -978,5 +1023,5 @@ export async function startPresenterOverlayCompositor({
     onError(error);
   });
 
-  return { track: generator, settings, addSource, removeSource, setVisible, zoomIn, resetZoom, clearDrawing, stop };
+  return { track: generator, settings, addSource, removeSource, setVisible, zoomIn, resetZoom, clearDrawing, setSpotlight, stop };
 }

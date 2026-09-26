@@ -6,13 +6,17 @@
  */
 
 export type Landmark = { x: number; y: number };
-export type Pose = "point" | "pinch" | "palm" | "pen" | "none";
+export type Pose = "point" | "pinch" | "palm" | "pen" | "fist" | "none";
 
 /** Hold times before a gesture takes effect. */
 export const POINT_HOLD_MS = 300;
 export const PINCH_HOLD_MS = 500;
 export const PALM_HOLD_MS = 500;
 export const PEN_HOLD_MS = 300;
+/** A fist must be held this long to turn the spotlight on (longer, so a resting fist doesn't trigger it). */
+export const FIST_HOLD_MS = 800;
+/** The spotlight fades out over this long after the fist opens. */
+export const SPOTLIGHT_FADE_MS = 500;
 /** How long a pose may drop out (a misread frame) without its hold timer restarting. */
 export const GRACE_MS = 150;
 /** The pointer dot fades out over this long after the pointing ends. */
@@ -46,6 +50,12 @@ const EXTENDED_RATIO = 1.1;
 const CURLED_RATIO = 1.0;
 /** Index and middle fingertips closer than this fraction of the hand's size are "together" (the pen pose); a peace sign is wider. */
 const PEN_TOGETHER_RATIO = 0.3;
+/** In a fist every fingertip is folded in close to the palm: nearer the wrist than this multiple of the hand's size. */
+const FIST_TIP_RATIO = 1.0;
+/** A fist only counts when raised: the wrist above this fraction of the frame height (y grows downward), i.e. out of the lowest ~30%. */
+export const FIST_RAISED_Y = 0.7;
+/** Palm landmarks (wrist and the knuckles), averaged for "the middle of the hand". */
+const PALM_POINTS = [0, 5, 9, 13, 17];
 /** Hands smaller than this (fraction of the frame) are too small to read. */
 const MIN_HAND_SIZE = 0.03;
 
@@ -55,6 +65,8 @@ export type PoseReading = {
   tip: Landmark;
   /** Midpoint of thumb and index tips — where a pinch is. */
   pinchPoint: Landmark;
+  /** The middle of the hand (wrist and knuckles averaged). */
+  palm: Landmark;
 };
 
 /**
@@ -66,15 +78,15 @@ export function classifyPose(landmarks: readonly Landmark[], aspect = 1): PoseRe
   const tip = landmarks[INDEX_TIP];
   const thumb = landmarks[THUMB_TIP];
   const pinchPoint = { x: (tip.x + thumb.x) / 2, y: (tip.y + thumb.y) / 2 };
-  const none: PoseReading = { pose: "none", tip, pinchPoint };
+  const palmPoints = PALM_POINTS.map((i) => landmarks[i]).filter(Boolean);
+  const palm = { x: palmPoints.reduce((t, p) => t + p.x, 0) / (palmPoints.length || 1), y: palmPoints.reduce((t, p) => t + p.y, 0) / (palmPoints.length || 1) };
+  const none: PoseReading = { pose: "none", tip, pinchPoint, palm };
   if (landmarks.length < 21) return none;
   if (landmarks.some((p) => p.x < EDGE || p.x > 1 - EDGE || p.y < EDGE || p.y > 1 - EDGE)) return none;
   const dist = (a: Landmark, b: Landmark) => Math.hypot((a.x - b.x) * aspect, a.y - b.y);
   const wrist = landmarks[WRIST];
   const size = dist(wrist, landmarks[MIDDLE_MCP]);
   if (size < MIN_HAND_SIZE) return none;
-
-  if (dist(thumb, tip) < PINCH_RATIO * size) return { pose: "pinch", tip, pinchPoint };
 
   const state = FINGERS.map(([t, p]) => {
     const tipDistance = dist(landmarks[t], wrist);
@@ -83,13 +95,19 @@ export function classifyPose(landmarks: readonly Landmark[], aspect = 1): PoseRe
     if (tipDistance < jointDistance * CURLED_RATIO) return "curled";
     return "unsure";
   });
+  // A fist first: with the thumb folded over the fingers its tip can sit near the index tip, which must not read as a pinch.
+  // The fingertips of a real pinch are held out in front of the palm; a fist's are tucked in against it.
+  if (state.every((s) => s === "curled") && FINGERS.every(([t]) => dist(landmarks[t], wrist) < FIST_TIP_RATIO * size)) {
+    return wrist.y <= FIST_RAISED_Y ? { pose: "fist", tip, pinchPoint, palm } : none;
+  }
+  if (dist(thumb, tip) < PINCH_RATIO * size) return { pose: "pinch", tip, pinchPoint, palm };
   const [index, ...others] = state;
-  if (index === "extended" && others.every((s) => s === "curled")) return { pose: "point", tip, pinchPoint };
+  if (index === "extended" && others.every((s) => s === "curled")) return { pose: "point", tip, pinchPoint, palm };
   const [middle, ring, pinky] = others;
   if (index === "extended" && middle === "extended" && ring === "curled" && pinky === "curled" && dist(tip, landmarks[MIDDLE_TIP]) < PEN_TOGETHER_RATIO * size) {
-    return { pose: "pen", tip, pinchPoint };
+    return { pose: "pen", tip, pinchPoint, palm };
   }
-  if (state.every((s) => s === "extended")) return { pose: "palm", tip, pinchPoint };
+  if (state.every((s) => s === "extended")) return { pose: "palm", tip, pinchPoint, palm };
   return none;
 }
 
@@ -105,16 +123,26 @@ export type GestureState = {
   pointer: { u: number; v: number; fade: number } | null;
   /** The pen tip (camera-frame coordinates, smoothed) while a stroke is being drawn; null otherwise. */
   pen: { u: number; v: number } | null;
+  /** The middle of the hand (camera-frame coordinates, smoothed) while a hand is in view; null once it has been gone a moment. */
+  hand: { u: number; v: number } | null;
+  /** The fist spotlight: 1 while the fist is held (after the hold), fading to 0 after it opens; null when off. */
+  spotlight: { alpha: number } | null;
   actions: GestureAction[];
   /** What is currently recognized, for the host's (not streamed) indicator. */
-  label: "pointing" | "zooming" | "reset" | "drawing" | null;
+  label: "pointing" | "zooming" | "reset" | "drawing" | "spotlight" | null;
 };
 
-const POSES: readonly Pose[] = ["point", "pinch", "palm", "pen"];
+const POSES: readonly Pose[] = ["point", "pinch", "palm", "pen", "fist"];
 
 export class GestureTracker {
-  private since: Record<string, number | null> = { point: null, pinch: null, palm: null, pen: null };
-  private lastSeen: Record<string, number> = { point: 0, pinch: 0, palm: 0, pen: 0 };
+  private since: Record<string, number | null> = { point: null, pinch: null, palm: null, pen: null, fist: null };
+  private lastSeen: Record<string, number> = { point: 0, pinch: 0, palm: 0, pen: 0, fist: 0 };
+  private spotlightActive = false;
+  private spotlightEndedAt = 0;
+  private handX = 0;
+  private handY = 0;
+  private handAt: number | null = null;
+  private handSeenAt = -Infinity;
   private penActive = false;
   private penX = 0;
   private penY = 0;
@@ -173,6 +201,31 @@ export class GestureTracker {
       this.pointerAt = null;
     }
 
+    // The middle of the hand, smoothed, for the spotlight to follow (and for a sticky spotlight to sit on).
+    if (reading) {
+      if (this.handAt === null || now - this.handSeenAt > GRACE_MS) {
+        this.handX = reading.palm.x;
+        this.handY = reading.palm.y;
+      } else {
+        const k = 1 - Math.exp(-Math.max(0, now - this.handAt) / SMOOTH_MS);
+        this.handX += (reading.palm.x - this.handX) * k;
+        this.handY += (reading.palm.y - this.handY) * k;
+      }
+      this.handAt = now;
+      this.handSeenAt = now;
+    }
+    const hand = now - this.handSeenAt <= GRACE_MS ? { u: this.handX, v: this.handY } : null;
+
+    // Spotlight: a raised fist held for FIST_HOLD_MS; fades out after it opens.
+    if (this.held("fist", now, FIST_HOLD_MS) && raw === "fist") {
+      this.spotlightActive = true;
+    } else if (this.spotlightActive && now - this.lastSeen.fist > GRACE_MS) {
+      this.spotlightActive = false;
+      this.spotlightEndedAt = this.lastSeen.fist;
+    }
+    const spotlightFade = this.spotlightActive ? 1 : 1 - (now - this.spotlightEndedAt) / SPOTLIGHT_FADE_MS;
+    const spotlight = this.spotlightActive || (this.spotlightEndedAt > 0 && spotlightFade > 0) ? { alpha: Math.max(0, Math.min(1, spotlightFade)) } : null;
+
     // Pen: two fingers together, held to start a stroke that follows the index fingertip until the pose ends.
     if (this.held("pen", now, PEN_HOLD_MS) && reading && raw === "pen") {
       if (!this.penActive || this.penAt === null) {
@@ -223,8 +276,18 @@ export class GestureTracker {
     const fade = this.pointerActive ? 1 : 1 - (now - this.pointerEndedAt) / POINTER_FADE_MS;
     const pointer = this.pointerActive || (this.pointerEndedAt > 0 && fade > 0) ? { u: this.pointerX, v: this.pointerY, fade: Math.max(0, Math.min(1, fade)) } : null;
     const pen = this.penActive ? { u: this.penX, v: this.penY } : null;
-    const label = this.pointerActive ? "pointing" : this.penActive ? "drawing" : this.pinching ? "zooming" : now < this.resetLabelUntil ? "reset" : null;
-    return { pointer, pen, actions, label };
+    const label = this.pointerActive
+      ? "pointing"
+      : this.penActive
+        ? "drawing"
+        : this.spotlightActive
+          ? "spotlight"
+          : this.pinching
+            ? "zooming"
+            : now < this.resetLabelUntil
+              ? "reset"
+              : null;
+    return { pointer, pen, hand, spotlight, actions, label };
   }
 }
 

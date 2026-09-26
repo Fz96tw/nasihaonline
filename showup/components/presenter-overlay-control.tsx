@@ -145,7 +145,8 @@ export function PresenterOverlayControl({
   const [normalizeSize, setNormalizeSize] = useState(true);
   // Host hand gestures (default off) and what's recognized right now — for the host's own indicator, never drawn into the stream.
   const [gestures, setGestures] = useState(false);
-  const [gestureLabel, setGestureLabel] = useState<"pointing" | "zooming" | "reset" | "drawing" | "unavailable" | null>(null);
+  const [gestureLabel, setGestureLabel] = useState<"pointing" | "zooming" | "reset" | "drawing" | "spotlight" | "unavailable" | null>(null);
+  const [spotlightOn, setSpotlightOn] = useState(false);
   const [penColor, setPenColor] = useState<PresenterOverlaySettings["penColor"]>("red");
   const [background, setBackground] = useState<PresenterOverlaySettings["background"]>("remove");
   const [panelShape, setPanelShape] = useState<PanelShape>("rounded");
@@ -205,6 +206,7 @@ export function PresenterOverlayControl({
     setOverlayStatus("off");
     clearInterval(overlay.tick);
     setGestureLabel(null);
+    setSpotlightOn(false);
     setPeople([]);
     setGuests([]);
     // Everyone who was on the overlay, or waiting to be, is told it's gone.
@@ -919,7 +921,9 @@ export function PresenterOverlayControl({
                   ? "Palm: zoom reset"
                   : gestureLabel === "drawing"
                     ? "Drawing"
-                    : "Couldn't load the hand model — gestures are off"}
+                    : gestureLabel === "spotlight"
+                      ? "Spotlight"
+                      : "Couldn't load the hand model — gestures are off"}
           </span>
         )}
         <details className="text-[11px] text-white/60">
@@ -928,6 +932,7 @@ export function PresenterOverlayControl({
             <li>Point with your index finger, other fingers curled, and hold for a moment: a red laser dot follows your fingertip.</li>
             <li>Pinch thumb and index finger together and hold half a second: the screen zooms 2x toward your pinch. Move your pinched hand to pan.</li>
             <li>Show an open palm for half a second: back to the whole screen.</li>
+            <li>Raise a fist (hand up in the camera frame) and hold it for a moment: the screen dims except a circle around your hand. Open your hand to bring the light back.</li>
             <li>Hold two fingers together (index and middle, others curled) for a moment to draw in the air; lower them to stop. Drawings fade after a few seconds.</li>
             <li>Keep your hand fully in the camera frame. Only the screen zooms, not you.</li>
           </ul>
@@ -957,6 +962,19 @@ export function PresenterOverlayControl({
               style={{ backgroundColor: color === "red" ? "#ff3030" : color === "yellow" ? "#ffd60a" : "#30d158" }}
             />
           ))}
+          <button
+            type="button"
+            data-testid="overlay-spotlight"
+            aria-pressed={spotlightOn}
+            onClick={() => {
+              const next = !spotlightOn;
+              setSpotlightOn(next);
+              overlayRef.current?.compositor.setSpotlight(next);
+            }}
+            className={`${segmentClass(spotlightOn)} ml-1`}
+          >
+            Spotlight
+          </button>
           <button type="button" data-testid="overlay-clear-drawing" onClick={() => overlayRef.current?.compositor.clearDrawing()} className={`${segmentClass(false)} ml-1`}>
             Clear drawing
           </button>

@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   COOLDOWN_MS,
+  FIST_HOLD_MS,
+  SPOTLIGHT_FADE_MS,
   PEN_HOLD_MS,
   GRACE_MS,
   GestureTracker,
@@ -50,7 +52,11 @@ function hand(fingers: [Finger, Finger, Finger, Finger], opts: { pinch?: boolean
 }
 
 const POINT = () => hand(["ext", "curl", "curl", "curl"]);
-const PINCH = () => hand(["curl", "curl", "curl", "curl"], { pinch: true });
+// A pinch holds the fingertips out in front of the palm (the index finger only half curled), unlike a fist.
+const PINCH = () => hand(["half", "curl", "curl", "curl"], { pinch: true });
+/** A raised fist (wrist up in the frame) and a resting one (wrist low). */
+const FIST = () => hand(["curl", "curl", "curl", "curl"], { oy: -0.3 });
+const FIST_LOW = () => hand(["curl", "curl", "curl", "curl"]);
 const PALM = () => hand(["ext", "ext", "ext", "ext"]);
 const PEN = () => hand(["ext", "ext", "curl", "curl"]);
 const PEACE = () => hand(["ext", "ext", "curl", "curl"], { apart: true });
@@ -65,6 +71,11 @@ test("classifies pointing, pinching and an open palm", () => {
   assert.equal(classifyPose(PEACE()).pose, "none", "a peace sign is nothing");
   assert.equal(classifyPose(hand(["ext", "ext", "ext", "curl"])).pose, "none", "three fingers is nothing");
   assert.equal(classifyPose(TALK()).pose, "none", "half-curled talking hands are nothing");
+  assert.equal(classifyPose(FIST()).pose, "fist", "a raised fist");
+  assert.equal(classifyPose(FIST_LOW()).pose, "none", "a fist held low in the frame is nothing");
+  const foldedThumb = FIST();
+  foldedThumb[4] = { x: foldedThumb[8].x + 0.01, y: foldedThumb[8].y + 0.01 }; // thumb folded over the fingers, tip beside the index tip
+  assert.equal(classifyPose(foldedThumb).pose, "fist", "a fist with the thumb across is not a pinch");
 });
 
 test("a hand only partly in frame, or too small, is not classified", () => {
@@ -300,4 +311,59 @@ test("output and screen coordinates convert both ways through the current zoom v
   const back = screenToOutput(zoomed, there.x, there.y);
   assert.ok(Math.abs(back.x - 0.2) < 1e-9 && Math.abs(back.y - 0.9) < 1e-9);
   assert.ok(screenToOutput(zoomed, 0.1, 0.1).x < 0, "content scrolled out of view lands outside the frame");
+});
+
+test("a raised fist held for the hold turns the spotlight on and it follows the middle of the hand", () => {
+  const tracker = new GestureTracker();
+  let state = run(tracker, 0, FIST_HOLD_MS - 100, FIST).state;
+  assert.equal(state.spotlight, null, "too early");
+  state = run(tracker, FIST_HOLD_MS - 67, FIST_HOLD_MS + 300, FIST).state;
+  assert.deepEqual(state.spotlight, { alpha: 1 });
+  assert.equal(state.label, "spotlight");
+  const f = FIST();
+  const centre = { u: [0, 5, 9, 13, 17].reduce((t, i) => t + f[i].x, 0) / 5, v: [0, 5, 9, 13, 17].reduce((t, i) => t + f[i].y, 0) / 5 };
+  assert.ok(state.hand && Math.abs(state.hand.u - centre.u) < 1e-9 && Math.abs(state.hand.v - centre.v) < 1e-9);
+  const moved = hand(["curl", "curl", "curl", "curl"], { oy: -0.3, ox: 0.2 });
+  const first = tracker.update(FIST_HOLD_MS + 333, moved).hand as { u: number };
+  assert.ok(first.u > centre.u && first.u < centre.u + 0.2, "smoothed, not a jump");
+  const later = run(tracker, FIST_HOLD_MS + 366, FIST_HOLD_MS + 1200, () => moved).state.hand as { u: number };
+  assert.ok(Math.abs(later.u - (centre.u + 0.2)) < 0.005, "and gets there");
+});
+
+test("the spotlight fades out in about half a second after the fist opens", () => {
+  const tracker = new GestureTracker();
+  run(tracker, 0, FIST_HOLD_MS + 300, FIST);
+  const end = FIST_HOLD_MS + 333;
+  const soon = run(tracker, end, end + GRACE_MS + 150, PALM).state;
+  assert.ok(soon.spotlight && soon.spotlight.alpha < 1 && soon.spotlight.alpha > 0);
+  const gone = run(tracker, end + GRACE_MS + 150, end + GRACE_MS + SPOTLIGHT_FADE_MS + 200, PALM).state;
+  assert.equal(gone.spotlight, null);
+});
+
+test("a resting fist, a low fist or a brief clench never turns the spotlight on", () => {
+  const low = new GestureTracker();
+  const lowRun = run(low, 0, 5000, FIST_LOW);
+  assert.equal(lowRun.state.spotlight, null);
+  const brief = new GestureTracker();
+  run(brief, 0, FIST_HOLD_MS - 150, FIST);
+  assert.equal(run(brief, FIST_HOLD_MS - 100, 3000, () => null).state.spotlight, null);
+  const flicker = new GestureTracker();
+  for (let i = 0; i < 20; i++) {
+    const { state } = run(flicker, i * 600, i * 600 + 450, FIST);
+    assert.equal(state.spotlight, null);
+    run(flicker, i * 600 + 460, i * 600 + 599, () => null);
+  }
+});
+
+test("the spotlight fist doesn't point, zoom, reset or draw", () => {
+  const tracker = new GestureTracker();
+  const { actions, state } = run(tracker, 0, 3000, FIST);
+  assert.equal(actions.length, 0);
+  assert.equal(state.pointer, null);
+  assert.equal(state.pen, null);
+  assert.ok(state.spotlight);
+});
+
+test("a real pinch is still a pinch when the index tip is out in front of the palm", () => {
+  assert.equal(classifyPose(PINCH()).pose, "pinch");
 });
