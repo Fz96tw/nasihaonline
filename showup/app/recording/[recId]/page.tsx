@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { BackLink } from "@/components/back-link";
 import { PageHeading } from "@/components/page-heading";
 import { RecordingParts } from "@/components/recording-parts";
 import { saveRecording, type RecordingViewJson } from "@/lib/recording-client";
@@ -81,60 +82,62 @@ export default function RecordingPage({ params }: { params: { recId: string } })
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center gap-6 px-4 py-10">
-      <header className="flex flex-col gap-1">
-        <PageHeading>Your recording</PageHeading>
-        <p className="text-sm text-muted-foreground">Bookmark this page: this link is your way back to the recording for 24 hours.</p>
-      </header>
+    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-4 py-10 sm:py-14">
+      <BackLink />
+      <div className="flex max-w-xl flex-col gap-6">
+        <header className="flex flex-col gap-1">
+          <PageHeading>Your recording</PageHeading>
+          <p className="text-sm text-muted-foreground">Bookmark this page: this link is your way back to the recording for 24 hours.</p>
+        </header>
 
-      {state.kind === "loading" && <p className="text-sm text-muted-foreground">Loading…</p>}
-      {state.kind === "no-secret" && (
-        <p className="text-sm">
-          This link is incomplete (it should end with <code>#…</code>). Use the full link you saved, or{" "}
-          <Link href="/recover" className="underline">recover it with your code and passcode</Link>.
-        </p>
-      )}
-      {state.kind === "not-found" && (
-        <p className="text-sm">
-          We couldn&apos;t find that recording. It may have expired (recordings are kept for 24 hours) or the link is wrong. You can also{" "}
-          <Link href="/recover" className="underline">recover it with your code and passcode</Link>.
-        </p>
-      )}
-      {state.kind === "unavailable" && (
-        <p role="alert" className="text-sm text-destructive">
-          Showup is temporarily unavailable. <button type="button" onClick={() => void load()} className="underline">Try again</button>
-        </p>
-      )}
-      {state.kind === "ok" && (
-        <>
-          <RecordingParts view={state.view} />
-          {state.view.emailAvailable && state.view.status !== "none" && !state.view.emailQueued && (
-            <form onSubmit={requestEmail} className="flex flex-col gap-2 rounded-xl border border-border bg-muted/40 p-4">
-              <label htmlFor="email" className="text-sm font-medium">Email me the link</label>
-              <p className="text-xs text-muted-foreground">
-                One email with this recording link, sent when the meeting has ended. We delete your address as soon as it&apos;s sent.
-              </p>
-              <div className="flex gap-2">
-                <input
-                  id="email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm"
-                />
-                <button type="submit" disabled={emailBusy} className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60">
-                  {emailBusy ? "…" : "Send"}
-                </button>
-              </div>
-            </form>
-          )}
-          {state.view.emailQueued && <p className="text-sm text-muted-foreground">An email with this link is on its way once the recording is ready.</p>}
-          {emailMsg && <p className="text-sm">{emailMsg}</p>}
-        </>
-      )}
-      <Link href="/" className="text-sm underline">Back to Showup</Link>
+        {state.kind === "loading" && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {state.kind === "no-secret" && (
+          <p className="text-sm">
+            This link is incomplete (it should end with <code>#…</code>). Use the full link you saved, or{" "}
+            <Link href="/recover" className="underline">recover it with your code and passcode</Link>.
+          </p>
+        )}
+        {state.kind === "not-found" && (
+          <p className="text-sm">
+            We couldn&apos;t find that recording. It may have expired (recordings are kept for 24 hours) or the link is wrong. You can also{" "}
+            <Link href="/recover" className="underline">recover it with your code and passcode</Link>.
+          </p>
+        )}
+        {state.kind === "unavailable" && (
+          <p role="alert" className="text-sm text-destructive">
+            Showup is temporarily unavailable. <button type="button" onClick={() => void load()} className="underline">Try again</button>
+          </p>
+        )}
+        {state.kind === "ok" && (
+          <>
+            <RecordingParts view={state.view} />
+            {state.view.emailAvailable && state.view.status !== "none" && !state.view.emailQueued && (
+              <form onSubmit={requestEmail} className="flex flex-col gap-2 rounded-xl border border-border bg-muted/40 p-4">
+                <label htmlFor="email" className="text-sm font-medium">Email me the link</label>
+                <p className="text-xs text-muted-foreground">
+                  One email with this recording link, sent when the meeting has ended. We delete your address as soon as it&apos;s sent.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    id="email"
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm"
+                  />
+                  <button type="submit" disabled={emailBusy} className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60">
+                    {emailBusy ? "…" : "Send"}
+                  </button>
+                </div>
+              </form>
+            )}
+            {state.view.emailQueued && <p className="text-sm text-muted-foreground">An email with this link is on its way once the recording is ready.</p>}
+            {emailMsg && <p className="text-sm">{emailMsg}</p>}
+          </>
+        )}
+      </div>
     </main>
   );
 }

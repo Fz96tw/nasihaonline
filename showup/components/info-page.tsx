@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { BackLink } from "@/components/back-link";
 import type { ReactNode } from "react";
 import { PageHeading } from "@/components/page-heading";
 
@@ -7,10 +6,7 @@ import { PageHeading } from "@/components/page-heading";
 export function InfoPage({ title, children }: { title: string; children: ReactNode }) {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-4 py-10 sm:py-14">
-      <Link href="/" className="inline-flex items-center gap-1 self-start text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-4 w-4" aria-hidden />
-        Back to Showup
-      </Link>
+      <BackLink />
       <PageHeading>{title}</PageHeading>
       {children}
     </main>
