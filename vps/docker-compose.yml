@@ -24,6 +24,10 @@ services:
           # for exceeding its age limit before ever reaching the app. This
           # alias routes it straight to nginx-proxy-manager internally instead.
           - nasihaforyou.org
+          # Same hairpin-NAT fix for Showup (its own compose project, see
+          # vps/showup/): LiveKit's webhooks to https://showup.cloudcurio.com
+          # must route straight to nginx-proxy-manager from inside this host.
+          - showup.cloudcurio.com
 
   postgres:
     image: postgres:16-alpine

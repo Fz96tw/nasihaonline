@@ -17,5 +17,7 @@ webhook:
   api_key: <GENERATE_API_KEY>
   urls:
     - https://nasihaforyou.org/api/webhooks/livekit
+    # Showup (vps/showup/). Both apps get every event and ignore rooms that aren't theirs.
+    - https://showup.cloudcurio.com/api/webhooks/livekit
 
 prometheus_port: 6789

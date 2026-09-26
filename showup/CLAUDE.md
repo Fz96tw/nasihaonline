@@ -26,3 +26,7 @@ See `.env.example`. LiveKit is the shared self-hosted instance; Showup room name
 ## Running locally
 
 See `README.md`. Short version: start Redis (`docker run -d --name showup-redis -p 6380:6379 redis:7-alpine`), `cp .env.example .env.local` and add the LiveKit key/secret, then `npm run dev -- -p 3012`. LiveKit webhooks can't reach localhost, so `room_finished` cleanup and `egress_ended` recording readiness can only be tested on the VPS or through a tunnel.
+
+## Deploying
+
+`scripts/deploy-showup.sh` (repo root) builds `showup/`, pushes `fz96tw/showup-app` and recreates only the `showup` service on the VPS. The VPS stack is `vps/showup/` (own compose project, own `showup-redis` on its own network, joins the external `appnet`). The app must use `redis://showup-redis:6379`; on `appnet` the bare name `redis` is Nasiha's Redis. One-time setup and verification: `vps/showup/README.md`. A production-only CSP is set in `next.config.mjs`; if the overlay or LiveKit ever stops loading in production, check it first (MediaPipe needs `cdn.jsdelivr.net` for script/wasm and `storage.googleapis.com` for the model).

@@ -116,3 +116,15 @@ and should not be a one-command operation. Do this manually, carefully:
 Double-check you're pointed at the actual production host/db before running
 step 3 — there is nothing in these commands that will stop you from doing
 this against the wrong environment.
+
+## Showup (separate service, separate stack)
+
+```bash
+./scripts/deploy-showup.sh            # DRY_RUN=1 to preview the push/ssh steps
+```
+
+Deploys `showup/` to https://showup.cloudcurio.com from its own compose project
+(`vps/showup/`, at `/home/ubuntu/showup` on the VPS). Builds and pushes
+`fz96tw/showup-app`, then pulls and recreates only the `showup` service; it never
+touches the Nasiha stack. One-time VPS setup (DNS, proxy host, MinIO bucket via
+`setup-minio-showup-recordings.sh`, LiveKit webhook) is in `vps/showup/README.md`.

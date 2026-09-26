@@ -1,0 +1,84 @@
+# Showup's own stack on the VPS: deliberately separate from vps/docker-compose.yml
+# (the Nasiha stack) so a Nasiha deploy, restart or outage never takes Showup
+# down, and a Showup deploy never touches Nasiha. Deployed to
+# /home/ubuntu/showup/ on the VPS (hand-copied, like the Nasiha compose file);
+# `scripts/deploy-showup.sh` only pulls the image and recreates the `showup`
+# service. Never run a bare `docker compose up -d` against the Nasiha stack
+# from here, and never touch the Nasiha app on port 3010.
+#
+# What is shared with the Nasiha stack, by design: LiveKit + egress
+# (`livekit`, `egress`) and MinIO (`minio`), reached over the external `appnet`
+# network. Compose can't order start-up across projects, so the app tolerates
+# any of them being down (start/join answer 503, /api/health says "degraded").
+name: showup
+
+services:
+  # Showup's OWN Redis (room-code claims, rate limits, recording index), so its
+  # core state doesn't share fate with the Nasiha stack.
+  #
+  # Naming rules (see Planwright "Showup 05"): on `appnet`, the bare name
+  # `redis` is Nasiha's Redis, used by LiveKit, egress and the Nasiha app. Two
+  # containers answering to `redis` on one network would make Docker DNS hand
+  # out either, causing intermittent cross-talk. So this service is called
+  # `showup-redis`, never sets `container_name: redis`, and is attached ONLY to
+  # this project's default network (`showup_default`), never to appnet.
+  showup-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - showup_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+
+  showup:
+    image: ${SHOWUP_IMAGE:-fz96tw/showup-app:latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+      # Shared self-hosted LiveKit. The hostname resolves to nginx-proxy-manager
+      # over appnet (the hairpin-NAT alias in vps/docker-compose.yml).
+      LIVEKIT_URL: ${LIVEKIT_URL:-wss://livekit.nasihaforyou.org}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      # Explicit on purpose: this container is on appnet too, where the bare
+      # name `redis` is Nasiha's Redis. Never use `redis` here.
+      REDIS_URL: redis://showup-redis:6379
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://showup.cloudcurio.com}
+      # MinIO is only for recording/downloads (Showup 06); /api/health probes it
+      # via this base URL. Recording uses its own bucket + scoped user.
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_RECORDINGS_BUCKET: ${MINIO_RECORDINGS_BUCKET:-showup-recordings}
+      MINIO_RECORDINGS_ACCESS_KEY: ${MINIO_RECORDINGS_ACCESS_KEY:-}
+      MINIO_RECORDINGS_SECRET_KEY: ${MINIO_RECORDINGS_SECRET_KEY:-}
+    depends_on:
+      showup-redis:
+        condition: service_healthy
+    healthcheck:
+      # /api/health always answers 200 (it reports "degraded" in the body), so an
+      # outage of a shared dependency never gets this container killed/restarted.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - default
+      # Reach the shared livekit/egress/minio by service name, and be reachable
+      # by nginx-proxy-manager as `showup:3000`.
+      - appnet
+
+volumes:
+  showup_redis_data:
+
+networks:
+  # Created by the Nasiha stack (vps/docker-compose.yml); we only join it.
+  appnet:
+    name: appnet
+    external: true
