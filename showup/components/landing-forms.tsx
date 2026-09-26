@@ -100,7 +100,7 @@ function RoomCard({
           type="button"
           id={`card-${mode}`}
           onClick={onSelect}
-          className="flex h-full w-full items-center justify-center rounded-xl border border-border bg-muted/40 p-6 text-lg font-semibold hover:border-primary hover:bg-muted md:min-w-[12rem]"
+          className="flex h-full w-full items-center justify-center rounded-xl border border-border bg-muted/40 p-8 text-2xl font-semibold hover:border-primary hover:bg-muted md:min-w-[12rem]"
         >
           {card.title}
         </button>
