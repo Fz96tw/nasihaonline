@@ -1069,7 +1069,7 @@ export function PresenterOverlayControl({
             updateSettings({ mirror: e.target.checked });
           }}
         />
-        Mirror me (point at things naturally)
+        Mirror everyone (point at things naturally)
       </label>
 
       <div className={`${labelClass} ${span ? "opacity-40" : ""}`}>

@@ -123,7 +123,7 @@ export type PresenterOverlaySettings = {
   /** Feather the panel's edge so it fades out instead of ending in a hard line. */
   softEdge: boolean;
   /**
-   * Flip the cut-out horizontally, like a mirror — on by default, because
+   * Flip every ghost (host and guests) horizontally, like a mirror — on by default, because
    * the presenter aims by watching their own image over the slide: when it
    * moves the way a mirror would, reaching toward something on their screen
    * lands their image's hand on it (the weather-presenter setup). Viewers
@@ -166,7 +166,7 @@ export type OverlaySource = {
   /** Shown as the auto caption. */
   label: string;
   track: MediaStreamTrack;
-  /** Only the host's own camera is mirrored (see settings.mirror); everyone else is drawn as they are seen. */
+  /** The host's own camera. Mirroring doesn't depend on it (settings.mirror applies to every ghost); it picks the pump and the keep-background panel, which is host-only. */
   isLocal: boolean;
 };
 
@@ -655,12 +655,17 @@ export async function startPresenterOverlayCompositor({
     return y;
   }
 
+  /** The one mirror rule: the host's Mirror setting applies to every ghost, host and guests alike. */
+  function ghostsMirrored(): boolean {
+    return settings.mirror;
+  }
+
   function drawGhost(source: Source, box: GhostBox, height: number) {
     outputCtx.globalAlpha = settings.opacity * source.alpha;
     const image = source.mode === "panel" ? source.panelCanvas : source.cutoutCanvas;
     const y = ghostTop(source, box, height);
-    // Bottom-aligned; only the host's own camera is mirrored (see settings.mirror).
-    if (settings.mirror && source.isLocal) {
+    // Bottom-aligned; mirrored (or not) like every other ghost (see ghostsMirrored).
+    if (ghostsMirrored()) {
       outputCtx.save();
       outputCtx.translate(box.x + box.width, 0);
       outputCtx.scale(-1, 1);
@@ -681,7 +686,7 @@ export async function startPresenterOverlayCompositor({
       y: ghostTop(source, source.box, outputCanvas.height),
       width: source.box.width,
       height: source.box.height,
-      mirror: settings.mirror,
+      mirror: ghostsMirrored(),
       crop: source.mode === "panel" ? source.panelCrop : null,
     };
   }
