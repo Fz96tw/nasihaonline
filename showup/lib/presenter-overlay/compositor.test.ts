@@ -60,3 +60,25 @@ test("span makes a lone ghost cover the frame, whichever edge needs the larger s
 test("span leaves a group's layout alone", () => {
   assert.deepEqual(layoutGhosts([1, 1], 1000, 500, 1, "left", true), layoutGhosts([1, 1], 1000, 500, 1, "left", false));
 });
+
+test("zoom scales a ghost about its bottom edge and keeps its anchor", () => {
+  const [plain] = layoutGhosts([1], 1000, 500, 1, "left");
+  const [zoomed] = layoutGhosts([1], 1000, 500, 1, "left", false, [1.5]);
+  assert.equal(zoomed.height, plain.height * 1.5);
+  assert.equal(zoomed.width, plain.width * 1.5);
+  assert.equal(zoomed.x, 0, "left anchor stays at the left edge");
+  const [right] = layoutGhosts([1], 1000, 500, 1, "right", false, [1.5]);
+  assert.equal(right.x + right.width, 1000, "right anchor stays at the right edge");
+  const [centre] = layoutGhosts([1], 1000, 500, 1, "center", false, [2]);
+  assert.ok(Math.abs(centre.x + centre.width / 2 - 500) < 1e-9, "stays centred even when wider than the frame");
+});
+
+test("zoom of 1 or no zooms leaves the layout as it was, and span ignores zoom", () => {
+  assert.deepEqual(layoutGhosts([1, 1], 1000, 500, 1, "left", false, [1, 1]), layoutGhosts([1, 1], 1000, 500, 1, "left"));
+  assert.deepEqual(layoutGhosts([16 / 9], 2000, 500, 1, "left", true, [2]), layoutGhosts([16 / 9], 2000, 500, 1, "left", true));
+});
+
+test("each ghost in a group gets its own zoom", () => {
+  const [a, b] = layoutGhosts([1, 1], 1000, 500, 1, "left", false, [1, 1.4]);
+  assert.ok(Math.abs(b.height / a.height - 1.4) < 1e-9);
+});

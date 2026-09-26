@@ -142,6 +142,7 @@ export function PresenterOverlayControl({
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState<PresenterOverlaySettings["position"]>("center");
   const [span, setSpan] = useState(false);
+  const [normalizeSize, setNormalizeSize] = useState(true);
   const [background, setBackground] = useState<PresenterOverlaySettings["background"]>("remove");
   const [panelShape, setPanelShape] = useState<PanelShape>("rounded");
   const [softEdge, setSoftEdge] = useState(false);
@@ -184,7 +185,7 @@ export function PresenterOverlayControl({
   }, []);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, span, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
+    return { opacity, scale, position, span, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -873,6 +874,19 @@ export function PresenterOverlayControl({
           }}
         />
         Reach the whole screen (fills a wide window)
+      </label>
+
+      <label className="flex items-center gap-2 text-xs text-white/70">
+        <input
+          type="checkbox"
+          data-testid="overlay-normalize-size"
+          checked={normalizeSize}
+          onChange={(e) => {
+            setNormalizeSize(e.target.checked);
+            updateSettings({ normalizeSize: e.target.checked });
+          }}
+        />
+        Match everyone&apos;s size (evens out how close people sit)
       </label>
 
       <label className={`${labelClass} ${span ? "opacity-40" : ""}`}>

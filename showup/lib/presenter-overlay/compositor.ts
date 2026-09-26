@@ -29,6 +29,7 @@
  */
 
 import type { ImageSegmenter } from "@mediapipe/tasks-vision";
+import { SizeNormalizer, measureFromRows } from "./size-normalize.ts";
 import { WindowSmoother, clampWindow, panelAspect, personBounds, targetCentre, tracePanelPath, windowSize, type PanelShape, type PersonBounds } from "./panel.ts";
 
 // Insertable-streams (Chrome's main-thread flavor) aren't in TS's DOM lib yet.
@@ -85,6 +86,11 @@ export type PresenterOverlaySettings = {
    */
   span: boolean;
   /**
+   * Scale each cut-out by how far its person sits from their camera, so everyone looks the same size.
+   * Host-controlled; on by default. Off = every camera frame is scaled the same (zoom 1).
+   */
+  normalizeSize: boolean;
+  /**
    * The host's own ghost: "remove" cuts the person out (default); "keep" shows the camera with its real
    * background as a shaped panel centred on them. Guests are always cut out.
    */
@@ -118,6 +124,7 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   scale: 1,
   position: "center",
   span: false,
+  normalizeSize: true,
   background: "remove",
   panelShape: "rounded",
   softEdge: false,
@@ -202,7 +209,8 @@ const GROUP_SCALE = [1, 1, 0.85, 0.7];
  * Lays ghosts out bottom-aligned. One ghost follows the `position` setting;
  * two or three are spaced evenly across the width in the order given (the
  * order they were added), each centred in its own slot. With `span`, a lone
- * ghost instead covers the whole frame. Pure, for testing.
+ * ghost instead covers the whole frame (ignoring zoom). `zooms` scales each ghost about its bottom edge (see size-normalize.ts).
+ * Pure, for testing.
  */
 export function layoutGhosts(
   aspects: number[],
@@ -211,6 +219,7 @@ export function layoutGhosts(
   scale: number,
   position: PresenterOverlaySettings["position"],
   span = false,
+  zooms: number[] = [],
 ): GhostBox[] {
   const count = aspects.length;
   if (count === 1 && span) {
@@ -219,8 +228,10 @@ export function layoutGhosts(
     const width = height * aspects[0];
     return [{ x: (outputWidth - width) / 2, width, height }];
   }
-  const height = outputHeight * scale * (GROUP_SCALE[Math.min(count, GROUP_SCALE.length - 1)] ?? 1);
+  const groupHeight = outputHeight * scale * (GROUP_SCALE[Math.min(count, GROUP_SCALE.length - 1)] ?? 1);
   return aspects.map((aspect, index) => {
+    // A zoomed ghost keeps its bottom edge and its anchor; it may run past the sides or top and is clipped by the output.
+    const height = groupHeight * (zooms[index] ?? 1);
     const width = height * aspect;
     if (count === 1) {
       const x = position === "left" ? 0 : position === "right" ? outputWidth - width : (outputWidth - width) / 2;
@@ -254,6 +265,10 @@ type Source = {
   lastSegmentAt: number;
   /** What was last drawn for this source: a background-removed cut-out (cutoutCanvas) or a shaped "keep background" panel (panelCanvas). */
   mode: "cutout" | "panel";
+  /** Sits-close-or-far correction for this camera (cut-outs only). */
+  normalizer: SizeNormalizer;
+  /** Person pixels per mask row, filled while the mask is converted; reused between frames. */
+  rowCounts: Uint32Array;
   panelCanvas: OffscreenCanvas;
   panelCtx: OffscreenCanvasRenderingContext2D;
   panelShape: PanelShape;
@@ -346,6 +361,8 @@ export async function startPresenterOverlayCompositor({
       target: visibleIds.includes(id) ? 1 : 0,
       lastSegmentAt: 0,
       mode: "cutout",
+      normalizer: new SizeNormalizer(),
+      rowCounts: new Uint32Array(CAMERA_HEIGHT),
       panelCanvas,
       panelCtx: context2d(panelCanvas),
       panelShape: "rounded",
@@ -375,7 +392,7 @@ export async function startPresenterOverlayCompositor({
     source.cameraCtx.drawImage(frame, 0, 0, size.width, size.height);
   }
 
-  function updateCutout(source: Source) {
+  function updateCutout(source: Source, now: number) {
     // MediaPipe requires strictly increasing timestamps within a VIDEO-mode session; all sources share it.
     const timestamp = Math.max(performance.now(), lastSegmentTimestamp + 1);
     lastSegmentTimestamp = timestamp;
@@ -394,10 +411,22 @@ export async function startPresenterOverlayCompositor({
       }
       const confidence = mask.getAsFloat32Array();
       const data = source.maskImage.data;
+      // Count person pixels per row in the same pass, to measure how far this person sits from the camera.
+      if (source.rowCounts.length !== mask.height) source.rowCounts = new Uint32Array(mask.height);
+      const rowCounts = source.rowCounts;
+      rowCounts.fill(0);
+      let column = 0;
+      let row = 0;
       for (let i = 0; i < confidence.length; i++) {
         const person = single ? confidence[i] : 1 - confidence[i];
         data[i * 4 + 3] = person * 255;
+        if (person > 0.5) rowCounts[row]++;
+        if (++column === mask.width) {
+          column = 0;
+          row++;
+        }
       }
+      source.normalizer.observe(now, measureFromRows(rowCounts, mask.width, mask.height));
     });
     source.maskCtx.putImageData(source.maskImage, 0, 0);
 
@@ -484,7 +513,7 @@ export async function startPresenterOverlayCompositor({
       source.lastSegmentAt = now;
       drawCamera(source, frame);
       frame.close();
-      updateCutout(source);
+      updateCutout(source, now);
       return true;
     } finally {
       // Safe to call on an already-closed frame.
@@ -573,7 +602,10 @@ export async function startPresenterOverlayCompositor({
     // Fading-out sources first, then the ones on their way in, so a new speaker fades in over the old one.
     // Each real camera keeps its own aspect ratio; the visible ones are spaced out in the order given.
     const shown = visibleIds.map((id) => sources.get(id)).filter((source): source is Source => !!source);
-    const boxes = layoutGhosts(shown.map(layoutAspect), width, height, settings.scale, settings.position, settings.span);
+    const now = performance.now();
+    // The host's keep-background panel isn't a cut-out of a person to size, so it stays at zoom 1.
+    const zooms = shown.map((source) => (source.mode === "panel" ? 1 : source.normalizer.zoom(now, settings.normalizeSize)));
+    const boxes = layoutGhosts(shown.map(layoutAspect), width, height, settings.scale, settings.position, settings.span, zooms);
     shown.forEach((source, index) => {
       source.box = boxes[index];
     });
