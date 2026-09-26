@@ -3,27 +3,16 @@
 @tailwind utilities;
 
 :root {
-  --background: 0 0% 100%;
-  --foreground: 222 30% 12%;
-  --muted: 220 20% 96%;
-  --muted-foreground: 220 10% 40%;
-  --primary: 245 75% 55%;
-  --primary-foreground: 0 0% 100%;
-  --border: 220 15% 88%;
-  --destructive: 0 70% 45%;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: 222 25% 9%;
-    --foreground: 210 20% 96%;
-    --muted: 222 20% 14%;
-    --muted-foreground: 215 12% 65%;
-    --primary: 245 85% 68%;
-    --primary-foreground: 222 25% 9%;
-    --border: 222 15% 22%;
-    --destructive: 0 75% 62%;
-  }
+  /* Always dark: the palette is sampled from the look the page was approved in. */
+  color-scheme: dark;
+  --background: 233 24% 9%;
+  --foreground: 220 20% 96%;
+  --muted: 245 19% 14%;
+  --muted-foreground: 215 12% 65%;
+  --primary: 273 100% 48%;
+  --primary-foreground: 233 24% 9%;
+  --border: 237 15% 22%;
+  --destructive: 0 75% 62%;
 }
 
 body {

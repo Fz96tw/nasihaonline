@@ -27,7 +27,7 @@ export default function HomePage() {
         <ol className="grid gap-4 sm:grid-cols-3">
           {STEPS.map((step, index) => (
             <li key={step.title} className="flex flex-col gap-1 rounded-xl border border-border p-4">
-              <span className="text-sm font-semibold text-primary">Step {index + 1}</span>
+              <span className="text-sm font-semibold text-purple-400">Step {index + 1}</span>
               <span className="font-medium">{step.title}</span>
               <span className="text-sm text-muted-foreground">{step.body}</span>
             </li>
