@@ -83,7 +83,7 @@ export default function RecordingPage({ params }: { params: { recId: string } })
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center gap-6 px-4 py-10">
       <header className="flex flex-col gap-1">
-        <PageHeading className="text-2xl">Your recording</PageHeading>
+        <PageHeading>Your recording</PageHeading>
         <p className="text-sm text-muted-foreground">Bookmark this page: this link is your way back to the recording for 24 hours.</p>
       </header>
 

@@ -38,7 +38,7 @@ export default function RecoverPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center gap-6 px-4 py-10">
       <header className="flex flex-col gap-1">
-        <PageHeading className="text-2xl">Get my recording</PageHeading>
+        <PageHeading>Get my recording</PageHeading>
         <p className="text-sm text-muted-foreground">
           Enter the code you used to start the meeting and the four-word passcode shown when it started. Only the host has these.
         </p>
