@@ -6,7 +6,8 @@
  */
 
 export type Landmark = { x: number; y: number };
-export type Pose = "point" | "pinch" | "palm" | "pen" | "fist" | "none";
+export type Pose = "point" | "pinch" | "palm" | "pen" | "fist" | "thumbsup" | "thumbsdown" | "none";
+export type ReactionKind = "thumbsup" | "thumbsdown" | "wave";
 
 /** Hold times before a gesture takes effect. */
 export const POINT_HOLD_MS = 300;
@@ -15,6 +16,20 @@ export const PALM_HOLD_MS = 500;
 export const PEN_HOLD_MS = 300;
 /** A fist must be held this long to turn the spotlight on (longer, so a resting fist doesn't trigger it). */
 export const FIST_HOLD_MS = 800;
+/** A thumb must be held up or down this long to react. */
+export const THUMB_HOLD_MS = 400;
+/** After a reaction nothing else reacts for this long, so a lingering thumb or wave doesn't spam. */
+export const REACTION_COOLDOWN_MS = 3000;
+/** A wave is at least this many changes of direction within the window, over at least this much sideways travel (fractions of the frame width). */
+export const WAVE_WINDOW_MS = 1500;
+export const WAVE_REVERSALS = 3;
+export const WAVE_AMPLITUDE = 0.08;
+/** A sideways move must be at least this far to count as a change of direction (so hand tremor doesn't). */
+const WAVE_MIN_SWING = 0.025;
+/** The palm reset needs the wrist to have stayed within this (fraction of the frame) for the whole hold. */
+export const STILL_LIMIT = 0.05;
+/** How long the "reaction" indicator stays up. */
+const REACTION_LABEL_MS = 1500;
 /** The spotlight fades out over this long after the fist opens. */
 export const SPOTLIGHT_FADE_MS = 500;
 /** How long a pose may drop out (a misread frame) without its hold timer restarting. */
@@ -56,6 +71,10 @@ const FIST_TIP_RATIO = 1.0;
 export const FIST_RAISED_Y = 0.7;
 /** Palm landmarks (wrist and the knuckles), averaged for "the middle of the hand". */
 const PALM_POINTS = [0, 5, 9, 13, 17];
+/** A thumb is "out" when its tip is this far from the index knuckle (fraction of the hand's size), and clearly up or down when this far above/below the wrist and knuckle. */
+const THUMB_OUT_RATIO = 0.6;
+const THUMB_WRIST_RATIO = 0.6;
+const THUMB_KNUCKLE_RATIO = 0.4;
 /** Hands smaller than this (fraction of the frame) are too small to read. */
 const MIN_HAND_SIZE = 0.03;
 
@@ -95,6 +114,12 @@ export function classifyPose(landmarks: readonly Landmark[], aspect = 1): PoseRe
     if (tipDistance < jointDistance * CURLED_RATIO) return "curled";
     return "unsure";
   });
+  // Thumbs up / down before the fist: the fingers are curled just the same, but the thumb sticks out clearly up or down.
+  if (state.every((s) => s === "curled") && dist(thumb, landmarks[5]) > THUMB_OUT_RATIO * size) {
+    const knuckle = landmarks[5];
+    if (thumb.y <= wrist.y - THUMB_WRIST_RATIO * size && thumb.y <= knuckle.y - THUMB_KNUCKLE_RATIO * size) return { pose: "thumbsup", tip, pinchPoint, palm };
+    if (thumb.y >= wrist.y + THUMB_WRIST_RATIO * size && thumb.y >= knuckle.y + THUMB_KNUCKLE_RATIO * size) return { pose: "thumbsdown", tip, pinchPoint, palm };
+  }
   // A fist first: with the thumb folded over the fingers its tip can sit near the index tip, which must not read as a pinch.
   // The fingertips of a real pinch are held out in front of the palm; a fist's are tucked in against it.
   if (state.every((s) => s === "curled") && FINGERS.every(([t]) => dist(landmarks[t], wrist) < FIST_TIP_RATIO * size)) {
@@ -111,12 +136,52 @@ export function classifyPose(landmarks: readonly Landmark[], aspect = 1): PoseRe
   return none;
 }
 
+/**
+ * True when the samples (wrist x, 0–1 of the frame width, with times in ms) within the last WAVE_WINDOW_MS show a wave:
+ * at least WAVE_REVERSALS changes of direction (each a swing of WAVE_MIN_SWING or more) over at least WAVE_AMPLITUDE of travel.
+ */
+export function detectWave(samples: readonly { t: number; x: number }[], now: number): boolean {
+  const recent = samples.filter((sample) => now - sample.t <= WAVE_WINDOW_MS);
+  if (recent.length < 4) return false;
+  const xs = recent.map((sample) => sample.x);
+  if (Math.max(...xs) - Math.min(...xs) < WAVE_AMPLITUDE) return false;
+  // Zigzag: a swing of WAVE_MIN_SWING against the current direction is a reversal.
+  let direction = 0;
+  let extreme = xs[0];
+  let reversals = 0;
+  for (const x of xs) {
+    if (direction === 0) {
+      if (Math.abs(x - extreme) >= WAVE_MIN_SWING) {
+        direction = x > extreme ? 1 : -1;
+        extreme = x;
+      }
+    } else if (direction > 0) {
+      if (x > extreme) extreme = x;
+      else if (extreme - x >= WAVE_MIN_SWING) {
+        reversals++;
+        direction = -1;
+        extreme = x;
+      }
+    } else {
+      if (x < extreme) extreme = x;
+      else if (x - extreme >= WAVE_MIN_SWING) {
+        reversals++;
+        direction = 1;
+        extreme = x;
+      }
+    }
+  }
+  return reversals >= WAVE_REVERSALS;
+}
+
 export type GestureAction =
   /** Zoom the screen toward this point (camera-frame coordinates of the pinch). */
   | { type: "zoom"; u: number; v: number }
   /** The pinch is being held after the zoom: the pinched hand is now at this point (drives panning). */
   | { type: "pan"; u: number; v: number }
-  | { type: "reset" };
+  | { type: "reset" }
+  /** A quick reaction to show near the host's ghost. */
+  | { type: "reaction"; kind: ReactionKind };
 
 export type GestureState = {
   /** The laser dot, in camera-frame coordinates, while pointing or fading out; `fade` goes 1 → 0. */
@@ -129,14 +194,21 @@ export type GestureState = {
   spotlight: { alpha: number } | null;
   actions: GestureAction[];
   /** What is currently recognized, for the host's (not streamed) indicator. */
-  label: "pointing" | "zooming" | "reset" | "drawing" | "spotlight" | null;
+  label: "pointing" | "zooming" | "reset" | "drawing" | "spotlight" | ReactionKind | null;
 };
 
-const POSES: readonly Pose[] = ["point", "pinch", "palm", "pen", "fist"];
+const POSES: readonly Pose[] = ["point", "pinch", "palm", "pen", "fist", "thumbsup", "thumbsdown"];
 
 export class GestureTracker {
-  private since: Record<string, number | null> = { point: null, pinch: null, palm: null, pen: null, fist: null };
-  private lastSeen: Record<string, number> = { point: 0, pinch: 0, palm: 0, pen: 0, fist: 0 };
+  private since: Record<string, number | null> = { point: null, pinch: null, palm: null, pen: null, fist: null, thumbsup: null, thumbsdown: null };
+  private lastSeen: Record<string, number> = { point: 0, pinch: 0, palm: 0, pen: 0, fist: 0, thumbsup: 0, thumbsdown: 0 };
+  private thumbFired: Record<string, boolean> = { thumbsup: false, thumbsdown: false };
+  private waveFired = false;
+  private reactionCooldownUntil = 0;
+  private reactionLabel: ReactionKind | null = null;
+  private reactionLabelUntil = 0;
+  private wrist: { t: number; x: number; y: number }[] = [];
+  private waveSamples: { t: number; x: number }[] = [];
   private spotlightActive = false;
   private spotlightEndedAt = 0;
   private handX = 0;
@@ -166,6 +238,23 @@ export class GestureTracker {
     return since !== null && now - since >= duration && now - this.lastSeen[pose] <= GRACE_MS;
   }
 
+  private react(now: number, kind: ReactionKind, actions: GestureAction[]) {
+    if (now < this.reactionCooldownUntil) return;
+    this.reactionCooldownUntil = now + REACTION_COOLDOWN_MS;
+    this.reactionLabel = kind;
+    this.reactionLabelUntil = now + REACTION_LABEL_MS;
+    actions.push({ type: "reaction", kind });
+  }
+
+  /** True when the wrist stayed within STILL_LIMIT (both ways) over the last `duration` ms. */
+  private still(now: number, duration: number): boolean {
+    const recent = this.wrist.filter((sample) => now - sample.t <= duration);
+    if (recent.length === 0) return false;
+    const xs = recent.map((sample) => sample.x);
+    const ys = recent.map((sample) => sample.y);
+    return Math.max(...xs) - Math.min(...xs) <= STILL_LIMIT && Math.max(...ys) - Math.min(...ys) <= STILL_LIMIT;
+  }
+
   /** Feeds the hand seen at `now` (ms), or null when there's none. Returns what to draw and do. */
   update(now: number, landmarks: readonly Landmark[] | null, aspect = 1): GestureState {
     const reading = landmarks ? classifyPose(landmarks, aspect) : null;
@@ -177,10 +266,22 @@ export class GestureTracker {
       } else if (this.since[pose] !== null && now - this.lastSeen[pose] > GRACE_MS) {
         this.since[pose] = null;
         if (pose === "pinch") this.pinchFired = false;
-        if (pose === "palm") this.palmFired = false;
+        if (pose === "palm") {
+          this.palmFired = false;
+          this.waveFired = false;
+          this.waveSamples = [];
+        }
+        if (pose === "thumbsup" || pose === "thumbsdown") this.thumbFired[pose] = false;
       }
     }
     const actions: GestureAction[] = [];
+    // Wrist track, for "has the hand been still?" (the palm reset) and the wave detector (open palm only).
+    if (landmarks && reading) {
+      this.wrist.push({ t: now, x: landmarks[0].x, y: landmarks[0].y });
+      this.wrist = this.wrist.filter((sample) => now - sample.t <= WAVE_WINDOW_MS + 500);
+      if (raw === "palm") this.waveSamples.push({ t: now, x: landmarks[0].x });
+      this.waveSamples = this.waveSamples.filter((sample) => now - sample.t <= WAVE_WINDOW_MS);
+    }
 
     // Laser pointer: held for POINTER_HOLD_MS to start; fades out after it ends.
     const pointing = this.held("point", now, POINT_HOLD_MS);
@@ -265,8 +366,22 @@ export class GestureTracker {
       this.panAt = null;
     }
 
-    // Open palm: held to reset the zoom.
-    if (this.held("palm", now, PALM_HOLD_MS) && !this.palmFired && now >= this.cooldownUntil) {
+    // Reactions: a thumb held up or down, or a wave. Each fires once per hold; nothing reacts again for REACTION_COOLDOWN_MS
+    // (a hold that finishes during the cooldown is used up, so a lingering thumb doesn't fire the moment it ends).
+    for (const kind of ["thumbsup", "thumbsdown"] as const) {
+      if (this.held(kind, now, THUMB_HOLD_MS) && !this.thumbFired[kind]) {
+        this.thumbFired[kind] = true;
+        this.react(now, kind, actions);
+      }
+    }
+    if (!this.waveFired && this.held("palm", now, 0) && detectWave(this.waveSamples, now)) {
+      this.waveFired = true;
+      this.waveSamples = [];
+      this.react(now, "wave", actions);
+    }
+
+    // Open palm: held (and still) to reset the zoom. A waving hand isn't still, so a wave never resets.
+    if (this.held("palm", now, PALM_HOLD_MS) && !this.palmFired && now >= this.cooldownUntil && this.still(now, PALM_HOLD_MS)) {
       this.palmFired = true;
       this.cooldownUntil = now + COOLDOWN_MS;
       this.resetLabelUntil = now + RESET_LABEL_MS;
@@ -276,7 +391,9 @@ export class GestureTracker {
     const fade = this.pointerActive ? 1 : 1 - (now - this.pointerEndedAt) / POINTER_FADE_MS;
     const pointer = this.pointerActive || (this.pointerEndedAt > 0 && fade > 0) ? { u: this.pointerX, v: this.pointerY, fade: Math.max(0, Math.min(1, fade)) } : null;
     const pen = this.penActive ? { u: this.penX, v: this.penY } : null;
-    const label = this.pointerActive
+    const label = this.reactionLabel && now < this.reactionLabelUntil
+      ? this.reactionLabel
+      : this.pointerActive
       ? "pointing"
       : this.penActive
         ? "drawing"

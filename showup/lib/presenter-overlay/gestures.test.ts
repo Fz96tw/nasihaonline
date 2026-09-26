@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  REACTION_COOLDOWN_MS,
+  THUMB_HOLD_MS,
+  WAVE_WINDOW_MS,
+  detectWave,
   COOLDOWN_MS,
   FIST_HOLD_MS,
   SPOTLIGHT_FADE_MS,
@@ -60,6 +64,19 @@ const FIST_LOW = () => hand(["curl", "curl", "curl", "curl"]);
 const PALM = () => hand(["ext", "ext", "ext", "ext"]);
 const PEN = () => hand(["ext", "ext", "curl", "curl"]);
 const PEACE = () => hand(["ext", "ext", "curl", "curl"], { apart: true });
+/** A fist with the thumb stuck straight up (wrist low) or straight down (hand held up, wrist high). */
+const THUMBS_UP = () => {
+  const h = hand(["curl", "curl", "curl", "curl"]);
+  h[4] = { x: 0.42, y: 0.45 };
+  return h;
+};
+const THUMBS_DOWN = () => {
+  const h = hand(["curl", "curl", "curl", "curl"], { oy: -0.4 });
+  h[4] = { x: 0.42, y: 0.85 };
+  return h;
+};
+/** An open palm waving side to side at 2 Hz, +-6% of the frame width. */
+const WAVING = (t: number) => hand(["ext", "ext", "ext", "ext"], { ox: 0.06 * Math.sin((2 * Math.PI * 2 * t) / 1000) });
 const TALK = () => hand(["half", "half", "curl", "half"]);
 
 test("classifies pointing, pinching and an open palm", () => {
@@ -366,4 +383,117 @@ test("the spotlight fist doesn't point, zoom, reset or draw", () => {
 
 test("a real pinch is still a pinch when the index tip is out in front of the palm", () => {
   assert.equal(classifyPose(PINCH()).pose, "pinch");
+});
+
+/** Like run(), but the hand can change with time. */
+function runAt(tracker: GestureTracker, from: number, to: number, at: (t: number) => Landmark[] | null) {
+  const actions: [number, GestureAction][] = [];
+  let state = tracker.update(from, at(from));
+  for (let t = from; t <= to; t += 33) {
+    state = tracker.update(t, at(t));
+    for (const a of state.actions) actions.push([t, a]);
+  }
+  return { actions, state };
+}
+const reactionsOf = (actions: [number, GestureAction][]) => actions.filter(([, a]) => a.type === "reaction").map(([t, a]) => [t, (a as { kind: string }).kind] as const);
+
+test("classifies thumbs up and thumbs down, not confused with a fist", () => {
+  assert.equal(classifyPose(THUMBS_UP()).pose, "thumbsup");
+  assert.equal(classifyPose(THUMBS_DOWN()).pose, "thumbsdown");
+  assert.equal(classifyPose(FIST()).pose, "fist", "a raised fist with the thumb tucked is still a fist");
+  const sideways = hand(["curl", "curl", "curl", "curl"]);
+  sideways[4] = { x: 0.2, y: 0.7 };
+  assert.equal(classifyPose(sideways).pose, "none", "a thumb sticking out sideways is neither");
+  const open = THUMBS_UP();
+  open[8] = { x: open[8].x, y: 0.4 }; // index finger out too
+  assert.notEqual(classifyPose(open).pose, "thumbsup", "thumb up with a finger out isn't a thumbs-up");
+});
+
+test("a held thumbs up reacts once, after the hold, and a lingering thumb does not repeat", () => {
+  const tracker = new GestureTracker();
+  const { actions } = run(tracker, 0, THUMB_HOLD_MS + 8000, THUMBS_UP);
+  const reactions = reactionsOf(actions);
+  assert.equal(reactions.length, 1);
+  assert.equal(reactions[0][1], "thumbsup");
+  assert.ok(reactions[0][0] >= THUMB_HOLD_MS);
+  const down = new GestureTracker();
+  assert.deepEqual(reactionsOf(run(down, 0, THUMB_HOLD_MS + 500, THUMBS_DOWN).actions).map(([, k]) => k), ["thumbsdown"]);
+});
+
+test("a thumb shown briefly does nothing", () => {
+  const tracker = new GestureTracker();
+  const { actions } = run(tracker, 0, THUMB_HOLD_MS - 150, THUMBS_UP);
+  assert.equal(reactionsOf(actions).length, 0);
+  assert.equal(reactionsOf(run(tracker, THUMB_HOLD_MS - 100, 3000, () => null).actions).length, 0);
+});
+
+test("after a reaction there is a cooldown, and a hold that finishes during it is used up", () => {
+  const tracker = new GestureTracker();
+  const first = runAt(tracker, 0, THUMB_HOLD_MS + 200, () => THUMBS_UP());
+  const at = reactionsOf(first.actions)[0][0];
+  // Drop the thumb, then straight into thumbs down: its hold completes inside the cooldown, so it is dropped.
+  const t1 = at + 300;
+  runAt(tracker, t1, t1 + 100, () => null);
+  const during = runAt(tracker, t1 + 133, t1 + 133 + THUMB_HOLD_MS + 500, () => THUMBS_DOWN());
+  assert.equal(reactionsOf(during.actions).length, 0, "blocked by the cooldown");
+  // Keep holding it past the cooldown: still nothing (the hold was used up).
+  const after = runAt(tracker, t1 + 133 + THUMB_HOLD_MS + 533, at + REACTION_COOLDOWN_MS + 2000, () => THUMBS_DOWN());
+  assert.equal(reactionsOf(after.actions).length, 0);
+  // A fresh thumb after the cooldown reacts.
+  const t2 = at + REACTION_COOLDOWN_MS + 2100;
+  runAt(tracker, t2, t2 + 300, () => null);
+  const fresh = runAt(tracker, t2 + 333, t2 + 333 + THUMB_HOLD_MS + 200, () => THUMBS_UP());
+  assert.equal(reactionsOf(fresh.actions).length, 1);
+});
+
+test("the wave detector needs enough back-and-forth over enough travel", () => {
+  const sweeps = (n: number, amplitude: number, periodMs = 500) => {
+    const samples: { t: number; x: number }[] = [];
+    for (let t = 0; t <= n * periodMs / 2; t += 33) samples.push({ t, x: 0.5 + amplitude * Math.sin((2 * Math.PI * t) / periodMs) });
+    return samples;
+  };
+  const wave = sweeps(8, 0.06);
+  assert.equal(detectWave(wave, wave[wave.length - 1].t), true);
+  const small = sweeps(8, 0.01);
+  assert.equal(detectWave(small, small[small.length - 1].t), false, "too little travel (tremor)");
+  const one = sweeps(2, 0.06);
+  assert.equal(detectWave(one, one[one.length - 1].t), false, "a single swipe is not a wave");
+  const drift = Array.from({ length: 40 }, (_, i) => ({ t: i * 33, x: 0.2 + i * 0.01 }));
+  assert.equal(detectWave(drift, 39 * 33), false, "steady movement one way is not a wave");
+  assert.equal(detectWave(wave, wave[wave.length - 1].t + WAVE_WINDOW_MS + 1), false, "old samples don't count");
+});
+
+test("waving an open hand reacts with a wave and does not reset the zoom", () => {
+  const tracker = new GestureTracker();
+  const { actions } = runAt(tracker, 0, 3000, WAVING);
+  assert.equal(reactionsOf(actions).length >= 1, true);
+  assert.equal(reactionsOf(actions)[0][1], "wave");
+  assert.equal(actions.filter(([, a]) => a.type === "reset").length, 0, "a waving hand isn't still");
+  assert.equal(reactionsOf(actions).length, 1, "one reaction per wave, however long it lasts");
+});
+
+test("a still open palm still resets and shows no wave", () => {
+  const tracker = new GestureTracker();
+  const { actions } = run(tracker, 0, PALM_HOLD_MS + 1500, PALM);
+  assert.equal(actions.filter(([, a]) => a.type === "reset").length, 1);
+  assert.equal(reactionsOf(actions).length, 0);
+});
+
+test("ordinary hand movement while talking triggers no reaction", () => {
+  const tracker = new GestureTracker();
+  const drift = (t: number) => hand(["half", "half", "curl", "half"], { ox: 0.05 * Math.sin(t / 700) });
+  assert.equal(reactionsOf(runAt(tracker, 0, 20_000, drift).actions).length, 0);
+  const open = new GestureTracker();
+  // A hand slowly drifting across while open (one sweep, not a wave).
+  const sweep = (t: number) => hand(["ext", "ext", "ext", "ext"], { ox: -0.1 + t * 0.00004 });
+  assert.equal(reactionsOf(runAt(open, 0, 4000, sweep).actions).length, 0);
+});
+
+test("the indicator shows the reaction for a moment", () => {
+  const tracker = new GestureTracker();
+  const { state, actions } = run(tracker, 0, THUMB_HOLD_MS + 100, THUMBS_UP);
+  assert.equal(reactionsOf(actions).length, 1);
+  assert.equal(state.label, "thumbsup");
+  const later = run(tracker, THUMB_HOLD_MS + 133, THUMB_HOLD_MS + 4000, () => null).state;
+  assert.equal(later.label, null);
 });

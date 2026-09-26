@@ -29,6 +29,7 @@
  */
 
 import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
+import { REACTION_EMOJI, ReactionPlayer, reactionPosition } from "./reactions.ts";
 import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement } from "./gestures.ts";
 import { PEN_COLORS, StrokeBoard, type PenColor } from "./drawing.ts";
 import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
@@ -379,6 +380,7 @@ export async function startPresenterOverlayCompositor({
   // Gestures: the tracker, the screen zoom, the laser dot and the hand model (loaded on first use).
   const viewport = new ScreenViewport();
   const board = new StrokeBoard();
+  const reactions = new ReactionPlayer();
   // Spotlight: the fist gesture's fade (from the tracker) and the sticky button's own fade; where the light last was, for fading out.
   let gestureSpotlight = 0;
   let handPoint: { u: number; v: number } | null = null;
@@ -684,6 +686,49 @@ export async function startPresenterOverlayCompositor({
     };
   }
 
+  /** The host's reaction emoji (thumbs up/down, wave), floating up by the top of their ghost. Falls back to simple shapes if no emoji font is available. */
+  function drawReaction(now: number, width: number, height: number) {
+    const frame = reactions.frame(now);
+    const placement = hostPlacement();
+    if (!frame || !placement) return;
+    const at = reactionPosition(placement, width, height, frame.progress);
+    outputCtx.save();
+    outputCtx.globalAlpha = frame.alpha;
+    outputCtx.textAlign = "center";
+    outputCtx.textBaseline = "middle";
+    outputCtx.font = `${Math.round(at.size)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+    const emoji = REACTION_EMOJI[frame.kind];
+    // A missing emoji font draws an empty box or nothing: too narrow to be a real glyph.
+    if (outputCtx.measureText(emoji).width >= at.size * 0.6) {
+      outputCtx.fillText(emoji, at.x, at.y);
+    } else {
+      drawReactionFallback(frame.kind, at.x, at.y, at.size);
+    }
+    outputCtx.restore();
+  }
+
+  function drawReactionFallback(kind: "thumbsup" | "thumbsdown" | "wave", x: number, y: number, size: number) {
+    outputCtx.fillStyle = "#ffcc33";
+    outputCtx.strokeStyle = "#7a5a00";
+    outputCtx.lineWidth = Math.max(2, size * 0.04);
+    if (kind === "wave") {
+      // An open hand: a palm and four fingers.
+      outputCtx.beginPath();
+      outputCtx.roundRect(x - size * 0.3, y - size * 0.05, size * 0.6, size * 0.45, size * 0.1);
+      for (let i = 0; i < 4; i++) outputCtx.roundRect(x - size * 0.3 + i * size * 0.15, y - size * 0.4, size * 0.12, size * 0.4, size * 0.05);
+      outputCtx.fill();
+      outputCtx.stroke();
+      return;
+    }
+    // A fist with the thumb up (or, flipped, down).
+    const flip = kind === "thumbsdown" ? -1 : 1;
+    outputCtx.beginPath();
+    outputCtx.roundRect(x - size * 0.3, y - flip * size * 0.05 - (flip < 0 ? size * 0.4 : 0), size * 0.6, size * 0.4, size * 0.08);
+    outputCtx.roundRect(x - size * 0.22, y - flip * size * 0.45 - (flip < 0 ? size * 0.4 : 0), size * 0.14, size * 0.4, size * 0.05);
+    outputCtx.fill();
+    outputCtx.stroke();
+  }
+
   /** Dims everything but a soft circle around the host's hand (or the screen centre for the sticky button); under the strokes, ghosts and laser. */
   function drawSpotlight(now: number, width: number, height: number) {
     const dt = lastStickyAt === 0 ? 0 : now - lastStickyAt;
@@ -793,6 +838,7 @@ export async function startPresenterOverlayCompositor({
   function runGestures(source: Source, now: number) {
     if (!settings.gestures) {
       board.end(now);
+      reactions.clear();
       gestureSpotlight = 0;
       handPoint = null;
       if (pointer || lastLabel) {
@@ -852,6 +898,10 @@ export async function startPresenterOverlayCompositor({
     let panned = false;
     for (const action of state.actions) {
       if (!placement) break;
+      if (action.type === "reaction") {
+        reactions.start(now, action.kind);
+        continue;
+      }
       if (action.type === "reset") {
         viewport.reset(now);
         continue;
@@ -907,6 +957,7 @@ export async function startPresenterOverlayCompositor({
       .sort((a, b) => a.target - b.target);
     for (const source of drawable) drawGhost(source, source.box as GhostBox, height);
     drawLaser(now, height);
+    drawReaction(now, width, height);
 
     if (settings.image) drawImageOverlay(width, height, settings.image, settings.imageCorner);
     let caption = settings.caption.trim();

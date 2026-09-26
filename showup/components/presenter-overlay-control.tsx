@@ -145,7 +145,7 @@ export function PresenterOverlayControl({
   const [normalizeSize, setNormalizeSize] = useState(true);
   // Host hand gestures (default off) and what's recognized right now — for the host's own indicator, never drawn into the stream.
   const [gestures, setGestures] = useState(false);
-  const [gestureLabel, setGestureLabel] = useState<"pointing" | "zooming" | "reset" | "drawing" | "spotlight" | "unavailable" | null>(null);
+  const [gestureLabel, setGestureLabel] = useState<"pointing" | "zooming" | "reset" | "drawing" | "spotlight" | "thumbsup" | "thumbsdown" | "wave" | "unavailable" | null>(null);
   const [spotlightOn, setSpotlightOn] = useState(false);
   const [penColor, setPenColor] = useState<PresenterOverlaySettings["penColor"]>("red");
   const [background, setBackground] = useState<PresenterOverlaySettings["background"]>("remove");
@@ -923,7 +923,13 @@ export function PresenterOverlayControl({
                     ? "Drawing"
                     : gestureLabel === "spotlight"
                       ? "Spotlight"
-                      : "Couldn't load the hand model — gestures are off"}
+                      : gestureLabel === "thumbsup"
+                        ? "Thumbs up 👍"
+                        : gestureLabel === "thumbsdown"
+                          ? "Thumbs down 👎"
+                          : gestureLabel === "wave"
+                            ? "Wave 👋"
+                            : "Couldn't load the hand model — gestures are off"}
           </span>
         )}
         <details className="text-[11px] text-white/60">
@@ -931,8 +937,9 @@ export function PresenterOverlayControl({
           <ul className="mt-1 list-disc space-y-1 pl-4">
             <li>Point with your index finger, other fingers curled, and hold for a moment: a red laser dot follows your fingertip.</li>
             <li>Pinch thumb and index finger together and hold half a second: the screen zooms 2x toward your pinch. Move your pinched hand to pan.</li>
-            <li>Show an open palm for half a second: back to the whole screen.</li>
+            <li>Hold an open palm still for half a second: back to the whole screen. A waving palm won&apos;t reset it.</li>
             <li>Raise a fist (hand up in the camera frame) and hold it for a moment: the screen dims except a circle around your hand. Open your hand to bring the light back.</li>
+            <li>Thumbs up or thumbs down (other fingers curled), held for a moment, or a wave of an open hand: a 👍, 👎 or 👋 floats up beside you. One reaction every few seconds.</li>
             <li>Hold two fingers together (index and middle, others curled) for a moment to draw in the air; lower them to stop. Drawings fade after a few seconds.</li>
             <li>Keep your hand fully in the camera frame. Only the screen zooms, not you.</li>
           </ul>
