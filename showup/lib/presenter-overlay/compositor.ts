@@ -124,7 +124,7 @@ export type PresenterOverlayCompositor = {
   /** Adds a camera (e.g. a guest joining). No-op if the id is already there. Not shown until it's in setVisible. */
   addSource: (source: OverlaySource) => void;
   removeSource: (id: string) => void;
-  /** Which sources are shown; the first is the primary (used for the auto caption). Others fade out over ~300 ms. */
+  /** Which sources are shown, spaced out in this order (one ghost follows `position`); auto caption names them all. Others fade out over ~300 ms. */
   setVisible: (ids: string[]) => void;
   /** Stops all readers and the output track (the segmenter is kept for reuse). Does NOT stop the input tracks — the caller owns those. */
   stop: () => void;
@@ -170,6 +170,38 @@ export function fitBox(width: number, height: number): { width: number; height: 
   return { width: Math.max(2, Math.round(width * ratio)), height: Math.max(2, Math.round(height * ratio)) };
 }
 
+/** Where one ghost is drawn on the output frame. */
+export type GhostBox = { x: number; width: number; height: number };
+
+/** With several ghosts each is drawn a little smaller, so they read as a group rather than a pile. */
+const GROUP_SCALE = [1, 1, 0.85, 0.7];
+
+/**
+ * Lays ghosts out bottom-aligned. One ghost follows the `position` setting;
+ * two or three are spaced evenly across the width in the order given (the
+ * order they were added), each centred in its own slot. Pure, for testing.
+ */
+export function layoutGhosts(
+  aspects: number[],
+  outputWidth: number,
+  outputHeight: number,
+  scale: number,
+  position: PresenterOverlaySettings["position"],
+): GhostBox[] {
+  const count = aspects.length;
+  const height = outputHeight * scale * (GROUP_SCALE[Math.min(count, GROUP_SCALE.length - 1)] ?? 1);
+  return aspects.map((aspect, index) => {
+    const width = height * aspect;
+    if (count === 1) {
+      const x = position === "left" ? 0 : position === "right" ? outputWidth - width : (outputWidth - width) / 2;
+      return { x, width, height };
+    }
+    const centre = (outputWidth * (index + 0.5)) / count;
+    const x = width >= outputWidth ? (outputWidth - width) / 2 : Math.min(Math.max(centre - width / 2, 0), outputWidth - width);
+    return { x, width, height };
+  });
+}
+
 /** Everything one camera needs: its reader, its own cut-out canvas and its own fade state. */
 type Source = {
   id: string;
@@ -190,6 +222,8 @@ type Source = {
   alpha: number;
   target: number;
   lastSegmentAt: number;
+  /** Where it was last laid out; a ghost fading out keeps drawing here. */
+  box: GhostBox | null;
 };
 
 export async function startPresenterOverlayCompositor({
@@ -270,6 +304,7 @@ export async function startPresenterOverlayCompositor({
       alpha: 0,
       target: visibleIds.includes(id) ? 1 : 0,
       lastSegmentAt: 0,
+      box: null,
     };
   }
 
@@ -384,22 +419,18 @@ export async function startPresenterOverlayCompositor({
     }
   }
 
-  function drawGhost(source: Source, width: number, height: number) {
-    // Real aspect ratio of this camera: a portrait phone stays portrait, a 4:3 webcam stays 4:3.
-    const personHeight = height * settings.scale;
-    const personWidth = personHeight * source.aspect;
-    const x =
-      settings.position === "left" ? 0 : settings.position === "right" ? width - personWidth : (width - personWidth) / 2;
+  function drawGhost(source: Source, box: GhostBox, height: number) {
     outputCtx.globalAlpha = settings.opacity * source.alpha;
+    const y = height - box.height;
     // Bottom-aligned; only the host's own camera is mirrored (see settings.mirror).
     if (settings.mirror && source.isLocal) {
       outputCtx.save();
-      outputCtx.translate(x + personWidth, 0);
+      outputCtx.translate(box.x + box.width, 0);
       outputCtx.scale(-1, 1);
-      outputCtx.drawImage(source.cutoutCanvas, 0, height - personHeight, personWidth, personHeight);
+      outputCtx.drawImage(source.cutoutCanvas, 0, y, box.width, box.height);
       outputCtx.restore();
     } else {
-      outputCtx.drawImage(source.cutoutCanvas, x, height - personHeight, personWidth, personHeight);
+      outputCtx.drawImage(source.cutoutCanvas, box.x, y, box.width, box.height);
     }
     outputCtx.globalAlpha = 1;
   }
@@ -419,16 +450,24 @@ export async function startPresenterOverlayCompositor({
     }
 
     // Fading-out sources first, then the ones on their way in, so a new speaker fades in over the old one.
+    // Each real camera keeps its own aspect ratio; the visible ones are spaced out in the order given.
+    const shown = visibleIds.map((id) => sources.get(id)).filter((source): source is Source => !!source);
+    const boxes = layoutGhosts(shown.map((source) => source.aspect), width, height, settings.scale, settings.position);
+    shown.forEach((source, index) => {
+      source.box = boxes[index];
+    });
     const drawable = Array.from(sources.values())
-      .filter((source) => source.hasCutout && source.alpha > 0.003)
+      .filter((source) => source.hasCutout && source.alpha > 0.003 && source.box)
       .sort((a, b) => a.target - b.target);
-    for (const source of drawable) drawGhost(source, width, height);
+    for (const source of drawable) drawGhost(source, source.box as GhostBox, height);
 
     if (settings.image) drawImageOverlay(width, height, settings.image, settings.imageCorner);
     let caption = settings.caption.trim();
     if (!caption && settings.autoCaption && sources.size > 1) {
-      const primary = visibleIds.length > 0 ? sources.get(visibleIds[0]) : undefined;
-      caption = primary?.label.trim() ?? "";
+      caption = shown
+        .map((source) => source.label.trim())
+        .filter(Boolean)
+        .join(" · ");
     }
     if (caption) drawCaption(width, height, caption);
 

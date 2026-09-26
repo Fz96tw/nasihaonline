@@ -5,6 +5,7 @@ import { Check, Copy, MonitorUp, X } from "lucide-react";
 import { RoomEvent, VideoPreset, VideoPresets, type RemoteParticipant, type Room } from "livekit-client";
 import { LiveKitRoom, VideoConference, useLocalParticipant, useRoomContext } from "@livekit/components-react";
 import "@livekit/components-styles";
+import { OverlayGuestControl } from "@/components/overlay-guest-control";
 import { PresenterOverlayControl } from "@/components/presenter-overlay-control";
 import { LK_BUTTON_CLASS } from "@/components/livekit-control-styles";
 import { LobbyHostPanel } from "@/components/lobby-host-panel";
@@ -248,6 +249,8 @@ export function ShowupRoom({ credentials, onLeave }: { credentials: RoomCredenti
       {isHost && !sharing && <SharePrompt room={room} onError={pushToast} />}
       <Toasts toasts={toasts} />
       <TopLeftOverlay>
+        {/* Anyone else in the meeting can ask to appear on a presenter's share; renders nothing unless someone else is sharing. */}
+        <OverlayGuestControl room={room} />
         {/* Anyone who shares can use the overlay: the control renders nothing until the local participant is sharing. */}
         {overlaySupported ? (
           <PresenterOverlayControl room={room} onError={pushToast} />
