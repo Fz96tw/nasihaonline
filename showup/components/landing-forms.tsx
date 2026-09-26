@@ -100,7 +100,7 @@ function RoomCard({
           type="button"
           id={`card-${mode}`}
           onClick={onSelect}
-          className="flex h-full w-full items-center justify-center rounded-xl border border-border bg-muted/40 p-8 text-lg font-semibold hover:border-primary hover:bg-muted md:min-w-[20rem]"
+          className="flex h-full w-full items-center justify-center rounded-xl border border-border bg-muted/40 p-6 text-lg font-semibold hover:border-primary hover:bg-muted md:min-w-[12rem]"
         >
           {card.title}
         </button>
@@ -225,7 +225,7 @@ export function LandingForms() {
   const columns = mode === "start" ? "md:grid-cols-[1fr_0fr]" : mode === "join" ? "md:grid-cols-[0fr_1fr]" : "md:grid-cols-[1fr_1fr]";
   return (
     <div
-      className={`grid w-full transition-[grid-template-columns,gap] duration-300 ease-out motion-reduce:transition-none ${columns} ${
+      className={`mx-auto grid w-full max-w-xl transition-[grid-template-columns,gap] duration-300 ease-out motion-reduce:transition-none ${columns} ${
         mode ? "gap-0" : "gap-4"
       }`}
     >
