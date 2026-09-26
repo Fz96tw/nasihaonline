@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { CREDENTIALS_STORAGE_KEY, type RoomCredentials } from "@/lib/room-types";
 
 type Mode = "start" | "join";
@@ -20,21 +20,19 @@ function generateCode(): string {
   return `${words.join("-")}-${String(bytes[3] % 100).padStart(2, "0")}`;
 }
 
-const CARDS: Record<Mode, { title: string; teaser: string; intro: string }> = {
+const CARDS: Record<Mode, { title: string; intro: string }> = {
   start: {
     title: "Start a share",
-    teaser: "Pick a code, share your screen, and give the code to whoever should join.",
     intro: "Pick any code, share your screen, and give the code to whoever should join.",
   },
   join: {
-    title: "Join with a code",
-    teaser: "Have a code from a host? Enter it to watch their screen.",
+    title: "Join a share",
     intro: "Enter the code the host gave you to join their screen share.",
   },
 };
 
 /**
- * One of the two landing cards. Collapsed it's a single button; once chosen
+ * One of the two landing cards. Collapsed it holds just one button; once chosen
  * it expands into the form. The state lives here, so going back and choosing
  * the same card again keeps what was typed. `hidden` is the other card being
  * chosen: it stays mounted so it can animate away, but is inert meanwhile.
@@ -98,18 +96,16 @@ function RoomCard({
   if (!selected) {
     return (
       <div className={wrapperClass} aria-hidden={hidden} {...inert}>
-        <button
-          type="button"
-          id={`card-${mode}`}
-          onClick={onSelect}
-          className="group flex h-full w-full flex-col md:min-w-[20rem] gap-2 rounded-xl border border-border bg-muted/40 p-5 text-left hover:border-primary/60 hover:bg-muted"
-        >
-          <span className="flex items-center justify-between gap-2 text-lg font-semibold">
+        <div className="flex h-full items-center rounded-xl border border-border bg-muted/40 p-5 md:min-w-[20rem]">
+          <button
+            type="button"
+            id={`card-${mode}`}
+            onClick={onSelect}
+            className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground hover:opacity-90"
+          >
             {card.title}
-            <ArrowRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden />
-          </span>
-          <span className="text-sm text-muted-foreground">{card.teaser}</span>
-        </button>
+          </button>
+        </div>
       </div>
     );
   }
