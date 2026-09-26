@@ -15,6 +15,18 @@
   --destructive: 0 75% 62%;
 }
 
+/*
+ * One knob for the size of everything: Tailwind sizes text, spacing and widths
+ * in rem, so this scales the whole page together. The in-meeting screen keeps
+ * the default, because LiveKit's controls are laid out for it.
+ */
+html {
+  font-size: 112.5%;
+}
+html:has([data-showup-room]) {
+  font-size: 100%;
+}
+
 body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));

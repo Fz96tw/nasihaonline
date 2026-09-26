@@ -241,7 +241,7 @@ export function ShowupRoom({ credentials, onLeave }: { credentials: RoomCredenti
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[60] bg-background">
+    <div data-showup-room className="fixed inset-0 z-[60] bg-background">
       <MeetingBanner code={credentials.code} isHost={isHost} />
       <RecordingBanner room={room} />
       {isHost && <HostRecordingPanel credentials={credentials} room={room} />}
