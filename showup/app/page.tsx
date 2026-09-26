@@ -12,7 +12,7 @@ export default function HomePage() {
           <Logo className="h-20 w-auto sm:h-[4.625rem]" />
           <div className="flex flex-col gap-1.5">
             <h1 className="text-4xl font-bold tracking-tight">Showup</h1>
-            <p className="text-balance text-lg font-medium">Show up. Share your screen. Appear on it.</p>
+            <p className="text-balance text-lg font-medium">Show up. Share your screen. Step into it.</p>
           </div>
         </div>
         <p className="text-muted-foreground">Share your screen with anyone using just a code. Free, no account needed.</p>
