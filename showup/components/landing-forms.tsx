@@ -32,7 +32,7 @@ const CARDS: Record<Mode, { title: string; intro: string }> = {
 };
 
 /**
- * One of the two landing cards. Collapsed it holds just one button; once chosen
+ * One of the two landing cards. Collapsed the whole card is the (single) button; once chosen
  * it expands into the form. The state lives here, so going back and choosing
  * the same card again keeps what was typed. `hidden` is the other card being
  * chosen: it stays mounted so it can animate away, but is inert meanwhile.
@@ -96,16 +96,14 @@ function RoomCard({
   if (!selected) {
     return (
       <div className={wrapperClass} aria-hidden={hidden} {...inert}>
-        <div className="flex h-full items-center rounded-xl border border-border bg-muted/40 p-5 md:min-w-[20rem]">
-          <button
-            type="button"
-            id={`card-${mode}`}
-            onClick={onSelect}
-            className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground hover:opacity-90"
-          >
-            {card.title}
-          </button>
-        </div>
+        <button
+          type="button"
+          id={`card-${mode}`}
+          onClick={onSelect}
+          className="flex h-full w-full items-center justify-center rounded-xl border border-border bg-muted/40 p-8 text-lg font-semibold hover:border-primary hover:bg-muted md:min-w-[20rem]"
+        >
+          {card.title}
+        </button>
       </div>
     );
   }
