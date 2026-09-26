@@ -30,7 +30,7 @@ const PRESENTER_POLL_MS = 1_000;
  * Renders nothing unless someone else is sharing. Messages count only when
  * they come from that person, and they're addressed to this guest alone.
  */
-export function OverlayGuestControl({ room }: { room: Room | null }) {
+export function OverlayGuestControl({ room, onOverlayIds }: { room: Room | null; onOverlayIds: (ids: string[]) => void }) {
   const [presenterId, setPresenterId] = useState<string | null>(null);
   const [selfSharing, setSelfSharing] = useState(false);
   const [onOverlay, setOnOverlay] = useState(false);
@@ -89,7 +89,10 @@ export function OverlayGuestControl({ room }: { room: Room | null }) {
 
   // The presenter stopped sharing (or left): whatever we had with them is over.
   useEffect(() => {
-    if (!presenterId) reset();
+    if (!presenterId) {
+      reset();
+      onOverlayIds([]);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presenterId]);
 
@@ -99,6 +102,10 @@ export function OverlayGuestControl({ room }: { room: Room | null }) {
       if (topic !== OVERLAY_TOPIC || !participant || participant.identity !== presenterRef.current) return;
       const message = parseToGuest(payload);
       if (!message) return;
+      if (message.t === "overlay-roster") {
+        onOverlayIds(message.ids);
+        return;
+      }
       if (message.t === "overlay-request") {
         setInvited(true);
         clearTimer(inviteTimer);

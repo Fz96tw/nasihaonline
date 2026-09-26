@@ -6,7 +6,10 @@ import { RoomEvent, Track, VideoPreset, VideoPresets, type RemoteParticipant, ty
 import {
   Chat,
   ConnectionStateToast,
+  CarouselLayout,
   ControlBar,
+  FocusLayout,
+  FocusLayoutContainer,
   GridLayout,
   LayoutContextProvider,
   LiveKitRoom,
@@ -263,33 +266,60 @@ function SpeakerChip() {
 }
 
 /**
- * The meeting view: only screen shares get a tile. Cameras are never shown as
- * participant tiles because hosts and guests appear on the share itself (the
- * webcam overlay); their camera tracks are still published and subscribed,
- * which is what the overlay reads. Replaces the prefab VideoConference, whose
- * grid always tiles every camera; the rest (control bar, chat, audio, toasts)
- * mirrors it.
+ * The meeting view. Screen shares always get a tile. A camera gets a tile only while it's on and that
+ * person isn't on the overlay: someone on the overlay already appears on the share itself, and a camera
+ * that's off has nothing to show (no avatar placeholder). Camera tracks are still published and subscribed
+ * either way, which is what the overlay reads. Replaces the prefab VideoConference; the rest (control bar,
+ * chat, audio, toasts) mirrors it.
  */
-function ShareStage({ isHost }: { isHost: boolean }) {
+function ShareStage({ isHost, overlayIds }: { isHost: boolean; overlayIds: string[] }) {
   const layoutContext = useCreateLayoutContext();
   const [widgetState, setWidgetState] = useState<WidgetState>({ showChat: false, unreadMessages: 0, showSettings: false });
-  const screenShares = useTracks([{ source: Track.Source.ScreenShare, withPlaceholder: false }], { onlySubscribed: false });
+  const tracks = useTracks(
+    [
+      { source: Track.Source.ScreenShare, withPlaceholder: false },
+      { source: Track.Source.Camera, withPlaceholder: false },
+    ],
+    { onlySubscribed: false },
+  );
+  const screenShares = tracks.filter((track) => track.source === Track.Source.ScreenShare);
+  const cameras = tracks.filter(
+    (track) => track.source === Track.Source.Camera && !track.publication?.isMuted && !overlayIds.includes(track.participant.identity),
+  );
+
+  let stage;
+  if (screenShares.length > 0 && cameras.length > 0) {
+    stage = (
+      <div className="lk-focus-layout-wrapper">
+        <FocusLayoutContainer>
+          <CarouselLayout tracks={cameras}>
+            <ParticipantTile />
+          </CarouselLayout>
+          <FocusLayout trackRef={screenShares[0]} />
+        </FocusLayoutContainer>
+      </div>
+    );
+  } else if (screenShares.length + cameras.length > 0) {
+    stage = (
+      <div className="lk-grid-layout-wrapper">
+        <GridLayout tracks={[...screenShares, ...cameras]}>
+          <ParticipantTile />
+        </GridLayout>
+      </div>
+    );
+  } else {
+    stage = (
+      <div className="flex flex-1 items-center justify-center p-6 text-center text-white/60">
+        {!isHost && "Waiting for the host to share their screen…"}
+      </div>
+    );
+  }
 
   return (
     <div className="lk-video-conference">
       <LayoutContextProvider value={layoutContext} onWidgetChange={setWidgetState}>
         <div className="lk-video-conference-inner">
-          {screenShares.length > 0 ? (
-            <div className="lk-grid-layout-wrapper">
-              <GridLayout tracks={screenShares}>
-                <ParticipantTile />
-              </GridLayout>
-            </div>
-          ) : (
-            <div className="flex flex-1 items-center justify-center p-6 text-center text-white/60">
-              {!isHost && "Waiting for the host to share their screen…"}
-            </div>
-          )}
+          {stage}
           <ControlBar controls={{ chat: true, settings: false }} />
         </div>
         <Chat style={{ display: widgetState.showChat ? "grid" : "none" }} />
@@ -313,6 +343,8 @@ export function ShowupRoom({ credentials, onLeave }: { credentials: RoomCredenti
   const isHost = credentials.role === "host";
   const [room, setRoom] = useState<Room | null>(null);
   const [sharing, setSharing] = useState(false);
+  // Identities whose camera is on the presenter's overlay; their camera tiles are hidden (see ShareStage).
+  const [overlayIds, setOverlayIds] = useState<string[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [overlaySupported, setOverlaySupported] = useState(true);
 
@@ -338,10 +370,10 @@ export function ShowupRoom({ credentials, onLeave }: { credentials: RoomCredenti
       <Toasts toasts={toasts} />
       <TopLeftOverlay>
         {/* Anyone else in the meeting can ask to appear on a presenter's share; renders nothing unless someone else is sharing. */}
-        <OverlayGuestControl room={room} />
+        <OverlayGuestControl room={room} onOverlayIds={setOverlayIds} />
         {/* Anyone who shares can use the overlay: the control renders nothing until the local participant is sharing. */}
         {overlaySupported ? (
-          <PresenterOverlayControl room={room} onError={pushToast} />
+          <PresenterOverlayControl room={room} onError={pushToast} onOverlayIds={setOverlayIds} />
         ) : (
           isHost && (
             <div className={`pointer-events-auto max-w-[16rem] rounded-lg text-xs ${LK_BUTTON_CLASS}`}>
@@ -361,7 +393,7 @@ export function ShowupRoom({ credentials, onLeave }: { credentials: RoomCredenti
       >
         <ParticipantActivityListener onEvent={pushToast} />
         <RoomBridge onRoom={setRoom} onSharing={setSharing} />
-        <ShareStage isHost={isHost} />
+        <ShareStage isHost={isHost} overlayIds={overlayIds} />
       </LiveKitRoom>
     </div>
   );

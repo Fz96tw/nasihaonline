@@ -121,10 +121,13 @@ function reattachLocalTiles(track: LocalVideoTrack) {
 export function PresenterOverlayControl({
   room,
   onError,
+  onOverlayIds,
   panelPlacement = "below-left",
 }: {
   room: Room | null;
   onError: (message: string) => void;
+  /** Called with everyone whose camera is on the overlay (empty when off), so the meeting view can hide their camera tiles. */
+  onOverlayIds: (ids: string[]) => void;
   /** Where the settings panel opens: under the button (TopLeftOverlay), or above it for the bottom-right quick-recording controls, which sit right on top of LiveKit's control bar. */
   panelPlacement?: "below-left" | "above-right";
 }) {
@@ -148,7 +151,9 @@ export function PresenterOverlayControl({
   // Guests who can be added to the overlay (everyone else in the meeting), and who is on it / has asked. The roster is the truth; the version counter re-renders when it changes.
   const [guests, setGuests] = useState<Person[]>([]);
   const [policy, setPolicy] = useState<JoinPolicy>("ask");
-  const [, setRosterVersion] = useState(0);
+  const [rosterVersion, setRosterVersion] = useState(0);
+  const announcedRef = useRef(false);
+  const overlayIdsRef = useRef<string[]>([]);
   const rosterRef = useRef(new CoGhostRoster());
   const hadGuestsRef = useRef(false);
   const followBeforeGuestsRef = useRef(true);
@@ -514,6 +519,38 @@ export function PresenterOverlayControl({
     return () => {
       room.off(RoomEvent.LocalTrackPublished, onPublished);
       room.off(RoomEvent.LocalTrackUnpublished, onUnpublished);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room]);
+
+  // Tell everyone (and the meeting view) whose camera is on the overlay, so their camera tiles are hidden. Only while this
+  // client is the one sharing; when the share ends, clear it once so a guest's client doesn't wipe the presenter's list.
+  useEffect(() => {
+    if (!room) return;
+    let ids: string[] | null = null;
+    if (share) {
+      announcedRef.current = true;
+      ids = overlayStatus === "on" ? [room.localParticipant.identity, ...rosterRef.current.pinned] : [];
+    } else if (announcedRef.current) {
+      announcedRef.current = false;
+      ids = [];
+    }
+    if (!ids) return;
+    overlayIdsRef.current = ids;
+    onOverlayIds(ids);
+    room.remoteParticipants.forEach((participant) => sendToGuest(participant.identity, { t: "overlay-roster", ids: ids as string[] }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room, share, overlayStatus, rosterVersion]);
+
+  // Someone who joins later needs the current list too.
+  useEffect(() => {
+    if (!room) return;
+    const onJoined = (participant: { identity: string }) => {
+      if (announcedRef.current) sendToGuest(participant.identity, { t: "overlay-roster", ids: overlayIdsRef.current });
+    };
+    room.on(RoomEvent.ParticipantConnected, onJoined);
+    return () => {
+      room.off(RoomEvent.ParticipantConnected, onJoined);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room]);
