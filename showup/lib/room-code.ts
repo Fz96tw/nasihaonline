@@ -18,6 +18,17 @@ export function normalizeCode(raw: string): string {
  * is effectively the meeting's only secret.
  */
 export function roomNameForCode(code: string): string {
-  const digest = createHash("sha256").update(normalizeCode(code)).digest("hex").slice(0, 32);
-  return `${ROOM_PREFIX}${digest}`;
+  return `${ROOM_PREFIX}${codeDigest(code)}`;
+}
+
+/** Stable, non-reversible id for a code. It's the suffix of the LiveKit room name, so a webhook (which only knows the room name) can find the code's Redis state without the raw code. */
+export function codeDigest(code: string): string {
+  return createHash("sha256").update(normalizeCode(code)).digest("hex").slice(0, 32);
+}
+
+/** Inverse of `roomNameForCode`'s naming: the digest for a Showup room name, or null for anyone else's room on the shared LiveKit. */
+export function digestFromRoomName(roomName: string): string | null {
+  if (!roomName.startsWith(ROOM_PREFIX)) return null;
+  const digest = roomName.slice(ROOM_PREFIX.length);
+  return /^[0-9a-f]{32}$/.test(digest) ? digest : null;
 }

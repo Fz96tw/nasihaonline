@@ -24,6 +24,7 @@ function RoomForm({ mode }: { mode: Mode }) {
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [codeInUse, setCodeInUse] = useState(false);
   const [pending, setPending] = useState(false);
 
   const isStart = mode === "start";
@@ -32,6 +33,7 @@ function RoomForm({ mode }: { mode: Mode }) {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    setCodeInUse(false);
     setPending(true);
     try {
       const res = await fetch(`/api/rooms/${mode}`, {
@@ -42,6 +44,7 @@ function RoomForm({ mode }: { mode: Mode }) {
       const payload = await res.json().catch(() => null);
       if (!res.ok) {
         setError(typeof payload?.error === "string" ? payload.error : "Something went wrong. Please try again.");
+        setCodeInUse(isStart && payload?.codeInUse === true);
         return;
       }
       sessionStorage.setItem(CREDENTIALS_STORAGE_KEY, JSON.stringify(payload as RoomCredentials));
@@ -114,6 +117,19 @@ function RoomForm({ mode }: { mode: Mode }) {
         <p role="alert" className="text-sm text-destructive">
           {error}
         </p>
+      )}
+      {codeInUse && (
+        <button
+          type="button"
+          onClick={() => {
+            setCode(generateCode());
+            setError(null);
+            setCodeInUse(false);
+          }}
+          className="self-start rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
+        >
+          Use a random code instead
+        </button>
       )}
 
       <button

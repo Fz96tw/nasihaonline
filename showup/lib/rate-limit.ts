@@ -37,6 +37,16 @@ export interface RateLimitResult {
 }
 
 /**
+ * Reads a counter without incrementing it. Used to refuse a caller who has
+ * already used up a budget that only *failures* spend (e.g. wrong-code joins),
+ * so successful requests don't burn it.
+ */
+export async function isRateLimited(identifier: string, limit: number): Promise<boolean> {
+  const count = Number(await redis.get(`ratelimit:${identifier}`));
+  return count >= limit;
+}
+
+/**
  * Fixed-window rate limiter backed by Redis INCR/EXPIRE.
  * Reference implementation for later API routes to follow.
  */

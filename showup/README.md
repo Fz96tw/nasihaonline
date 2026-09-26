@@ -30,7 +30,15 @@ Local dev uses the shared self-hosted LiveKit at `wss://livekit.nasihaforyou.org
 
 ### Redis
 
-Redis isn't used by the start/join flow yet; it arrives with room state and rate limiting (Showup 04). Start it anyway so the setup doesn't change later. If you skip it, everything currently works.
+Redis holds the room-code claims (`showup:room:*`) and the rate-limit counters. Start/join need it: without it they answer `503` with `Retry-After` (the app itself still boots and recovers on its own when Redis returns).
+
+### Behavior worth knowing while testing
+
+- A code is claimed by the first starter. A second start on the same code gets "already in use" (and a "Use a random code instead" button); it is never offered a way in.
+- Refreshing the host tab reclaims host (the tab keeps a `hostSecret` in sessionStorage). Guests who refresh go back to the landing page and rejoin.
+- Wrong-code joins are limited to 10 per 10 minutes per IP (then `429`). On localhost every request shares one IP, so clear the counters when you hit it: `docker exec showup-redis redis-cli --scan --pattern 'ratelimit:*' | xargs docker exec -i showup-redis redis-cli del`.
+- A host who disappears frees the code within about 2-3 minutes even without webhooks: the empty LiveKit room closes after 2 minutes, and a start on an abandoned code is allowed once the claim is over a minute old and the room is empty. Otherwise the claim expires after 3 hours.
+- `GET /api/health` always returns 200 and reports `redis`, `livekit` and `minio` as `up`, `down` or `not_configured`, with an overall `status` of `ok` or `degraded`.
 
 ## Test with two participants
 
@@ -53,7 +61,7 @@ google-chrome --user-data-dir=/tmp/showup-guest --incognito \
 
 | Feature | Why | Fallback |
 | --- | --- | --- |
-| Code cleanup on `room_finished` | LiveKit sends webhooks to its configured public URLs (the VPS), which can't reach `localhost` | The code's Redis TTL expires it eventually. To test the real path, deploy to the VPS |
+| Instant code cleanup on `room_finished` (`/api/webhooks/livekit`) | LiveKit sends webhooks to its configured public URLs (the VPS), which can't reach `localhost` | The abandoned-claim takeover and the claim TTL free the code instead (see above). To test the real path, deploy to the VPS, or post a signed webhook to localhost yourself |
 | Recording readiness on `egress_ended` | Same webhook limitation, so the "recording is ready" event never arrives | Test recording on the VPS after deploy, or expose the dev server with a tunnel (e.g. `ngrok http 3012`) and point a LiveKit webhook at it |
 | Anything needing the public domain or HTTPS from a LAN device | `localhost` is the only secure context | Use a tunnel, or test on the VPS |
 

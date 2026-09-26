@@ -17,7 +17,7 @@ Showup is a free, no-account, code-based screen-share meeting service built on L
 - `lib/livekit.ts` server-only LiveKit helpers (token mint, room service, webhook verify). `lib/room-code.ts` code normalization and room naming.
 - `lib/presenter-overlay/compositor.ts` and `components/presenter-overlay-control.tsx` the client-side webcam overlay, copied from Nasiha's `web/`. The overlay is composited in the sharer's browser; no server involvement.
 - `components/showup-room.tsx` the in-meeting screen (LiveKit `VideoConference` plus overlay controls).
-- `lib/rate-limit.ts` / `lib/redis.ts` copied from Nasiha; not wired up until the room-state objective.
+- `lib/redis.ts` / `lib/rate-limit.ts` (copied from Nasiha, then adapted): Redis client that tolerates Redis being down, and the rate limiter. `lib/room-state.ts` holds the `showup:room:{digest}` code claims (SET NX, hostSecret reclaim). Routes catch dependency failures and answer 503 + Retry-After (`unavailableResponse`), never a 500. `api/webhooks/livekit` frees a code on `room_finished`. `api/health` always returns 200 with per-dependency status.
 
 ## Environment
 

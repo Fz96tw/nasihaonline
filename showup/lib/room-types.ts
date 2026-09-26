@@ -8,6 +8,10 @@ export type RoomCredentials = {
   identity: string;
   /** Normalized code, shown in the in-meeting banner. */
   code: string;
+  /** Display name, kept so the host can reclaim the meeting after a refresh without re-asking. */
+  name: string;
+  /** Host only. Proves this tab started the meeting; presented to /api/rooms/start to reclaim host. Never sent to guests. */
+  hostSecret?: string;
 };
 
 /** sessionStorage key the landing page writes and the room page reads. Per-tab, so a second tab never inherits a meeting. */

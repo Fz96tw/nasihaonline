@@ -5,11 +5,25 @@ const LIVEKIT_URL = process.env.LIVEKIT_URL;
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
 
+/** How long a join token (and so, in practice, a meeting) is valid. Also the ceiling for the Redis code claim. */
+export const TOKEN_TTL_SECONDS = 3 * 60 * 60;
+
+/** Participants per meeting, including the host. Enforced by LiveKit itself via `maxParticipants`. */
+export const MAX_PARTICIPANTS = 10;
+
+/** How long an empty room lingers before LiveKit closes it and fires `room_finished`, which frees the code. */
+const EMPTY_TIMEOUT_SECONDS = 120;
+
+/** Bounds every call to LiveKit so an unreachable server turns into a fast "unavailable", not a hung request. */
+const LIVEKIT_REQUEST_TIMEOUT_MS = 3000;
+
 export function getRoomServiceClient(): RoomServiceClient | null {
   if (!LIVEKIT_URL || !LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) return null;
   // RoomServiceClient talks to LiveKit's HTTP twirp API, not the wss://
   // signaling endpoint the browser client connects to — same host, different scheme.
-  return new RoomServiceClient(LIVEKIT_URL.replace("wss://", "https://"), LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
+  return new RoomServiceClient(LIVEKIT_URL.replace("wss://", "https://"), LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+    requestTimeout: LIVEKIT_REQUEST_TIMEOUT_MS,
+  });
 }
 
 /** Role carried in the join token's metadata; the client reads it from `localParticipant.metadata` to show host-only UI. */
@@ -29,11 +43,27 @@ export async function createLiveKitRoom(roomName: string): Promise<boolean> {
     return false;
   }
   try {
-    await roomService.createRoom({ name: roomName });
+    await roomService.createRoom({
+      name: roomName,
+      maxParticipants: MAX_PARTICIPANTS,
+      emptyTimeout: EMPTY_TIMEOUT_SECONDS,
+    });
     return true;
   } catch (error) {
     console.error("[livekit] Failed to create room", error);
     return false;
+  }
+}
+
+/** Cheap reachability probe for /api/health. */
+export async function pingLiveKit(): Promise<"up" | "down" | "not_configured"> {
+  const roomService = getRoomServiceClient();
+  if (!roomService) return "not_configured";
+  try {
+    await roomService.listRooms([]);
+    return "up";
+  } catch {
+    return "down";
   }
 }
 
@@ -77,7 +107,7 @@ export async function mintLiveKitToken(
     const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
       identity,
       name,
-      ttl: "4h",
+      ttl: TOKEN_TTL_SECONDS,
       metadata: JSON.stringify({ role }),
     });
     token.addGrant({
