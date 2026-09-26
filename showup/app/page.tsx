@@ -11,7 +11,7 @@ export default function HomePage() {
           {/* On wider screens the mark is as tall as the title and tagline (74px), so it sits flush with them. */}
           <Logo className="h-20 w-auto sm:h-[4.625rem]" />
           <div className="flex flex-col gap-1.5">
-            <h1 className="text-4xl font-bold tracking-tight text-purple-400">Showup</h1>
+            <h1 className="text-4xl font-bold tracking-tight text-purple-500">Showup</h1>
             <p className="text-balance text-lg font-medium">Show up. Share your screen. Step into it.</p>
           </div>
         </div>
