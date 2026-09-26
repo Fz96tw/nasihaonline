@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type RefObject } from "r
 import { createPortal } from "react-dom";
 import { ImagePlus, PictureInPicture2, Presentation, X } from "lucide-react";
 import { RoomEvent, Track, type LocalTrackPublication, type LocalVideoTrack, type Room } from "livekit-client";
+import type { PanelShape } from "@/lib/presenter-overlay/panel";
 import { SpeakerFollower } from "@/lib/presenter-overlay/speaker-follow";
 import { CoGhostRoster, MAX_GUEST_GHOSTS, type GuestOverlayState, type JoinPolicy } from "@/lib/presenter-overlay/co-ghosts";
 import { OVERLAY_TOPIC, encodeMessage, parseToPresenter, type ToGuest, type ToPresenter } from "@/lib/presenter-overlay/overlay-protocol";
@@ -141,6 +142,9 @@ export function PresenterOverlayControl({
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState<PresenterOverlaySettings["position"]>("center");
   const [span, setSpan] = useState(false);
+  const [background, setBackground] = useState<PresenterOverlaySettings["background"]>("remove");
+  const [panelShape, setPanelShape] = useState<PanelShape>("rounded");
+  const [softEdge, setSoftEdge] = useState(false);
   const [mirror, setMirror] = useState(true);
   const [caption, setCaption] = useState("");
   // Follow-the-speaker (default on) and an optional pinned person, who overrides it. Kept for the whole page like the other settings.
@@ -180,7 +184,7 @@ export function PresenterOverlayControl({
   }, []);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, span, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
+    return { opacity, scale, position, span, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -887,6 +891,61 @@ export function PresenterOverlayControl({
           }}
         />
       </label>
+
+      <div className={labelClass}>
+        My background
+        <div className="flex gap-1">
+          {(["remove", "keep"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              data-testid={`overlay-background-${value}`}
+              onClick={() => {
+                setBackground(value);
+                updateSettings({ background: value });
+              }}
+              className={segmentClass(background === value)}
+            >
+              {value === "remove" ? "Remove" : "Keep"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {background === "keep" && (
+        <>
+          <div className={labelClass}>
+            Panel shape
+            <div className="flex gap-1">
+              {(["rounded", "circle", "arch"] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  data-testid={`overlay-shape-${value}`}
+                  onClick={() => {
+                    setPanelShape(value);
+                    updateSettings({ panelShape: value });
+                  }}
+                  className={segmentClass(panelShape === value)}
+                >
+                  {value === "rounded" ? "Rounded" : value[0].toUpperCase() + value.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-white/70">
+            <input
+              type="checkbox"
+              checked={softEdge}
+              onChange={(e) => {
+                setSoftEdge(e.target.checked);
+                updateSettings({ softEdge: e.target.checked });
+              }}
+            />
+            Soft edge
+          </label>
+        </>
+      )}
 
       <label className="flex items-center gap-2 text-xs text-white/70">
         <input

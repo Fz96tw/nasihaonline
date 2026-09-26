@@ -29,6 +29,7 @@
  */
 
 import type { ImageSegmenter } from "@mediapipe/tasks-vision";
+import { WindowSmoother, clampWindow, panelAspect, personBounds, targetCentre, tracePanelPath, windowSize, type PanelShape, type PersonBounds } from "./panel.ts";
 
 // Insertable-streams (Chrome's main-thread flavor) aren't in TS's DOM lib yet.
 type MediaStreamTrackProcessorCtor = new (init: { track: MediaStreamTrack }) => { readable: ReadableStream<VideoFrame> };
@@ -63,6 +64,8 @@ const CAMERA_WIDTH = 640;
 const CAMERA_HEIGHT = 360;
 /** The host's own camera drives the output frame rate and is segmented every output frame; everyone else is throttled. */
 const GUEST_SEGMENT_INTERVAL_MS = 1000 / 12;
+/** In "keep background" mode segmentation only locates the person, so it runs a few times a second. */
+const PANEL_SEGMENT_INTERVAL_MS = 250;
 /** How long a ghost takes to fade in or out when the shown person changes. */
 const CROSSFADE_MS = 300;
 
@@ -81,6 +84,15 @@ export type PresenterOverlaySettings = {
    * or sides of the frame may be cropped. Only applies to one ghost — a group keeps the normal layout.
    */
   span: boolean;
+  /**
+   * The host's own ghost: "remove" cuts the person out (default); "keep" shows the camera with its real
+   * background as a shaped panel centred on them. Guests are always cut out.
+   */
+  background: "remove" | "keep";
+  /** Outline of the "keep" panel. */
+  panelShape: PanelShape;
+  /** Feather the panel's edge so it fades out instead of ending in a hard line. */
+  softEdge: boolean;
   /**
    * Flip the cut-out horizontally, like a mirror — on by default, because
    * the presenter aims by watching their own image over the slide: when it
@@ -106,6 +118,9 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   scale: 1,
   position: "center",
   span: false,
+  background: "remove",
+  panelShape: "rounded",
+  softEdge: false,
   mirror: true,
   caption: "",
   autoCaption: true,
@@ -237,6 +252,16 @@ type Source = {
   alpha: number;
   target: number;
   lastSegmentAt: number;
+  /** What was last drawn for this source: a background-removed cut-out (cutoutCanvas) or a shaped "keep background" panel (panelCanvas). */
+  mode: "cutout" | "panel";
+  panelCanvas: OffscreenCanvas;
+  panelCtx: OffscreenCanvasRenderingContext2D;
+  panelShape: PanelShape;
+  /** Latest person location (panel mode); null when nobody was found. */
+  person: PersonBounds | null;
+  smoother: WindowSmoother;
+  /** Camera size and shape the smoother's position refers to; a change re-centres it. */
+  smootherKey: string;
   /** Where it was last laid out; a ghost fading out keeps drawing here. */
   box: GhostBox | null;
 };
@@ -302,6 +327,7 @@ export async function startPresenterOverlayCompositor({
     const cameraCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
     const maskCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
     const cutoutCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
+    const panelCanvas = new OffscreenCanvas(2, 2);
     return {
       id,
       label,
@@ -319,6 +345,13 @@ export async function startPresenterOverlayCompositor({
       alpha: 0,
       target: visibleIds.includes(id) ? 1 : 0,
       lastSegmentAt: 0,
+      mode: "cutout",
+      panelCanvas,
+      panelCtx: context2d(panelCanvas),
+      panelShape: "rounded",
+      person: null,
+      smoother: new WindowSmoother(CAMERA_WIDTH / 2, CAMERA_HEIGHT / 2),
+      smootherKey: "",
       box: null,
     };
   }
@@ -378,11 +411,75 @@ export async function startPresenterOverlayCompositor({
     cutoutCtx.filter = "none";
     cutoutCtx.globalCompositeOperation = "source-over";
     source.hasCutout = true;
+    source.mode = "cutout";
+  }
+
+  /** Panel mode: segment only to find where the person is (no cut-out is made). */
+  function updatePerson(source: Source) {
+    const timestamp = Math.max(performance.now(), lastSegmentTimestamp + 1);
+    lastSegmentTimestamp = timestamp;
+    segmenter.segmentForVideo(source.cameraCanvas, timestamp, (result) => {
+      const masks = result.confidenceMasks;
+      if (!masks || masks.length === 0) return;
+      const mask = masks[0];
+      source.person = personBounds(mask.getAsFloat32Array(), mask.width, mask.height, masks.length === 1);
+    });
+  }
+
+  /** Panel mode: crops the camera to a window centred on the person (clamped to the frame) and masks it to the chosen shape. */
+  function updatePanel(source: Source, now: number) {
+    const camW = source.cameraCanvas.width;
+    const camH = source.cameraCanvas.height;
+    const shape = settings.panelShape;
+    const size = windowSize(shape, camW, camH);
+    const target = targetCentre(shape, source.person, camW, camH);
+    const key = `${shape}:${camW}x${camH}`;
+    if (source.smootherKey !== key) {
+      source.smootherKey = key;
+      source.smoother.reset(target.x, target.y);
+    }
+    const centre = source.smoother.update(now, target.x, target.y, camW);
+    const win = clampWindow(centre.x, centre.y, size.width, size.height, camW, camH);
+    const w = Math.max(2, Math.round(win.width));
+    const h = Math.max(2, Math.round(win.height));
+    const { panelCanvas, panelCtx } = source;
+    if (panelCanvas.width !== w || panelCanvas.height !== h) {
+      panelCanvas.width = w;
+      panelCanvas.height = h;
+    }
+    panelCtx.globalCompositeOperation = "copy";
+    panelCtx.drawImage(source.cameraCanvas, win.x, win.y, win.width, win.height, 0, 0, w, h);
+    // Keep only what's inside the shape; with a soft edge the outline is drawn blurred, so the panel fades out.
+    panelCtx.globalCompositeOperation = "destination-in";
+    if (settings.softEdge) {
+      const margin = Math.min(w, h) * 0.08;
+      panelCtx.filter = `blur(${margin * 0.6}px)`;
+      tracePanelPath(panelCtx, shape, { x: margin, y: margin, width: w - margin * 2, height: h - margin * 2 });
+    } else {
+      tracePanelPath(panelCtx, shape, { x: 0, y: 0, width: w, height: h });
+    }
+    panelCtx.fillStyle = "#000";
+    panelCtx.fill();
+    panelCtx.filter = "none";
+    panelCtx.globalCompositeOperation = "source-over";
+    source.panelShape = shape;
+    source.hasCutout = true;
+    source.mode = "panel";
   }
 
   /** Handles one camera frame for a source; always closes it. Returns true if a fresh cut-out was made. */
   function processFrame(source: Source, frame: VideoFrame, now: number, minIntervalMs: number): boolean {
     try {
+      if (source.isLocal && settings.background === "keep") {
+        drawCamera(source, frame);
+        frame.close();
+        if (now - source.lastSegmentAt >= PANEL_SEGMENT_INTERVAL_MS) {
+          source.lastSegmentAt = now;
+          updatePerson(source);
+        }
+        updatePanel(source, now);
+        return true;
+      }
       if (!isNeeded(source) || now - source.lastSegmentAt < minIntervalMs) return false;
       source.lastSegmentAt = now;
       drawCamera(source, frame);
@@ -434,18 +531,27 @@ export async function startPresenterOverlayCompositor({
     }
   }
 
+  /** Width / height a source is laid out at: its panel's shape, or the camera's own aspect for a cut-out. */
+  function layoutAspect(source: Source): number {
+    return source.mode === "panel" ? panelAspect(source.panelShape) : source.aspect;
+  }
+
   function drawGhost(source: Source, box: GhostBox, height: number) {
     outputCtx.globalAlpha = settings.opacity * source.alpha;
-    const y = height - box.height;
+    const panel = source.mode === "panel";
+    const image = panel ? source.panelCanvas : source.cutoutCanvas;
+    let y = height - box.height;
+    // A circle floats a little above the bottom edge so it doesn't look cut off (only if there's room).
+    if (panel && source.panelShape === "circle") y -= Math.min(height * 0.03, y);
     // Bottom-aligned; only the host's own camera is mirrored (see settings.mirror).
     if (settings.mirror && source.isLocal) {
       outputCtx.save();
       outputCtx.translate(box.x + box.width, 0);
       outputCtx.scale(-1, 1);
-      outputCtx.drawImage(source.cutoutCanvas, 0, y, box.width, box.height);
+      outputCtx.drawImage(image, 0, y, box.width, box.height);
       outputCtx.restore();
     } else {
-      outputCtx.drawImage(source.cutoutCanvas, box.x, y, box.width, box.height);
+      outputCtx.drawImage(image, box.x, y, box.width, box.height);
     }
     outputCtx.globalAlpha = 1;
   }
@@ -467,7 +573,7 @@ export async function startPresenterOverlayCompositor({
     // Fading-out sources first, then the ones on their way in, so a new speaker fades in over the old one.
     // Each real camera keeps its own aspect ratio; the visible ones are spaced out in the order given.
     const shown = visibleIds.map((id) => sources.get(id)).filter((source): source is Source => !!source);
-    const boxes = layoutGhosts(shown.map((source) => source.aspect), width, height, settings.scale, settings.position, settings.span);
+    const boxes = layoutGhosts(shown.map(layoutAspect), width, height, settings.scale, settings.position, settings.span);
     shown.forEach((source, index) => {
       source.box = boxes[index];
     });
