@@ -58,9 +58,13 @@ const SELFIE_SEGMENTER_MODEL =
 const MAX_OUTPUT_WIDTH = 1280;
 const MAX_OUTPUT_HEIGHT = 720;
 const MIN_FRAME_INTERVAL_MS = 1000 / 20;
-/** Webcam is segmented at this size — plenty for a translucent cut-out, and keeps the per-frame mask readback cheap. */
+/** Each camera is segmented within this box (keeping its own aspect ratio) — plenty for a translucent cut-out, and keeps the per-frame mask readback cheap. */
 const CAMERA_WIDTH = 640;
 const CAMERA_HEIGHT = 360;
+/** The host's own camera drives the output frame rate and is segmented every output frame; everyone else is throttled. */
+const GUEST_SEGMENT_INTERVAL_MS = 1000 / 12;
+/** How long a ghost takes to fade in or out when the shown person changes. */
+const CROSSFADE_MS = 300;
 
 export type OverlayCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
@@ -81,6 +85,12 @@ export type PresenterOverlaySettings = {
    */
   mirror: boolean;
   caption: string;
+  /**
+   * With no typed caption, caption the ghost with the name of whoever is
+   * shown — but only while someone else is in the meeting, so a lone host
+   * doesn't get their own name stamped on the share.
+   */
+  autoCaption: boolean;
   image: ImageBitmap | null;
   imageCorner: OverlayCorner;
 };
@@ -91,16 +101,32 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   position: "center",
   mirror: true,
   caption: "",
+  autoCaption: true,
   image: null,
   imageCorner: "top-right",
+};
+
+/** One camera that can be shown as a ghost. */
+export type OverlaySource = {
+  id: string;
+  /** Shown as the auto caption. */
+  label: string;
+  track: MediaStreamTrack;
+  /** Only the host's own camera is mirrored (see settings.mirror); everyone else is drawn as they are seen. */
+  isLocal: boolean;
 };
 
 export type PresenterOverlayCompositor = {
   /** The combined track, ready for localParticipant.publishTrack(..., { source: ScreenShare }). */
   track: MediaStreamTrack;
-  /** Mutated in place by the UI; read fresh on every frame, so changes apply without a restart. */
+  /** Mutated in place by the UI; read fresh on every frame, so changes apply without a restart. Applies to every ghost. */
   settings: PresenterOverlaySettings;
-  /** Stops both readers and the output track (the segmenter is kept for reuse). Does NOT stop the input tracks — the caller owns those. */
+  /** Adds a camera (e.g. a guest joining). No-op if the id is already there. Not shown until it's in setVisible. */
+  addSource: (source: OverlaySource) => void;
+  removeSource: (id: string) => void;
+  /** Which sources are shown; the first is the primary (used for the auto caption). Others fade out over ~300 ms. */
+  setVisible: (ids: string[]) => void;
+  /** Stops all readers and the output track (the segmenter is kept for reuse). Does NOT stop the input tracks — the caller owns those. */
   stop: () => void;
 };
 
@@ -138,13 +164,44 @@ function fitWithin(width: number, height: number): { width: number; height: numb
   return { width: Math.max(2, Math.round((width * ratio) / 2) * 2), height: Math.max(2, Math.round((height * ratio) / 2) * 2) };
 }
 
+/** Fits a frame into the segmentation box without changing its aspect ratio (so a portrait phone camera stays portrait). */
+export function fitBox(width: number, height: number): { width: number; height: number } {
+  const ratio = Math.min(CAMERA_WIDTH / width, CAMERA_HEIGHT / height);
+  return { width: Math.max(2, Math.round(width * ratio)), height: Math.max(2, Math.round(height * ratio)) };
+}
+
+/** Everything one camera needs: its reader, its own cut-out canvas and its own fade state. */
+type Source = {
+  id: string;
+  label: string;
+  isLocal: boolean;
+  reader: ReadableStreamDefaultReader<VideoFrame>;
+  cameraCanvas: OffscreenCanvas;
+  cameraCtx: OffscreenCanvasRenderingContext2D;
+  maskCanvas: OffscreenCanvas;
+  maskCtx: OffscreenCanvasRenderingContext2D;
+  maskImage: ImageData;
+  cutoutCanvas: OffscreenCanvas;
+  cutoutCtx: OffscreenCanvasRenderingContext2D;
+  /** Width / height of the cut-out, from the camera's real frame size. */
+  aspect: number;
+  hasCutout: boolean;
+  /** 0–1 current fade, moving toward `target` (1 shown, 0 hidden). */
+  alpha: number;
+  target: number;
+  lastSegmentAt: number;
+};
+
 export async function startPresenterOverlayCompositor({
   screenTrack,
   cameraTrack,
+  cameraLabel = "",
   onError,
 }: {
   screenTrack: MediaStreamTrack;
+  /** The host's own camera. Its frames drive the output, so it must stay live for as long as the overlay does. */
   cameraTrack: MediaStreamTrack;
+  cameraLabel?: string;
   onError: (error: unknown) => void;
 }): Promise<PresenterOverlayCompositor> {
   const { Processor, Generator } = insertableStreams();
@@ -161,24 +218,18 @@ export async function startPresenterOverlayCompositor({
   const screenCtx = context2d(screenCanvas);
   let hasScreenFrame = false;
 
-  // Webcam → (segment) → mask → cut-out with transparent background.
-  const cameraCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
-  const cameraCtx = context2d(cameraCanvas);
-  const maskCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
-  const maskCtx = context2d(maskCanvas);
-  let maskImage = new ImageData(CAMERA_WIDTH, CAMERA_HEIGHT);
-  const cutoutCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
-  const cutoutCtx = context2d(cutoutCanvas);
-
   const outputCanvas = new OffscreenCanvas(MAX_OUTPUT_WIDTH, MAX_OUTPUT_HEIGHT);
   const outputCtx = context2d(outputCanvas);
 
   let stopped = false;
   let lastOutputAt = 0;
+  let lastFadeAt = 0;
   let lastSegmentTimestamp = 0;
+  let visibleIds: string[] = [];
+  const sources = new Map<string, Source>();
+  const LOCAL_ID = "local";
 
   const screenReader = new Processor({ track: screenTrack }).readable.getReader();
-  const cameraReader = new Processor({ track: cameraTrack }).readable.getReader();
 
   async function pumpScreen() {
     while (!stopped) {
@@ -198,24 +249,54 @@ export async function startPresenterOverlayCompositor({
     }
   }
 
-  /** Center-crops the camera frame to 16:9 so a 4:3 webcam isn't stretched. */
-  function drawCameraCover(frame: VideoFrame) {
-    const sourceRatio = frame.displayWidth / frame.displayHeight;
-    const targetRatio = CAMERA_WIDTH / CAMERA_HEIGHT;
-    let sw = frame.displayWidth;
-    let sh = frame.displayHeight;
-    if (sourceRatio > targetRatio) sw = sh * targetRatio;
-    else sh = sw / targetRatio;
-    const sx = (frame.displayWidth - sw) / 2;
-    const sy = (frame.displayHeight - sh) / 2;
-    cameraCtx.drawImage(frame, sx, sy, sw, sh, 0, 0, CAMERA_WIDTH, CAMERA_HEIGHT);
+  function createSource(id: string, label: string, isLocal: boolean, track: MediaStreamTrack): Source {
+    const cameraCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
+    const maskCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
+    const cutoutCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
+    return {
+      id,
+      label,
+      isLocal,
+      reader: new Processor!({ track }).readable.getReader(),
+      cameraCanvas,
+      cameraCtx: context2d(cameraCanvas),
+      maskCanvas,
+      maskCtx: context2d(maskCanvas),
+      maskImage: new ImageData(CAMERA_WIDTH, CAMERA_HEIGHT),
+      cutoutCanvas,
+      cutoutCtx: context2d(cutoutCanvas),
+      aspect: CAMERA_WIDTH / CAMERA_HEIGHT,
+      hasCutout: false,
+      alpha: 0,
+      target: visibleIds.includes(id) ? 1 : 0,
+      lastSegmentAt: 0,
+    };
   }
 
-  function updateCutout() {
-    // MediaPipe requires strictly increasing timestamps within a VIDEO-mode session.
+  /** True while a source is (or is still fading) on screen — only those cost segmentation time. */
+  function isNeeded(source: Source): boolean {
+    return source.target > 0 || source.alpha > 0.003;
+  }
+
+  /** Draws the camera frame at its real aspect ratio into the source's canvas, resizing every buffer to match. */
+  function drawCamera(source: Source, frame: VideoFrame) {
+    const size = fitBox(frame.displayWidth, frame.displayHeight);
+    if (source.cameraCanvas.width !== size.width || source.cameraCanvas.height !== size.height) {
+      for (const canvas of [source.cameraCanvas, source.maskCanvas, source.cutoutCanvas]) {
+        canvas.width = size.width;
+        canvas.height = size.height;
+      }
+      source.maskImage = new ImageData(size.width, size.height);
+      source.aspect = size.width / size.height;
+    }
+    source.cameraCtx.drawImage(frame, 0, 0, size.width, size.height);
+  }
+
+  function updateCutout(source: Source) {
+    // MediaPipe requires strictly increasing timestamps within a VIDEO-mode session; all sources share it.
     const timestamp = Math.max(performance.now(), lastSegmentTimestamp + 1);
     lastSegmentTimestamp = timestamp;
-    segmenter.segmentForVideo(cameraCanvas, timestamp, (result) => {
+    segmenter.segmentForVideo(source.cameraCanvas, timestamp, (result) => {
       const masks = result.confidenceMasks;
       if (!masks || masks.length === 0) return;
       // selfie_segmenter has a single "person" confidence channel; a
@@ -223,28 +304,45 @@ export async function startPresenterOverlayCompositor({
       const single = masks.length === 1;
       const mask = masks[0];
       // Masks normally come back at the input size; resize our buffers if a model ever differs.
-      if (mask.width !== maskImage.width || mask.height !== maskImage.height) {
-        maskImage = new ImageData(mask.width, mask.height);
-        maskCanvas.width = mask.width;
-        maskCanvas.height = mask.height;
+      if (mask.width !== source.maskImage.width || mask.height !== source.maskImage.height) {
+        source.maskImage = new ImageData(mask.width, mask.height);
+        source.maskCanvas.width = mask.width;
+        source.maskCanvas.height = mask.height;
       }
       const confidence = mask.getAsFloat32Array();
-      const data = maskImage.data;
+      const data = source.maskImage.data;
       for (let i = 0; i < confidence.length; i++) {
         const person = single ? confidence[i] : 1 - confidence[i];
         data[i * 4 + 3] = person * 255;
       }
     });
-    maskCtx.putImageData(maskImage, 0, 0);
+    source.maskCtx.putImageData(source.maskImage, 0, 0);
 
+    const { cutoutCtx, cameraCanvas, maskCanvas } = source;
     cutoutCtx.globalCompositeOperation = "copy";
     cutoutCtx.drawImage(cameraCanvas, 0, 0);
     cutoutCtx.globalCompositeOperation = "destination-in";
     // Soften the mask edge so the outline doesn't shimmer frame to frame.
     cutoutCtx.filter = "blur(2px)";
-    cutoutCtx.drawImage(maskCanvas, 0, 0, CAMERA_WIDTH, CAMERA_HEIGHT);
+    cutoutCtx.drawImage(maskCanvas, 0, 0, cameraCanvas.width, cameraCanvas.height);
     cutoutCtx.filter = "none";
     cutoutCtx.globalCompositeOperation = "source-over";
+    source.hasCutout = true;
+  }
+
+  /** Handles one camera frame for a source; always closes it. Returns true if a fresh cut-out was made. */
+  function processFrame(source: Source, frame: VideoFrame, now: number, minIntervalMs: number): boolean {
+    try {
+      if (!isNeeded(source) || now - source.lastSegmentAt < minIntervalMs) return false;
+      source.lastSegmentAt = now;
+      drawCamera(source, frame);
+      frame.close();
+      updateCutout(source);
+      return true;
+    } finally {
+      // Safe to call on an already-closed frame.
+      frame.close();
+    }
   }
 
   function drawCaption(width: number, height: number, caption: string) {
@@ -275,6 +373,37 @@ export async function startPresenterOverlayCompositor({
     outputCtx.drawImage(image, x, y, w, h);
   }
 
+  /** Moves every source's fade toward its target, so a change of speaker crossfades over ~300 ms. */
+  function stepFades(now: number) {
+    const dt = lastFadeAt === 0 ? 0 : now - lastFadeAt;
+    lastFadeAt = now;
+    const step = dt / CROSSFADE_MS;
+    for (const source of Array.from(sources.values())) {
+      if (source.alpha < source.target) source.alpha = Math.min(source.target, source.alpha + step);
+      else if (source.alpha > source.target) source.alpha = Math.max(source.target, source.alpha - step);
+    }
+  }
+
+  function drawGhost(source: Source, width: number, height: number) {
+    // Real aspect ratio of this camera: a portrait phone stays portrait, a 4:3 webcam stays 4:3.
+    const personHeight = height * settings.scale;
+    const personWidth = personHeight * source.aspect;
+    const x =
+      settings.position === "left" ? 0 : settings.position === "right" ? width - personWidth : (width - personWidth) / 2;
+    outputCtx.globalAlpha = settings.opacity * source.alpha;
+    // Bottom-aligned; only the host's own camera is mirrored (see settings.mirror).
+    if (settings.mirror && source.isLocal) {
+      outputCtx.save();
+      outputCtx.translate(x + personWidth, 0);
+      outputCtx.scale(-1, 1);
+      outputCtx.drawImage(source.cutoutCanvas, 0, height - personHeight, personWidth, personHeight);
+      outputCtx.restore();
+    } else {
+      outputCtx.drawImage(source.cutoutCanvas, x, height - personHeight, personWidth, personHeight);
+    }
+    outputCtx.globalAlpha = 1;
+  }
+
   function compose(timestamp: number) {
     const { width, height } = hasScreenFrame ? screenCanvas : { width: MAX_OUTPUT_WIDTH, height: MAX_OUTPUT_HEIGHT };
     if (outputCanvas.width !== width || outputCanvas.height !== height) {
@@ -289,33 +418,27 @@ export async function startPresenterOverlayCompositor({
       outputCtx.fillRect(0, 0, width, height);
     }
 
-    // Presenter cut-out: bottom-aligned, mirrored unless turned off (see settings.mirror).
-    const personHeight = height * settings.scale;
-    const personWidth = personHeight * (CAMERA_WIDTH / CAMERA_HEIGHT);
-    const x =
-      settings.position === "left" ? 0 : settings.position === "right" ? width - personWidth : (width - personWidth) / 2;
-    outputCtx.globalAlpha = settings.opacity;
-    if (settings.mirror) {
-      outputCtx.save();
-      outputCtx.translate(x + personWidth, 0);
-      outputCtx.scale(-1, 1);
-      outputCtx.drawImage(cutoutCanvas, 0, height - personHeight, personWidth, personHeight);
-      outputCtx.restore();
-    } else {
-      outputCtx.drawImage(cutoutCanvas, x, height - personHeight, personWidth, personHeight);
-    }
-    outputCtx.globalAlpha = 1;
+    // Fading-out sources first, then the ones on their way in, so a new speaker fades in over the old one.
+    const drawable = Array.from(sources.values())
+      .filter((source) => source.hasCutout && source.alpha > 0.003)
+      .sort((a, b) => a.target - b.target);
+    for (const source of drawable) drawGhost(source, width, height);
 
     if (settings.image) drawImageOverlay(width, height, settings.image, settings.imageCorner);
-    const caption = settings.caption.trim();
+    let caption = settings.caption.trim();
+    if (!caption && settings.autoCaption && sources.size > 1) {
+      const primary = visibleIds.length > 0 ? sources.get(visibleIds[0]) : undefined;
+      caption = primary?.label.trim() ?? "";
+    }
     if (caption) drawCaption(width, height, caption);
 
     return new VideoFrame(outputCanvas, { timestamp });
   }
 
-  async function pumpCamera() {
+  /** The host's camera: segmented at output rate, and every one of its frames also drives a composed output frame. */
+  async function pumpLocal(source: Source) {
     while (!stopped) {
-      const { value: frame, done } = await cameraReader.read();
+      const { value: frame, done } = await source.reader.read();
       if (done || !frame) return;
       const now = performance.now();
       if (now - lastOutputAt < MIN_FRAME_INTERVAL_MS) {
@@ -325,38 +448,77 @@ export async function startPresenterOverlayCompositor({
       lastOutputAt = now;
       let output: VideoFrame | null = null;
       try {
-        drawCameraCover(frame);
         const timestamp = frame.timestamp;
-        frame.close();
-        updateCutout();
+        processFrame(source, frame, now, 0);
+        stepFades(now);
         output = compose(timestamp);
         await writer.write(output);
       } catch (error) {
         output?.close();
         if (!stopped) throw error;
-      } finally {
-        // Safe to call on an already-closed frame.
-        frame.close();
       }
     }
+  }
+
+  /** Someone else's camera: drained continuously, segmented only while it's on screen and at most ~12 times a second. */
+  async function pumpRemote(source: Source) {
+    while (!stopped) {
+      const { value: frame, done } = await source.reader.read();
+      if (done || !frame) return;
+      processFrame(source, frame, performance.now(), GUEST_SEGMENT_INTERVAL_MS);
+    }
+  }
+
+  function startPump(source: Source, pump: (source: Source) => Promise<void>) {
+    pump(source).catch((error) => {
+      // A single guest's track ending or failing must not take the whole overlay down.
+      if (stopped || sources.get(source.id) !== source) return;
+      if (source.isLocal) {
+        stop();
+        onError(error);
+      } else {
+        console.warn("[presenter-overlay] dropping a camera source", source.id, error);
+        removeSource(source.id);
+      }
+    });
+  }
+
+  function addSource(input: OverlaySource) {
+    if (stopped || sources.has(input.id)) return;
+    const source = createSource(input.id, input.label, input.isLocal, input.track);
+    sources.set(input.id, source);
+    startPump(source, input.isLocal ? pumpLocal : pumpRemote);
+  }
+
+  function removeSource(id: string) {
+    const source = sources.get(id);
+    if (!source) return;
+    sources.delete(id);
+    source.reader.cancel().catch(() => {});
+  }
+
+  function setVisible(ids: string[]) {
+    visibleIds = ids;
+    for (const source of Array.from(sources.values())) source.target = ids.includes(source.id) ? 1 : 0;
   }
 
   function stop() {
     if (stopped) return;
     stopped = true;
     screenReader.cancel().catch(() => {});
-    cameraReader.cancel().catch(() => {});
+    for (const source of Array.from(sources.values())) source.reader.cancel().catch(() => {});
+    sources.clear();
     writer.close().catch(() => {});
     generator.stop();
   }
 
-  for (const pump of [pumpScreen, pumpCamera]) {
-    pump().catch((error) => {
-      if (stopped) return;
-      stop();
-      onError(error);
-    });
-  }
+  addSource({ id: LOCAL_ID, label: cameraLabel, track: cameraTrack, isLocal: true });
+  setVisible([LOCAL_ID]);
+  pumpScreen().catch((error) => {
+    if (stopped) return;
+    stop();
+    onError(error);
+  });
 
-  return { track: generator, settings, stop };
+  return { track: generator, settings, addSource, removeSource, setVisible, stop };
 }

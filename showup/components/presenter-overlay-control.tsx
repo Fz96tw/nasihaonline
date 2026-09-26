@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type RefObject } from "r
 import { createPortal } from "react-dom";
 import { ImagePlus, PictureInPicture2, Presentation, X } from "lucide-react";
 import { RoomEvent, Track, type LocalTrackPublication, type LocalVideoTrack, type Room } from "livekit-client";
+import { SpeakerFollower } from "@/lib/presenter-overlay/speaker-follow";
 import {
   isPresenterOverlaySupported,
   startPresenterOverlayCompositor,
@@ -29,7 +30,19 @@ type Overlay = {
   cameraTrack: MediaStreamTrack;
   /** Whether the presenter's regular camera tile was on before the overlay — restored when it's removed. */
   cameraWasEnabled: boolean;
+  /** Picks whose cut-out is shown; ticked while the overlay is on. */
+  follower: SpeakerFollower;
+  tick: ReturnType<typeof setInterval>;
+  /** Remote camera sources currently registered with the compositor: participant identity -> the MediaStreamTrack it was built from. */
+  attached: Map<string, MediaStreamTrack>;
 };
+
+/** A camera the presenter can pin the ghost to. */
+type Person = { id: string; label: string };
+
+/** How often speech is sampled to decide who the ghost shows. */
+const FOLLOW_TICK_MS = 100;
+const LOCAL_ID = "local";
 
 /** Chrome 116+ Document Picture-in-Picture — not in TS's DOM lib yet. */
 type DocumentPictureInPicture = {
@@ -115,9 +128,15 @@ export function PresenterOverlayControl({
   const [position, setPosition] = useState<PresenterOverlaySettings["position"]>("center");
   const [mirror, setMirror] = useState(true);
   const [caption, setCaption] = useState("");
+  // Follow-the-speaker (default on) and an optional pinned person, who overrides it. Kept for the whole page like the other settings.
+  const [followSpeaker, setFollowSpeaker] = useState(true);
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
+  const [people, setPeople] = useState<Person[]>([]);
+  const [shownId, setShownId] = useState<string>(LOCAL_ID);
   const [imageName, setImageName] = useState<string | null>(null);
   const [imageCorner, setImageCorner] = useState<OverlayCorner>("top-right");
   const imageRef = useRef<ImageBitmap | null>(null);
+  const followRef = useRef({ follow: true, pinned: null as string | null });
   const shareRef = useRef<Share | null>(null);
   const overlayRef = useRef<Overlay | null>(null);
   const previewRef = useRef<HTMLVideoElement | null>(null);
@@ -137,7 +156,7 @@ export function PresenterOverlayControl({
   }, []);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, mirror, caption, image: imageRef.current, imageCorner };
+    return { opacity, scale, position, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -151,6 +170,8 @@ export function PresenterOverlayControl({
     if (!overlay) return;
     overlayRef.current = null;
     setOverlayStatus("off");
+    clearInterval(overlay.tick);
+    setPeople([]);
     overlay.compositor.stop();
     overlay.screenClone.stop();
     overlay.cameraTrack.stop();
@@ -191,6 +212,7 @@ export function PresenterOverlayControl({
       compositor = await startPresenterOverlayCompositor({
         screenTrack: screenClone,
         cameraTrack,
+        cameraLabel: room.localParticipant.name || "",
         onError: (error) => {
           console.error("[presenter-overlay] compositor failed", error);
           onError("The camera overlay stopped unexpectedly.");
@@ -208,7 +230,13 @@ export function PresenterOverlayControl({
       const cameraWasEnabled = room.localParticipant.isCameraEnabled;
       if (cameraWasEnabled) await room.localParticipant.setCameraEnabled(false);
 
-      overlayRef.current = { compositor, screenClone, cameraTrack, cameraWasEnabled };
+      const follower = new SpeakerFollower(LOCAL_ID);
+      follower.setFollow(followRef.current.follow);
+      follower.setPinned(followRef.current.pinned);
+      const attached = new Map<string, MediaStreamTrack>();
+      const started = compositor;
+      const tick = setInterval(() => syncFollow(started, follower, attached), FOLLOW_TICK_MS);
+      overlayRef.current = { compositor, screenClone, cameraTrack, cameraWasEnabled, follower, tick, attached };
       // userProvidedTrack: true — otherwise LiveKit stops the track it's
       // replacing, and we need the raw capture to swap back to later.
       await share.track.replaceTrack(compositor.track, { userProvidedTrack: true });
@@ -225,6 +253,54 @@ export function PresenterOverlayControl({
       }
       onError("Couldn't add your camera to the share.");
     }
+  }
+
+  /**
+   * One sample of the room: keeps the compositor's camera sources in step
+   * with who has a camera on (guests joining, leaving, muting), then asks the
+   * follower whose cut-out to show. Runs every FOLLOW_TICK_MS while the
+   * overlay is on; polled rather than event-driven so a missed event can't
+   * leave a stale source behind.
+   */
+  function syncFollow(compositor: PresenterOverlayCompositor, follower: SpeakerFollower, attached: Map<string, MediaStreamTrack>) {
+    const room = roomRef.current;
+    if (!room) return;
+    const eligible = new Set<string>([LOCAL_ID]);
+    const nextPeople: Person[] = [{ id: LOCAL_ID, label: "You" }];
+    const live = new Set<string>();
+    room.remoteParticipants.forEach((participant) => {
+      const publication = participant.getTrackPublication(Track.Source.Camera);
+      const mediaTrack = publication?.track?.mediaStreamTrack;
+      if (!publication || !mediaTrack || publication.isMuted) return;
+      live.add(participant.identity);
+      eligible.add(participant.identity);
+      nextPeople.push({ id: participant.identity, label: participant.name || "Guest" });
+      if (attached.get(participant.identity) !== mediaTrack) {
+        // New guest camera, or the guest switched cameras: (re)build their source.
+        compositor.removeSource(participant.identity);
+        compositor.addSource({ id: participant.identity, label: participant.name || "Guest", track: mediaTrack, isLocal: false });
+        attached.set(participant.identity, mediaTrack);
+      }
+    });
+    attached.forEach((_track, id) => {
+      if (live.has(id)) return;
+      compositor.removeSource(id);
+      attached.delete(id);
+    });
+
+    const speakers = new Map<string, number>();
+    room.activeSpeakers.forEach((participant) => {
+      if (participant.isSpeaking) speakers.set(participant.isLocal ? LOCAL_ID : participant.identity, participant.audioLevel);
+    });
+    const shown = follower.update(performance.now(), speakers, eligible, LOCAL_ID);
+    compositor.setVisible([shown]);
+    setShownId(shown);
+
+    setPeople((previous) =>
+      previous.length === nextPeople.length && previous.every((person, i) => person.id === nextPeople[i].id && person.label === nextPeople[i].label)
+        ? previous
+        : nextPeople,
+    );
   }
 
   /** Swaps the untouched capture back in (full resolution, LiveKit-owned again), then disposes the overlay. */
@@ -411,6 +487,18 @@ export function PresenterOverlayControl({
     setImageName(null);
   }
 
+  function changeFollow(follow: boolean) {
+    setFollowSpeaker(follow);
+    followRef.current.follow = follow;
+    overlayRef.current?.follower.setFollow(follow);
+  }
+
+  function changePinned(id: string | null) {
+    setPinnedId(id);
+    followRef.current.pinned = id;
+    overlayRef.current?.follower.setPinned(id);
+  }
+
   function toggleOverlay() {
     if (overlayStatus === "on") removeOverlay();
     else if (overlayStatus === "off") addOverlay();
@@ -444,6 +532,33 @@ export function PresenterOverlayControl({
       </label>
       {overlayStatus === "off" && (
         <p className="text-[11px] text-white/50">Viewers see your plain screen share. Settings below apply when you turn it on.</p>
+      )}
+
+      <label className="flex items-center justify-between gap-2 text-xs text-white/70">
+        Follow the speaker
+        <input type="checkbox" checked={followSpeaker} onChange={(e) => changeFollow(e.target.checked)} />
+      </label>
+      {people.length > 1 && (
+        <div className={labelClass}>
+          <span data-testid="overlay-showing">
+            Showing: {people.find((person) => person.id === shownId)?.label ?? "You"}{" "}
+            {pinnedId ? "(pinned)" : followSpeaker ? "(follows speech)" : "(stays put)"}
+          </span>
+          <div className="flex flex-wrap gap-1">
+            {people.map((person) => (
+              <button
+                key={person.id}
+                type="button"
+                onClick={() => changePinned(pinnedId === person.id ? null : person.id)}
+                aria-pressed={pinnedId === person.id}
+                title={pinnedId === person.id ? "Unpin" : "Pin this person"}
+                className={`${segmentClass(pinnedId === person.id)} flex-none`}
+              >
+                {person.label}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       <label className={labelClass}>
@@ -515,7 +630,7 @@ export function PresenterOverlayControl({
           type="text"
           value={caption}
           maxLength={120}
-          placeholder="Shown along the bottom"
+          placeholder="Blank = the speaker's name"
           onChange={(e) => {
             setCaption(e.target.value);
             updateSettings({ caption: e.target.value });
