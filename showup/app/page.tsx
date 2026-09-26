@@ -8,8 +8,8 @@ export default function HomePage() {
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-10 px-4 py-10 sm:py-14">
       <header className="flex flex-col items-center gap-4 text-center">
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:gap-5 sm:text-left">
-          {/* On wider screens the mark is as tall as the title and tagline (74px), so it sits flush with them. */}
-          <Logo className="h-20 w-auto sm:h-[4.625rem]" />
+          {/* Slightly shorter than the title and tagline together, centred beside them. */}
+          <Logo className="h-[4.5rem] w-auto sm:h-16" />
           <div className="flex flex-col gap-1.5">
             <h1 className="text-4xl font-bold tracking-tight text-purple-600">Showup</h1>
             <p className="text-balance text-lg font-medium">Show up. Share your screen. Step into it.</p>
