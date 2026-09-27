@@ -12,7 +12,7 @@
  * published video).
  *
  * Frame pacing — the load-bearing design choice: the pipeline is driven by
- * the *webcam's* MediaStreamTrackProcessor frame stream, not
+ * the *host's own webcam's* MediaStreamTrackProcessor frame stream, not
  * requestAnimationFrame or a timer. Chrome freezes rAF and throttles
  * timers to ~1Hz in a background tab, and the presenter's meeting tab is
  * almost always in the background while they're in their slides app. A
@@ -32,8 +32,17 @@
  * comments): point to show a laser dot, pinch to zoom/pan the screen layer,
  * open palm to reset, two fingers together to air-draw. Off by default;
  * loads the hand-landmark model the first time they're switched on. Only
- * ever active while the overlay itself is on (i.e. while screen-sharing) —
- * there is no camera-only mode.
+ * ever active while the host's own ghost is on the share — there is no
+ * camera-only mode, and if a guest's ghost is currently shown instead (see
+ * "Follow the speaker" below) there's nothing for a gesture to point at.
+ *
+ * Follow the speaker (ported from showup/lib/presenter-overlay/speaker-follow.ts):
+ * the compositor can hold more than one camera at once — the host's own,
+ * added at startup, plus any guest's (addSource/removeSource, driven by the
+ * caller sampling the room) — but only ever shows one of them at a time
+ * (setVisible), crossfading over ~300ms when the shown one changes.
+ * Deciding *which* one to show is the caller's job (SpeakerFollower); this
+ * module only knows how to fade between whichever ids it's told.
  */
 
 import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
@@ -72,9 +81,13 @@ const HAND_LANDMARKER_MODEL =
 const MAX_OUTPUT_WIDTH = 1280;
 const MAX_OUTPUT_HEIGHT = 720;
 const MIN_FRAME_INTERVAL_MS = 1000 / 20;
-/** Webcam is segmented at this size — plenty for a translucent cut-out, and keeps the per-frame mask readback cheap. */
+/** Each camera is segmented within this box (keeping its own aspect ratio) — plenty for a translucent cut-out, and keeps the per-frame mask readback cheap. */
 const CAMERA_WIDTH = 640;
 const CAMERA_HEIGHT = 360;
+/** The host's own camera drives the output frame rate and is segmented every output frame; a guest shown via "Follow the speaker" is throttled. */
+const GUEST_SEGMENT_INTERVAL_MS = 1000 / 12;
+/** How long a ghost takes to fade in or out when the shown person changes. */
+const CROSSFADE_MS = 300;
 /** Hand detection runs at most ~14 times a second, and slower still if a detection ever takes long — independent of (and
  * throttled separately from) the 20fps segmentation above, so gestures don't cost the cut-out its frame rate. */
 const HAND_INTERVAL_MS = 70;
@@ -87,7 +100,7 @@ export type OverlayCorner = "top-left" | "top-right" | "bottom-left" | "bottom-r
 export type GestureLabel = GestureState["label"] | "unavailable";
 
 export type PresenterOverlaySettings = {
-  /** 0–1, how solid the presenter's cut-out is drawn over the screen. */
+  /** 0–1, how solid the shown cut-out is drawn over the screen. */
   opacity: number;
   /** 0.3–1, cut-out height as a fraction of the output height. */
   scale: number;
@@ -100,9 +113,10 @@ export type PresenterOverlaySettings = {
    */
   span: boolean;
   /**
-   * Scale the cut-out by how far the presenter sits from their camera, so they look the same size across a
-   * session even if they lean back or move their laptop. On by default. Off = the camera frame is always
-   * scaled the same (zoom 1), driven only by `scale`.
+   * Scale the shown cut-out by how far that person sits from their camera, so they look the same size
+   * whether they lean back or move their laptop — and a guest shown via "Follow the speaker" looks about
+   * the same size as the host did. On by default. Off = the camera frame is always scaled the same (zoom 1),
+   * driven only by `scale`.
    */
   normalizeSize: boolean;
   /**
@@ -111,12 +125,14 @@ export type PresenterOverlaySettings = {
    * moves the way a mirror would, reaching toward something on their screen
    * lands their image's hand on it (the weather-presenter setup). Viewers
    * see the hand on the same item, so pointing reads correctly for them
-   * too; the only visible cost is reversed text on clothing.
+   * too; the only visible cost is reversed text on clothing. Applies to
+   * whoever is shown, host or guest alike — there's only ever this one rule.
    */
   mirror: boolean;
   /**
    * Host hand gestures: point to show a laser dot, pinch to zoom the screen (pan by moving the pinched
-   * hand), open palm to reset, two fingers together to air-draw. Off by default.
+   * hand), open palm to reset, two fingers together to air-draw. Off by default. Host-only, and only act
+   * while the host's own ghost is on the share (see "Follow the speaker" above).
    */
   gestures: boolean;
   /** Colour of the air-draw pen. */
@@ -140,18 +156,33 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   imageCorner: "top-right",
 };
 
+/** One camera that can be shown as the ghost: the host's own, or a guest's. */
+export type OverlaySource = {
+  id: string;
+  /** Shown nowhere yet (there's no auto-caption here), but kept for a future one and for logging. */
+  label: string;
+  track: MediaStreamTrack;
+  /** The host's own camera — the one that drives the output frame rate and that gestures act through. */
+  isLocal: boolean;
+};
+
 export type PresenterOverlayCompositor = {
   /** The combined track, ready for localParticipant.publishTrack(..., { source: ScreenShare }). */
   track: MediaStreamTrack;
   /** Mutated in place by the UI; read fresh on every frame, so changes apply without a restart. */
   settings: PresenterOverlaySettings;
+  /** Adds a camera (e.g. a guest whose camera just came on). No-op if the id is already there. Not shown until setVisible names it. */
+  addSource: (source: OverlaySource) => void;
+  removeSource: (id: string) => void;
+  /** Which camera's cut-out is drawn; the previously-shown one (if any) fades out as this one fades in, over ~300ms. */
+  setVisible: (id: string) => void;
   /** Zooms the screen layer 2x toward its centre (the same zoom a pinch gives). No-op when already zoomed. */
   zoomIn: () => void;
   /** Back to the whole screen. */
   resetZoom: () => void;
   /** Removes every air-drawn stroke. */
   clearDrawing: () => void;
-  /** Stops both readers and the output track (the segmenter is kept for reuse). Does NOT stop the input tracks — the caller owns those. */
+  /** Stops every reader and the output track (the segmenter is kept for reuse). Does NOT stop the input tracks — the caller owns those. */
   stop: () => void;
 };
 
@@ -210,14 +241,23 @@ function fitWithin(width: number, height: number): { width: number; height: numb
   return { width: Math.max(2, Math.round((width * ratio) / 2) * 2), height: Math.max(2, Math.round((height * ratio) / 2) * 2) };
 }
 
+/** Fits a camera frame inside the CAMERA_WIDTH×CAMERA_HEIGHT segmentation box, keeping its own aspect ratio (never enlarged past it). */
+export function fitBox(width: number, height: number): { width: number; height: number } {
+  const ratio = Math.min(CAMERA_WIDTH / width, CAMERA_HEIGHT / height);
+  return { width: Math.max(2, Math.round(width * ratio)), height: Math.max(2, Math.round(height * ratio)) };
+}
+
 export async function startPresenterOverlayCompositor({
   screenTrack,
   cameraTrack,
+  cameraLabel = "",
   onError,
   onGesture,
 }: {
   screenTrack: MediaStreamTrack;
   cameraTrack: MediaStreamTrack;
+  /** The host's own name, for their OverlaySource label. */
+  cameraLabel?: string;
   onError: (error: unknown) => void;
   /** Tells the host's UI what gesture is recognized (or that the hand model couldn't load). Not drawn into the stream. */
   onGesture?: (label: GestureLabel) => void;
@@ -231,85 +271,104 @@ export async function startPresenterOverlayCompositor({
   const generator = new Generator({ kind: "video" });
   const writer = generator.writable.getWriter();
 
+  const LOCAL_ID = "local";
+
   // Latest screen image, refreshed only when the screen actually changes.
   const screenCanvas = new OffscreenCanvas(2, 2);
   const screenCtx = context2d(screenCanvas);
   let hasScreenFrame = false;
-
-  // Webcam → (segment) → mask → cut-out with transparent background.
-  const cameraCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
-  const cameraCtx = context2d(cameraCanvas);
-  const maskCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
-  const maskCtx = context2d(maskCanvas);
-  let maskImage = new ImageData(CAMERA_WIDTH, CAMERA_HEIGHT);
-  const cutoutCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
-  const cutoutCtx = context2d(cutoutCanvas);
-  // Sits-close-or-far correction: how much of the frame the presenter fills, and the zoom it settles on.
-  const normalizer = new SizeNormalizer();
-  let rowCounts = new Uint32Array(CAMERA_HEIGHT);
-  /** The normalizer's current zoom, refreshed once per output frame in compose() and read by hostPlacement() (including a call made a frame earlier, from runGestures — the lag is negligible since the zoom only ever glides). */
-  let hostZoom = 1;
 
   const outputCanvas = new OffscreenCanvas(MAX_OUTPUT_WIDTH, MAX_OUTPUT_HEIGHT);
   const outputCtx = context2d(outputCanvas);
 
   let stopped = false;
   let lastOutputAt = 0;
+  // MediaPipe requires strictly increasing timestamps within a VIDEO-mode session; every source shares this one sequence.
   let lastSegmentTimestamp = 0;
 
-  // Gestures: the tracker, the screen zoom, the stroke board and the hand model (loaded on first use).
-  const viewport = new ScreenViewport();
-  const board = new StrokeBoard();
-  let tracker = new GestureTracker();
-  let hand: HandLandmarker | null = null;
-  let handLoading = false;
-  let lastHandAt = 0;
-  let lastHandMs = 0;
-  let lastHandTimestamp = 0;
-  let lastLabel: GestureLabel = null;
-  let pointer: GestureState["pointer"] = null;
-  let lastPan: { x: number; y: number } | null = null;
-  let trail: { x: number; y: number; t: number }[] = [];
+  /** Everything one camera needs: its reader, its own segmentation canvases, and its fade state. */
+  type Source = {
+    id: string;
+    label: string;
+    isLocal: boolean;
+    reader: ReadableStreamDefaultReader<VideoFrame>;
+    cameraCanvas: OffscreenCanvas;
+    cameraCtx: OffscreenCanvasRenderingContext2D;
+    maskCanvas: OffscreenCanvas;
+    maskCtx: OffscreenCanvasRenderingContext2D;
+    maskImage: ImageData;
+    cutoutCanvas: OffscreenCanvas;
+    cutoutCtx: OffscreenCanvasRenderingContext2D;
+    /** Width / height of the cut-out, from the camera's real frame size. */
+    aspect: number;
+    hasCutout: boolean;
+    /** 0–1 current fade, moving toward `target` (1 shown, 0 hidden). */
+    alpha: number;
+    target: number;
+    lastSegmentAt: number;
+    /** Sits-close-or-far correction for this camera. */
+    normalizer: SizeNormalizer;
+    /** Person pixels per mask row, filled while the mask is converted; reused between frames. */
+    rowCounts: Uint32Array;
+    /** Where this source is drawn, computed fresh each frame while it's the visible one and kept (unchanged) while it fades out. */
+    box: { x: number; y: number; width: number; height: number } | null;
+  };
 
-  const screenReader = new Processor({ track: screenTrack }).readable.getReader();
-  const cameraReader = new Processor({ track: cameraTrack }).readable.getReader();
+  const sources = new Map<string, Source>();
+  /** The id setVisible last named — what every source's `target` is derived from. */
+  let visibleId: string = LOCAL_ID;
+  let lastFadeAt = 0;
 
-  async function pumpScreen() {
-    while (!stopped) {
-      const { value: frame, done } = await screenReader.read();
-      if (done || !frame) return;
-      try {
-        const size = fitWithin(frame.displayWidth, frame.displayHeight);
-        if (screenCanvas.width !== size.width || screenCanvas.height !== size.height) {
-          screenCanvas.width = size.width;
-          screenCanvas.height = size.height;
-        }
-        screenCtx.drawImage(frame, 0, 0, size.width, size.height);
-        hasScreenFrame = true;
-      } finally {
-        frame.close();
+  function createSource(id: string, label: string, isLocal: boolean, track: MediaStreamTrack): Source {
+    const cameraCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
+    const maskCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
+    const cutoutCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
+    return {
+      id,
+      label,
+      isLocal,
+      reader: new Processor!({ track }).readable.getReader(),
+      cameraCanvas,
+      cameraCtx: context2d(cameraCanvas),
+      maskCanvas,
+      maskCtx: context2d(maskCanvas),
+      maskImage: new ImageData(CAMERA_WIDTH, CAMERA_HEIGHT),
+      cutoutCanvas,
+      cutoutCtx: context2d(cutoutCanvas),
+      aspect: CAMERA_WIDTH / CAMERA_HEIGHT,
+      hasCutout: false,
+      alpha: 0,
+      target: id === visibleId ? 1 : 0,
+      lastSegmentAt: 0,
+      normalizer: new SizeNormalizer(),
+      rowCounts: new Uint32Array(CAMERA_HEIGHT),
+      box: null,
+    };
+  }
+
+  /** True while a source is (or is still fading) on screen — only those cost segmentation time. */
+  function isNeeded(source: Source): boolean {
+    return source.target > 0 || source.alpha > 0.003;
+  }
+
+  /** Draws the camera frame at its real aspect ratio into the source's canvas, resizing every buffer to match. */
+  function drawCamera(source: Source, frame: VideoFrame) {
+    const size = fitBox(frame.displayWidth, frame.displayHeight);
+    if (source.cameraCanvas.width !== size.width || source.cameraCanvas.height !== size.height) {
+      for (const canvas of [source.cameraCanvas, source.maskCanvas, source.cutoutCanvas]) {
+        canvas.width = size.width;
+        canvas.height = size.height;
       }
+      source.maskImage = new ImageData(size.width, size.height);
+      source.aspect = size.width / size.height;
     }
+    source.cameraCtx.drawImage(frame, 0, 0, size.width, size.height);
   }
 
-  /** Center-crops the camera frame to 16:9 so a 4:3 webcam isn't stretched. */
-  function drawCameraCover(frame: VideoFrame) {
-    const sourceRatio = frame.displayWidth / frame.displayHeight;
-    const targetRatio = CAMERA_WIDTH / CAMERA_HEIGHT;
-    let sw = frame.displayWidth;
-    let sh = frame.displayHeight;
-    if (sourceRatio > targetRatio) sw = sh * targetRatio;
-    else sh = sw / targetRatio;
-    const sx = (frame.displayWidth - sw) / 2;
-    const sy = (frame.displayHeight - sh) / 2;
-    cameraCtx.drawImage(frame, sx, sy, sw, sh, 0, 0, CAMERA_WIDTH, CAMERA_HEIGHT);
-  }
-
-  function updateCutout(now: number) {
-    // MediaPipe requires strictly increasing timestamps within a VIDEO-mode session.
+  function updateCutout(source: Source, now: number) {
     const timestamp = Math.max(performance.now(), lastSegmentTimestamp + 1);
     lastSegmentTimestamp = timestamp;
-    segmenter.segmentForVideo(cameraCanvas, timestamp, (result) => {
+    segmenter.segmentForVideo(source.cameraCanvas, timestamp, (result) => {
       const masks = result.confidenceMasks;
       if (!masks || masks.length === 0) return;
       // selfie_segmenter has a single "person" confidence channel; a
@@ -317,15 +376,16 @@ export async function startPresenterOverlayCompositor({
       const single = masks.length === 1;
       const mask = masks[0];
       // Masks normally come back at the input size; resize our buffers if a model ever differs.
-      if (mask.width !== maskImage.width || mask.height !== maskImage.height) {
-        maskImage = new ImageData(mask.width, mask.height);
-        maskCanvas.width = mask.width;
-        maskCanvas.height = mask.height;
+      if (mask.width !== source.maskImage.width || mask.height !== source.maskImage.height) {
+        source.maskImage = new ImageData(mask.width, mask.height);
+        source.maskCanvas.width = mask.width;
+        source.maskCanvas.height = mask.height;
       }
       const confidence = mask.getAsFloat32Array();
-      const data = maskImage.data;
-      // Count person pixels per row in the same pass, to measure how far the presenter sits from the camera.
-      if (rowCounts.length !== mask.height) rowCounts = new Uint32Array(mask.height);
+      const data = source.maskImage.data;
+      // Count person pixels per row in the same pass, to measure how far this person sits from the camera.
+      if (source.rowCounts.length !== mask.height) source.rowCounts = new Uint32Array(mask.height);
+      const rowCounts = source.rowCounts;
       rowCounts.fill(0);
       let column = 0;
       let row = 0;
@@ -338,18 +398,35 @@ export async function startPresenterOverlayCompositor({
           row++;
         }
       }
-      normalizer.observe(now, measureFromRows(rowCounts, mask.width, mask.height));
+      source.normalizer.observe(now, measureFromRows(rowCounts, mask.width, mask.height));
     });
-    maskCtx.putImageData(maskImage, 0, 0);
+    source.maskCtx.putImageData(source.maskImage, 0, 0);
 
+    const { cutoutCtx, cameraCanvas, maskCanvas } = source;
     cutoutCtx.globalCompositeOperation = "copy";
     cutoutCtx.drawImage(cameraCanvas, 0, 0);
     cutoutCtx.globalCompositeOperation = "destination-in";
     // Soften the mask edge so the outline doesn't shimmer frame to frame.
     cutoutCtx.filter = "blur(2px)";
-    cutoutCtx.drawImage(maskCanvas, 0, 0, CAMERA_WIDTH, CAMERA_HEIGHT);
+    cutoutCtx.drawImage(maskCanvas, 0, 0, cameraCanvas.width, cameraCanvas.height);
     cutoutCtx.filter = "none";
     cutoutCtx.globalCompositeOperation = "source-over";
+    source.hasCutout = true;
+  }
+
+  /** Handles one camera frame for a source; always closes it. Returns true if a fresh cut-out was made. */
+  function processFrame(source: Source, frame: VideoFrame, now: number, minIntervalMs: number): boolean {
+    try {
+      if (!isNeeded(source) || now - source.lastSegmentAt < minIntervalMs) return false;
+      source.lastSegmentAt = now;
+      drawCamera(source, frame);
+      frame.close();
+      updateCutout(source, now);
+      return true;
+    } finally {
+      // Safe to call on an already-closed frame.
+      frame.close();
+    }
   }
 
   function drawCaption(width: number, height: number, caption: string) {
@@ -385,26 +462,37 @@ export async function startPresenterOverlayCompositor({
     return hasScreenFrame ? { width: screenCanvas.width, height: screenCanvas.height } : { width: MAX_OUTPUT_WIDTH, height: MAX_OUTPUT_HEIGHT };
   }
 
-  /** Where the cut-out is drawn on the output frame right now — the same placement gestures are mapped through. */
-  function hostPlacement(): GhostPlacement {
-    const { width, height } = outputSize();
-    const aspect = CAMERA_WIDTH / CAMERA_HEIGHT;
+  /**
+   * Where a lone ghost of this aspect ratio and zoom sits on the output frame: bottom-aligned, and either
+   * anchored to `position` (zoomed about its bottom edge, so it stays anchored while it grows or shrinks —
+   * it may then run past the sides or top and is clipped by the output) or, with `span`, cover-fit to the
+   * whole frame (ignoring scale/position/zoom — there's only ever one ghost to fill it with).
+   */
+  function soloBox(aspect: number, zoom: number, width: number, height: number): { x: number; y: number; width: number; height: number } {
     if (settings.span) {
-      // Cover fit, bottom-aligned and centred: the camera frame's edges land on (or past) the share's edges.
-      // Ignores scale/position/normalizeSize — there's only ever this one ghost to fill the frame with.
-      const personHeight = Math.max(height, width / aspect);
-      const personWidth = personHeight * aspect;
-      return { x: (width - personWidth) / 2, y: height - personHeight, width: personWidth, height: personHeight, mirror: settings.mirror };
+      const h = Math.max(height, width / aspect);
+      const w = h * aspect;
+      return { x: (width - w) / 2, y: height - h, width: w, height: h };
     }
-    // Zoomed about the bottom edge, so it stays anchored while it grows or shrinks — it may then run past the
-    // sides or top and is clipped by the output, same as a plain scale change.
-    const personHeight = height * settings.scale * hostZoom;
-    const personWidth = personHeight * aspect;
-    const x = settings.position === "left" ? 0 : settings.position === "right" ? width - personWidth : (width - personWidth) / 2;
-    return { x, y: height - personHeight, width: personWidth, height: personHeight, mirror: settings.mirror };
+    const h = height * settings.scale * zoom;
+    const w = h * aspect;
+    const x = settings.position === "left" ? 0 : settings.position === "right" ? width - w : (width - w) / 2;
+    return { x, y: height - h, width: w, height: h };
   }
 
-  /** Air-drawn strokes, on top of the (zoomed) screen layer and under the cut-out. They live in screen coordinates, so they follow the zoom view. */
+  /** Where a source is drawn, for mapping a fingertip onto it; null when it isn't on the share. */
+  function placementFor(id: string): GhostPlacement | null {
+    const source = sources.get(id);
+    if (!source || !source.box || source.target <= 0 || !source.hasCutout) return null;
+    return { x: source.box.x, y: source.box.y, width: source.box.width, height: source.box.height, mirror: settings.mirror };
+  }
+
+  /** Where the host's own ghost is drawn; null when a guest is currently shown instead (or the host isn't ready yet). Gestures act only through this. */
+  function hostPlacement(): GhostPlacement | null {
+    return placementFor(LOCAL_ID);
+  }
+
+  /** Air-drawn strokes, on top of the (zoomed) screen layer and under the ghost. They live in screen coordinates, so they follow the zoom view. */
   function drawStrokes(now: number, width: number, height: number) {
     const shown = board.visible(now);
     if (shown.length === 0) return;
@@ -447,7 +535,12 @@ export async function startPresenterOverlayCompositor({
       trail = [];
       return;
     }
-    const at = cameraToOutput(pointer.u, pointer.v, hostPlacement());
+    const placement = hostPlacement();
+    if (!placement) {
+      trail = [];
+      return;
+    }
+    const at = cameraToOutput(pointer.u, pointer.v, placement);
     trail.push({ x: at.x, y: at.y, t: now });
     trail = trail.filter((point) => now - point.t <= LASER_TRAIL_MS);
     const radius = Math.max(5, height * 0.012);
@@ -480,14 +573,32 @@ export async function startPresenterOverlayCompositor({
     outputCtx.restore();
   }
 
+  // Gestures: the tracker, the screen zoom, the stroke board and the hand model (loaded on first use). Host-only.
+  const viewport = new ScreenViewport();
+  const board = new StrokeBoard();
+  let tracker = new GestureTracker();
+  let hand: HandLandmarker | null = null;
+  let handLoading = false;
+  let lastHandAt = 0;
+  let lastHandMs = 0;
+  let lastHandTimestamp = 0;
+  let lastLabel: GestureLabel = null;
+  let pointer: GestureState["pointer"] = null;
+  let lastPan: { x: number; y: number } | null = null;
+  let trail: { x: number; y: number; t: number }[] = [];
+
   function setLabel(label: GestureLabel) {
     if (label === lastLabel) return;
     lastLabel = label;
     onGesture?.(label);
   }
 
-  /** Runs hand detection on the latest camera frame (throttled, independent of the segmentation rate) and applies what it recognizes. */
-  function runGestures(now: number) {
+  /**
+   * Runs hand detection on the host's latest camera frame (throttled, independent of the segmentation rate)
+   * and applies what it recognizes. With the host's own ghost off the share — a guest is currently shown
+   * instead — there's nothing for a gesture to point at, so detection is skipped and anything in progress ends.
+   */
+  function runGestures(source: Source, now: number) {
     if (!settings.gestures) {
       board.end(now);
       if (pointer || lastLabel) {
@@ -520,18 +631,20 @@ export async function startPresenterOverlayCompositor({
     lastHandAt = now;
     const placement = hostPlacement();
     let landmarks: { x: number; y: number }[] | null = null;
-    const started = performance.now();
-    lastHandTimestamp = Math.max(started, lastHandTimestamp + 1);
-    try {
-      landmarks = hand.detectForVideo(cameraCanvas, lastHandTimestamp).landmarks[0] ?? null;
-    } catch (error) {
-      console.warn("[presenter-overlay] hand detection failed", error);
+    if (placement) {
+      const started = performance.now();
+      lastHandTimestamp = Math.max(started, lastHandTimestamp + 1);
+      try {
+        landmarks = hand.detectForVideo(source.cameraCanvas, lastHandTimestamp).landmarks[0] ?? null;
+      } catch (error) {
+        console.warn("[presenter-overlay] hand detection failed", error);
+      }
+      lastHandMs = performance.now() - started;
     }
-    lastHandMs = performance.now() - started;
-    const state = tracker.update(now, landmarks, CAMERA_WIDTH / CAMERA_HEIGHT);
+    const state = tracker.update(now, landmarks, source.aspect);
     pointer = state.pointer;
     // Air-draw: the pen tip goes through the same ghost mapping as the laser, then to screen coordinates through the current zoom view.
-    if (state.pen) {
+    if (placement && state.pen) {
       const out = cameraToOutput(state.pen.u, state.pen.v, placement);
       const { width, height } = outputSize();
       const onScreen = outputToScreen(viewport.rect(now), out.x / width, out.y / height);
@@ -542,6 +655,7 @@ export async function startPresenterOverlayCompositor({
     }
     let panned = false;
     for (const action of state.actions) {
+      if (!placement) break;
       if (action.type === "reset") {
         viewport.reset(now);
         continue;
@@ -563,6 +677,31 @@ export async function startPresenterOverlayCompositor({
     setLabel(state.label);
   }
 
+  /** Moves every source's fade toward its target, so a change of who's shown crossfades over ~300ms. */
+  function stepFades(now: number) {
+    const dt = lastFadeAt === 0 ? 0 : now - lastFadeAt;
+    lastFadeAt = now;
+    const step = dt / CROSSFADE_MS;
+    for (const source of Array.from(sources.values())) {
+      if (source.alpha < source.target) source.alpha = Math.min(source.target, source.alpha + step);
+      else if (source.alpha > source.target) source.alpha = Math.max(source.target, source.alpha - step);
+    }
+  }
+
+  function drawGhost(source: Source, box: { x: number; y: number; width: number; height: number }) {
+    outputCtx.globalAlpha = settings.opacity * source.alpha;
+    if (settings.mirror) {
+      outputCtx.save();
+      outputCtx.translate(box.x + box.width, 0);
+      outputCtx.scale(-1, 1);
+      outputCtx.drawImage(source.cutoutCanvas, 0, box.y, box.width, box.height);
+      outputCtx.restore();
+    } else {
+      outputCtx.drawImage(source.cutoutCanvas, box.x, box.y, box.width, box.height);
+    }
+    outputCtx.globalAlpha = 1;
+  }
+
   function compose(timestamp: number) {
     const { width, height } = outputSize();
     if (outputCanvas.width !== width || outputCanvas.height !== height) {
@@ -572,7 +711,7 @@ export async function startPresenterOverlayCompositor({
     outputCtx.globalAlpha = 1;
     const now = performance.now();
     if (hasScreenFrame) {
-      // Only the screen layer is zoomed; the cut-out, strokes, caption and image stay at their normal size.
+      // Only the screen layer is zoomed; the ghost, strokes, caption and image stay at their normal size.
       const view = viewport.rect(now);
       if (view.width >= 1) outputCtx.drawImage(screenCanvas, 0, 0);
       else outputCtx.drawImage(screenCanvas, view.x * width, view.y * height, view.width * width, view.height * height, 0, 0, width, height);
@@ -583,23 +722,18 @@ export async function startPresenterOverlayCompositor({
 
     drawStrokes(now, width, height);
 
-    // Refreshed once per output frame; hostPlacement() reads it (a call from runGestures, made a little
-    // earlier in the same tick, still sees the previous frame's value — the zoom only ever glides, so the lag is negligible).
-    hostZoom = normalizer.zoom(now, settings.normalizeSize);
-
-    // Presenter cut-out: bottom-aligned, mirrored unless turned off (see settings.mirror).
-    const placement = hostPlacement();
-    outputCtx.globalAlpha = settings.opacity;
-    if (settings.mirror) {
-      outputCtx.save();
-      outputCtx.translate(placement.x + placement.width, 0);
-      outputCtx.scale(-1, 1);
-      outputCtx.drawImage(cutoutCanvas, 0, placement.y, placement.width, placement.height);
-      outputCtx.restore();
-    } else {
-      outputCtx.drawImage(cutoutCanvas, placement.x, placement.y, placement.width, placement.height);
+    // The currently-visible source gets a fresh box (its own aspect and zoom); a source still fading out
+    // keeps whatever box it was drawn at last, so its outline doesn't jump right before it disappears.
+    const visible = sources.get(visibleId);
+    if (visible) {
+      const zoom = visible.normalizer.zoom(now, settings.normalizeSize);
+      visible.box = soloBox(visible.aspect, zoom, width, height);
     }
-    outputCtx.globalAlpha = 1;
+    // Fading-out first, then the one fading in, so a new speaker fades in over the old one.
+    const drawable = Array.from(sources.values())
+      .filter((source) => source.hasCutout && source.alpha > 0.003 && source.box)
+      .sort((a, b) => a.target - b.target);
+    for (const source of drawable) drawGhost(source, source.box!);
 
     if (settings.image) drawImageOverlay(width, height, settings.image, settings.imageCorner);
     const caption = settings.caption.trim();
@@ -610,9 +744,10 @@ export async function startPresenterOverlayCompositor({
     return new VideoFrame(outputCanvas, { timestamp });
   }
 
-  async function pumpCamera() {
+  /** The host's camera: segmented at output rate, and every one of its frames also drives a composed output frame. */
+  async function pumpLocal(source: Source) {
     while (!stopped) {
-      const { value: frame, done } = await cameraReader.read();
+      const { value: frame, done } = await source.reader.read();
       if (done || !frame) return;
       const now = performance.now();
       if (now - lastOutputAt < MIN_FRAME_INTERVAL_MS) {
@@ -622,18 +757,76 @@ export async function startPresenterOverlayCompositor({
       lastOutputAt = now;
       let output: VideoFrame | null = null;
       try {
-        drawCameraCover(frame);
         const timestamp = frame.timestamp;
-        frame.close();
-        updateCutout(now);
-        runGestures(now);
+        processFrame(source, frame, now, 0);
+        runGestures(source, now);
+        stepFades(now);
         output = compose(timestamp);
         await writer.write(output);
       } catch (error) {
         output?.close();
         if (!stopped) throw error;
+      }
+    }
+  }
+
+  /** A guest's camera: drained continuously, segmented only while its ghost is (or is still fading) on screen, and at most ~12 times a second. */
+  async function pumpRemote(source: Source) {
+    while (!stopped) {
+      const { value: frame, done } = await source.reader.read();
+      if (done || !frame) return;
+      processFrame(source, frame, performance.now(), GUEST_SEGMENT_INTERVAL_MS);
+    }
+  }
+
+  function startPump(source: Source, pump: (source: Source) => Promise<void>) {
+    pump(source).catch((error) => {
+      // A single guest's track ending or failing must not take the whole overlay down.
+      if (stopped || sources.get(source.id) !== source) return;
+      if (source.isLocal) {
+        stop();
+        onError(error);
+      } else {
+        console.warn("[presenter-overlay] dropping a camera source", source.id, error);
+        removeSource(source.id);
+      }
+    });
+  }
+
+  function addSource(input: OverlaySource) {
+    if (stopped || sources.has(input.id)) return;
+    const source = createSource(input.id, input.label, input.isLocal, input.track);
+    sources.set(input.id, source);
+    startPump(source, input.isLocal ? pumpLocal : pumpRemote);
+  }
+
+  function removeSource(id: string) {
+    const source = sources.get(id);
+    if (!source) return;
+    sources.delete(id);
+    source.reader.cancel().catch(() => {});
+  }
+
+  function setVisible(id: string) {
+    visibleId = id;
+    for (const source of Array.from(sources.values())) source.target = source.id === id ? 1 : 0;
+  }
+
+  const screenReader = new Processor({ track: screenTrack }).readable.getReader();
+
+  async function pumpScreen() {
+    while (!stopped) {
+      const { value: frame, done } = await screenReader.read();
+      if (done || !frame) return;
+      try {
+        const size = fitWithin(frame.displayWidth, frame.displayHeight);
+        if (screenCanvas.width !== size.width || screenCanvas.height !== size.height) {
+          screenCanvas.width = size.width;
+          screenCanvas.height = size.height;
+        }
+        screenCtx.drawImage(frame, 0, 0, size.width, size.height);
+        hasScreenFrame = true;
       } finally {
-        // Safe to call on an already-closed frame.
         frame.close();
       }
     }
@@ -655,18 +848,19 @@ export async function startPresenterOverlayCompositor({
     if (stopped) return;
     stopped = true;
     screenReader.cancel().catch(() => {});
-    cameraReader.cancel().catch(() => {});
+    for (const source of Array.from(sources.values())) source.reader.cancel().catch(() => {});
+    sources.clear();
     writer.close().catch(() => {});
     generator.stop();
   }
 
-  for (const pump of [pumpScreen, pumpCamera]) {
-    pump().catch((error) => {
-      if (stopped) return;
-      stop();
-      onError(error);
-    });
-  }
+  addSource({ id: LOCAL_ID, label: cameraLabel, track: cameraTrack, isLocal: true });
+  setVisible(LOCAL_ID);
+  pumpScreen().catch((error) => {
+    if (stopped) return;
+    stop();
+    onError(error);
+  });
 
-  return { track: generator, settings, zoomIn, resetZoom, clearDrawing, stop };
+  return { track: generator, settings, addSource, removeSource, setVisible, zoomIn, resetZoom, clearDrawing, stop };
 }
