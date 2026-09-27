@@ -1,15 +1,38 @@
+"use client";
+
 import Link from "next/link";
 import { Eye, Hand, Lock, MessageSquare, Users } from "lucide-react";
 import { type FeedItem, FEED_TYPE_LABELS } from "@/lib/feed";
-import { formatRelativeTime, formatTimestamp } from "@/lib/format-date";
+import { formatRelativeTime } from "@/lib/format-date";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ReviewOfferButton } from "@/components/review/review-offer-button";
 import { HighlightText } from "@/components/highlight-text";
+import { useHasMounted } from "@/lib/use-has-mounted";
 import { cn } from "@/lib/utils";
 
+// Deliberately not lib/format-date.ts's formatTimestamp: that's a generic
+// "when did this happen" formatter shared by ~20 unrelated call sites
+// (forum posts, chat messages, admin tables) where labeling the zone would
+// be noise. This is specifically an event's *scheduled* start time — same
+// category as event-detail.tsx/event-card.tsx/event-list-item.tsx/
+// public-event-detail.tsx, so it gets the same timeZoneName: "short"
+// treatment. No explicit `timeZone` here means it already converts to the
+// viewer's own browser zone; the abbreviation just confirms that.
+function formatFeedEventDate(iso: string) {
+  const date = new Date(iso);
+  const datePart = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const timePart = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+  return `${datePart}, ${timePart}`;
+}
+
 export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
+  // Guards the one viewer-zone-dependent value below (formatFeedEventDate)
+  // so the server-rendered HTML (server's own zone) and the client's first
+  // hydration pass render the same "nothing yet", same rationale as
+  // event-list-item.tsx's identical guard on its own event date line.
+  const hasMounted = useHasMounted();
   const subtitle = [item.author.titleSpecialty, item.author.countryRegion].filter(Boolean).join(", ");
   // Forum threads always carry the same static default image (no per-thread
   // upload), so instead of the full-width hero image other feed types render
@@ -151,7 +174,7 @@ export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
                             hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
                           )}
                         >
-                          Event Date: {formatTimestamp(item.eventStartsAt)}
+                          Event Date: {hasMounted ? formatFeedEventDate(item.eventStartsAt) : null}
                         </div>
                       )}
                     </div>
