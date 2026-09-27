@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FADE_MS, HOLD_MS, MAX_POINTS, MAX_POINTS_PER_GUEST, MAX_PINNED, MAX_TEXT_LENGTH, MIN_ARROW_LENGTH, MIN_SHAPE_SIZE, StrokeBoard, arrowHead, cleanShapeText, shapeBounds, strokeColor } from "./drawing.ts";
+import { FADE_MS, HOLD_MS, MAX_POINTS, MAX_POINTS_PER_GUEST, ERASER_RADIUS, MAX_PINNED, MAX_TEXT_LENGTH, MIN_ARROW_LENGTH, MIN_SHAPE_SIZE, StrokeBoard, arrowHead, cleanShapeText, shapeBounds, strokeColor } from "./drawing.ts";
 
 test("a stroke collects points while drawing and stays fully visible", () => {
   const board = new StrokeBoard();
@@ -473,4 +473,129 @@ test("a pinned shape drawn while another is pending doesn't disturb it, and both
   board.setText(first.id, "one");
   board.setText(second.id, "two");
   assert.deepEqual(board.pinnedShapes().map((shape) => shape.text), ["one", "two"]);
+});
+
+function freehand(board: StrokeBoard, t: number, points: [number, number][]) {
+  board.begin(t, "red", undefined, "free");
+  for (const [x, y] of points) board.add(x, y);
+  board.end(t + 10);
+}
+function arrow(board: StrokeBoard, t: number, from: [number, number], to: [number, number]) {
+  board.begin(t, "red", undefined, "arrow");
+  board.add(from[0], from[1]);
+  board.add(to[0], to[1]);
+  board.end(t + 10);
+}
+
+test("the eraser wipes a freehand stroke it touches, anywhere along it, and leaves the rest", () => {
+  const board = new StrokeBoard();
+  freehand(board, 0, [[0.1, 0.1], [0.2, 0.1], [0.3, 0.1]]);
+  freehand(board, 100, [[0.1, 0.8], [0.3, 0.8]]);
+  assert.equal(board.eraseAt(0.2, 0.1 + ERASER_RADIUS / 2), 1, "on the segment between two points");
+  assert.equal(board.visible(200).length, 1);
+  assert.equal(board.eraseAt(0.6, 0.6), 0, "nothing there");
+  assert.equal(board.visible(200).length, 1);
+});
+
+test("the eraser only reaches as far as its radius", () => {
+  const board = new StrokeBoard();
+  freehand(board, 0, [[0.2, 0.5], [0.4, 0.5]]);
+  assert.equal(board.eraseAt(0.3, 0.5 + ERASER_RADIUS * 1.5), 0);
+  assert.equal(board.eraseAt(0.3, 0.5 + ERASER_RADIUS * 0.9), 1);
+});
+
+test("the eraser ring is round on a wide screen: distances use the screen's aspect ratio", () => {
+  const wide = new StrokeBoard();
+  freehand(wide, 0, [[0.5, 0.5], [0.5, 0.5]]);
+  // 16:9 - a horizontal offset of 0.03 of the width is 0.03 * 16/9 = 0.053 of the height, past the 0.035 radius.
+  assert.equal(wide.eraseAt(0.53, 0.5, ERASER_RADIUS, 16 / 9), 0);
+  const square = new StrokeBoard();
+  freehand(square, 0, [[0.5, 0.5], [0.5, 0.5]]);
+  assert.equal(square.eraseAt(0.53, 0.5, ERASER_RADIUS, 1), 1);
+  const near = new StrokeBoard();
+  freehand(near, 0, [[0.5, 0.5], [0.5, 0.5]]);
+  assert.equal(near.eraseAt(0.51, 0.5, ERASER_RADIUS, 16 / 9), 1);
+});
+
+test("an arrow is erased where the ring crosses its line, not off to the side", () => {
+  const board = new StrokeBoard();
+  arrow(board, 0, [0.1, 0.1], [0.7, 0.7]);
+  assert.equal(board.eraseAt(0.9, 0.2), 0);
+  assert.equal(board.eraseAt(0.4, 0.4), 1);
+  assert.equal(board.visible(100).length, 0);
+});
+
+test("a box is erased only on its outline: inside and far outside are safe", () => {
+  const board = new StrokeBoard();
+  pin(board, 0, "box", 0.1); // corners (0.1, 0.1) and (0.3, 0.4)
+  assert.equal(board.eraseAt(0.2, 0.25), 0, "in the middle of the box");
+  assert.equal(board.eraseAt(0.2, 0.25 + 0.05), 0, "still inside, clear of every edge");
+  assert.equal(board.eraseAt(0.7, 0.7), 0, "far outside");
+  assert.equal(board.pinnedShapes().length, 1);
+  assert.equal(board.eraseAt(0.2, 0.1 + ERASER_RADIUS * 0.5), 1, "on the top edge");
+  assert.equal(board.pinnedShapes().length, 0);
+});
+
+test("an ellipse is erased on its outline only", () => {
+  const board = new StrokeBoard();
+  pin(board, 0, "ellipse", 0.1); // bounds x 0.1..0.3, y 0.1..0.4: centre (0.2, 0.25)
+  assert.equal(board.eraseAt(0.2, 0.25), 0, "its centre");
+  assert.equal(board.eraseAt(0.1, 0.1), 0, "the corner of its bounding box is outside the curve");
+  assert.equal(board.eraseAt(0.3, 0.25), 1, "the right-hand edge of the curve");
+});
+
+test("erasing a labelled shape takes its text with it, and updates the pinned list version", () => {
+  const board = new StrokeBoard();
+  const box = pin(board, 0, "box", 0.1) as { id: number };
+  board.setText(box.id, "Look here");
+  const before = board.version;
+  assert.equal(board.eraseAt(0.1, 0.25), 1, "the left edge");
+  assert.deepEqual(board.pinnedShapes(), []);
+  assert.ok(board.version > before, "the host's list is told");
+  freehand(board, 100, [[0.5, 0.5], [0.6, 0.6]]);
+  const afterPinned = board.version;
+  assert.equal(board.eraseAt(0.55, 0.55), 1);
+  assert.equal(board.version, afterPinned, "erasing a freehand stroke doesn't touch the pinned list");
+});
+
+test("a stroke still being drawn is not erased", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "red", undefined, "free");
+  board.add(0.5, 0.5);
+  board.add(0.6, 0.6);
+  assert.equal(board.eraseAt(0.55, 0.55), 0);
+  assert.equal(board.drawing, true);
+});
+
+test("a guest's finished stroke can be erased by the host's eraser too", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "#00aaff", "guest-1");
+  board.add(0.4, 0.4, "guest-1");
+  board.add(0.5, 0.5, "guest-1");
+  board.end(10, "guest-1");
+  assert.equal(board.eraseAt(0.45, 0.45), 1);
+});
+
+test("a fast sweep between two positions erases what it passes over, a single position does not jump", () => {
+  const board = new StrokeBoard();
+  freehand(board, 0, [[0.5, 0.2], [0.5, 0.3]]);
+  assert.equal(board.eraseAt(0.9, 0.25), 0);
+  assert.equal(board.eraseSwept({ x: 0.1, y: 0.25 }, { x: 0.9, y: 0.25 }), 1, "the sweep crosses the stroke");
+  const alone = new StrokeBoard();
+  freehand(alone, 0, [[0.5, 0.2], [0.5, 0.3]]);
+  assert.equal(alone.eraseSwept(null, { x: 0.9, y: 0.25 }), 0, "with no previous position it is just the one spot");
+  assert.equal(alone.eraseSwept(null, { x: 0.5, y: 0.25 }), 1);
+});
+
+test("clear() still removes everything and undo still removes the newest pinned shape after erasing", () => {
+  const board = new StrokeBoard();
+  const first = pin(board, 0, "box", 0.05) as { id: number };
+  pin(board, 100, "ellipse", 0.5);
+  board.eraseAt(0.05, 0.25);
+  assert.equal(board.pinnedShapes().length, 1);
+  assert.notEqual(board.undoLast(), first.id);
+  assert.equal(board.pinnedShapes().length, 0);
+  pin(board, 200);
+  board.clear();
+  assert.equal(board.visible(300).length, 0);
 });

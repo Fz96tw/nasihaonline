@@ -42,6 +42,8 @@ export function isPinnedKind(kind: StrokeKind): boolean {
 
 /** Pinned shapes kept at once; drawing another drops the oldest. */
 export const MAX_PINNED = 20;
+/** How far from the eraser's centre it wipes, as a fraction of the shared screen's height. */
+export const ERASER_RADIUS = 0.035;
 /** Longest label a shape can carry. */
 export const MAX_TEXT_LENGTH = 80;
 
@@ -151,6 +153,37 @@ export class StrokeBoard {
   /** Bumps whenever the set of pinned shapes or their labels changes, so the UI can tell without diffing. */
   get version(): number {
     return this.pinnedVersion;
+  }
+
+  /**
+   * Erases every finished stroke the eraser touches, with the ring centred at (x, y) in screen-content units and
+   * `radius` a fraction of the screen's height. `aspect` is the screen's width / height, so the ring is round on a wide
+   * screen. Freehand strokes and arrows are hit anywhere along their line; a box or ellipse only on its outline, so
+   * pointing at something inside one doesn't delete it. A stroke still being drawn is left alone. Returns how many went.
+   */
+  eraseAt(x: number, y: number, radius: number = ERASER_RADIUS, aspect = 1): number {
+    const touched = this.strokes.filter((stroke) => !this.isCurrent(stroke) && strokeTouches(stroke, x, y, radius, aspect));
+    if (touched.length === 0) return 0;
+    const hadPinned = touched.some((stroke) => isPinnedKind(stroke.kind));
+    this.strokes = this.strokes.filter((stroke) => !touched.includes(stroke));
+    if (hadPinned) this.pinnedVersion++;
+    return touched.length;
+  }
+
+  /**
+   * Erases along the straight path the eraser took from `from` to `to` (or just at `to` when there is no previous
+   * position), so a fast hand movement between two camera frames doesn't jump over a stroke.
+   */
+  eraseSwept(from: { x: number; y: number } | null, to: { x: number; y: number }, radius: number = ERASER_RADIUS, aspect = 1): number {
+    if (!from) return this.eraseAt(to.x, to.y, radius, aspect);
+    const length = Math.hypot((to.x - from.x) * aspect, to.y - from.y);
+    const steps = Math.max(1, Math.ceil(length / (radius / 2)));
+    let erased = 0;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      erased += this.eraseAt(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t, radius, aspect);
+    }
+    return erased;
   }
 
   /** The pinned shapes, oldest first. */
@@ -289,4 +322,47 @@ export function arrowHead(
     y: to.y - Math.sin(angle + offset) * size,
   });
   return [barb(spread), barb(-spread)];
+}
+
+/** Distance from (px, py) to the segment a-b, measured with x stretched by `aspect` so it is a true screen distance. */
+function distanceToSegment(px: number, py: number, a: { x: number; y: number }, b: { x: number; y: number }, aspect: number): number {
+  const ax = a.x * aspect;
+  const bx = b.x * aspect;
+  const x = px * aspect;
+  const dx = bx - ax;
+  const dy = b.y - a.y;
+  const lengthSquared = dx * dx + dy * dy;
+  const t = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1, ((x - ax) * dx + (py - a.y) * dy) / lengthSquared));
+  return Math.hypot(x - (ax + t * dx), py - (a.y + t * dy));
+}
+
+/** Segments approximating the outline of a two-corner shape: four edges for a box, a 48-sided polygon for an ellipse. */
+function outlineSegments(stroke: Stroke): [{ x: number; y: number }, { x: number; y: number }][] {
+  const [a, b] = stroke.points;
+  const { x, y, width, height } = shapeBounds(a, b);
+  const corners = [
+    { x, y },
+    { x: x + width, y },
+    { x: x + width, y: y + height },
+    { x, y: y + height },
+  ];
+  const ring =
+    stroke.kind === "ellipse"
+      ? Array.from({ length: 48 }, (_, i) => ({ x: x + width / 2 + (Math.cos((i / 48) * Math.PI * 2) * width) / 2, y: y + height / 2 + (Math.sin((i / 48) * Math.PI * 2) * height) / 2 }))
+      : corners;
+  return ring.map((point, i) => [point, ring[(i + 1) % ring.length]]);
+}
+
+function strokeTouches(stroke: Stroke, x: number, y: number, radius: number, aspect: number): boolean {
+  const points = stroke.points;
+  if (points.length === 0) return false;
+  if (isPinnedKind(stroke.kind)) {
+    if (points.length < 2) return false;
+    return outlineSegments(stroke).some(([a, b]) => distanceToSegment(x, y, a, b, aspect) <= radius);
+  }
+  if (points.length === 1) return Math.hypot((points[0].x - x) * aspect, points[0].y - y) <= radius;
+  for (let i = 1; i < points.length; i++) {
+    if (distanceToSegment(x, y, points[i - 1], points[i], aspect) <= radius) return true;
+  }
+  return false;
 }

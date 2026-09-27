@@ -160,7 +160,7 @@ export function PresenterOverlayControl({
   const [normalizeSize, setNormalizeSize] = useState(true);
   // Host hand gestures (default off) and what's recognized right now — for the host's own indicator, never drawn into the stream.
   const [gestures, setGestures] = useState(false);
-  const [gestureLabel, setGestureLabel] = useState<"pointing" | "zooming" | "reset" | "drawing" | "shape" | "spotlight" | "thumbsup" | "thumbsdown" | "wave" | "unavailable" | null>(null);
+  const [gestureLabel, setGestureLabel] = useState<"pointing" | "zooming" | "reset" | "drawing" | "shape" | "erasing" | "spotlight" | "thumbsup" | "thumbsdown" | "wave" | "unavailable" | null>(null);
   const [spotlightOn, setSpotlightOn] = useState(false);
   const [penColor, setPenColor] = useState<PresenterOverlaySettings["penColor"]>("red");
   const [arrowMode, setArrowMode] = useState(false);
@@ -1094,6 +1094,8 @@ export function PresenterOverlayControl({
                     ? "Drawing"
                     : gestureLabel === "shape"
                       ? "Drawing a shape"
+                      : gestureLabel === "erasing"
+                        ? "Erasing"
                     : gestureLabel === "spotlight"
                       ? "Spotlight"
                       : gestureLabel === "thumbsup"
@@ -1115,6 +1117,7 @@ export function PresenterOverlayControl({
             <li>Thumbs up or thumbs down (other fingers curled), held for a moment, or a wave of an open hand: a 👍, 👎 or 👋 floats up beside you. One reaction every few seconds.</li>
             <li>Hold two fingers together (index and middle, others curled) for a moment to draw in the air; lower them to stop. Drawings fade after a few seconds. Switch on &ldquo;Straight arrow&rdquo; and the same gesture draws a straight arrow from where you start to where you lower your fingers.</li>
             <li>Hold your thumb and index finger out in an &ldquo;L&rdquo; (other fingers curled) for a moment to draw a box or ellipse: the point where you start is one corner and your fingertip is the opposite corner. Choose Box or Ellipse below; drop the L to finish. Boxes and ellipses stay on the screen until you remove them (Clear drawing, Undo last shape, or the list under Shapes) and can carry a short label. They stay put while you zoom or pan, but do not follow the shared content if it scrolls or changes, so clear them when the content changes.</li>
+            <li>Hold three fingers together (index, middle and ring, pinky curled) for a moment to erase: a ring around your middle fingertip wipes any drawing it touches as you move your hand. A box or ellipse is erased only when the ring touches its outline, so you can point inside one safely. Erasing can&apos;t be undone.</li>
             <li>Keep your hand fully in the camera frame. Only the screen zooms, not you.</li>
           </ul>
         </details>

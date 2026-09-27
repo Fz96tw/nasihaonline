@@ -6,7 +6,7 @@
  */
 
 export type Landmark = { x: number; y: number };
-export type Pose = "point" | "pinch" | "palm" | "pen" | "shape" | "fist" | "thumbsup" | "thumbsdown" | "none";
+export type Pose = "point" | "pinch" | "palm" | "pen" | "shape" | "eraser" | "fist" | "thumbsup" | "thumbsdown" | "none";
 export type ReactionKind = "thumbsup" | "thumbsdown" | "wave";
 
 /** Hold times before a gesture takes effect. */
@@ -16,6 +16,8 @@ export const PALM_HOLD_MS = 500;
 export const PEN_HOLD_MS = 300;
 /** Hold the "L" (thumb and index out) this long before a shape starts, so a hand on its way to another pose draws nothing. */
 export const SHAPE_HOLD_MS = 400;
+/** Hold the eraser pose (three fingers together) this long before it starts erasing. */
+export const ERASER_HOLD_MS = 300;
 /** A fist must be held this long to turn the spotlight on (longer, so a resting fist doesn't trigger it). */
 export const FIST_HOLD_MS = 800;
 /** A thumb must be held up or down this long to react. */
@@ -57,6 +59,7 @@ const FINGERS: readonly [number, number][] = [
 ];
 const INDEX_TIP = 8;
 const MIDDLE_TIP = 12;
+const RING_TIP = 16;
 
 /** A hand with any landmark this close to (or past) the frame edge is only partly in frame. */
 const EDGE = 0.01;
@@ -91,6 +94,8 @@ export type PoseReading = {
   pose: Pose;
   /** Index fingertip. */
   tip: Landmark;
+  /** Middle fingertip: the centre of the eraser's three fingers. */
+  middleTip: Landmark;
   /** Midpoint of thumb and index tips — where a pinch is. */
   pinchPoint: Landmark;
   /** The middle of the hand (wrist and knuckles averaged). */
@@ -118,10 +123,11 @@ function isThumbSquare(landmarks: readonly Landmark[], aspect: number, size: num
 export function classifyPose(landmarks: readonly Landmark[], aspect = 1): PoseReading {
   const tip = landmarks[INDEX_TIP];
   const thumb = landmarks[THUMB_TIP];
+  const middleTip = landmarks[MIDDLE_TIP];
   const pinchPoint = { x: (tip.x + thumb.x) / 2, y: (tip.y + thumb.y) / 2 };
   const palmPoints = PALM_POINTS.map((i) => landmarks[i]).filter(Boolean);
   const palm = { x: palmPoints.reduce((t, p) => t + p.x, 0) / (palmPoints.length || 1), y: palmPoints.reduce((t, p) => t + p.y, 0) / (palmPoints.length || 1) };
-  const none: PoseReading = { pose: "none", tip, pinchPoint, palm };
+  const none: PoseReading = { pose: "none", tip, middleTip, pinchPoint, palm };
   if (landmarks.length < 21) return none;
   if (landmarks.some((p) => p.x < EDGE || p.x > 1 - EDGE || p.y < EDGE || p.y > 1 - EDGE)) return none;
   const dist = (a: Landmark, b: Landmark) => Math.hypot((a.x - b.x) * aspect, a.y - b.y);
@@ -139,26 +145,37 @@ export function classifyPose(landmarks: readonly Landmark[], aspect = 1): PoseRe
   // Thumbs up / down before the fist: the fingers are curled just the same, but the thumb sticks out clearly up or down.
   if (state.every((s) => s === "curled") && dist(thumb, landmarks[5]) > THUMB_OUT_RATIO * size) {
     const knuckle = landmarks[5];
-    if (thumb.y <= wrist.y - THUMB_WRIST_RATIO * size && thumb.y <= knuckle.y - THUMB_KNUCKLE_RATIO * size) return { pose: "thumbsup", tip, pinchPoint, palm };
-    if (thumb.y >= wrist.y + THUMB_WRIST_RATIO * size && thumb.y >= knuckle.y + THUMB_KNUCKLE_RATIO * size) return { pose: "thumbsdown", tip, pinchPoint, palm };
+    if (thumb.y <= wrist.y - THUMB_WRIST_RATIO * size && thumb.y <= knuckle.y - THUMB_KNUCKLE_RATIO * size) return { pose: "thumbsup", tip, middleTip, pinchPoint, palm };
+    if (thumb.y >= wrist.y + THUMB_WRIST_RATIO * size && thumb.y >= knuckle.y + THUMB_KNUCKLE_RATIO * size) return { pose: "thumbsdown", tip, middleTip, pinchPoint, palm };
   }
   // A fist first: with the thumb folded over the fingers its tip can sit near the index tip, which must not read as a pinch.
   // The fingertips of a real pinch are held out in front of the palm; a fist's are tucked in against it.
   if (state.every((s) => s === "curled") && FINGERS.every(([t]) => dist(landmarks[t], wrist) < FIST_TIP_RATIO * size)) {
-    return wrist.y <= FIST_RAISED_Y ? { pose: "fist", tip, pinchPoint, palm } : none;
+    return wrist.y <= FIST_RAISED_Y ? { pose: "fist", tip, middleTip, pinchPoint, palm } : none;
   }
-  if (dist(thumb, tip) < PINCH_RATIO * size) return { pose: "pinch", tip, pinchPoint, palm };
+  if (dist(thumb, tip) < PINCH_RATIO * size) return { pose: "pinch", tip, middleTip, pinchPoint, palm };
   const [index, ...others] = state;
   // The "L" before the laser: same fingers, but the thumb is held out square to the index finger.
   if (index === "extended" && others.every((s) => s === "curled") && isThumbSquare(landmarks, aspect, size)) {
-    return { pose: "shape", tip, pinchPoint, palm };
+    return { pose: "shape", tip, middleTip, pinchPoint, palm };
   }
-  if (index === "extended" && others.every((s) => s === "curled")) return { pose: "point", tip, pinchPoint, palm };
+  if (index === "extended" && others.every((s) => s === "curled")) return { pose: "point", tip, middleTip, pinchPoint, palm };
   const [middle, ring, pinky] = others;
   if (index === "extended" && middle === "extended" && ring === "curled" && pinky === "curled" && dist(tip, landmarks[MIDDLE_TIP]) < PEN_TOGETHER_RATIO * size) {
-    return { pose: "pen", tip, pinchPoint, palm };
+    return { pose: "pen", tip, middleTip, pinchPoint, palm };
   }
-  if (state.every((s) => s === "extended")) return { pose: "palm", tip, pinchPoint, palm };
+  // Three fingers together (index, middle, ring), pinky curled: the eraser. Each finger must sit right against the next, or it is a fan of fingers.
+  if (
+    index === "extended" &&
+    middle === "extended" &&
+    ring === "extended" &&
+    pinky === "curled" &&
+    dist(tip, landmarks[MIDDLE_TIP]) < PEN_TOGETHER_RATIO * size &&
+    dist(landmarks[MIDDLE_TIP], landmarks[RING_TIP]) < PEN_TOGETHER_RATIO * size
+  ) {
+    return { pose: "eraser", tip, middleTip, pinchPoint, palm };
+  }
+  if (state.every((s) => s === "extended")) return { pose: "palm", tip, middleTip, pinchPoint, palm };
   return none;
 }
 
@@ -216,20 +233,22 @@ export type GestureState = {
   pen: { u: number; v: number } | null;
   /** The index fingertip (camera-frame coordinates, smoothed) while the "L" is held and a shape is being drawn; null otherwise. */
   shape: { u: number; v: number } | null;
+  /** The middle fingertip (camera-frame coordinates, smoothed) while the eraser pose is held; null otherwise. */
+  eraser: { u: number; v: number } | null;
   /** The middle of the hand (camera-frame coordinates, smoothed) while a hand is in view; null once it has been gone a moment. */
   hand: { u: number; v: number } | null;
   /** The fist spotlight: 1 while the fist is held (after the hold), fading to 0 after it opens; null when off. */
   spotlight: { alpha: number } | null;
   actions: GestureAction[];
   /** What is currently recognized, for the host's (not streamed) indicator. */
-  label: "pointing" | "zooming" | "reset" | "drawing" | "shape" | "spotlight" | ReactionKind | null;
+  label: "pointing" | "zooming" | "reset" | "drawing" | "shape" | "erasing" | "spotlight" | ReactionKind | null;
 };
 
-const POSES: readonly Pose[] = ["point", "pinch", "palm", "pen", "shape", "fist", "thumbsup", "thumbsdown"];
+const POSES: readonly Pose[] = ["point", "pinch", "palm", "pen", "shape", "eraser", "fist", "thumbsup", "thumbsdown"];
 
 export class GestureTracker {
-  private since: Record<string, number | null> = { point: null, pinch: null, palm: null, pen: null, shape: null, fist: null, thumbsup: null, thumbsdown: null };
-  private lastSeen: Record<string, number> = { point: 0, pinch: 0, palm: 0, pen: 0, shape: 0, fist: 0, thumbsup: 0, thumbsdown: 0 };
+  private since: Record<string, number | null> = { point: null, pinch: null, palm: null, pen: null, shape: null, eraser: null, fist: null, thumbsup: null, thumbsdown: null };
+  private lastSeen: Record<string, number> = { point: 0, pinch: 0, palm: 0, pen: 0, shape: 0, eraser: 0, fist: 0, thumbsup: 0, thumbsdown: 0 };
   private thumbFired: Record<string, boolean> = { thumbsup: false, thumbsdown: false };
   private waveFired = false;
   private reactionCooldownUntil = 0;
@@ -251,6 +270,10 @@ export class GestureTracker {
   private shapeX = 0;
   private shapeY = 0;
   private shapeAt: number | null = null;
+  private eraserActive = false;
+  private eraserX = 0;
+  private eraserY = 0;
+  private eraserAt: number | null = null;
   private pointerActive = false;
   private pointerEndedAt = 0;
   private pointerX = 0;
@@ -393,6 +416,23 @@ export class GestureTracker {
       this.shapeAt = null;
     }
 
+    // Eraser: three fingers held together to start; the middle fingertip is the centre of the erasing ring until the pose ends.
+    if (this.held("eraser", now, ERASER_HOLD_MS) && reading && raw === "eraser") {
+      if (!this.eraserActive || this.eraserAt === null) {
+        this.eraserX = reading.middleTip.x;
+        this.eraserY = reading.middleTip.y;
+      } else {
+        const k = 1 - Math.exp(-Math.max(0, now - this.eraserAt) / SMOOTH_MS);
+        this.eraserX += (reading.middleTip.x - this.eraserX) * k;
+        this.eraserY += (reading.middleTip.y - this.eraserY) * k;
+      }
+      this.eraserAt = now;
+      this.eraserActive = true;
+    } else if (this.eraserActive && now - this.lastSeen.eraser > GRACE_MS) {
+      this.eraserActive = false;
+      this.eraserAt = null;
+    }
+
     // Pinch: held to zoom, then the pinched hand pans.
     const pinchHeld = this.held("pinch", now, PINCH_HOLD_MS);
     if (pinchHeld && !this.pinchFired && now >= this.cooldownUntil && reading) {
@@ -441,6 +481,7 @@ export class GestureTracker {
     const pointer = this.pointerActive || (this.pointerEndedAt > 0 && fade > 0) ? { u: this.pointerX, v: this.pointerY, fade: Math.max(0, Math.min(1, fade)) } : null;
     const pen = this.penActive ? { u: this.penX, v: this.penY } : null;
     const shape = this.shapeActive ? { u: this.shapeX, v: this.shapeY } : null;
+    const eraser = this.eraserActive ? { u: this.eraserX, v: this.eraserY } : null;
     const label = this.reactionLabel && now < this.reactionLabelUntil
       ? this.reactionLabel
       : this.pointerActive
@@ -449,14 +490,16 @@ export class GestureTracker {
         ? "drawing"
         : this.shapeActive
           ? "shape"
-          : this.spotlightActive
+          : this.eraserActive
+            ? "erasing"
+            : this.spotlightActive
           ? "spotlight"
           : this.pinching
             ? "zooming"
             : now < this.resetLabelUntil
               ? "reset"
               : null;
-    return { pointer, pen, shape, hand, spotlight, actions, label };
+    return { pointer, pen, shape, eraser, hand, spotlight, actions, label };
   }
 }
 

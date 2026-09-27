@@ -32,7 +32,7 @@ import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
 import { REACTION_EMOJI, ReactionPlayer, reactionPosition } from "./reactions.ts";
 import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement } from "./gestures.ts";
 import { mapGuestPenToScreen, mapGuestPointer, type GuestPointerDot } from "./guest-pointer.ts";
-import { HOST_OWNER, StrokeBoard, arrowHead, shapeBounds, strokeColor, type PenColor, type PinnedShape } from "./drawing.ts";
+import { ERASER_RADIUS, HOST_OWNER, StrokeBoard, arrowHead, shapeBounds, strokeColor, type PenColor, type PinnedShape } from "./drawing.ts";
 import { fitText, textArea, type FittedText } from "./text-fit.ts";
 import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
 import { SizeNormalizer, measureFromRows } from "./size-normalize.ts";
@@ -426,6 +426,8 @@ export async function startPresenterOverlayCompositor({
   let guestPointers: GuestPointerDot[] = [];
   let guestPens: GuestPointerDot[] = [];
   let lastPan: { x: number; y: number } | null = null;
+  /** Where the eraser ring is (screen-content coordinates) while the eraser pose is held; null otherwise. */
+  let eraserAt: { x: number; y: number } | null = null;
   let trail: { x: number; y: number; t: number }[] = [];
 
   const screenReader = new Processor({ track: screenTrack }).readable.getReader();
@@ -867,6 +869,24 @@ export async function startPresenterOverlayCompositor({
     outputCtx.restore();
   }
 
+  /** A faint ring where the eraser is, so viewers can see what is being wiped. Its size is in screen-content units, so it grows with zoom like the drawings do. */
+  function drawEraser(now: number, width: number, height: number) {
+    if (!eraserAt) return;
+    const view = viewport.rect(now);
+    const at = screenToOutput(view, eraserAt.x, eraserAt.y);
+    const radius = (ERASER_RADIUS * height) / view.height;
+    outputCtx.save();
+    outputCtx.beginPath();
+    outputCtx.arc(at.x * width, at.y * height, radius, 0, Math.PI * 2);
+    outputCtx.fillStyle = "rgba(255, 255, 255, 0.12)";
+    outputCtx.fill();
+    outputCtx.lineWidth = Math.max(2, height * 0.003);
+    outputCtx.strokeStyle = "rgba(255, 255, 255, 0.75)";
+    outputCtx.setLineDash([radius * 0.35, radius * 0.25]);
+    outputCtx.stroke();
+    outputCtx.restore();
+  }
+
   /** A label centred inside a pinned shape, shrunk to fit, with a dark outline so it reads over any screen content. */
   function drawShapeText(id: number, text: string, kind: "box" | "ellipse", bounds: { x: number; y: number; width: number; height: number }) {
     const area = textArea(bounds, kind);
@@ -1004,6 +1024,7 @@ export async function startPresenterOverlayCompositor({
   function runGestures(source: Source, now: number) {
     if (!settings.gestures) {
       endHostStroke(now);
+      eraserAt = null;
       reactions.clear();
       gestureSpotlight = 0;
       handPoint = null;
@@ -1067,6 +1088,16 @@ export async function startPresenterOverlayCompositor({
     } else {
       endHostStroke(now);
     }
+    // Eraser: the middle fingertip goes through the same ghost mapping and zoom view; every stroke the ring touches on
+    // the way from its last position is wiped (a fast hand can move a long way between camera frames).
+    if (placement && state.eraser) {
+      const out = cameraToOutput(state.eraser.u, state.eraser.v, placement);
+      const onScreen = outputToScreen(viewport.rect(now), out.x / outputCanvas.width, out.y / outputCanvas.height);
+      board.eraseSwept(eraserAt, onScreen, ERASER_RADIUS, outputCanvas.width / outputCanvas.height);
+      eraserAt = onScreen;
+    } else {
+      eraserAt = null;
+    }
     let panned = false;
     for (const action of state.actions) {
       if (!placement) break;
@@ -1119,6 +1150,7 @@ export async function startPresenterOverlayCompositor({
       onShapes?.(board.pinnedShapes());
     }
     drawStrokes(now, width, height);
+    drawEraser(now, width, height);
 
     // Fading-out sources first, then the ones on their way in, so a new speaker fades in over the old one.
     // Each real camera keeps its own aspect ratio; the visible ones are spaced out in the order given.

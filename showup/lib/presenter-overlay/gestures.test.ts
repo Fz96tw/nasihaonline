@@ -10,6 +10,7 @@ import {
   SPOTLIGHT_FADE_MS,
   PEN_HOLD_MS,
   SHAPE_HOLD_MS,
+  ERASER_HOLD_MS,
   SHAPE_MAX_COS,
   SHAPE_THUMB_OUT_RATIO,
   GRACE_MS,
@@ -89,7 +90,7 @@ test("classifies pointing, pinching and an open palm", () => {
   assert.equal(classifyPose(hand(["curl", "curl", "curl", "curl"])).pose, "none", "a fist is nothing");
   assert.equal(classifyPose(PEN()).pose, "pen", "two fingers together is the pen");
   assert.equal(classifyPose(PEACE()).pose, "none", "a peace sign is nothing");
-  assert.equal(classifyPose(hand(["ext", "ext", "ext", "curl"])).pose, "none", "three fingers is nothing");
+  assert.equal(classifyPose(hand(["ext", "ext", "ext", "curl"])).pose, "eraser", "three fingers together is the eraser");
   assert.equal(classifyPose(TALK()).pose, "none", "half-curled talking hands are nothing");
   assert.equal(classifyPose(FIST()).pose, "fist", "a raised fist");
   assert.equal(classifyPose(FIST_LOW()).pose, "none", "a fist held low in the frame is nothing");
@@ -591,4 +592,70 @@ test("two fingers still draw with the pen, and the L never shows as the pen", ()
   const { state } = run(tracker, 0, PEN_HOLD_MS + 400, PEN);
   assert.ok(state.pen);
   assert.equal(state.shape, null);
+});
+
+const ERASER = () => hand(["ext", "ext", "ext", "curl"]);
+
+test("three fingers together (pinky curled) is the eraser, and the neighbouring poses are unchanged", () => {
+  assert.equal(classifyPose(ERASER()).pose, "eraser");
+  assert.equal(classifyPose(PEN()).pose, "pen", "two fingers together is still the pen");
+  assert.equal(classifyPose(POINT()).pose, "point");
+  assert.equal(classifyPose(PALM()).pose, "palm", "four fingers out is a palm, not the eraser");
+  assert.equal(classifyPose(SHAPE()).pose, "shape", "the L is unchanged");
+  assert.equal(classifyPose(PINCH()).pose, "pinch");
+});
+
+test("the eraser needs the fingers together and the pinky curled", () => {
+  assert.equal(classifyPose(hand(["ext", "ext", "ext", "curl"], { apart: true })).pose, "none", "a fan of three fingers is nothing");
+  assert.equal(classifyPose(hand(["ext", "ext", "ext", "half"])).pose, "none", "a half-curled pinky is nothing");
+  const wideRing = hand(["ext", "ext", "ext", "curl"]);
+  wideRing[16] = { x: wideRing[16].x + 0.05, y: wideRing[16].y };
+  assert.equal(classifyPose(wideRing).pose, "none", "ring finger held away from the middle finger is nothing");
+  const wideMiddle = hand(["ext", "ext", "ext", "curl"]);
+  wideMiddle[12] = { x: wideMiddle[12].x + 0.03, y: wideMiddle[12].y };
+  wideMiddle[16] = { x: wideMiddle[16].x + 0.06, y: wideMiddle[16].y };
+  assert.equal(classifyPose(wideMiddle).pose, "none", "middle finger held away from the index is nothing");
+});
+
+test("the eraser reports the middle fingertip", () => {
+  const h = ERASER();
+  assert.deepEqual(classifyPose(h).middleTip, h[12]);
+});
+
+test("three fingers held start erasing after the hold, centred on the middle fingertip, until the pose ends", () => {
+  const tracker = new GestureTracker();
+  let state = run(tracker, 0, ERASER_HOLD_MS - 100, ERASER).state;
+  assert.equal(state.eraser, null, "too early");
+  state = run(tracker, ERASER_HOLD_MS - 67, ERASER_HOLD_MS + 300, ERASER).state;
+  const h = ERASER();
+  assert.ok(state.eraser && Math.abs(state.eraser.u - h[12].x) < 1e-6 && Math.abs(state.eraser.v - h[12].y) < 1e-6);
+  assert.equal(state.label, "erasing");
+  assert.equal(state.pen, null);
+  assert.equal(state.shape, null);
+  const moved = hand(["ext", "ext", "ext", "curl"], { ox: 0.15 });
+  const next = tracker.update(ERASER_HOLD_MS + 333, moved).eraser as { u: number };
+  assert.ok(next.u > h[12].x && next.u < moved[12].x, "smoothed towards the new fingertip");
+  const gone = run(tracker, ERASER_HOLD_MS + 360, ERASER_HOLD_MS + 360 + GRACE_MS + 100, () => null).state;
+  assert.equal(gone.eraser, null);
+  assert.equal(gone.label, null);
+});
+
+test("a brief flash of the eraser pose erases nothing, and a different pose ends it", () => {
+  const brief = new GestureTracker();
+  assert.equal(run(brief, 0, ERASER_HOLD_MS - 120, ERASER).state.eraser, null);
+  const tracker = new GestureTracker();
+  run(tracker, 0, ERASER_HOLD_MS + 300, ERASER);
+  assert.equal(run(tracker, ERASER_HOLD_MS + 320, ERASER_HOLD_MS + 320 + GRACE_MS + 100, PALM).state.eraser, null);
+});
+
+test("the eraser does not trigger the laser, zoom, reset, the pen or a shape", () => {
+  const tracker = new GestureTracker();
+  const { actions, state } = run(tracker, 0, 3000, ERASER);
+  assert.equal(actions.length, 0);
+  assert.equal(state.pointer, null);
+  assert.equal(state.pen, null);
+  assert.equal(state.shape, null);
+  assert.ok(state.eraser);
+  const pen = run(new GestureTracker(), 0, 3000, PEN).state;
+  assert.equal(pen.eraser, null, "two fingers never erase");
 });
