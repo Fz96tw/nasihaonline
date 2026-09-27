@@ -19,7 +19,9 @@ export function formatTimestamp(iso: string): string {
 // Fallback for events created before Event.timezone existed (nullable
 // backfill gap) — arbitrary but fixed, so old rows format consistently
 // rather than drifting with wherever the server process happens to run.
-const DEFAULT_EVENT_TIME_ZONE = "America/New_York";
+// Exported so SubmitEventForm can use the same fallback when redisplaying
+// a legacy event's stored startsAt/endsAt for editing.
+export const DEFAULT_EVENT_TIME_ZONE = "America/New_York";
 
 /**
  * Formats an event's start (or any event-related) instant as e.g.

@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,7 @@ import {
   type CreateEventValues,
 } from "@/lib/validation/event";
 import { DATETIME_LOCAL_STEP_SECONDS, snapDatetimeLocalValue } from "@/lib/datetime-input";
+import { DEFAULT_EVENT_TIME_ZONE } from "@/lib/format-date";
 import { describeRecurrence } from "@/lib/recurrence";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { InviteePicker } from "@/components/members/invitee-picker";
@@ -83,12 +85,21 @@ function defaultUntilIso(startsAtLocal: string): string {
   return new Date(anchor.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString();
 }
 
-/** Converts a stored ISO timestamp to the local "YYYY-MM-DDTHH:mm" value a <input type="datetime-local"> expects. */
-function toDatetimeLocalValue(iso: string | null): string {
+// The full IANA zone list — deterministic (not environment-dependent, unlike
+// Intl.DateTimeFormat().resolvedOptions().timeZone below), so safe to
+// compute once at module scope without an SSR/client mismatch.
+const IANA_TIMEZONES = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
+
+/**
+ * Converts a stored UTC ISO timestamp to the "YYYY-MM-DDTHH:mm" wall-clock
+ * value a <input type="datetime-local"> expects, as it reads in `timezone`
+ * (the event's own stored zone in edit mode) — NOT the viewer's current
+ * browser zone, so re-editing an event from a different zone than it was
+ * created in doesn't silently show shifted times.
+ */
+function toDatetimeLocalValue(iso: string | null, timezone: string): string {
   if (!iso) return "";
-  const date = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return formatInTimeZone(iso, timezone, "yyyy-MM-dd'T'HH:mm");
 }
 
 // The three real audiences an event can have (§4.6) — modeled underneath as
@@ -117,6 +128,8 @@ type ExistingEvent = {
   type: EventType;
   startsAt: string;
   endsAt: string | null;
+  /** IANA zone the event was created/last saved in (see Event.timezone's schema comment) — null for legacy rows saved before this field existed. */
+  timezone: string | null;
   open: boolean;
   meetingUrl: string | null;
   meetLinkSource: "auto" | "manual" | "livekit";
@@ -229,12 +242,19 @@ export function SubmitEventForm({
           title: existingEvent.title,
           description: existingEvent.description,
           type: existingEvent.type,
-          startsAt: toDatetimeLocalValue(existingEvent.startsAt),
-          endsAt: toDatetimeLocalValue(existingEvent.endsAt) || null,
+          // Redisplayed in the zone the event was actually created/last
+          // saved in (falling back to the same fixed default
+          // formatEventDateTime uses for pre-existing null rows) — NOT the
+          // editor's own current browser zone, so re-editing from a
+          // different zone than it was created in doesn't silently shift
+          // the displayed wall-clock time. The timezone field below is
+          // filled with this same value, so the Select reflects it too.
+          startsAt: toDatetimeLocalValue(existingEvent.startsAt, existingEvent.timezone ?? DEFAULT_EVENT_TIME_ZONE),
+          endsAt: toDatetimeLocalValue(existingEvent.endsAt, existingEvent.timezone ?? DEFAULT_EVENT_TIME_ZONE) || null,
           open: existingEvent.open,
           meetingUrl: existingEvent.meetingUrl,
           deidentificationConfirmed: existingEvent.deidentificationConfirmed,
-          timezone: null,
+          timezone: existingEvent.timezone,
           // The invited list itself isn't editable from this form once past
           // a draft's first submission (Audience-Restricted Group Events —
           // see ManageInvitees on the event detail page for that) but
@@ -259,6 +279,21 @@ export function SubmitEventForm({
       : DEFAULT_VALUES,
     mode: "onTouched",
   });
+
+  // Intl.DateTimeFormat().resolvedOptions().timeZone reads the *browser's*
+  // zone, which during SSR would be the server process's zone instead —
+  // filled in client-side only, after mount, to avoid a hydration mismatch
+  // (same reasoning as isPresenterOverlaySupported's client-only check
+  // elsewhere in this codebase). Only when the field is still unset: a
+  // brand-new event (DEFAULT_VALUES.timezone is null) or a legacy event
+  // saved before Event.timezone existed — never overwrites a real stored
+  // or already-chosen value.
+  useEffect(() => {
+    if (!form.getValues("timezone")) {
+      form.setValue("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const isCaseDiscussion = form.watch("type") === EventType.case_discussion;
   const visibility = form.watch("visibility");
@@ -308,16 +343,19 @@ export function SubmitEventForm({
       if (values.description) formData.append("description", values.description);
       formData.append("type", values.type);
       // datetime-local values are converted to real ISO instants here, in
-      // the browser's own timezone — parsing the raw string server-side
-      // would use the server's timezone instead (§4.6 requires UTC
-      // storage), same conversion as RequestMeetingDialog's proposedTimes.
-      formData.append("startsAt", new Date(values.startsAt).toISOString());
-      if (values.endsAt) formData.append("endsAt", new Date(values.endsAt).toISOString());
+      // the *selected* timezone field (not necessarily the browser's own —
+      // that's the whole point of the picker below) — parsing the raw
+      // string server-side would use the server's timezone instead (§4.6
+      // requires UTC storage). RequestMeetingDialog's proposedTimes does a
+      // separate, still browser-zone-only conversion — out of scope here.
+      const zone = values.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+      formData.append("startsAt", fromZonedTime(values.startsAt, zone).toISOString());
+      if (values.endsAt) formData.append("endsAt", fromZonedTime(values.endsAt, zone).toISOString());
       // The zone startsAt/endsAt above were actually entered in — stored
       // alongside them so notification/email "when" text can be formatted
       // back into the organizer's wall-clock time instead of the server
       // process's own timezone (see Event.timezone's schema comment).
-      formData.append("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
+      formData.append("timezone", zone);
       // "Open to the public" doesn't make sense for a restricted event —
       // same "can't linger as true after switching away" rationale as
       // deidentificationConfirmed below.
@@ -646,6 +684,35 @@ export function SubmitEventForm({
             )}
           />
         </div>
+
+        <FormField
+          control={form.control}
+          name="timezone"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Timezone</FormLabel>
+              <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a timezone" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {IANA_TIMEZONES.map((zone) => (
+                    <SelectItem key={zone} value={zone}>
+                      {zone}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                What &quot;Starts&quot;/&quot;Ends&quot; above are in — defaults to your own, but pick a different
+                one if you&apos;re scheduling for another timezone.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
         <FormField
           control={form.control}
