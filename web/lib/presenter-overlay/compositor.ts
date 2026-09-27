@@ -40,6 +40,7 @@ import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
 import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement } from "./gestures.ts";
 import { StrokeBoard, strokeColor, type PenColor } from "./drawing.ts";
 import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
+import { SizeNormalizer, measureFromRows } from "./size-normalize.ts";
 
 // Insertable-streams (Chrome's main-thread flavor) aren't in TS's DOM lib yet.
 type MediaStreamTrackProcessorCtor = new (init: { track: MediaStreamTrack }) => { readable: ReadableStream<VideoFrame> };
@@ -93,6 +94,18 @@ export type PresenterOverlaySettings = {
   /** Horizontal anchor of the cut-out (always bottom-aligned, like someone standing in front of the slide). */
   position: "left" | "center" | "right";
   /**
+   * Scale the cut-out so the camera frame covers the whole shared frame (whichever edge needs the larger
+   * scale), so the presenter can reach any part of a wide window. Ignores `scale` and `position`; the top
+   * or sides of the frame may be cropped.
+   */
+  span: boolean;
+  /**
+   * Scale the cut-out by how far the presenter sits from their camera, so they look the same size across a
+   * session even if they lean back or move their laptop. On by default. Off = the camera frame is always
+   * scaled the same (zoom 1), driven only by `scale`.
+   */
+  normalizeSize: boolean;
+  /**
    * Flip the cut-out horizontally, like a mirror — on by default, because
    * the presenter aims by watching their own image over the slide: when it
    * moves the way a mirror would, reaching toward something on their screen
@@ -117,6 +130,8 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   opacity: 0.5,
   scale: 1,
   position: "center",
+  span: false,
+  normalizeSize: true,
   mirror: true,
   gestures: false,
   penColor: "red",
@@ -229,6 +244,11 @@ export async function startPresenterOverlayCompositor({
   let maskImage = new ImageData(CAMERA_WIDTH, CAMERA_HEIGHT);
   const cutoutCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
   const cutoutCtx = context2d(cutoutCanvas);
+  // Sits-close-or-far correction: how much of the frame the presenter fills, and the zoom it settles on.
+  const normalizer = new SizeNormalizer();
+  let rowCounts = new Uint32Array(CAMERA_HEIGHT);
+  /** The normalizer's current zoom, refreshed once per output frame in compose() and read by hostPlacement() (including a call made a frame earlier, from runGestures — the lag is negligible since the zoom only ever glides). */
+  let hostZoom = 1;
 
   const outputCanvas = new OffscreenCanvas(MAX_OUTPUT_WIDTH, MAX_OUTPUT_HEIGHT);
   const outputCtx = context2d(outputCanvas);
@@ -285,7 +305,7 @@ export async function startPresenterOverlayCompositor({
     cameraCtx.drawImage(frame, sx, sy, sw, sh, 0, 0, CAMERA_WIDTH, CAMERA_HEIGHT);
   }
 
-  function updateCutout() {
+  function updateCutout(now: number) {
     // MediaPipe requires strictly increasing timestamps within a VIDEO-mode session.
     const timestamp = Math.max(performance.now(), lastSegmentTimestamp + 1);
     lastSegmentTimestamp = timestamp;
@@ -304,10 +324,21 @@ export async function startPresenterOverlayCompositor({
       }
       const confidence = mask.getAsFloat32Array();
       const data = maskImage.data;
+      // Count person pixels per row in the same pass, to measure how far the presenter sits from the camera.
+      if (rowCounts.length !== mask.height) rowCounts = new Uint32Array(mask.height);
+      rowCounts.fill(0);
+      let column = 0;
+      let row = 0;
       for (let i = 0; i < confidence.length; i++) {
         const person = single ? confidence[i] : 1 - confidence[i];
         data[i * 4 + 3] = person * 255;
+        if (person > 0.5) rowCounts[row]++;
+        if (++column === mask.width) {
+          column = 0;
+          row++;
+        }
       }
+      normalizer.observe(now, measureFromRows(rowCounts, mask.width, mask.height));
     });
     maskCtx.putImageData(maskImage, 0, 0);
 
@@ -357,8 +388,18 @@ export async function startPresenterOverlayCompositor({
   /** Where the cut-out is drawn on the output frame right now — the same placement gestures are mapped through. */
   function hostPlacement(): GhostPlacement {
     const { width, height } = outputSize();
-    const personHeight = height * settings.scale;
-    const personWidth = personHeight * (CAMERA_WIDTH / CAMERA_HEIGHT);
+    const aspect = CAMERA_WIDTH / CAMERA_HEIGHT;
+    if (settings.span) {
+      // Cover fit, bottom-aligned and centred: the camera frame's edges land on (or past) the share's edges.
+      // Ignores scale/position/normalizeSize — there's only ever this one ghost to fill the frame with.
+      const personHeight = Math.max(height, width / aspect);
+      const personWidth = personHeight * aspect;
+      return { x: (width - personWidth) / 2, y: height - personHeight, width: personWidth, height: personHeight, mirror: settings.mirror };
+    }
+    // Zoomed about the bottom edge, so it stays anchored while it grows or shrinks — it may then run past the
+    // sides or top and is clipped by the output, same as a plain scale change.
+    const personHeight = height * settings.scale * hostZoom;
+    const personWidth = personHeight * aspect;
     const x = settings.position === "left" ? 0 : settings.position === "right" ? width - personWidth : (width - personWidth) / 2;
     return { x, y: height - personHeight, width: personWidth, height: personHeight, mirror: settings.mirror };
   }
@@ -542,6 +583,10 @@ export async function startPresenterOverlayCompositor({
 
     drawStrokes(now, width, height);
 
+    // Refreshed once per output frame; hostPlacement() reads it (a call from runGestures, made a little
+    // earlier in the same tick, still sees the previous frame's value — the zoom only ever glides, so the lag is negligible).
+    hostZoom = normalizer.zoom(now, settings.normalizeSize);
+
     // Presenter cut-out: bottom-aligned, mirrored unless turned off (see settings.mirror).
     const placement = hostPlacement();
     outputCtx.globalAlpha = settings.opacity;
@@ -580,7 +625,7 @@ export async function startPresenterOverlayCompositor({
         drawCameraCover(frame);
         const timestamp = frame.timestamp;
         frame.close();
-        updateCutout();
+        updateCutout(now);
         runGestures(now);
         output = compose(timestamp);
         await writer.write(output);
