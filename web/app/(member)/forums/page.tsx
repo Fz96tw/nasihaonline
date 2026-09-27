@@ -57,6 +57,15 @@ function matchesCommunityFilter(
  * number of matching forums — a member scanning pills cares how much
  * discussion is in a community, not how many forum categories it happens
  * to be split into.
+ *
+ * Deliberately NOT matchesCommunityFilter's own rule (confirmed with user):
+ * that rule folds every General Topics forum's thread count into every
+ * single pill (it "always matches" so the page still shows General Topics
+ * alongside whichever community is selected) — fine for deciding what the
+ * page displays, but it made every pill's number the same padded total
+ * rather than what's actually specific to that community, and a community
+ * with no forums of its own still showed a nonzero count. A pill's count
+ * here counts only that community's own forums.
  */
 function computeCommunityCounts(
   forums: { communityId: string | null; threadCount: number }[],
@@ -65,11 +74,14 @@ function computeCommunityCounts(
 ): Map<string, number> {
   const counts = new Map<string, number>();
   const sumThreads = (matching: typeof forums) => matching.reduce((sum, forum) => sum + forum.threadCount, 0);
-  counts.set("mine", sumThreads(forums.filter((forum) => matchesCommunityFilter(forum.communityId, "mine", myCommunityIds))));
+  counts.set(
+    "mine",
+    sumThreads(forums.filter((forum) => forum.communityId !== null && myCommunityIds.includes(forum.communityId))),
+  );
   for (const community of communities) {
     counts.set(
       community.id,
-      sumThreads(forums.filter((forum) => matchesCommunityFilter(forum.communityId, community.id, myCommunityIds))),
+      sumThreads(forums.filter((forum) => forum.communityId === community.id)),
     );
   }
   return counts;
