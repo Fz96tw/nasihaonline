@@ -161,6 +161,7 @@ export function PresenterOverlayControl({
   const [gestureLabel, setGestureLabel] = useState<"pointing" | "zooming" | "reset" | "drawing" | "spotlight" | "thumbsup" | "thumbsdown" | "wave" | "unavailable" | null>(null);
   const [spotlightOn, setSpotlightOn] = useState(false);
   const [penColor, setPenColor] = useState<PresenterOverlaySettings["penColor"]>("red");
+  const [arrowMode, setArrowMode] = useState(false);
   const [background, setBackground] = useState<PresenterOverlaySettings["background"]>("remove");
   const [panelShape, setPanelShape] = useState<PanelShape>("rounded");
   const [softEdge, setSoftEdge] = useState(false);
@@ -217,7 +218,7 @@ export function PresenterOverlayControl({
   }, []);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, span, gestures, penColor, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
+    return { opacity, scale, position, span, gestures, penColor, arrowMode, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -1097,7 +1098,7 @@ export function PresenterOverlayControl({
             <li>Hold an open palm still for half a second: back to the whole screen. A waving palm won&apos;t reset it.</li>
             <li>Raise a fist (hand up in the camera frame) and hold it for a moment: the screen dims except a circle around your hand. Open your hand to bring the light back.</li>
             <li>Thumbs up or thumbs down (other fingers curled), held for a moment, or a wave of an open hand: a 👍, 👎 or 👋 floats up beside you. One reaction every few seconds.</li>
-            <li>Hold two fingers together (index and middle, others curled) for a moment to draw in the air; lower them to stop. Drawings fade after a few seconds.</li>
+            <li>Hold two fingers together (index and middle, others curled) for a moment to draw in the air; lower them to stop. Drawings fade after a few seconds. Switch on &ldquo;Straight arrow&rdquo; and the same gesture draws a straight arrow from where you start to where you lower your fingers.</li>
             <li>Keep your hand fully in the camera frame. Only the screen zooms, not you.</li>
           </ul>
         </details>
@@ -1126,6 +1127,19 @@ export function PresenterOverlayControl({
               style={{ backgroundColor: color === "red" ? "#ff3030" : color === "yellow" ? "#ffd60a" : "#30d158" }}
             />
           ))}
+          <button
+            type="button"
+            data-testid="overlay-arrow-mode"
+            aria-pressed={arrowMode}
+            onClick={() => {
+              const next = !arrowMode;
+              setArrowMode(next);
+              updateSettings({ arrowMode: next });
+            }}
+            className={`${segmentClass(arrowMode)} ml-1`}
+          >
+            Straight arrow
+          </button>
           <button
             type="button"
             data-testid="overlay-spotlight"

@@ -32,7 +32,7 @@ import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
 import { REACTION_EMOJI, ReactionPlayer, reactionPosition } from "./reactions.ts";
 import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement } from "./gestures.ts";
 import { mapGuestPenToScreen, mapGuestPointer, type GuestPointerDot } from "./guest-pointer.ts";
-import { HOST_OWNER, StrokeBoard, strokeColor, type PenColor } from "./drawing.ts";
+import { HOST_OWNER, StrokeBoard, arrowHead, strokeColor, type PenColor } from "./drawing.ts";
 import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
 import { SizeNormalizer, measureFromRows } from "./size-normalize.ts";
 import { WindowSmoother, clampWindow, panelAspect, personBounds, targetCentre, tracePanelPath, windowSize, type PanelShape, type PersonBounds } from "./panel.ts";
@@ -109,6 +109,8 @@ export type PresenterOverlaySettings = {
   gestures: boolean;
   /** Colour of the air-draw pen (the two-finger gesture, part of `gestures`). */
   penColor: PenColor;
+  /** Air-draw draws a straight arrow from where the pen started to where it is now, instead of following the fingertip. Host pen only. */
+  arrowMode: boolean;
   /**
    * Scale each cut-out by how far its person sits from their camera, so everyone looks the same size.
    * Host-controlled; on by default. Off = every camera frame is scaled the same (zoom 1).
@@ -150,6 +152,7 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   span: false,
   gestures: false,
   penColor: "red",
+  arrowMode: false,
   normalizeSize: true,
   background: "remove",
   panelShape: "rounded",
@@ -810,7 +813,16 @@ export async function startPresenterOverlayCompositor({
       outputCtx.shadowBlur = outputCtx.lineWidth * 2;
       outputCtx.beginPath();
       outputCtx.moveTo(points[0].x, points[0].y);
-      if (points.length === 1) {
+      if (stroke.kind === "arrow") {
+        // Nothing to show until the fingertip has moved away from where the arrow started.
+        if (points.length < 2) continue;
+        const [tail, tip] = points;
+        outputCtx.lineTo(tip.x, tip.y);
+        const [barbA, barbB] = arrowHead(tail, tip, outputCtx.lineWidth * 4);
+        outputCtx.moveTo(barbA.x, barbA.y);
+        outputCtx.lineTo(tip.x, tip.y);
+        outputCtx.lineTo(barbB.x, barbB.y);
+      } else if (points.length === 1) {
         outputCtx.lineTo(points[0].x + 0.1, points[0].y);
       } else {
         // Curve through the midpoints, so the coarse ~14 Hz samples don't show as corners.
@@ -976,7 +988,7 @@ export async function startPresenterOverlayCompositor({
     if (placement && state.pen) {
       const out = cameraToOutput(state.pen.u, state.pen.v, placement);
       const onScreen = outputToScreen(viewport.rect(now), out.x / outputCanvas.width, out.y / outputCanvas.height);
-      if (!board.drawing) board.begin(now, settings.penColor);
+      if (!board.drawing) board.begin(now, settings.penColor, HOST_OWNER, settings.arrowMode ? "arrow" : "free");
       board.add(onScreen.x, onScreen.y);
     } else {
       board.end(now);

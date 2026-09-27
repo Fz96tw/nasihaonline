@@ -24,8 +24,14 @@ export const MAX_POINTS_PER_GUEST = 400;
 export const HOST_OWNER = "host";
 /** A new point closer than this (fraction of the screen) to the last one is skipped. */
 const MIN_STEP = 0.002;
+/** An arrow shorter than this (in screen-content units, where 1 is the whole screen) is thrown away when it is finished: a twitch, not an arrow. */
+export const MIN_ARROW_LENGTH = 0.03;
+
+/** "free" follows the fingertip; "arrow" keeps only where it started and where it is now, drawn as a straight line with a head. */
+export type StrokeKind = "free" | "arrow";
 
 export type Stroke = {
+  kind: StrokeKind;
   /** One of the presenter's pen colours, or (for a guest) a CSS colour. */
   color: string;
   owner: string;
@@ -62,9 +68,9 @@ export class StrokeBoard {
   }
 
   /** Starts a stroke for `owner` (ending any of theirs that is still going). */
-  begin(now: number, color: string, owner: string = HOST_OWNER) {
+  begin(now: number, color: string, owner: string = HOST_OWNER, kind: StrokeKind = "free") {
     this.end(now, owner);
-    const stroke: Stroke = { color, owner, points: [], endedAt: null };
+    const stroke: Stroke = { kind, color, owner, points: [], endedAt: null };
     this.current.set(owner, stroke);
     this.strokes.push(stroke);
   }
@@ -73,6 +79,12 @@ export class StrokeBoard {
   add(x: number, y: number, owner: string = HOST_OWNER) {
     const stroke = this.current.get(owner);
     if (!stroke) return;
+    if (stroke.kind === "arrow") {
+      // Rubber band: the first point is the tail, the second follows the fingertip.
+      if (stroke.points.length === 0) stroke.points.push({ x, y });
+      else stroke.points[1] = { x, y };
+      return;
+    }
     const last = stroke.points[stroke.points.length - 1];
     if (last && Math.hypot(x - last.x, y - last.y) < MIN_STEP) return;
     stroke.points.push({ x, y });
@@ -84,8 +96,13 @@ export class StrokeBoard {
   end(now: number, owner: string = HOST_OWNER) {
     const stroke = this.current.get(owner);
     if (!stroke) return;
-    stroke.endedAt = now;
     this.current.delete(owner);
+    if (stroke.kind === "arrow" && !isLongEnough(stroke.points)) {
+      // A twitch, not an arrow: drop it instead of leaving a dot on the screen.
+      this.strokes = this.strokes.filter((other) => other !== stroke);
+      return;
+    }
+    stroke.endedAt = now;
   }
 
   /** Points `owner` has on the board. */
@@ -141,4 +158,32 @@ export class StrokeBoard {
       }
     }
   }
+}
+
+function isLongEnough(points: { x: number; y: number }[]): boolean {
+  if (points.length < 2) return false;
+  return Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y) >= MIN_ARROW_LENGTH;
+}
+
+/**
+ * The two barbs of an arrowhead at `to`, for an arrow from `from`. Works in whatever unit the points are in;
+ * pass `aspect` (width / height of the space they are drawn in) so a head on a diagonal isn't squashed when
+ * the points are fractions of a non-square screen. `size` is the barb length in the same unit as the y axis.
+ */
+export function arrowHead(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  size: number,
+  aspect = 1,
+): [{ x: number; y: number }, { x: number; y: number }] {
+  // Work in isotropic space (x scaled by aspect) so angles are true, then scale back.
+  const dx = (to.x - from.x) * aspect;
+  const dy = to.y - from.y;
+  const angle = Math.atan2(dy, dx);
+  const spread = Math.PI / 7;
+  const barb = (offset: number) => ({
+    x: to.x - (Math.cos(angle + offset) * size) / aspect,
+    y: to.y - Math.sin(angle + offset) * size,
+  });
+  return [barb(spread), barb(-spread)];
 }

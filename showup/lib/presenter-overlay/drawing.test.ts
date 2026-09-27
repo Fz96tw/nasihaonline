@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FADE_MS, HOLD_MS, MAX_POINTS, MAX_POINTS_PER_GUEST, StrokeBoard, strokeColor } from "./drawing.ts";
+import { FADE_MS, HOLD_MS, MAX_POINTS, MAX_POINTS_PER_GUEST, MIN_ARROW_LENGTH, StrokeBoard, arrowHead, strokeColor } from "./drawing.ts";
 
 test("a stroke collects points while drawing and stays fully visible", () => {
   const board = new StrokeBoard();
@@ -173,4 +173,101 @@ test("Clear drawing removes the presenter's and every guest's strokes at once", 
 test("strokeColor resolves the presenter's pen names and passes a guest's colour through", () => {
   assert.equal(strokeColor("red"), "#ff3030");
   assert.equal(strokeColor("#22d3ee"), "#22d3ee");
+});
+
+test("an arrow keeps only its tail and the latest fingertip position", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "red", undefined, "arrow");
+  board.add(0.1, 0.1);
+  assert.equal(board.visible(0)[0].stroke.points.length, 1, "just the tail until the fingertip moves");
+  board.add(0.2, 0.2);
+  board.add(0.3, 0.5);
+  board.add(0.6, 0.4);
+  const [arrow] = board.visible(0);
+  assert.equal(arrow.stroke.kind, "arrow");
+  assert.deepEqual(arrow.stroke.points, [{ x: 0.1, y: 0.1 }, { x: 0.6, y: 0.4 }]);
+  assert.equal(board.pointCount, 2, "however long the gesture, an arrow costs two points");
+});
+
+test("a finished arrow holds and fades like any stroke", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "green", undefined, "arrow");
+  board.add(0.1, 0.1);
+  board.add(0.5, 0.5);
+  board.end(1000);
+  assert.equal(board.visible(1000 + HOLD_MS)[0].alpha, 1);
+  assert.ok(Math.abs(board.visible(1000 + HOLD_MS + FADE_MS / 2)[0].alpha - 0.5) < 1e-9);
+  assert.equal(board.visible(1000 + HOLD_MS + FADE_MS).length, 0);
+});
+
+test("an arrow shorter than the minimum is discarded when finished, a long enough one is kept", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "red", undefined, "arrow");
+  board.add(0.5, 0.5);
+  board.add(0.5 + MIN_ARROW_LENGTH / 2, 0.5);
+  board.end(100);
+  assert.equal(board.visible(100).length, 0, "a twitch leaves nothing behind");
+  assert.equal(board.drawing, false);
+
+  board.begin(200, "red", undefined, "arrow");
+  board.add(0.5, 0.5);
+  board.add(0.5 + MIN_ARROW_LENGTH * 2, 0.5);
+  board.end(300);
+  assert.equal(board.visible(300).length, 1);
+
+  board.begin(400, "red", undefined, "arrow");
+  board.add(0.2, 0.2);
+  board.end(500);
+  assert.equal(board.visible(500).length, 1, "a tail with no head yet is dropped, the earlier arrow stays");
+});
+
+test("freehand strokes are unchanged and clear() removes arrows too", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "red");
+  board.add(0.1, 0.1);
+  board.add(0.2, 0.2);
+  board.add(0.3, 0.3);
+  assert.equal(board.visible(0)[0].stroke.kind, "free");
+  assert.equal(board.pointCount, 3);
+  board.end(10);
+  board.begin(20, "yellow", undefined, "arrow");
+  board.add(0.4, 0.4);
+  board.add(0.8, 0.8);
+  board.end(30);
+  assert.equal(board.visible(30).length, 2);
+  board.clear();
+  assert.equal(board.visible(30).length, 0);
+});
+
+test("a guest's stroke can be an arrow too and is owned by that guest", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "#00aaff", "guest-1", "arrow");
+  board.add(0.1, 0.1, "guest-1");
+  board.add(0.5, 0.5, "guest-1");
+  assert.equal(board.pointsOf("guest-1"), 2);
+  assert.equal(board.drawing, false, "not the host's pen");
+});
+
+test("arrowHead puts two barbs behind the tip, symmetric about the shaft", () => {
+  const tip = { x: 10, y: 0 };
+  const [a, b] = arrowHead({ x: 0, y: 0 }, tip, 2);
+  assert.ok(a.x < tip.x && b.x < tip.x, "barbs sit behind the tip");
+  assert.ok(Math.abs(a.y + b.y) < 1e-9, "mirror images across the shaft");
+  assert.ok(a.y !== b.y);
+  assert.ok(Math.abs(Math.hypot(a.x - tip.x, a.y - tip.y) - 2) < 1e-9, "barb length is the size given");
+});
+
+test("arrowHead barbs turn with the direction of the arrow", () => {
+  const tip = { x: 0, y: 10 };
+  const [a, b] = arrowHead({ x: 0, y: 0 }, tip, 2);
+  assert.ok(a.y < tip.y && b.y < tip.y, "pointing down, the barbs sit above the tip");
+  assert.ok(Math.abs(a.x + b.x) < 1e-9);
+});
+
+test("arrowHead keeps true angles when the points are fractions of a wide screen", () => {
+  const aspect = 16 / 9;
+  const tip = { x: 0.5, y: 0.5 };
+  const [a] = arrowHead({ x: 0.1, y: 0.5 }, tip, 0.05, aspect);
+  const realLength = Math.hypot((a.x - tip.x) * aspect, a.y - tip.y);
+  assert.ok(Math.abs(realLength - 0.05) < 1e-9, "the barb is 0.05 long in real (isotropic) terms");
 });
