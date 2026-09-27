@@ -9,6 +9,15 @@ import { SpeakerFollower } from "@/lib/presenter-overlay/speaker-follow";
 import { CoGhostRoster, MAX_GUEST_GHOSTS, type GuestOverlayState, type JoinPolicy } from "@/lib/presenter-overlay/co-ghosts";
 import { OVERLAY_TOPIC, encodeMessage, parseToPresenter, type ToGuest, type ToPresenter } from "@/lib/presenter-overlay/overlay-protocol";
 import {
+  GuestPointerBoard,
+  POINTER_TOPIC,
+  encodePointerMessage,
+  parsePointerToHost,
+  type PointerPolicy,
+  type PointerStatus,
+  type PointerToGuest,
+} from "@/lib/presenter-overlay/guest-pointer";
+import {
   isPresenterOverlaySupported,
   startPresenterOverlayCompositor,
   type OverlayCorner,
@@ -162,6 +171,14 @@ export function PresenterOverlayControl({
   const [guests, setGuests] = useState<Person[]>([]);
   const [policy, setPolicy] = useState<JoinPolicy>("ask");
   const [rosterVersion, setRosterVersion] = useState(0);
+  // "Guests can point" (default off): the board says who may, and the version counter re-renders the host's list when that changes.
+  const [pointerPolicy, setPointerPolicy] = useState<PointerPolicy>("off");
+  const [pointerVersion, setPointerVersion] = useState(0);
+  const [pointingIds, setPointingIds] = useState<string[]>([]);
+  const pointerBoardRef = useRef(new GuestPointerBoard());
+  /** Guests whose ghost is on the share right now, and the pointer status each was last told. */
+  const shownIdsRef = useRef<string[]>([]);
+  const pointerSentRef = useRef(new Map<string, PointerStatus>());
   const announcedRef = useRef(false);
   const overlayIdsRef = useRef<string[]>([]);
   const rosterRef = useRef(new CoGhostRoster());
@@ -212,6 +229,13 @@ export function PresenterOverlayControl({
     // Everyone who was on the overlay, or waiting to be, is told it's gone.
     for (const id of rosterRef.current.clear()) sendToGuest(id, { t: "overlay-state", state: "off" });
     rosterChanged();
+    // No ghosts, no pointers: every guest is told theirs is off, and any dots go.
+    pointerBoardRef.current.clearLive();
+    shownIdsRef.current = [];
+    const stillHere = new Set<string>();
+    roomRef.current?.remoteParticipants.forEach((participant) => stillHere.add(participant.identity));
+    pushPointerStatuses(stillHere);
+    setPointingIds([]);
     overlay.compositor.stop();
     overlay.screenClone.stop();
     overlay.cameraTrack.stop();
@@ -356,11 +380,14 @@ export function PresenterOverlayControl({
     if (coGhosts.length > 0) {
       // Guests the presenter added stay up with them, in the order added; who's speaking no longer picks the ghost.
       compositor.setVisible([LOCAL_ID, ...coGhosts]);
+      shownIdsRef.current = coGhosts;
       setShownId(LOCAL_ID);
     } else {
       compositor.setVisible([shown]);
+      shownIdsRef.current = shown === LOCAL_ID ? [] : [shown];
       setShownId(shown);
     }
+    syncGuestPointers(compositor, present, now);
     setGuests((previous) =>
       previous.length === nextGuests.length && previous.every((guest, i) => guest.id === nextGuests[i].id && guest.label === nextGuests[i].label)
         ? previous
@@ -372,6 +399,92 @@ export function PresenterOverlayControl({
         ? previous
         : nextPeople,
     );
+  }
+
+  /**
+   * Each tick: who is on the share decides who may point. Tells any guest whose pointer status changed, feeds the
+   * compositor the dots, and updates the host's "pointing" markers.
+   */
+  function syncGuestPointers(compositor: PresenterOverlayCompositor, present: Set<string>, now: number) {
+    const board = pointerBoardRef.current;
+    board.prune(present);
+    for (const id of board.expire(now)) sendPointerStatus(id, board.status(id, false));
+    const shown = shownIdsRef.current;
+    pushPointerStatuses(present);
+    compositor.setGuestPointers(board.dots(now, shown));
+    const pointing = Array.from(present).filter((id) => board.isPointing(id, now) && shown.includes(id));
+    setPointingIds((previous) => (previous.length === pointing.length && previous.every((id, i) => id === pointing[i]) ? previous : pointing));
+  }
+
+  /** Sends each present guest their pointer status if it differs from what they were last told. */
+  function pushPointerStatuses(present: Set<string>) {
+    const board = pointerBoardRef.current;
+    const sent = pointerSentRef.current;
+    const overlayOn = !!overlayRef.current;
+    sent.forEach((_status, id) => {
+      if (!present.has(id)) sent.delete(id);
+    });
+    let changed = false;
+    present.forEach((id) => {
+      const status = overlayOn ? board.status(id, shownIdsRef.current.includes(id)) : "off";
+      if (sent.get(id) === status) return;
+      sent.set(id, status);
+      sendPointerStatus(id, status);
+      changed = true;
+    });
+    if (changed) setPointerVersion((version) => version + 1);
+  }
+
+  function sendPointerStatus(id: string, status: PointerStatus) {
+    const message: PointerToGuest = { t: "pointer-status", status };
+    roomRef.current?.localParticipant
+      .publishData(encodePointerMessage(message), { reliable: true, topic: POINTER_TOPIC, destinationIdentities: [id] })
+      .catch(() => {});
+  }
+
+  /** A pointer message from a guest. The board decides; anything from a guest who isn't shown and permitted is ignored. */
+  function handlePointerMessage(id: string, payload: Uint8Array) {
+    const message = parsePointerToHost(payload);
+    if (!message || !overlayRef.current) return;
+    const board = pointerBoardRef.current;
+    const visible = shownIdsRef.current.includes(id);
+    if (message.t === "pointer-request") {
+      const status = board.request(id, visible, performance.now());
+      if (status === "pending") setPanelOpen(true);
+      pushPointerStatuses(new Set(pointerSentRef.current.keys()).add(id));
+      setPointerVersion((version) => version + 1);
+      return;
+    }
+    board.accept(id, message, visible, performance.now());
+  }
+
+  function changePointerPolicy(next: PointerPolicy) {
+    const board = pointerBoardRef.current;
+    board.policy = next;
+    setPointerPolicy(next);
+    if (next !== "ask") {
+      // Anyone still waiting is answered by the status change below.
+      for (const id of board.requesting) board.decide(id, false);
+    }
+    setPointerVersion((version) => version + 1);
+  }
+
+  function decidePointer(id: string, allow: boolean) {
+    pointerBoardRef.current.decide(id, allow);
+    pushPointerStatuses(new Set(pointerSentRef.current.keys()));
+    setPointerVersion((version) => version + 1);
+  }
+
+  function revokePointer(id: string) {
+    pointerBoardRef.current.revoke(id);
+    pushPointerStatuses(new Set(pointerSentRef.current.keys()));
+    setPointerVersion((version) => version + 1);
+  }
+
+  function allowPointer(id: string) {
+    pointerBoardRef.current.allow(id);
+    pushPointerStatuses(new Set(pointerSentRef.current.keys()));
+    setPointerVersion((version) => version + 1);
   }
 
   /** Sends one overlay message to one guest. Best effort: a guest who has just left simply doesn't get it. */
@@ -575,6 +688,20 @@ export function PresenterOverlayControl({
       if (topic !== OVERLAY_TOPIC || !participant) return;
       const message = parseToPresenter(payload);
       if (message) handleGuestMessage(participant.identity, message);
+    };
+    room.on(RoomEvent.DataReceived, onData);
+    return () => {
+      room.off(RoomEvent.DataReceived, onData);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room]);
+
+  // Pointer requests and positions from guests. Addressed to this participant only; the board ignores anything from a guest who isn't shown and permitted.
+  useEffect(() => {
+    if (!room) return;
+    const onData = (payload: Uint8Array, participant?: { identity: string }, _kind?: unknown, topic?: string) => {
+      if (topic !== POINTER_TOPIC || !participant) return;
+      handlePointerMessage(participant.identity, payload);
     };
     room.on(RoomEvent.DataReceived, onData);
     return () => {
@@ -848,6 +975,91 @@ export function PresenterOverlayControl({
                         {full ? "Overlay is full" : "Add to overlay"}
                       </button>
                     )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {overlayOn && (
+        <div className={labelClass} data-testid="guest-pointers">
+          <span className="text-white">Guest pointers</span>
+          <label className="flex items-center justify-between gap-2">
+            Guests can point
+            <select
+              value={pointerPolicy}
+              onChange={(e) => changePointerPolicy(e.target.value as PointerPolicy)}
+              aria-label="Guests can point"
+              className="rounded-md border border-white/10 bg-white/10 px-1.5 py-1 text-xs text-white"
+            >
+              <option value="off">Off</option>
+              <option value="ask">Ask me</option>
+              <option value="on">On</option>
+            </select>
+          </label>
+          {guests.length === 0 ? (
+            <span className="text-white/50">Nobody else is in the showup session yet.</span>
+          ) : (
+            <ul className="space-y-1" data-version={pointerVersion}>
+              {guests.map((guest) => {
+                const board = pointerBoardRef.current;
+                const shown = shownIdsRef.current.includes(guest.id);
+                const status = board.status(guest.id, shown);
+                const blocked = board.isBlocked(guest.id);
+                const pointing = pointingIds.includes(guest.id);
+                const permission = blocked
+                  ? "Revoked"
+                  : status === "allowed"
+                    ? "Can point"
+                    : status === "pending"
+                      ? "Wants to point"
+                      : pointerPolicy === "off"
+                        ? "Off"
+                        : board.permitted(guest.id)
+                          ? "Can point when on the share"
+                          : status === "ask"
+                            ? "Can ask"
+                            : "Not on the share";
+                return (
+                  <li key={guest.id} className="flex items-center justify-between gap-2" data-testid="guest-pointer-row">
+                    <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-white">
+                      {pointing && (
+                        <span
+                          aria-label="Pointing now"
+                          data-testid="guest-pointing"
+                          className="inline-block h-2 w-2 flex-none animate-pulse rounded-full"
+                          style={{ backgroundColor: board.colorOf(guest.id) ?? "#22d3ee" }}
+                        />
+                      )}
+                      <span className="truncate">{guest.label}</span>
+                      {pointing && <span className="flex-none text-white/60">pointing</span>}
+                    </span>
+                    <span className="flex-none text-white/60">{permission}</span>
+                    {status === "pending" ? (
+                      <span className="flex flex-none gap-1">
+                        <button type="button" onClick={() => decidePointer(guest.id, true)} className={segmentClass(true)}>
+                          Allow
+                        </button>
+                        <button type="button" onClick={() => decidePointer(guest.id, false)} className={segmentClass(false)}>
+                          Deny
+                        </button>
+                      </span>
+                    ) : blocked ? (
+                      <button type="button" onClick={() => allowPointer(guest.id)} className={`${segmentClass(false)} flex-none`}>
+                        Allow
+                      </button>
+                    ) : board.permitted(guest.id) ? (
+                      <button
+                        type="button"
+                        onClick={() => revokePointer(guest.id)}
+                        title="Take this guest's pointer away"
+                        className={`${segmentClass(false)} flex-none`}
+                      >
+                        Revoke
+                      </button>
+                    ) : null}
                   </li>
                 );
               })}
@@ -1148,9 +1360,10 @@ export function PresenterOverlayControl({
     </>
   );
 
+  const pendingPointers = overlayOn ? pointerBoardRef.current.requesting : [];
   const pendingRequests = overlayOn ? roster.requesting : [];
   const requestsBlock =
-    pendingRequests.length > 0 ? (
+    pendingRequests.length > 0 || pendingPointers.length > 0 ? (
       <div className={`space-y-1.5 rounded-lg border p-2 text-xs shadow-lg ${LK_PANEL_CLASS}`} role="alert" data-testid="overlay-requests">
         {pendingRequests.map((id) => (
           <div key={id} className="flex items-center justify-between gap-2">
@@ -1159,6 +1372,17 @@ export function PresenterOverlayControl({
               Allow
             </button>
             <button type="button" onClick={() => decideRequest(id, false)} className={segmentClass(false)}>
+              Deny
+            </button>
+          </div>
+        ))}
+        {pendingPointers.map((id) => (
+          <div key={`pointer-${id}`} className="flex items-center justify-between gap-2" data-testid="pointer-requests">
+            <span className="min-w-0 flex-1 truncate text-white">{labelOf(id)} wants to use the pointer</span>
+            <button type="button" onClick={() => decidePointer(id, true)} className={segmentClass(true)}>
+              Allow
+            </button>
+            <button type="button" onClick={() => decidePointer(id, false)} className={segmentClass(false)}>
               Deny
             </button>
           </div>

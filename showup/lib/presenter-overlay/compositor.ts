@@ -31,6 +31,7 @@
 import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
 import { REACTION_EMOJI, ReactionPlayer, reactionPosition } from "./reactions.ts";
 import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement } from "./gestures.ts";
+import { mapGuestPointer, type GuestPointerDot } from "./guest-pointer.ts";
 import { PEN_COLORS, StrokeBoard, type PenColor } from "./drawing.ts";
 import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
 import { SizeNormalizer, measureFromRows } from "./size-normalize.ts";
@@ -188,6 +189,8 @@ export type PresenterOverlayCompositor = {
   clearDrawing: () => void;
   /** Turns the sticky spotlight (screen dimmed except around the host's hand, or the screen centre) on or off. */
   setSpotlight: (on: boolean) => void;
+  /** The guests' laser dots for this moment (fingertips in each guest's camera frame). A dot is drawn only while that guest's ghost is on the share; call it every tick. */
+  setGuestPointers: (dots: GuestPointerDot[]) => void;
   /** Stops all readers and the output track (the segmenter is kept for reuse). Does NOT stop the input tracks — the caller owns those. */
   stop: () => void;
 };
@@ -217,7 +220,7 @@ function loadSegmenter(): Promise<ImageSegmenter> {
 let handLandmarkerPromise: Promise<HandLandmarker> | null = null;
 
 /** Lazily loads MediaPipe's hand model the first time gestures are switched on; reused afterwards. */
-function loadHandLandmarker(): Promise<HandLandmarker> {
+export function loadHandLandmarker(): Promise<HandLandmarker> {
   if (!handLandmarkerPromise) {
     handLandmarkerPromise = (async () => {
       const { FilesetResolver, HandLandmarker } = await import("@mediapipe/tasks-vision");
@@ -396,6 +399,7 @@ export async function startPresenterOverlayCompositor({
   let lastHandTimestamp = 0;
   let lastLabel: GestureState["label"] | "unavailable" = null;
   let pointer: GestureState["pointer"] = null;
+  let guestPointers: GuestPointerDot[] = [];
   let lastPan: { x: number; y: number } | null = null;
   let trail: { x: number; y: number; t: number }[] = [];
 
@@ -677,9 +681,9 @@ export async function startPresenterOverlayCompositor({
     outputCtx.globalAlpha = 1;
   }
 
-  /** Where the host's ghost is drawn, for mapping a fingertip onto it; null when the host isn't on the share. */
-  function hostPlacement(): GhostPlacement | null {
-    const source = sources.get(LOCAL_ID);
+  /** Where a ghost is drawn, for mapping a fingertip onto it; null when it isn't on the share. */
+  function placementFor(id: string): GhostPlacement | null {
+    const source = sources.get(id);
     if (!source || !source.box || source.target <= 0 || !source.hasCutout) return null;
     return {
       x: source.box.x,
@@ -689,6 +693,11 @@ export async function startPresenterOverlayCompositor({
       mirror: ghostsMirrored(),
       crop: source.mode === "panel" ? source.panelCrop : null,
     };
+  }
+
+  /** Where the host's ghost is drawn; null when the host isn't on the share. */
+  function hostPlacement(): GhostPlacement | null {
+    return placementFor(LOCAL_ID);
   }
 
   /** The host's reaction emoji (thumbs up/down, wave), floating up by the top of their ghost. Falls back to simple shapes if no emoji font is available. */
@@ -791,6 +800,55 @@ export async function startPresenterOverlayCompositor({
       outputCtx.stroke();
     }
     outputCtx.restore();
+  }
+
+  /** Each pointing guest's dot, in their colour with their name beside it, on their own ghost's fingertip (same mirror rule as every ghost). */
+  function drawGuestPointers(height: number) {
+    for (const dot of guestPointers) {
+      const source = sources.get(dot.id);
+      const placement = placementFor(dot.id);
+      if (!source || !placement) continue;
+      const at = mapGuestPointer(dot.u, dot.v, placement);
+      const radius = Math.max(5, height * 0.012);
+      outputCtx.save();
+      outputCtx.globalAlpha = dot.fade;
+      const glow = outputCtx.createRadialGradient(at.x, at.y, 0, at.x, at.y, radius * 3);
+      glow.addColorStop(0, dot.color);
+      glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+      outputCtx.globalAlpha = dot.fade * 0.5;
+      outputCtx.fillStyle = glow;
+      outputCtx.beginPath();
+      outputCtx.arc(at.x, at.y, radius * 3, 0, Math.PI * 2);
+      outputCtx.fill();
+      outputCtx.globalAlpha = dot.fade;
+      outputCtx.fillStyle = dot.color;
+      outputCtx.beginPath();
+      outputCtx.arc(at.x, at.y, radius, 0, Math.PI * 2);
+      outputCtx.fill();
+      outputCtx.fillStyle = "#fff";
+      outputCtx.beginPath();
+      outputCtx.arc(at.x, at.y, radius * 0.4, 0, Math.PI * 2);
+      outputCtx.fill();
+      const name = source.label.trim();
+      if (name) {
+        const size = Math.max(12, Math.round(height * 0.022));
+        outputCtx.font = `600 ${size}px system-ui, sans-serif`;
+        outputCtx.textBaseline = "middle";
+        const pad = size * 0.4;
+        const textWidth = outputCtx.measureText(name).width;
+        // Beside the dot, on whichever side has room.
+        const right = at.x + radius * 2 + textWidth + pad * 2 < outputCanvas.width;
+        const x = right ? at.x + radius * 2 : at.x - radius * 2 - textWidth - pad * 2;
+        const y = Math.max(size, Math.min(outputCanvas.height - size, at.y));
+        outputCtx.fillStyle = "rgba(0, 0, 0, 0.6)";
+        outputCtx.beginPath();
+        outputCtx.roundRect(x, y - size * 0.8, textWidth + pad * 2, size * 1.6, size * 0.4);
+        outputCtx.fill();
+        outputCtx.fillStyle = dot.color;
+        outputCtx.fillText(name, x + pad, y);
+      }
+      outputCtx.restore();
+    }
   }
 
   /** The glowing red laser dot at the host's fingertip, with a short fading trail. */
@@ -962,6 +1020,7 @@ export async function startPresenterOverlayCompositor({
       .sort((a, b) => a.target - b.target);
     for (const source of drawable) drawGhost(source, source.box as GhostBox, height);
     drawLaser(now, height);
+    drawGuestPointers(height);
     drawReaction(now, width, height);
 
     if (settings.image) drawImageOverlay(width, height, settings.image, settings.imageCorner);
@@ -1061,6 +1120,10 @@ export async function startPresenterOverlayCompositor({
     stickyTarget = on ? 1 : 0;
   }
 
+  function setGuestPointers(dots: GuestPointerDot[]) {
+    guestPointers = dots;
+  }
+
   function stop() {
     if (stopped) return;
     stopped = true;
@@ -1079,5 +1142,5 @@ export async function startPresenterOverlayCompositor({
     onError(error);
   });
 
-  return { track: generator, settings, addSource, removeSource, setVisible, zoomIn, resetZoom, clearDrawing, setSpotlight, stop };
+  return { track: generator, settings, addSource, removeSource, setVisible, zoomIn, resetZoom, clearDrawing, setSpotlight, setGuestPointers, stop };
 }

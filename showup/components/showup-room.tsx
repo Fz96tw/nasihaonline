@@ -23,6 +23,7 @@ import {
   type WidgetState,
 } from "@livekit/components-react";
 import "@livekit/components-styles";
+import { GuestPointerControl } from "@/components/guest-pointer-control";
 import { OverlayGuestControl } from "@/components/overlay-guest-control";
 import { PresenterOverlayControl } from "@/components/presenter-overlay-control";
 import { LK_BUTTON_CLASS } from "@/components/livekit-control-styles";
@@ -371,6 +372,8 @@ export function ShowupRoom({ credentials, onLeave }: { credentials: RoomCredenti
       <TopLeftOverlay>
         {/* Anyone else in the meeting can ask to appear on a presenter's share; renders nothing unless someone else is sharing. */}
         <OverlayGuestControl room={room} onOverlayIds={setOverlayIds} />
+        {/* Where the presenter allows it and this guest's ghost is on the share, they can point at the screen; hand tracking runs here, on their own camera. */}
+        <GuestPointerControl room={room} />
         {/* Anyone who shares can use the overlay: the control renders nothing until the local participant is sharing. */}
         {overlaySupported ? (
           <PresenterOverlayControl room={room} onError={pushToast} onOverlayIds={setOverlayIds} />
