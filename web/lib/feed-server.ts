@@ -293,9 +293,14 @@ export async function getFeedPage(params: {
     // too, and this is a deliberate "find anything you can view" tool, not
     // a "what's new" one.
     status: query ? { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] } : KnowledgeStatus.published,
-    // Same lastActivityAt sort/cursor field as eventWhere above (publish
-    // time, bumped by every post in the item's discussion thread).
-    ...(before ? { lastActivityAt: { lt: before } } : {}),
+    // publishedAt, not lastActivityAt — unlike events/forum threads, a
+    // library item's own feed row never gets bumped by discussion activity
+    // (see the libraryItems.flatMap branch below, which surfaces a reply as
+    // its own separate row instead of mutating this one). publishedAt is
+    // always set once status is published/flagged (the only statuses this
+    // where clause ever matches), so there's no need for a createdAt
+    // fallback here.
+    ...(before ? { publishedAt: { lt: before } } : {}),
     ...(libraryHitIds ? { id: { in: libraryHitIds } } : {}),
     // Queries the direct KnowledgeItemCommunity relation, same as
     // getLibraryCards' communityFilter (lib/library-server.ts) — deriving
@@ -472,11 +477,14 @@ export async function getFeedPage(params: {
         _count: { select: { views: true } },
         // posts includes the thread's own system-authored opening post, so
         // forumReplyCount below subtracts one — same convention as the
-        // events branch above.
+        // events branch above. Also feeds latestDiscussionReply below: a
+        // real reply still gets its own feed row, just a separate one
+        // (see the libraryItems.flatMap branch below) instead of
+        // overwriting this item's own row.
         forumThread: { select: DISCUSSION_THREAD_FEED_SELECT },
         lastActivityAt: true,
       },
-      orderBy: { lastActivityAt: "desc" },
+      orderBy: { publishedAt: "desc" },
       take: pageSize,
     }),
     !wants("forum_thread") || forumHitIds?.length === 0 ? Promise.resolve([]) : db.forumThread.findMany({
@@ -723,12 +731,8 @@ export async function getFeedPage(params: {
         isRestricted: event.visibility === EventVisibility.invited,
       };
     }),
-    ...libraryItems.map((item): FeedItem => {
-      // Same bumped-row treatment as the events branch above.
-      const reply = query
-        ? null
-        : latestDiscussionReply(item.forumThread, item.lastActivityAt, item.publishedAt ?? item.createdAt);
-      return {
+    ...libraryItems.flatMap((item): FeedItem[] => {
+      const ownRow: FeedItem = {
         type: "library",
         id: item.id,
         title: item.title,
@@ -738,18 +742,23 @@ export async function getFeedPage(params: {
         // for the contributor's own feed (viewerId === item.contributorId),
         // same rationale as the events branch's excerpt swap. Search mode
         // exception: see the matching comment on the events branch above.
-        excerpt: reply
-          ? "Replied in the resource discussion"
-          : item.visibility === KnowledgeVisibility.restricted && !query && item.contributorId !== viewerId
-            ? `${item.contributor.name ?? "A member"} shared this with you.`
-            // Non-null assertion, not a fallback — the query above only ever
-            // selects published/flagged items, which submit-time validation
-            // guarantees a description for.
-            : excerptOf(item.description!),
-        href: withFeedRef(`/library/${item.id}`, query) + (reply ? `#post-${reply.id}` : ""),
-        timestamp: item.lastActivityAt.toISOString(),
-        author: authorOf(reply?.author ?? item.contributor),
-        replyExcerpt: reply ? excerptOf(stripPastedImageTokens(reply.body)) || undefined : undefined,
+        //
+        // Deliberately never swapped for a reply's excerpt/author, unlike
+        // the events branch above — confirmed with user: a reply to a
+        // Library item's discussion shouldn't replace this row's own
+        // content or position (publishedAt, not bumped by activity — see
+        // libraryWhere). A reply still surfaces, but as replyRow below,
+        // which always reflects just the latest reply, not a growing trail
+        // of one row per historical reply.
+        excerpt: item.visibility === KnowledgeVisibility.restricted && !query && item.contributorId !== viewerId
+          ? `${item.contributor.name ?? "A member"} shared this with you.`
+          // Non-null assertion, not a fallback — the query above only ever
+          // selects published/flagged items, which submit-time validation
+          // guarantees a description for.
+          : excerptOf(item.description!),
+        href: withFeedRef(`/library/${item.id}`, query),
+        timestamp: (item.publishedAt ?? item.createdAt).toISOString(),
+        author: authorOf(item.contributor),
         // A custom hero image always wins; a recorded_lecture with none set
         // falls back to its video's YouTube thumbnail as the default cover —
         // same precedence as LibraryItemCard's browse-grid thumbnail.
@@ -761,6 +770,37 @@ export async function getFeedPage(params: {
         libraryViewCount: item._count.views,
         forumReplyCount: item.forumThread ? item.forumThread._count.posts - 1 : undefined,
       };
+
+      // Search mode never bumps/adds a reply row here, same as the events
+      // branch above — a search hit shows the item's own indexed
+      // description, not discussion framing that carries no hint of why it
+      // matched the query.
+      const reply = query
+        ? null
+        : latestDiscussionReply(item.forumThread, item.lastActivityAt, item.publishedAt ?? item.createdAt);
+      if (!reply) return [ownRow];
+
+      // The latest reply, as its OWN row (id: reply.id, not item.id) rather
+      // than overwriting ownRow above — confirmed with user: a reply
+      // shouldn't replace the original resource's feed entry. Also
+      // confirmed NOT a full history of every past reply: only ever one
+      // such row per item, standing in for "this item's discussion has new
+      // activity" and naturally replaced by the next reply's row once it
+      // bumps lastActivityAt again (same one-row-per-domain-entity
+      // convention forumThreads' bumped rows already use below).
+      const replyRow: FeedItem = {
+        type: "library",
+        id: reply.id,
+        title: item.title,
+        excerpt: "Replied in the resource discussion",
+        href: withFeedRef(`/library/${item.id}`, query) + `#post-${reply.id}`,
+        timestamp: item.lastActivityAt.toISOString(),
+        author: authorOf(reply.author),
+        replyExcerpt: excerptOf(stripPastedImageTokens(reply.body)) || undefined,
+        imageUrl: ownRow.imageUrl,
+        showTitleOverlay: item.showTitleOverlay,
+      };
+      return [ownRow, replyRow];
     }),
     ...forumThreads.map((thread): FeedItem => {
       // A thread bumped up by a fresh reply (lastActivityAt > createdAt)

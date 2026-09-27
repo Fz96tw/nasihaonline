@@ -1839,11 +1839,13 @@ model KnowledgeItem {
   publishedAt               DateTime?
   createdAt                 DateTime             @default(now())
   updatedAt                 DateTime             @updatedAt
-  // What's New feed sort key for this item's row — set to publishedAt when
-  // a Steward publishes it, then bumped by createForumPost
-  // (lib/forums-server.ts) on every post in its discussion thread, so fresh
-  // discussion resurfaces the item instead of it only ever appearing once
-  // at its publish date. Same convention as ForumThread.lastActivityAt.
+  // No longer the What's New feed's sort key for this item's own row (that's
+  // publishedAt now — confirmed with user that a discussion reply shouldn't
+  // resurface/overwrite the original item's feed entry; each reply gets its
+  // own row instead, see lib/feed-server.ts's libraryReplyWhere). Still set
+  // to publishedAt on publish and bumped by createForumPost
+  // (lib/forums-server.ts) on every post in its discussion thread, kept for
+  // any future "recently active" use — just not read by the feed today.
   lastActivityAt            DateTime             @default(now())
 
   categories              KnowledgeItemCategory[]
