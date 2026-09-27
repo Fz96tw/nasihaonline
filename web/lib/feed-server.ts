@@ -256,10 +256,16 @@ export async function getFeedPage(params: {
   // shares the exact same where clause its findMany uses, rather than
   // drifting out of sync with it over time.
   const eventWhere = {
-    // lastActivityAt (createdAt, bumped by every post in the event's
-    // discussion thread — see createForumPost) is the sort/cursor field,
-    // same as the forum_thread branch below.
-    ...(before ? { lastActivityAt: { lt: before } } : {}),
+    // publishedAt, not lastActivityAt — same fix as libraryWhere below (see
+    // its own comment for the full rationale): an event's own feed row
+    // never gets bumped by discussion activity, only by a Steward
+    // publishing it (see the events.flatMap branch below, which surfaces a
+    // reply as its own separate row instead of mutating this one). Also
+    // excludes an in-progress "Save as Draft" event (publishedAt: null)
+    // from the feed entirely — every other events-server.ts read path
+    // already gates on this same `not: null`, an invariant this where
+    // clause had been missing.
+    publishedAt: before ? { not: null, lt: before } : { not: null },
     ...(eventHitIds ? { id: { in: eventHitIds } } : {}),
     cancelledAt: null,
     // A suspended member can't log in at all (lib/auth.ts), so they're never
@@ -437,6 +443,7 @@ export async function getFeedPage(params: {
         title: true,
         description: true,
         createdAt: true,
+        publishedAt: true,
         startsAt: true,
         heroImageUrl: true,
         visibility: true,
@@ -454,10 +461,13 @@ export async function getFeedPage(params: {
         // posts includes the thread's own system-authored opening post, so
         // forumReplyCount below subtracts one — same convention as the
         // forumThreads feed query and getMemberEventById's forumReplyCount.
+        // Also feeds latestDiscussionReply below: a real reply still gets
+        // its own feed row, just a separate one (see the events.flatMap
+        // branch below) instead of overwriting this event's own row.
         forumThread: { select: DISCUSSION_THREAD_FEED_SELECT },
         lastActivityAt: true,
       },
-      orderBy: { lastActivityAt: "desc" },
+      orderBy: { publishedAt: "desc" },
       take: pageSize,
     }),
     !wants("library") || libraryHitIds?.length === 0 ? Promise.resolve([]) : db.knowledgeItem.findMany({
@@ -691,13 +701,8 @@ export async function getFeedPage(params: {
         });
 
   const merged: FeedItem[] = [
-    ...events.map((event): FeedItem => {
-      // Browse mode only: a row bumped by discussion activity credits and
-      // quotes the latest replier, same as a bumped forum_thread row. Search
-      // mode keeps the host/description framing below, which is what the
-      // query matched against.
-      const reply = query ? null : latestDiscussionReply(event.forumThread, event.lastActivityAt, event.createdAt);
-      return {
+    ...events.flatMap((event): FeedItem[] => {
+      const ownRow: FeedItem = {
         type: "event",
         id: event.id,
         title: event.title,
@@ -710,19 +715,21 @@ export async function getFeedPage(params: {
         // event matched the query, so a search hit shows the actual
         // (highlightable) description instead — the viewer is already
         // authorized to see it, same as clicking through would show them.
-        excerpt: reply
-          ? "Replied in the event discussion"
-          : event.visibility === EventVisibility.invited && !query && event.hostId !== viewerId
-            ? `${event.host.name ?? "The host"} has requested your attendance. Please RSVP.`
-            : event.description
-              ? excerptOf(event.description)
-              : "No description provided.",
-        // The event page embeds its discussion thread, so a bumped row links
-        // straight to the reply (same #post-<id> anchor as forum_thread rows).
-        href: withFeedRef(`/calendar/${event.id}`, query) + (reply ? `#post-${reply.id}` : ""),
-        timestamp: event.lastActivityAt.toISOString(),
-        author: authorOf(reply?.author ?? event.host),
-        replyExcerpt: reply ? excerptOf(stripPastedImageTokens(reply.body)) || undefined : undefined,
+        //
+        // Deliberately never swapped for a reply's excerpt/author — same
+        // fix as the library branch below (see its own comment): a reply
+        // shouldn't replace this row's own content or position (publishedAt,
+        // not bumped by activity — see eventWhere). A reply still surfaces,
+        // but as replyRow below, which always reflects just the latest
+        // reply, not a growing trail of one row per historical reply.
+        excerpt: event.visibility === EventVisibility.invited && !query && event.hostId !== viewerId
+          ? `${event.host.name ?? "The host"} has requested your attendance. Please RSVP.`
+          : event.description
+            ? excerptOf(event.description)
+            : "No description provided.",
+        href: withFeedRef(`/calendar/${event.id}`, query),
+        timestamp: (event.publishedAt ?? event.createdAt).toISOString(),
+        author: authorOf(event.host),
         imageUrl: getEventHeroImageUrl(event.heroImageUrl),
         attendeeCount: event._count.rsvps + event._count.registrations,
         forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : undefined,
@@ -730,6 +737,36 @@ export async function getFeedPage(params: {
         eventViewCount: event._count.views,
         isRestricted: event.visibility === EventVisibility.invited,
       };
+
+      // Search mode never bumps/adds a reply row here, same as before —
+      // a search hit shows the event's own indexed description, not
+      // discussion framing that carries no hint of why it matched the
+      // query.
+      const reply = query ? null : latestDiscussionReply(event.forumThread, event.lastActivityAt, event.createdAt);
+      if (!reply) return [ownRow];
+
+      // The latest reply, as its own row (id: reply.id, not event.id)
+      // rather than overwriting ownRow above — same fix as the library
+      // branch below. Only ever one such row per event, standing in for
+      // "this event's discussion has new activity", naturally replaced by
+      // the next reply's row once it bumps lastActivityAt again.
+      const replyRow: FeedItem = {
+        type: "event",
+        id: reply.id,
+        title: event.title,
+        excerpt: "Replied in the event discussion",
+        // The event page embeds its discussion thread, so this links
+        // straight to the reply (same #post-<id> anchor as forum_thread rows).
+        href: withFeedRef(`/calendar/${event.id}`, query) + `#post-${reply.id}`,
+        timestamp: event.lastActivityAt.toISOString(),
+        author: authorOf(reply.author),
+        replyExcerpt: excerptOf(stripPastedImageTokens(reply.body)) || undefined,
+        // No hero banner here (same as the library branch below) — only
+        // ownRow above carries the event's own hero image.
+        imageUrl: null,
+        isRestricted: event.visibility === EventVisibility.invited,
+      };
+      return [ownRow, replyRow];
     }),
     ...libraryItems.flatMap((item): FeedItem[] => {
       const ownRow: FeedItem = {
