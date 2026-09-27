@@ -46,6 +46,8 @@ export function ProfileForm({
   initialCity,
   availableSkills,
   isOnboarding,
+  endpoint = "/api/profile",
+  avatarEndpoint = "/api/profile/avatar",
 }: {
   email: string;
   avatarUrl: string | null;
@@ -60,6 +62,9 @@ export function ProfileForm({
   // of just refreshing in place, since an already-onboarded member editing
   // their profile normally shouldn't be redirected away on save.
   isOnboarding: boolean;
+  /** Overridden by the admin edit page (app/admin/users/[id]/profile/edit) to target a different member's profile instead of the caller's own. */
+  endpoint?: string;
+  avatarEndpoint?: string;
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -102,7 +107,7 @@ export function ProfileForm({
     setSaved(false);
     try {
       const csrfToken = await getCsrfToken();
-      const res = await fetch("/api/profile", {
+      const res = await fetch(endpoint, {
         method: "PATCH",
         headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
         body: JSON.stringify({
@@ -145,7 +150,7 @@ export function ProfileForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-8" noValidate>
-        <ProfilePhotoUpload name={form.watch("name") || "?"} avatarUrl={avatarUrl} />
+        <ProfilePhotoUpload name={form.watch("name") || "?"} avatarUrl={avatarUrl} endpoint={avatarEndpoint} />
 
         <p className="text-sm text-muted-foreground">
           Fields marked with <span className="text-destructive">*</span> are required to

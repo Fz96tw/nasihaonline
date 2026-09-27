@@ -1,12 +1,15 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { getProfileAvatarUrl } from "@/lib/storage";
+import { getCityById } from "@/lib/cities-server";
+import { resolveCountry } from "@/lib/country-centroids";
 import type { ProfileModel } from "@/lib/generated/prisma/models/Profile";
 import type { SkillModel } from "@/lib/generated/prisma/models/Skill";
 import type { CommunityModel } from "@/lib/generated/prisma/models/Community";
 import { InterestArea } from "@/lib/generated/prisma/enums";
 import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
 import { getMissingRequiredProfileFields, isProfileComplete } from "@/lib/profile-completeness";
+import type { ProfilePatchValues } from "@/lib/validation/profile";
 
 export { getMissingRequiredProfileFields, isProfileComplete };
 
@@ -35,6 +38,83 @@ export async function getOrCreateProfile(userId: string): Promise<ProfileWithSki
 
 export function withResolvedAvatarUrl(profile: ProfileWithSkills): ProfileWithAvatarUrl {
   return { ...profile, avatarUrl: getProfileAvatarUrl(profile.avatarUrl) };
+}
+
+/** Thrown by updateMemberProfile for a validation failure that must reach the caller as a 4xx, not a 500. */
+export class ProfileUpdateError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Applies a validated profile edit (PATCH /api/profile's body shape) to
+ * `userId`'s User.name + Profile row. Shared by the self-service route and
+ * the admin-on-behalf-of-a-member route (app/api/admin/users/[id]/profile) —
+ * same validation, same transaction, same shape either way; the only
+ * difference between the two call sites is whose session is allowed to
+ * reach this with which target userId.
+ */
+export async function updateMemberProfile(userId: string, data: ProfilePatchValues): Promise<ProfileWithSkills> {
+  const existingProfile = await getOrCreateProfile(userId);
+
+  // Members (and an admin editing on their behalf) can only attach existing
+  // catalog skills (§4.3/§7.3), not create new ones inline — reject anything
+  // that isn't a real Skill id rather than silently dropping it.
+  const skillIds = Array.from(new Set(data.skillIds));
+  const validSkills = await db.skill.findMany({ where: { id: { in: skillIds } } });
+  if (validSkills.length !== skillIds.length) {
+    throw new ProfileUpdateError(400, "One or more selected skills are invalid.");
+  }
+
+  // The client only sends the picked city's id; the name is resolved here so it
+  // can't drift from the bundled list, and a city that contradicts the stated
+  // country is rejected rather than plotted somewhere the member didn't mean.
+  const city = data.cityId == null ? null : getCityById(data.cityId);
+  if (data.cityId != null) {
+    if (!city) throw new ProfileUpdateError(400, "That city isn't recognized. Please pick one from the list.");
+    const country = resolveCountry(data.countryRegion);
+    if (country && country.iso2 !== city.iso2) {
+      throw new ProfileUpdateError(400, "The selected city isn't in the country you entered.");
+    }
+  }
+
+  const [, , profile] = await db.$transaction([
+    db.user.update({ where: { id: userId }, data: { name: data.name } }),
+    db.profileSkill.deleteMany({
+      where: { profileId: existingProfile.id, skillId: { notIn: skillIds } },
+    }),
+    db.profile.update({
+      where: { userId },
+      data: {
+        bio: data.bio,
+        countryRegion: data.countryRegion,
+        city: city?.name ?? null,
+        cityGeonameId: city?.id ?? null,
+        titleSpecialty: data.titleSpecialty,
+        careerStage: data.careerStage,
+        linkedinUrl: data.linkedinUrl || null,
+        expertiseAreas: data.expertiseAreas,
+        learningTopics: data.learningTopics,
+        interestAreas: data.interestAreas,
+        availability: data.availability,
+        listInDirectory: data.listInDirectory,
+        showSpecialtyLocation: data.showSpecialtyLocation,
+        skills: {
+          createMany: {
+            data: skillIds.map((skillId) => ({ skillId })),
+            skipDuplicates: true,
+          },
+        },
+      },
+      include: PROFILE_INCLUDE,
+    }),
+  ]);
+
+  return profile;
 }
 
 // Fixed 8-community display order (matches prisma/seed.ts's COMMUNITIES) —

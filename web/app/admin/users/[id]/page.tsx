@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getAdminUserDetail } from "@/lib/users-server";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UserDetailActions } from "@/components/admin/user-detail-actions";
 import { ROLE_LABELS, ROLE_BADGE_VARIANT } from "@/lib/validation/user-admin";
@@ -53,8 +54,11 @@ export default async function AdminUserDetailPage({ params }: { params: { id: st
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
           <CardTitle className="text-lg">Profile summary</CardTitle>
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/admin/users/${user.id}/profile/edit`}>Edit profile</Link>
+          </Button>
         </CardHeader>
         <CardContent>
           <dl className="grid gap-4 sm:grid-cols-2">

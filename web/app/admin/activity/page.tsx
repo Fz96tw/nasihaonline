@@ -25,6 +25,7 @@ const ACTIVITY_DOMAIN_FILTERS: Record<string, { label: string; entityType: strin
   content: { label: "Content Moderation", entityType: ["Post", "PostComment", "KnowledgeItem", "ForumPost"] },
   contact: { label: "Contact Messages", entityType: "ContactMessage" },
   ledger: { label: "Knowledge Hours Ledger", entityType: "ContributionLedger" },
+  users: { label: "Users", entityType: "User" },
 };
 
 function filterPillClass(active: boolean): string {
@@ -73,7 +74,8 @@ export default async function AdminActivityPage({
         <h1 className="mt-2 text-3xl font-bold tracking-tight">Activity Log</h1>
         <p className="text-muted-foreground">
           Every resolved alert across Applications, Conduct, Privacy Requests, Content Moderation,
-          Contact Messages, and the Knowledge Hours Ledger — who acted, when, and what they did.
+          Contact Messages, the Knowledge Hours Ledger, and admin-made changes to a member&apos;s
+          account or profile — who acted, when, and what they did.
         </p>
       </div>
 

@@ -17,6 +17,9 @@ export const ADMIN_ACTION_LABELS: Record<string, string> = {
   "ledger.rejected": "Rejected knowledge hours",
   "ledger.adjusted": "Adjusted a member's ledger balance",
   "user.deleted": "Deleted a user account",
+  "profile.updated": "Updated a member's profile",
+  "profile.avatar_updated": "Updated a member's profile photo",
+  "profile.avatar_removed": "Removed a member's profile photo",
 };
 
 export function formatAdminAction(action: string): string {
@@ -34,6 +37,10 @@ const ENTITY_HREF: Record<string, (entityId: string | null) => string> = {
   KnowledgeItem: () => "/admin/content",
   ForumPost: () => "/admin/content",
   ForumThread: () => "/admin/content",
+  // Only meaningful for a profile edit — "user.deleted" also uses entityType
+  // "User" but by definition points at an account that no longer exists;
+  // clicking through 404s in that one case rather than showing no link at all.
+  User: (id) => (id ? `/admin/users/${id}` : "/admin/users"),
 };
 
 export function adminActionEntityHref(entityType: string, entityId: string | null): string | null {

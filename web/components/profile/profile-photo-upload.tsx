@@ -15,9 +15,12 @@ import { getCsrfToken } from "@/lib/csrf-client";
 export function ProfilePhotoUpload({
   name,
   avatarUrl,
+  endpoint = "/api/profile/avatar",
 }: {
   name: string;
   avatarUrl: string | null;
+  /** Overridden by the admin edit page to target a different member's profile instead of the caller's own. */
+  endpoint?: string;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -46,7 +49,7 @@ export function ProfilePhotoUpload({
       const body = new FormData();
       body.set("photo", file);
       const csrfToken = await getCsrfToken();
-      const res = await fetch("/api/profile/avatar", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "x-csrf-token": csrfToken },
         body,
@@ -69,7 +72,7 @@ export function ProfilePhotoUpload({
     setBusy(true);
     try {
       const csrfToken = await getCsrfToken();
-      const res = await fetch("/api/profile/avatar", {
+      const res = await fetch(endpoint, {
         method: "DELETE",
         headers: { "x-csrf-token": csrfToken },
       });
