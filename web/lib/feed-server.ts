@@ -797,8 +797,9 @@ export async function getFeedPage(params: {
         timestamp: item.lastActivityAt.toISOString(),
         author: authorOf(reply.author),
         replyExcerpt: excerptOf(stripPastedImageTokens(reply.body)) || undefined,
-        imageUrl: ownRow.imageUrl,
-        showTitleOverlay: item.showTitleOverlay,
+        // No hero banner here (confirmed with user) — unlike ownRow above,
+        // which always carries the item's own hero/YouTube-thumbnail image.
+        imageUrl: null,
       };
       return [ownRow, replyRow];
     }),
