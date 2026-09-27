@@ -47,6 +47,15 @@ export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
   // banner title overlay option) show the title on the image instead of in
   // the text block above it, mirroring the detail page/browse card.
   const isLibraryOverlay = item.type === "library" && !!item.showTitleOverlay && !!item.imageUrl;
+  // A Library/Event reply row (see lib/feed-server.ts's replyRow) — never
+  // true for that item's own row (which never carries replyExcerpt now) or
+  // for a forum_thread's own bumped row (which has its own, already-correct
+  // title-first order below). Confirmed with user: read top to bottom as
+  // "<member> replied in the resource/event discussion", then the original
+  // item's title (smaller, same size as a forum thread's own title, not the
+  // usual large Library/Event title), then the quoted reply — the reverse
+  // of every other row's title-then-excerpt order.
+  const isDiscussionReplyRow = (item.type === "library" || item.type === "event") && !!item.replyExcerpt;
 
   return (
     <li>
@@ -106,7 +115,17 @@ export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
                       </div>
                     )}
                     <div className={cn(hasThreadImage && "relative z-10")}>
-                      <div className="flex items-center gap-2">
+                      {isDiscussionReplyRow && (
+                        <div
+                          className={cn(
+                            "line-clamp-2 text-sm",
+                            hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
+                          )}
+                        >
+                          <HighlightText text={item.excerpt} query={q} />
+                        </div>
+                      )}
+                      <div className={cn("flex items-center gap-2", isDiscussionReplyRow && "mt-0.5")}>
                         {item.isRestricted && (
                           <Lock
                             className={cn(
@@ -118,14 +137,18 @@ export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
                         )}
                         <span
                           className={cn(
-                            // Library items without the title-overlay banner
-                            // treatment (isLibraryOverlay above) still get the
-                            // overlay's text-2xl/font-bold size — the title
-                            // shouldn't read smaller just because there's no
-                            // hero image/overlay to put it on. Events match
-                            // the same size (confirmed with user) so the two
-                            // hero-image-bearing feed types read consistently.
-                            item.type === "library" || item.type === "event"
+                            // Library/Event items without the title-overlay
+                            // banner treatment (isLibraryOverlay above) still
+                            // get the overlay's text-2xl/font-bold size — the
+                            // title shouldn't read smaller just because
+                            // there's no hero image/overlay to put it on.
+                            // Events match the same size (confirmed with
+                            // user) so the two hero-image-bearing feed types
+                            // read consistently. Exception: a discussion
+                            // reply row's title is the original item's, not
+                            // this row's own — sized like a forum thread's
+                            // title instead (isDiscussionReplyRow above).
+                            !isDiscussionReplyRow && (item.type === "library" || item.type === "event")
                               ? "text-2xl font-bold"
                               : "text-base font-semibold",
                             hasThreadImage && "text-neutral-900",
@@ -139,14 +162,16 @@ export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
                           </Badge>
                         )}
                       </div>
-                      <div
-                        className={cn(
-                          "mt-0.5 line-clamp-2 text-sm",
-                          hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
-                        )}
-                      >
-                        <HighlightText text={item.excerpt} query={q} />
-                      </div>
+                      {!isDiscussionReplyRow && (
+                        <div
+                          className={cn(
+                            "mt-0.5 line-clamp-2 text-sm",
+                            hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
+                          )}
+                        >
+                          <HighlightText text={item.excerpt} query={q} />
+                        </div>
+                      )}
                       {item.replyExcerpt && (
                         <div
                           className={cn(
