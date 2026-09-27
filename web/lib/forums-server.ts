@@ -63,11 +63,13 @@ export async function getForumCategories(userId?: string, isPrivileged = false):
       slug: true,
       description: true,
       category: { select: { communityId: true } },
-      _count: { select: { threads: true } },
       threads: {
         select: {
           _count: { select: { posts: true } },
           posts: { select: { createdAt: true }, orderBy: { createdAt: "desc" }, take: 1 },
+          event: EVENT_THREAD_ACCESS_SELECT,
+          knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
+          ...OWN_THREAD_ACCESS_SELECT,
         },
       },
     },
@@ -82,8 +84,24 @@ export async function getForumCategories(userId?: string, isPrivileged = false):
   const accessibleForums = forums.filter((forum) => isForumAccessibleToMember(forum, member, isPrivileged));
 
   return accessibleForums.map((forum) => {
-    const postCount = forum.threads.reduce((sum, thread) => sum + thread._count.posts, 0);
-    const lastActivityAt = forum.threads.reduce<Date | null>((latest, thread) => {
+    // Same per-thread visibility gate getForumBySlug's own thread list
+    // applies (isThreadVisible, minus the forum-level access check already
+    // applied above) — threadCount/postCount/lastActivityAt must reflect
+    // only what this viewer can actually see. Before this fix, a forum with
+    // Member-Initiated Restricted threads (§4.13/§11.16) this viewer wasn't
+    // invited to counted (and dated) those threads anyway: the tile read
+    // "N threads" while clicking in showed fewer (or none) — the restricted
+    // threads' existence, activity, and reply volume were leaking through
+    // the count even though the threads themselves stayed hidden.
+    const visibleThreads = forum.threads.filter(
+      (thread) =>
+        !thread.removed &&
+        isEventThreadVisible(thread.event, userId) &&
+        isKnowledgeItemThreadVisible(thread.knowledgeItem, userId, isPrivileged) &&
+        isOwnThreadVisible(thread, userId, isPrivileged),
+    );
+    const postCount = visibleThreads.reduce((sum, thread) => sum + thread._count.posts, 0);
+    const lastActivityAt = visibleThreads.reduce<Date | null>((latest, thread) => {
       const postDate = thread.posts[0]?.createdAt;
       if (!postDate) return latest;
       return !latest || postDate > latest ? postDate : latest;
@@ -94,7 +112,7 @@ export async function getForumCategories(userId?: string, isPrivileged = false):
       name: forum.name,
       slug: forum.slug,
       description: forum.description,
-      threadCount: forum._count.threads,
+      threadCount: visibleThreads.length,
       postCount,
       lastActivityAt: lastActivityAt ? lastActivityAt.toISOString() : null,
       communityId: forum.category?.communityId ?? null,
@@ -307,7 +325,6 @@ export async function getForumBySlug(
       description: true,
       active: true,
       category: { select: { communityId: true } },
-      _count: { select: { threads: true } },
     },
   });
   if (!forum || !forum.active) return null;
@@ -322,15 +339,6 @@ export async function getForumBySlug(
   const isFollowing = userId
     ? (await db.forumFollow.findUnique({ where: { forumId_userId: { forumId: forum.id, userId } } })) != null
     : false;
-
-  const forumCategory: ForumCategory = {
-    id: forum.id,
-    name: forum.name,
-    slug: forum.slug,
-    description: forum.description,
-    threadCount: forum._count.threads,
-    communityId: forum.category?.communityId ?? null,
-  };
 
   // Browse view sorts pinned first, then by each thread's latest post
   // (falling back to its own createdAt, same as toThreadListItem) — a
@@ -349,6 +357,19 @@ export async function getForumBySlug(
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
       return b.lastActivityAt.localeCompare(a.lastActivityAt);
     });
+
+  // items.length, not a raw db.forumThread.count/forum._count.threads — a
+  // Member-Initiated Restricted thread (§4.13/§11.16) this viewer isn't
+  // invited to must not inflate this past what the list below actually
+  // shows them (same bug/fix as getForumCategories' tile count above).
+  const forumCategory: ForumCategory = {
+    id: forum.id,
+    name: forum.name,
+    slug: forum.slug,
+    description: forum.description,
+    threadCount: items.length,
+    communityId: forum.category?.communityId ?? null,
+  };
 
   return { forum: forumCategory, threads: items, isFollowing };
 }
