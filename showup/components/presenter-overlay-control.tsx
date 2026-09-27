@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { ImagePlus, PictureInPicture2, Presentation, X } from "lucide-react";
+import { ChevronDown, ChevronUp, GripHorizontal, ImagePlus, PictureInPicture2, Presentation, X } from "lucide-react";
 import { RoomEvent, Track, type LocalTrackPublication, type LocalVideoTrack, type Room } from "livekit-client";
 import type { PanelShape } from "@/lib/presenter-overlay/panel";
 import { SpeakerFollower } from "@/lib/presenter-overlay/speaker-follow";
@@ -29,6 +29,7 @@ import {
   type PresenterOverlaySettings,
 } from "@/lib/presenter-overlay/compositor";
 import type { PinnedShape } from "@/lib/presenter-overlay/drawing";
+import { clampPanelPosition, dragPanelPosition, nudgePanelPosition, parseStoredPanel, serializePanel, type PanelPosition } from "@/lib/presenter-overlay/panel-position";
 import { ShapePromptField, ShapeTextPanel, useShapePrompt } from "@/components/shape-text-panel";
 import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/components/livekit-control-styles";
 
@@ -72,6 +73,8 @@ function documentPictureInPicture(): DocumentPictureInPicture | undefined {
 }
 
 /** Pop-out size: a 16:9 preview, grown by PIP_PANEL_HEIGHT while its settings panel is open. */
+/** Browser-storage key for where the settings panel was left and whether it is collapsed (best effort). */
+const PANEL_STORAGE_KEY = "showup:overlay-panel";
 const PIP_WIDTH = 360;
 const PIP_HEIGHT = 203;
 const PIP_PANEL_HEIGHT = 420;
@@ -152,6 +155,12 @@ export function PresenterOverlayControl({
   const [overlayStatus, setOverlayStatus] = useState<"off" | "starting" | "on">("off");
   // Starts collapsed — it sits over the meeting view; the "Overlay settings" button toggles it.
   const [panelOpen, setPanelOpen] = useState(false);
+  // The settings panel can be dragged out of the way of the shared screen and folded down to its header.
+  // null = the default spot (under or above its button); a position pins it to the window.
+  const [panelPos, setPanelPos] = useState<PanelPosition | null>(null);
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ origin: PanelPosition; start: { x: number; y: number }; last: PanelPosition } | null>(null);
   // Overlay settings — kept for the whole page, so turning the overlay off and on again restores them.
   const [opacity, setOpacity] = useState(0.5);
   const [scale, setScale] = useState(1);
@@ -228,6 +237,41 @@ export function PresenterOverlayControl({
   useEffect(() => {
     setSupported(isPresenterOverlaySupported());
   }, []);
+
+  // Where the panel was left last time. Storage can be missing or blocked; the panel works without it.
+  useEffect(() => {
+    try {
+      const stored = parseStoredPanel(window.localStorage.getItem(PANEL_STORAGE_KEY));
+      setPanelPos(stored.position);
+      setPanelCollapsed(stored.collapsed);
+    } catch {
+      // no storage: defaults
+    }
+  }, []);
+
+  function savePanel(position: PanelPosition | null, collapsed: boolean) {
+    try {
+      window.localStorage.setItem(PANEL_STORAGE_KEY, serializePanel({ position, collapsed }));
+    } catch {
+      // no storage: it just won't be remembered
+    }
+  }
+
+  /** The panel's current size, for keeping it reachable; a nominal size before it has been drawn. */
+  function panelSize() {
+    const rect = panelRef.current?.getBoundingClientRect();
+    return { width: rect?.width ?? 288, height: rect?.height ?? 40 };
+  }
+
+  // A window that shrinks must not strand the panel out of reach.
+  useEffect(() => {
+    if (!panelPos) return;
+    const onResize = () =>
+      setPanelPos((position) => (position ? clampPanelPosition(position, panelSize(), { width: window.innerWidth, height: window.innerHeight }) : position));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelPos !== null]);
 
   function currentSettings(): PresenterOverlaySettings {
     return { opacity, scale, position, span, gestures, penColor, arrowMode, shapeKind, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
@@ -1556,9 +1600,88 @@ export function PresenterOverlayControl({
       {!panelOpen && requestsBlock && <div className="mt-2 w-72">{requestsBlock}</div>}
       {panelOpen && overlayOn && (
         <div
-          className={`absolute ${panelPlacement === "above-right" ? "bottom-full right-0 mb-2" : "left-0 top-full mt-2"} max-h-[60vh] w-72 space-y-3 overflow-y-auto rounded-lg border p-3 shadow-lg ${LK_PANEL_CLASS}`}
+          ref={panelRef}
+          style={panelPos ? { position: "fixed", left: panelPos.x, top: panelPos.y } : undefined}
+          className={`${panelPos ? "" : `absolute ${panelPlacement === "above-right" ? "bottom-full right-0 mb-2" : "left-0 top-full mt-2"}`} w-72 rounded-lg border shadow-lg ${LK_PANEL_CLASS}`}
+          data-testid="overlay-panel"
         >
-          {settingsFields(fileInputRef)}
+          <div
+            role="group"
+            tabIndex={0}
+            aria-label="Overlay settings. Drag to move, double-click to reset, or use the arrow keys."
+            data-testid="overlay-panel-header"
+            title="Drag to move, double-click to put it back"
+            className="flex cursor-grab touch-none select-none items-center gap-1 rounded-t-lg border-b border-white/10 px-2 py-1.5 active:cursor-grabbing"
+            onPointerDown={(event) => {
+              if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+              const rect = panelRef.current?.getBoundingClientRect();
+              if (!rect) return;
+              const origin = { x: rect.left, y: rect.top };
+              dragRef.current = { origin, start: { x: event.clientX, y: event.clientY }, last: origin };
+              event.currentTarget.setPointerCapture(event.pointerId);
+              setPanelPos(origin);
+            }}
+            onPointerMove={(event) => {
+              const drag = dragRef.current;
+              if (!drag) return;
+              drag.last = dragPanelPosition(drag.origin, drag.start, { x: event.clientX, y: event.clientY }, panelSize(), { width: window.innerWidth, height: window.innerHeight });
+              setPanelPos(drag.last);
+            }}
+            onPointerUp={() => {
+              const drag = dragRef.current;
+              if (!drag) return;
+              dragRef.current = null;
+              savePanel(drag.last, panelCollapsed);
+            }}
+            onPointerCancel={() => {
+              dragRef.current = null;
+            }}
+            onDoubleClick={(event) => {
+              if ((event.target as HTMLElement).closest("button")) return;
+              setPanelPos(null);
+              savePanel(null, panelCollapsed);
+            }}
+            onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) return;
+              const rect = panelRef.current?.getBoundingClientRect();
+              const base = panelPos ?? (rect ? { x: rect.left, y: rect.top } : null);
+              if (!base) return;
+              const next = nudgePanelPosition(base, event.key, event.shiftKey, panelSize(), { width: window.innerWidth, height: window.innerHeight });
+              if (!next) return;
+              event.preventDefault();
+              setPanelPos(next);
+              savePanel(next, panelCollapsed);
+            }}
+          >
+            <GripHorizontal className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
+            <span className="min-w-0 flex-1 truncate text-xs font-medium">Overlay settings</span>
+            <button
+              type="button"
+              data-testid="overlay-panel-collapse"
+              aria-expanded={!panelCollapsed}
+              aria-label={panelCollapsed ? "Expand overlay settings" : "Collapse overlay settings"}
+              title={panelCollapsed ? "Expand" : "Collapse to just this bar"}
+              onClick={() => {
+                const next = !panelCollapsed;
+                setPanelCollapsed(next);
+                savePanel(panelPos, next);
+              }}
+              className="rounded p-0.5 hover:bg-white/10"
+            >
+              {panelCollapsed ? <ChevronDown className="h-4 w-4" aria-hidden /> : <ChevronUp className="h-4 w-4" aria-hidden />}
+            </button>
+            <button
+              type="button"
+              data-testid="overlay-panel-close"
+              aria-label="Close overlay settings"
+              title="Close"
+              onClick={() => setPanelOpen(false)}
+              className="rounded p-0.5 hover:bg-white/10"
+            >
+              <X className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
+          {!panelCollapsed && <div className="max-h-[60vh] space-y-3 overflow-y-auto p-3">{settingsFields(fileInputRef)}</div>}
         </div>
       )}
       {pipWindow &&
