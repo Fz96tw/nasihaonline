@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FADE_MS, HOLD_MS, MAX_POINTS, MAX_POINTS_PER_GUEST, MIN_ARROW_LENGTH, StrokeBoard, arrowHead, strokeColor } from "./drawing.ts";
+import { FADE_MS, HOLD_MS, MAX_POINTS, MAX_POINTS_PER_GUEST, MIN_ARROW_LENGTH, MIN_SHAPE_SIZE, StrokeBoard, arrowHead, shapeBounds, strokeColor } from "./drawing.ts";
 
 test("a stroke collects points while drawing and stays fully visible", () => {
   const board = new StrokeBoard();
@@ -270,4 +270,72 @@ test("arrowHead keeps true angles when the points are fractions of a wide screen
   const [a] = arrowHead({ x: 0.1, y: 0.5 }, tip, 0.05, aspect);
   const realLength = Math.hypot((a.x - tip.x) * aspect, a.y - tip.y);
   assert.ok(Math.abs(realLength - 0.05) < 1e-9, "the barb is 0.05 long in real (isotropic) terms");
+});
+
+test("a box or ellipse keeps only two opposite corners, whichever way it is dragged", () => {
+  for (const kind of ["box", "ellipse"] as const) {
+    const board = new StrokeBoard();
+    board.begin(0, "red", undefined, kind);
+    assert.equal(board.kindOf(), kind);
+    board.add(0.6, 0.6);
+    board.add(0.5, 0.4);
+    board.add(0.2, 0.3);
+    const [shape] = board.visible(0);
+    assert.equal(shape.stroke.kind, kind);
+    assert.deepEqual(shape.stroke.points, [{ x: 0.6, y: 0.6 }, { x: 0.2, y: 0.3 }]);
+    assert.equal(board.pointCount, 2);
+  }
+});
+
+test("shapeBounds gives the same rectangle from either diagonal", () => {
+  const expected = { x: 0.2, y: 0.3, width: 0.4, height: 0.3 };
+  const close = (a: { x: number; y: number; width: number; height: number }) => {
+    for (const key of ["x", "y", "width", "height"] as const) assert.ok(Math.abs(a[key] - expected[key]) < 1e-9, key);
+  };
+  close(shapeBounds({ x: 0.6, y: 0.6 }, { x: 0.2, y: 0.3 }));
+  close(shapeBounds({ x: 0.2, y: 0.3 }, { x: 0.6, y: 0.6 }));
+  close(shapeBounds({ x: 0.2, y: 0.6 }, { x: 0.6, y: 0.3 }));
+});
+
+test("a shape too narrow or too short is discarded when finished, a big enough one is kept", () => {
+  const board = new StrokeBoard();
+  const draw = (t: number, dx: number, dy: number) => {
+    board.begin(t, "red", undefined, "box");
+    board.add(0.5, 0.5);
+    board.add(0.5 + dx, 0.5 + dy);
+    board.end(t + 10);
+  };
+  draw(0, MIN_SHAPE_SIZE / 2, MIN_SHAPE_SIZE * 3);
+  assert.equal(board.visible(10).length, 0, "too narrow: it would be a line");
+  draw(100, MIN_SHAPE_SIZE * 3, MIN_SHAPE_SIZE / 2);
+  assert.equal(board.visible(110).length, 0, "too short");
+  draw(200, -MIN_SHAPE_SIZE * 2, -MIN_SHAPE_SIZE * 2);
+  assert.equal(board.visible(210).length, 1, "dragged up and to the left still counts");
+});
+
+test("a finished shape holds and fades, and clear() removes it", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "yellow", undefined, "ellipse");
+  board.add(0.1, 0.1);
+  board.add(0.5, 0.4);
+  board.end(1000);
+  assert.equal(board.visible(1000 + HOLD_MS)[0].alpha, 1);
+  assert.ok(Math.abs(board.visible(1000 + HOLD_MS + FADE_MS / 2)[0].alpha - 0.5) < 1e-9);
+  board.clear();
+  assert.equal(board.visible(1000).length, 0);
+});
+
+test("kindOf is null when not drawing, and switching kinds starts a fresh stroke", () => {
+  const board = new StrokeBoard();
+  assert.equal(board.kindOf(), null);
+  board.begin(0, "red", undefined, "free");
+  board.add(0.1, 0.1);
+  board.add(0.3, 0.3);
+  board.begin(50, "red", undefined, "box");
+  board.add(0.4, 0.4);
+  board.add(0.6, 0.6);
+  board.end(100);
+  assert.equal(board.kindOf(), null);
+  const kinds = board.visible(100).map(({ stroke }) => stroke.kind);
+  assert.deepEqual(kinds, ["free", "box"], "the freehand stroke was finished, not replaced");
 });

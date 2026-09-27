@@ -26,9 +26,19 @@ export const HOST_OWNER = "host";
 const MIN_STEP = 0.002;
 /** An arrow shorter than this (in screen-content units, where 1 is the whole screen) is thrown away when it is finished: a twitch, not an arrow. */
 export const MIN_ARROW_LENGTH = 0.03;
+/** A box or ellipse narrower or shorter than this (in screen-content units) is thrown away when it is finished: it would be a line, not a shape. */
+export const MIN_SHAPE_SIZE = 0.02;
 
-/** "free" follows the fingertip; "arrow" keeps only where it started and where it is now, drawn as a straight line with a head. */
-export type StrokeKind = "free" | "arrow";
+/**
+ * "free" follows the fingertip. The others keep only where the pen started and where it is now (a rubber band):
+ * "arrow" is a straight line with a head, "box" a rectangle and "ellipse" the ellipse inscribed in it, with those two points as opposite corners.
+ */
+export type StrokeKind = "free" | "arrow" | "box" | "ellipse";
+
+/** Kinds that are just two points, tail and latest fingertip. */
+export function isRubberBand(kind: StrokeKind): boolean {
+  return kind !== "free";
+}
 
 export type Stroke = {
   kind: StrokeKind;
@@ -52,6 +62,11 @@ export class StrokeBoard {
 
   isDrawing(owner: string = HOST_OWNER): boolean {
     return this.current.has(owner);
+  }
+
+  /** What `owner` is drawing right now, or null when they aren't drawing. */
+  kindOf(owner: string = HOST_OWNER): StrokeKind | null {
+    return this.current.get(owner)?.kind ?? null;
   }
 
   /** Everyone with a stroke in progress. */
@@ -79,7 +94,7 @@ export class StrokeBoard {
   add(x: number, y: number, owner: string = HOST_OWNER) {
     const stroke = this.current.get(owner);
     if (!stroke) return;
-    if (stroke.kind === "arrow") {
+    if (isRubberBand(stroke.kind)) {
       // Rubber band: the first point is the tail, the second follows the fingertip.
       if (stroke.points.length === 0) stroke.points.push({ x, y });
       else stroke.points[1] = { x, y };
@@ -97,8 +112,8 @@ export class StrokeBoard {
     const stroke = this.current.get(owner);
     if (!stroke) return;
     this.current.delete(owner);
-    if (stroke.kind === "arrow" && !isLongEnough(stroke.points)) {
-      // A twitch, not an arrow: drop it instead of leaving a dot on the screen.
+    if (isRubberBand(stroke.kind) && !isBigEnough(stroke)) {
+      // A twitch, not an arrow or shape: drop it instead of leaving a dot on the screen.
       this.strokes = this.strokes.filter((other) => other !== stroke);
       return;
     }
@@ -160,9 +175,15 @@ export class StrokeBoard {
   }
 }
 
-function isLongEnough(points: { x: number; y: number }[]): boolean {
+function isBigEnough({ kind, points }: Stroke): boolean {
   if (points.length < 2) return false;
-  return Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y) >= MIN_ARROW_LENGTH;
+  if (kind === "arrow") return Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y) >= MIN_ARROW_LENGTH;
+  return Math.abs(points[1].x - points[0].x) >= MIN_SHAPE_SIZE && Math.abs(points[1].y - points[0].y) >= MIN_SHAPE_SIZE;
+}
+
+/** The axis-aligned rectangle with these two points as opposite corners (whichever way the pen was dragged). */
+export function shapeBounds(a: { x: number; y: number }, b: { x: number; y: number }): { x: number; y: number; width: number; height: number } {
+  return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
 }
 
 /**

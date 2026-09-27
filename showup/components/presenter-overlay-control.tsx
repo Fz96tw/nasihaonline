@@ -158,10 +158,11 @@ export function PresenterOverlayControl({
   const [normalizeSize, setNormalizeSize] = useState(true);
   // Host hand gestures (default off) and what's recognized right now — for the host's own indicator, never drawn into the stream.
   const [gestures, setGestures] = useState(false);
-  const [gestureLabel, setGestureLabel] = useState<"pointing" | "zooming" | "reset" | "drawing" | "spotlight" | "thumbsup" | "thumbsdown" | "wave" | "unavailable" | null>(null);
+  const [gestureLabel, setGestureLabel] = useState<"pointing" | "zooming" | "reset" | "drawing" | "shape" | "spotlight" | "thumbsup" | "thumbsdown" | "wave" | "unavailable" | null>(null);
   const [spotlightOn, setSpotlightOn] = useState(false);
   const [penColor, setPenColor] = useState<PresenterOverlaySettings["penColor"]>("red");
   const [arrowMode, setArrowMode] = useState(false);
+  const [shapeKind, setShapeKind] = useState<PresenterOverlaySettings["shapeKind"]>("box");
   const [background, setBackground] = useState<PresenterOverlaySettings["background"]>("remove");
   const [panelShape, setPanelShape] = useState<PanelShape>("rounded");
   const [softEdge, setSoftEdge] = useState(false);
@@ -218,7 +219,7 @@ export function PresenterOverlayControl({
   }, []);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, span, gestures, penColor, arrowMode, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
+    return { opacity, scale, position, span, gestures, penColor, arrowMode, shapeKind, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -1079,6 +1080,8 @@ export function PresenterOverlayControl({
                   ? "Palm: zoom reset"
                   : gestureLabel === "drawing"
                     ? "Drawing"
+                    : gestureLabel === "shape"
+                      ? "Drawing a shape"
                     : gestureLabel === "spotlight"
                       ? "Spotlight"
                       : gestureLabel === "thumbsup"
@@ -1099,6 +1102,7 @@ export function PresenterOverlayControl({
             <li>Raise a fist (hand up in the camera frame) and hold it for a moment: the screen dims except a circle around your hand. Open your hand to bring the light back.</li>
             <li>Thumbs up or thumbs down (other fingers curled), held for a moment, or a wave of an open hand: a 👍, 👎 or 👋 floats up beside you. One reaction every few seconds.</li>
             <li>Hold two fingers together (index and middle, others curled) for a moment to draw in the air; lower them to stop. Drawings fade after a few seconds. Switch on &ldquo;Straight arrow&rdquo; and the same gesture draws a straight arrow from where you start to where you lower your fingers.</li>
+            <li>Hold your thumb and index finger out in an &ldquo;L&rdquo; (other fingers curled) for a moment to draw a box or ellipse: the point where you start is one corner and your fingertip is the opposite corner. Choose Box or Ellipse below; drop the L to finish.</li>
             <li>Keep your hand fully in the camera frame. Only the screen zooms, not you.</li>
           </ul>
         </details>
@@ -1140,6 +1144,22 @@ export function PresenterOverlayControl({
           >
             Straight arrow
           </button>
+          {(["box", "ellipse"] as const).map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              data-testid={`overlay-shape-${kind}`}
+              aria-pressed={shapeKind === kind}
+              title="What the L gesture (thumb and index out) draws"
+              onClick={() => {
+                setShapeKind(kind);
+                updateSettings({ shapeKind: kind });
+              }}
+              className={`${segmentClass(shapeKind === kind)} ml-1`}
+            >
+              {kind === "box" ? "Box" : "Ellipse"}
+            </button>
+          ))}
           <button
             type="button"
             data-testid="overlay-spotlight"

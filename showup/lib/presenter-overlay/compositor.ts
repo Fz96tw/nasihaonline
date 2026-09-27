@@ -32,7 +32,7 @@ import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
 import { REACTION_EMOJI, ReactionPlayer, reactionPosition } from "./reactions.ts";
 import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement } from "./gestures.ts";
 import { mapGuestPenToScreen, mapGuestPointer, type GuestPointerDot } from "./guest-pointer.ts";
-import { HOST_OWNER, StrokeBoard, arrowHead, strokeColor, type PenColor } from "./drawing.ts";
+import { HOST_OWNER, StrokeBoard, arrowHead, shapeBounds, strokeColor, type PenColor } from "./drawing.ts";
 import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
 import { SizeNormalizer, measureFromRows } from "./size-normalize.ts";
 import { WindowSmoother, clampWindow, panelAspect, personBounds, targetCentre, tracePanelPath, windowSize, type PanelShape, type PersonBounds } from "./panel.ts";
@@ -111,6 +111,8 @@ export type PresenterOverlaySettings = {
   penColor: PenColor;
   /** Air-draw draws a straight arrow from where the pen started to where it is now, instead of following the fingertip. Host pen only. */
   arrowMode: boolean;
+  /** What the "L" gesture draws: a box or the ellipse inscribed in it. */
+  shapeKind: "box" | "ellipse";
   /**
    * Scale each cut-out by how far its person sits from their camera, so everyone looks the same size.
    * Host-controlled; on by default. Off = every camera frame is scaled the same (zoom 1).
@@ -153,6 +155,7 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   gestures: false,
   penColor: "red",
   arrowMode: false,
+  shapeKind: "box",
   normalizeSize: true,
   background: "remove",
   panelShape: "rounded",
@@ -813,7 +816,15 @@ export async function startPresenterOverlayCompositor({
       outputCtx.shadowBlur = outputCtx.lineWidth * 2;
       outputCtx.beginPath();
       outputCtx.moveTo(points[0].x, points[0].y);
-      if (stroke.kind === "arrow") {
+      if (stroke.kind === "box" || stroke.kind === "ellipse") {
+        if (points.length < 2) continue;
+        const { x, y, width: w, height: h } = shapeBounds(points[0], points[1]);
+        if (stroke.kind === "box") {
+          outputCtx.roundRect(x, y, w, h, Math.min(w, h) * 0.08);
+        } else {
+          outputCtx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+        }
+      } else if (stroke.kind === "arrow") {
         // Nothing to show until the fingertip has moved away from where the arrow started.
         if (points.length < 2) continue;
         const [tail, tip] = points;
@@ -984,11 +995,14 @@ export async function startPresenterOverlayCompositor({
     pointer = state.pointer;
     gestureSpotlight = state.spotlight ? state.spotlight.alpha : 0;
     handPoint = state.hand;
-    // Air-draw: the pen tip goes through the same ghost mapping as the laser, then to screen coordinates through the current zoom view.
-    if (placement && state.pen) {
-      const out = cameraToOutput(state.pen.u, state.pen.v, placement);
+    // Air-draw: the pen tip (two fingers) or the shape corner (the "L") goes through the same ghost mapping as the laser,
+    // then to screen coordinates through the current zoom view. Only one of them is ever active.
+    const hostTip = state.pen ?? state.shape;
+    if (placement && hostTip) {
+      const out = cameraToOutput(hostTip.u, hostTip.v, placement);
       const onScreen = outputToScreen(viewport.rect(now), out.x / outputCanvas.width, out.y / outputCanvas.height);
-      if (!board.drawing) board.begin(now, settings.penColor, HOST_OWNER, settings.arrowMode ? "arrow" : "free");
+      const kind = state.pen ? (settings.arrowMode ? "arrow" : "free") : settings.shapeKind;
+      if (board.kindOf() !== kind) board.begin(now, settings.penColor, HOST_OWNER, kind);
       board.add(onScreen.x, onScreen.y);
     } else {
       board.end(now);

@@ -9,6 +9,9 @@ import {
   FIST_HOLD_MS,
   SPOTLIGHT_FADE_MS,
   PEN_HOLD_MS,
+  SHAPE_HOLD_MS,
+  SHAPE_MAX_COS,
+  SHAPE_THUMB_OUT_RATIO,
   GRACE_MS,
   GestureTracker,
   PALM_HOLD_MS,
@@ -496,4 +499,96 @@ test("the indicator shows the reaction for a moment", () => {
   assert.equal(state.label, "thumbsup");
   const later = run(tracker, THUMB_HOLD_MS + 133, THUMB_HOLD_MS + 4000, () => null).state;
   assert.equal(later.label, null);
+});
+
+/** The "L": index out, other fingers curled, thumb held out to the side at a right angle to the index (knuckle at 0.45, 0.7; hand size 0.2). */
+function shapeHand(thumb: Landmark = { x: 0.25, y: 0.68 }, opts: { ox?: number } = {}): Landmark[] {
+  const h = hand(["ext", "curl", "curl", "curl"], opts);
+  h[4] = { x: thumb.x + (opts.ox ?? 0), y: thumb.y };
+  return h;
+}
+const SHAPE = () => shapeHand();
+const KNUCKLE = { x: 0.45, y: 0.7 };
+/** A thumb `length` (fraction of the 0.2 hand size) from the index knuckle, at `deg` degrees from the index finger's direction (straight up). */
+const thumbAt = (length: number, deg: number): Landmark => ({
+  x: KNUCKLE.x - Math.sin((deg * Math.PI) / 180) * length * 0.2,
+  y: KNUCKLE.y - Math.cos((deg * Math.PI) / 180) * length * 0.2,
+});
+
+test("the L (index out, thumb held square to it) is the shape pose, and a plain point is still a point", () => {
+  assert.equal(classifyPose(SHAPE()).pose, "shape");
+  assert.equal(classifyPose(POINT()).pose, "point", "a relaxed pointing thumb is not an L");
+  const tucked = POINT();
+  tucked[4] = { x: 0.47, y: 0.72 };
+  assert.equal(classifyPose(tucked).pose, "point", "a tucked thumb is not an L");
+});
+
+test("the L needs the thumb clearly out: just inside the margin is a point, just past it is a shape", () => {
+  assert.equal(classifyPose(shapeHand(thumbAt(SHAPE_THUMB_OUT_RATIO - 0.1, 90))).pose, "point");
+  assert.equal(classifyPose(shapeHand(thumbAt(SHAPE_THUMB_OUT_RATIO + 0.1, 90))).pose, "shape");
+});
+
+test("the L needs the thumb roughly square to the index: a thumb along the finger or at 45 degrees is a point", () => {
+  const limit = (Math.acos(SHAPE_MAX_COS) * 180) / Math.PI;
+  assert.ok(limit > 50 && limit < 60, "about 55 degrees from the finger's line");
+  assert.equal(classifyPose(shapeHand(thumbAt(1.3, 0))).pose, "point", "thumb straight along the index");
+  assert.equal(classifyPose(shapeHand(thumbAt(1.3, 45))).pose, "point", "thumb at 45 degrees");
+  assert.equal(classifyPose(shapeHand(thumbAt(1.3, limit + 5))).pose, "shape");
+  assert.equal(classifyPose(shapeHand(thumbAt(1.3, 90))).pose, "shape");
+  assert.equal(classifyPose(shapeHand(thumbAt(1.3, 180 - limit - 5))).pose, "shape", "and a thumb pointing down-and-out is fine too");
+  assert.equal(classifyPose(shapeHand(thumbAt(1.3, 180))).pose, "point", "thumb straight back along the finger");
+});
+
+test("the L is not a pinch, the pen, or a thumbs-up, and closing the thumb onto the index makes it a pinch", () => {
+  assert.equal(classifyPose(PEN()).pose, "pen", "two fingers together is still the pen");
+  const withMiddle = hand(["ext", "ext", "curl", "curl"]);
+  withMiddle[4] = { x: 0.25, y: 0.68 };
+  assert.equal(classifyPose(withMiddle).pose, "pen", "an L with the middle finger out too is still the pen");
+  const closing = SHAPE();
+  closing[4] = { x: closing[8].x + 0.01, y: closing[8].y + 0.01 };
+  assert.equal(classifyPose(closing).pose, "pinch", "thumb touching the index tip is a pinch");
+  assert.equal(classifyPose(THUMBS_UP()).pose, "thumbsup");
+  assert.equal(classifyPose(PALM()).pose, "palm");
+});
+
+test("the L holds for a moment, then a shape follows the fingertip until the pose ends", () => {
+  const tracker = new GestureTracker();
+  let state = run(tracker, 0, SHAPE_HOLD_MS - 100, SHAPE).state;
+  assert.equal(state.shape, null, "too early");
+  state = run(tracker, SHAPE_HOLD_MS - 67, SHAPE_HOLD_MS + 300, SHAPE).state;
+  const h = SHAPE();
+  assert.ok(state.shape && Math.abs(state.shape.u - h[8].x) < 1e-6 && Math.abs(state.shape.v - h[8].y) < 1e-6, "starts at the fingertip");
+  assert.equal(state.label, "shape");
+  assert.equal(state.pen, null, "not the pen");
+  const moved = shapeHand(undefined, { ox: 0.15 });
+  const next = tracker.update(SHAPE_HOLD_MS + 333, moved).shape as { u: number };
+  assert.ok(next.u > h[8].x && next.u < moved[8].x, "smoothed towards the new fingertip");
+  const gone = run(tracker, SHAPE_HOLD_MS + 360, SHAPE_HOLD_MS + 360 + GRACE_MS + 100, () => null).state;
+  assert.equal(gone.shape, null);
+  assert.equal(gone.label, null);
+});
+
+test("a different pose ends the shape, and a brief L on the way to another pose draws nothing", () => {
+  const tracker = new GestureTracker();
+  run(tracker, 0, SHAPE_HOLD_MS + 300, SHAPE);
+  const changed = run(tracker, SHAPE_HOLD_MS + 320, SHAPE_HOLD_MS + 320 + GRACE_MS + 100, PALM).state;
+  assert.equal(changed.shape, null);
+  const brief = new GestureTracker();
+  const flash = run(brief, 0, SHAPE_HOLD_MS - 120, SHAPE);
+  assert.equal(flash.state.shape, null);
+  assert.equal(run(brief, SHAPE_HOLD_MS - 100, 1500, () => null).state.shape, null);
+});
+
+test("the L does not trigger the laser, zoom or reset", () => {
+  const tracker = new GestureTracker();
+  const { actions, state } = run(tracker, 0, 3000, SHAPE);
+  assert.equal(actions.length, 0);
+  assert.equal(state.pointer, null);
+});
+
+test("two fingers still draw with the pen, and the L never shows as the pen", () => {
+  const tracker = new GestureTracker();
+  const { state } = run(tracker, 0, PEN_HOLD_MS + 400, PEN);
+  assert.ok(state.pen);
+  assert.equal(state.shape, null);
 });
