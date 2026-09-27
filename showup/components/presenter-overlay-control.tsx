@@ -29,7 +29,7 @@ import {
   type PresenterOverlaySettings,
 } from "@/lib/presenter-overlay/compositor";
 import type { PinnedShape } from "@/lib/presenter-overlay/drawing";
-import { ShapeTextPanel } from "@/components/shape-text-panel";
+import { ShapePromptField, ShapeTextPanel, useShapePrompt } from "@/components/shape-text-panel";
 import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/components/livekit-control-styles";
 
 /** The presenter's own screen share, started with LiveKit's regular Share screen button. */
@@ -167,6 +167,12 @@ export function PresenterOverlayControl({
   /** Boxes and ellipses pinned to the share, and the one just drawn that is waiting for its optional label. */
   const [shapes, setShapes] = useState<PinnedShape[]>([]);
   const [pendingShapeId, setPendingShapeId] = useState<number | null>(null);
+  // Owned here, not by the settings panel, so closing or reopening that panel never loses a half-typed label.
+  const shapePrompt = useShapePrompt(
+    pendingShapeId,
+    (id, text) => overlayRef.current?.compositor.setShapeText(id, text),
+    () => setPendingShapeId(null),
+  );
   const [shapeKind, setShapeKind] = useState<PresenterOverlaySettings["shapeKind"]>("box");
   const [background, setBackground] = useState<PresenterOverlaySettings["background"]>("remove");
   const [panelShape, setPanelShape] = useState<PanelShape>("rounded");
@@ -1194,9 +1200,8 @@ export function PresenterOverlayControl({
         </div>
         <ShapeTextPanel
           shapes={shapes}
-          pendingId={pendingShapeId}
-          onText={(id, text) => overlayRef.current?.compositor.setShapeText(id, text)}
-          onDone={() => setPendingShapeId(null)}
+          prompt={shapePrompt}
+          promptElsewhere={pipWindow !== null}
           onRemove={(id) => overlayRef.current?.compositor.removeShape(id)}
           onUndo={() => overlayRef.current?.compositor.undoShape()}
         />
@@ -1576,6 +1581,12 @@ export function PresenterOverlayControl({
                 </span>
               )}
             </div>
+            {pendingShapeId !== null && (
+              // The label prompt floats here, over the window being shared, so the host can type without leaving it.
+              <div className="flex-none border-t border-white/20 bg-[#1d1d1d] p-2">
+                <ShapePromptField prompt={shapePrompt} compact />
+              </div>
+            )}
             {pipPanelOpen && (
               <div className={`max-h-[70%] flex-none space-y-3 overflow-y-auto border-t p-3 ${LK_PANEL_CLASS}`}>
                 {settingsFields(pipFileInputRef)}
