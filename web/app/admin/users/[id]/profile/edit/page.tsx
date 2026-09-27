@@ -8,6 +8,7 @@ import { getCityById } from "@/lib/cities-server";
 import { getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
 import { getAllSkills } from "@/lib/skills-server";
 import { ProfileForm } from "@/components/profile/profile-form";
+import { QueryProvider } from "@/components/providers/query-provider";
 import { joinList } from "@/lib/validation/profile";
 
 export const metadata: Metadata = {
@@ -57,31 +58,33 @@ export default async function AdminEditMemberProfilePage({ params }: { params: {
         </p>
       </div>
 
-      <ProfileForm
-        email={target.email}
-        avatarUrl={profile.avatarUrl}
-        availableSkills={skills}
-        isOnboarding={false}
-        initialCity={initialCity}
-        endpoint={`/api/admin/users/${target.id}/profile`}
-        avatarEndpoint={`/api/admin/users/${target.id}/profile/avatar`}
-        defaultValues={{
-          name: target.name ?? "",
-          bio: profile.bio ?? "",
-          countryRegion: profile.countryRegion ?? "",
-          cityId: initialCity ? initialCity.id : null,
-          titleSpecialty: profile.titleSpecialty ?? "",
-          careerStage: profile.careerStage ?? "",
-          linkedinUrl: profile.linkedinUrl ?? "",
-          skillIds: profile.skills.map(({ skill }) => skill.id),
-          expertiseAreas: joinList(profile.expertiseAreas),
-          learningTopics: profile.learningTopics ?? "",
-          interestAreas: profile.interestAreas,
-          availability: profile.availability,
-          listInDirectory: profile.listInDirectory,
-          showSpecialtyLocation: profile.showSpecialtyLocation,
-        }}
-      />
+      <QueryProvider>
+        <ProfileForm
+          email={target.email}
+          avatarUrl={profile.avatarUrl}
+          availableSkills={skills}
+          isOnboarding={false}
+          initialCity={initialCity}
+          endpoint={`/api/admin/users/${target.id}/profile`}
+          avatarEndpoint={`/api/admin/users/${target.id}/profile/avatar`}
+          defaultValues={{
+            name: target.name ?? "",
+            bio: profile.bio ?? "",
+            countryRegion: profile.countryRegion ?? "",
+            cityId: initialCity ? initialCity.id : null,
+            titleSpecialty: profile.titleSpecialty ?? "",
+            careerStage: profile.careerStage ?? "",
+            linkedinUrl: profile.linkedinUrl ?? "",
+            skillIds: profile.skills.map(({ skill }) => skill.id),
+            expertiseAreas: joinList(profile.expertiseAreas),
+            learningTopics: profile.learningTopics ?? "",
+            interestAreas: profile.interestAreas,
+            availability: profile.availability,
+            listInDirectory: profile.listInDirectory,
+            showSpecialtyLocation: profile.showSpecialtyLocation,
+          }}
+        />
+      </QueryProvider>
     </main>
   );
 }
