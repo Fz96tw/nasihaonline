@@ -9,10 +9,14 @@ import {
   POINTER_TIMEOUT_MS,
   PointerSender,
   encodePointerMessage,
+  mapGuestPenToScreen,
   mapGuestPointer,
+  parseDrawToGuest,
+  parseDrawToHost,
   parsePointerToGuest,
   parsePointerToHost,
 } from "./guest-pointer.ts";
+import { ScreenViewport, screenToOutput } from "./screen-zoom.ts";
 
 const raw = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 const on = (u = 0.5, v = 0.5) => ({ u, v, on: true });
@@ -224,4 +228,103 @@ test("a guest's fingertip lands on their ghost's fingertip, mirrored or not", ()
   assert.deepEqual(mapGuestPointer(1, 1, { ...ghost, mirror: true }), { x: 100, y: 500 });
   // A smaller group ghost placed elsewhere: position and scale come from the placement.
   assert.deepEqual(mapGuestPointer(0.5, 0.5, { x: 800, y: 100, width: 200, height: 100, mirror: true }), { x: 900, y: 150 });
+});
+
+test("draw messages round-trip, and pointer and draw messages are not interchangeable", () => {
+  assert.deepEqual(parseDrawToHost(encodePointerMessage({ t: "draw", u: 0.2, v: 0.8, on: true })), { t: "draw", u: 0.2, v: 0.8, on: true });
+  assert.deepEqual(parseDrawToHost(encodePointerMessage({ t: "draw", u: 0, v: 0, on: false })), { t: "draw", u: 0, v: 0, on: false });
+  assert.deepEqual(parseDrawToHost(encodePointerMessage({ t: "draw-request" })), { t: "draw-request" });
+  assert.deepEqual(parseDrawToGuest(encodePointerMessage({ t: "draw-status", status: "pending" })), { t: "draw-status", status: "pending" });
+  assert.equal(parseDrawToHost(encodePointerMessage({ t: "pointer", u: 0.2, v: 0.8, on: true })), null, "a pointer message isn't a draw message");
+  assert.equal(parsePointerToHost(encodePointerMessage({ t: "draw", u: 0.2, v: 0.8, on: true })), null, "and the other way round");
+  assert.equal(parseDrawToGuest(encodePointerMessage({ t: "pointer-status", status: "allowed" })), null);
+});
+
+test("invalid, out-of-range or oversized draw messages are ignored without throwing", () => {
+  for (const bad of [
+    { t: "draw" },
+    { t: "draw", u: 0.5, v: 0.5 },
+    { t: "draw", u: 1.5, v: 0.5, on: true },
+    { t: "draw", u: -1, v: 0.5, on: true },
+    { t: "draw", u: "0.5", v: 0.5, on: true },
+    { t: "draw", u: 0.5, v: null, on: true },
+    { t: "draw", u: 0.5, v: 0.5, on: 1 },
+    { t: "draw-status", status: "allowed" },
+    { t: "zoom", u: 0.5, v: 0.5, on: true },
+    { t: "spotlight" },
+    { t: "reaction", kind: "wave" },
+    [],
+    "text",
+    null,
+  ]) {
+    assert.equal(parseDrawToHost(raw(bad)), null, JSON.stringify(bad));
+  }
+  assert.equal(parseDrawToGuest(raw({ t: "draw-status", status: "admin" })), null);
+  assert.equal(parseDrawToHost(new TextEncoder().encode("{oops")), null);
+  assert.equal(parseDrawToHost(raw({ t: "draw", u: 0.5, v: 0.5, on: true, pad: "x".repeat(200) })), null, "oversized");
+});
+
+test("drawing has its own policy and permissions, off by default, and the same rules as pointing", () => {
+  const pointer = new GuestPointerBoard();
+  const draw = new GuestPointerBoard();
+  assert.equal(draw.policy, "off");
+  pointer.policy = "on";
+  assert.equal(pointer.status("a", true), "allowed");
+  assert.equal(draw.status("a", true), "off", "letting a guest point doesn't let them draw");
+  assert.equal(draw.accept("a", on(), true, 0), false);
+  draw.policy = "ask";
+  assert.equal(draw.request("a", true, 0), "pending");
+  assert.equal(draw.accept("a", on(), true, 10), false, "not approved yet");
+  draw.decide("a", true);
+  assert.equal(draw.accept("a", on(), true, 100), true);
+  assert.equal(draw.accept("a", on(), false, 200), false, "a guest whose ghost isn't shown can't draw");
+  draw.revoke("a");
+  assert.equal(draw.canPoint("a", true), false);
+  assert.deepEqual(draw.dots(300, ["a"]), [], "a revoked guest's pen is gone at once, so their stroke ends");
+  assert.equal(pointer.status("a", true), "allowed", "revoking drawing leaves pointing alone");
+});
+
+test("a guest's pen has the same colour as their pointer dot when the boards share a colour map", () => {
+  const colors = new Map<string, string>();
+  const pointer = new GuestPointerBoard(colors);
+  const draw = new GuestPointerBoard(colors);
+  pointer.policy = "on";
+  draw.policy = "on";
+  pointer.accept("a", on(), true, 0);
+  draw.accept("b", on(), true, 0);
+  draw.accept("a", on(), true, 0);
+  pointer.accept("b", on(), true, 0);
+  const pointerColors = new Map(pointer.dots(0, ["a", "b"]).map((dot) => [dot.id, dot.color]));
+  const drawColors = new Map(draw.dots(0, ["a", "b"]).map((dot) => [dot.id, dot.color]));
+  assert.equal(drawColors.get("a"), pointerColors.get("a"));
+  assert.equal(drawColors.get("b"), pointerColors.get("b"));
+  assert.notEqual(drawColors.get("a"), drawColors.get("b"));
+});
+
+test("a guest's pen tip lands on their ghost's fingertip in screen coordinates, mirrored or not", () => {
+  const ghost = { x: 100, y: 200, width: 400, height: 300 };
+  const output = { width: 1000, height: 800 };
+  const whole = new ScreenViewport().rect(0);
+  // With the whole screen showing, screen coordinates are just the output position as a fraction.
+  assert.deepEqual(mapGuestPenToScreen(0.25, 0.5, { ...ghost, mirror: false }, output, whole), { x: 0.2, y: 350 / 800 });
+  assert.deepEqual(mapGuestPenToScreen(0.25, 0.5, { ...ghost, mirror: true }, output, whole), { x: 0.4, y: 350 / 800 });
+  assert.deepEqual(mapGuestPenToScreen(0, 0, { ...ghost, mirror: true }, output, whole), { x: 0.5, y: 0.25 });
+});
+
+test("guest strokes stay on the screen content when the host zooms or pans", () => {
+  const ghost = { x: 100, y: 200, width: 400, height: 300, mirror: false };
+  const output = { width: 1000, height: 800 };
+  const viewport = new ScreenViewport();
+  const before = mapGuestPenToScreen(0.5, 0.5, ghost, output, viewport.rect(0));
+  // Zoomed 2x toward the top-left: the same fingertip position now points at different screen content...
+  viewport.zoomIn(0, 0, 0);
+  const zoomed = mapGuestPenToScreen(0.5, 0.5, ghost, output, viewport.rect(10_000));
+  assert.ok(zoomed.x < before.x && zoomed.y < before.y, "the zoomed view shows half as much, so the same spot on screen is nearer the corner");
+  assert.ok(zoomed.x >= 0 && zoomed.y >= 0 && zoomed.x <= 1 && zoomed.y <= 1);
+  // ...and a stroke point already on the board is stored in screen coordinates, so under the zoom it is drawn where that
+  // content now appears (2x from the corner it zoomed toward), not where the fingertip was.
+  const drawnZoomed = screenToOutput(viewport.rect(10_000), before.x, before.y);
+  assert.ok(Math.abs(drawnZoomed.x - before.x * 2) < 1e-9 && Math.abs(drawnZoomed.y - before.y * 2) < 1e-9);
+  const drawnWhole = screenToOutput(new ScreenViewport().rect(0), before.x, before.y);
+  assert.ok(Math.abs(drawnWhole.x - before.x) < 1e-9 && Math.abs(drawnWhole.y - before.y) < 1e-9);
 });

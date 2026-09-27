@@ -5,8 +5,14 @@
  * like speaker-follow.ts. Parsing is strict: anything that isn't exactly one of these shapes is ignored.
  */
 import { cameraToOutput, type GhostPlacement } from "./gestures.ts";
+import { outputToScreen, type ViewRect } from "./screen-zoom.ts";
 
 export const POINTER_TOPIC = "showup-pointer";
+/** Guest air-draw (Showup 22) uses the same rules on its own topic, with its own host setting and permissions. */
+export const DRAW_TOPIC = "showup-draw";
+
+/** Which guest ability a message, status or board is about. */
+export type GuestAbility = "pointer" | "draw";
 
 /** Host setting "Guests can point". */
 export type PointerPolicy = "off" | "ask" | "on";
@@ -29,6 +35,11 @@ export type PointerToHost = { t: "pointer-request" } | PointerPosition;
 /** Presenter -> guest. */
 export type PointerToGuest = { t: "pointer-status"; status: PointerStatus };
 
+/** The same three messages for drawing: a fingertip position with a pen-active flag, a request, and the host's status. */
+export type DrawPosition = { t: "draw"; u: number; v: number; on: boolean };
+export type DrawToHost = { t: "draw-request" } | DrawPosition;
+export type DrawToGuest = { t: "draw-status"; status: PointerStatus };
+
 const STATUSES: readonly PointerStatus[] = ["off", "ask", "pending", "allowed"];
 const MAX_MESSAGE_BYTES = 128;
 
@@ -48,7 +59,7 @@ const DOT_SMOOTH_MS = 70;
 /** Per-guest dot colours, none of them the host's red laser or pen. Handed out in the order guests first point. */
 export const GUEST_POINTER_COLORS: readonly string[] = ["#22d3ee", "#a3e635", "#facc15", "#e879f9", "#fb923c", "#60a5fa"];
 
-export function encodePointerMessage(message: PointerToHost | PointerToGuest): Uint8Array<ArrayBuffer> {
+export function encodePointerMessage(message: PointerToHost | PointerToGuest | DrawToHost | DrawToGuest): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(JSON.stringify(message));
 }
 
@@ -83,6 +94,25 @@ export function parsePointerToGuest(payload: Uint8Array): PointerToGuest | null 
   return null;
 }
 
+export function parseDrawToHost(payload: Uint8Array): DrawToHost | null {
+  const message = parseJson(payload);
+  if (!message) return null;
+  if (message.t === "draw-request") return { t: "draw-request" };
+  if (message.t === "draw" && inRange(message.u) && inRange(message.v) && typeof message.on === "boolean") {
+    return { t: "draw", u: message.u, v: message.v, on: message.on };
+  }
+  return null;
+}
+
+export function parseDrawToGuest(payload: Uint8Array): DrawToGuest | null {
+  const message = parseJson(payload);
+  if (!message) return null;
+  if (message.t === "draw-status" && STATUSES.includes(message.status as PointerStatus)) {
+    return { t: "draw-status", status: message.status as PointerStatus };
+  }
+  return null;
+}
+
 /** A dot to draw: `u`/`v` are the guest's fingertip in their camera frame (0-1), `fade` is 1 while pointing and falls to 0 as it times out. */
 export type GuestPointerDot = { id: string; u: number; v: number; fade: number; color: string };
 
@@ -99,7 +129,13 @@ export class GuestPointerBoard {
   private requests = new Map<string, number>();
   private live = new Map<string, Live>();
   private lastAccepted = new Map<string, number>();
-  private colors = new Map<string, string>();
+
+  private colors: Map<string, string>;
+
+  /** Pass one colour map to both boards (pointing and drawing) so a guest has the same colour for both. */
+  constructor(colors: Map<string, string> = new Map()) {
+    this.colors = colors;
+  }
 
   /** What this guest should be told about their pointer right now. */
   status(id: string, visible: boolean): PointerStatus {
@@ -257,6 +293,22 @@ export class PointerSender {
     this.lastAt = Number.NEGATIVE_INFINITY;
     return { t: "pointer", u: 0, v: 0, on: false };
   }
+}
+
+/**
+ * Where a guest's pen tip lands in screen-content coordinates (fractions of the captured screen), which is where strokes
+ * are kept so they stay on the thing they circle when the host zooms or pans: through that guest's ghost (placement, size
+ * and the host's single mirror rule), then through the zoom view that is showing right now.
+ */
+export function mapGuestPenToScreen(
+  u: number,
+  v: number,
+  ghost: Omit<GhostPlacement, "crop">,
+  output: { width: number; height: number },
+  view: ViewRect,
+): { x: number; y: number } {
+  const at = mapGuestPointer(u, v, ghost);
+  return outputToScreen(view, at.x / output.width, at.y / output.height);
 }
 
 /**

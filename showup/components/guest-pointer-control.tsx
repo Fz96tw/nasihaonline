@@ -1,17 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MousePointer2 } from "lucide-react";
+import { MousePointer2, Pencil } from "lucide-react";
 import { RoomEvent, Track, type Room } from "livekit-client";
 import { loadHandLandmarker } from "@/lib/presenter-overlay/compositor";
 import { GestureTracker } from "@/lib/presenter-overlay/gestures";
 import {
+  DRAW_TOPIC,
   POINTER_TOPIC,
   PointerSender,
   encodePointerMessage,
+  parseDrawToGuest,
   parsePointerToGuest,
-  type PointerStatus,
+  type DrawPosition,
+  type GuestAbility,
   type PointerPosition,
+  type PointerStatus,
 } from "@/lib/presenter-overlay/guest-pointer";
 import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/components/livekit-control-styles";
 
@@ -21,24 +25,37 @@ const DETECT_INTERVAL_MS = 70;
 /** A little slack past the host's own request timeout so their answer normally arrives first. */
 const ASK_TIMEOUT_MS = 35_000;
 
+const TOPICS: Record<GuestAbility, string> = { pointer: POINTER_TOPIC, draw: DRAW_TOPIC };
+
+type ByAbility<T> = Record<GuestAbility, T>;
+
 /**
- * The guest's side of the laser pointer. While the presenter has this guest's ghost on the share and allows pointing,
- * it offers "Use pointer". When it's on, the hand tracking runs here, on the guest's own camera, and only the fingertip
- * position and an on/off flag are sent (to the presenter alone); no video or hand landmarks leave this device. The
- * presenter's screen does the drawing. Shows nothing while there's no share, when this guest isn't allowed to point, or
- * where the hand model can't run.
+ * The guest's side of the laser pointer and the pen. While the presenter has this guest's ghost on the share and allows
+ * it, it offers "Use pointer" and/or "Use pen". When one is on, the hand tracking runs here, on the guest's own camera,
+ * and only the fingertip position and an on/off flag are sent (to the presenter alone); no video or hand landmarks
+ * leave this device. The presenter's screen does the drawing. Point with the index finger for the pointer, hold two
+ * fingers together for the pen. Shows nothing while there's no share, when this guest isn't allowed either, or where
+ * the hand model can't run. Guests have no zoom, spotlight or reactions: nothing here can send them.
  */
 export function GuestPointerControl({ room }: { room: Room | null }) {
   const [presenterId, setPresenterId] = useState<string | null>(null);
   const [selfSharing, setSelfSharing] = useState(false);
-  const [status, setStatus] = useState<PointerStatus>("off");
-  const [using, setUsing] = useState(false);
-  const [asked, setAsked] = useState(false);
+  const [status, setStatus] = useState<ByAbility<PointerStatus>>({ pointer: "off", draw: "off" });
+  const [using, setUsing] = useState<ByAbility<boolean>>({ pointer: false, draw: false });
+  const [asked, setAsked] = useState<ByAbility<boolean>>({ pointer: false, draw: false });
   const [unavailable, setUnavailable] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const presenterRef = useRef<string | null>(null);
   presenterRef.current = presenterId;
-  const askTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const askTimers = useRef<ByAbility<ReturnType<typeof setTimeout> | null>>({ pointer: null, draw: null });
+  // Read by the detection loop without restarting it whenever a toggle changes.
+  const wantRef = useRef<ByAbility<boolean>>({ pointer: false, draw: false });
+  wantRef.current = { pointer: using.pointer && status.pointer === "allowed", draw: using.draw && status.draw === "allowed" };
+  const anyWanted = wantRef.current.pointer || wantRef.current.draw;
+
+  function setOne<T>(setter: (update: (previous: ByAbility<T>) => ByAbility<T>) => void, ability: GuestAbility, value: T) {
+    setter((previous) => (previous[ability] === value ? previous : { ...previous, [ability]: value }));
+  }
 
   // Hidden where the hand model can't run at all.
   useEffect(() => {
@@ -65,9 +82,9 @@ export function GuestPointerControl({ room }: { room: Room | null }) {
   // The share ended: nothing from it carries over.
   useEffect(() => {
     if (!presenterId) {
-      setStatus("off");
-      setUsing(false);
-      setAsked(false);
+      setStatus({ pointer: "off", draw: "off" });
+      setUsing({ pointer: false, draw: false });
+      setAsked({ pointer: false, draw: false });
     }
   }, [presenterId]);
 
@@ -75,15 +92,18 @@ export function GuestPointerControl({ room }: { room: Room | null }) {
   useEffect(() => {
     if (!room) return;
     const onData = (payload: Uint8Array, participant?: { identity: string }, _kind?: unknown, topic?: string) => {
-      if (topic !== POINTER_TOPIC || !participant || participant.identity !== presenterRef.current) return;
-      const message = parsePointerToGuest(payload);
+      if (!participant || participant.identity !== presenterRef.current) return;
+      const ability: GuestAbility | null = topic === POINTER_TOPIC ? "pointer" : topic === DRAW_TOPIC ? "draw" : null;
+      if (!ability) return;
+      const message = ability === "pointer" ? parsePointerToGuest(payload) : parseDrawToGuest(payload);
       if (!message) return;
-      setStatus(message.status);
+      setOne(setStatus, ability, message.status);
       if (message.status !== "pending") {
-        setAsked(false);
-        if (askTimer.current) clearTimeout(askTimer.current);
+        setOne(setAsked, ability, false);
+        const timer = askTimers.current[ability];
+        if (timer) clearTimeout(timer);
       }
-      if (message.status !== "allowed") setUsing(false);
+      if (message.status !== "allowed") setOne(setUsing, ability, false);
     };
     room.on(RoomEvent.DataReceived, onData);
     return () => {
@@ -93,24 +113,25 @@ export function GuestPointerControl({ room }: { room: Room | null }) {
 
   useEffect(
     () => () => {
-      if (askTimer.current) clearTimeout(askTimer.current);
+      for (const timer of Object.values(askTimers.current)) if (timer) clearTimeout(timer);
     },
     [],
   );
 
-  // The detection loop: only while the guest has turned the pointer on and is allowed to point.
+  // The detection loop: only while the guest has turned the pointer or the pen on and is allowed it. One loop serves both.
   useEffect(() => {
-    if (!room || !using || status !== "allowed" || !presenterId) return;
+    if (!room || !anyWanted || !presenterId) return;
     let cancelled = false;
     let timer: ReturnType<typeof setInterval> | null = null;
     let video: HTMLVideoElement | null = null;
-    const sender = new PointerSender();
+    const senders = { pointer: new PointerSender(), draw: new PointerSender() };
     const tracker = new GestureTracker();
 
-    function send(message: PointerPosition) {
+    function send(ability: GuestAbility, position: PointerPosition) {
       // Positions are lossy on purpose (a late one is worthless); the closing "off" is reliable.
+      const message: PointerPosition | DrawPosition = ability === "pointer" ? position : { ...position, t: "draw" };
       room?.localParticipant
-        .publishData(encodePointerMessage(message), { reliable: !message.on, topic: POINTER_TOPIC, destinationIdentities: [presenterId as string] })
+        .publishData(encodePointerMessage(message), { reliable: !message.on, topic: TOPICS[ability], destinationIdentities: [presenterId as string] })
         .catch(() => {});
     }
 
@@ -120,8 +141,8 @@ export function GuestPointerControl({ room }: { room: Room | null }) {
         if (cancelled) return;
         const camera = room.localParticipant.getTrackPublication(Track.Source.Camera)?.track?.mediaStreamTrack;
         if (!camera) {
-          setNotice("Turn your camera on to use the pointer.");
-          setUsing(false);
+          setNotice("Turn your camera on to use the pointer or pen.");
+          setUsing({ pointer: false, draw: false });
           return;
         }
         const element = document.createElement("video");
@@ -140,9 +161,14 @@ export function GuestPointerControl({ room }: { room: Room | null }) {
             const now = performance.now();
             const result = hand.detectForVideo(video, now);
             const state = tracker.update(now, result.landmarks?.[0] ?? null, video.videoWidth / video.videoHeight);
-            const tip = state.pointer && state.pointer.fade >= 0.999 ? { u: state.pointer.u, v: state.pointer.v } : null;
-            const message = sender.next(now, tip);
-            if (message) send(message);
+            const want = wantRef.current;
+            // The pointer needs the pointing pose, the pen the two-fingers-together pose; a turned-off one sends its closing "off" once.
+            const tip = want.pointer && state.pointer && state.pointer.fade >= 0.999 ? { u: state.pointer.u, v: state.pointer.v } : null;
+            const pen = want.draw && state.pen ? { u: state.pen.u, v: state.pen.v } : null;
+            const pointerMessage = senders.pointer.next(now, tip);
+            if (pointerMessage) send("pointer", pointerMessage);
+            const drawMessage = senders.draw.next(now, pen);
+            if (drawMessage) send("draw", drawMessage);
           } catch {
             // A bad frame is skipped; the loop keeps going.
           }
@@ -151,7 +177,7 @@ export function GuestPointerControl({ room }: { room: Room | null }) {
         console.warn("[guest-pointer] hand tracking can't run here", error);
         if (!cancelled) {
           setUnavailable(true);
-          setUsing(false);
+          setUsing({ pointer: false, draw: false });
         }
       }
     })();
@@ -164,10 +190,12 @@ export function GuestPointerControl({ room }: { room: Room | null }) {
         video.srcObject = null;
         video.remove();
       }
-      const off = sender.next(performance.now(), null);
-      if (off) send(off);
+      for (const ability of ["pointer", "draw"] as const) {
+        const off = senders[ability].next(performance.now(), null);
+        if (off) send(ability, off);
+      }
     };
-  }, [room, using, status, presenterId]);
+  }, [room, anyWanted, presenterId]);
 
   useEffect(() => {
     if (!notice) return;
@@ -175,52 +203,85 @@ export function GuestPointerControl({ room }: { room: Room | null }) {
     return () => clearTimeout(timer);
   }, [notice]);
 
-  function ask() {
+  function ask(ability: GuestAbility) {
     if (!room || !presenterId) return;
     room.localParticipant
-      .publishData(encodePointerMessage({ t: "pointer-request" }), { reliable: true, topic: POINTER_TOPIC, destinationIdentities: [presenterId] })
+      .publishData(encodePointerMessage({ t: ability === "pointer" ? "pointer-request" : "draw-request" }), {
+        reliable: true,
+        topic: TOPICS[ability],
+        destinationIdentities: [presenterId],
+      })
       .catch(() => {});
-    setAsked(true);
-    if (askTimer.current) clearTimeout(askTimer.current);
-    askTimer.current = setTimeout(() => {
-      setAsked(false);
+    setOne(setAsked, ability, true);
+    const previous = askTimers.current[ability];
+    if (previous) clearTimeout(previous);
+    askTimers.current[ability] = setTimeout(() => {
+      setOne(setAsked, ability, false);
       setNotice("No response from the presenter.");
     }, ASK_TIMEOUT_MS);
   }
 
-  if (unavailable || !presenterId || selfSharing || (status === "off" && !notice)) return null;
+  if (unavailable || !presenterId || selfSharing || (status.pointer === "off" && status.draw === "off" && !notice)) return null;
+
+  const labels: ByAbility<{ ask: string; use: string; stop: string; askTitle: string; useTitle: string; hint: string }> = {
+    pointer: {
+      ask: "Ask to use pointer",
+      use: "Use pointer",
+      stop: "Stop pointer",
+      askTitle: "Ask the presenter to let you point at the shared screen",
+      useTitle: "Point with your index finger, other fingers curled, to show a dot on the shared screen",
+      hint: "Point with your index finger, other fingers curled, and hold for a moment.",
+    },
+    draw: {
+      ask: "Ask to draw",
+      use: "Use pen",
+      stop: "Stop pen",
+      askTitle: "Ask the presenter to let you draw on the shared screen",
+      useTitle: "Hold two fingers together to draw on the shared screen",
+      hint: "Hold two fingers together and move them to draw.",
+    },
+  };
 
   return (
     <div className="pointer-events-auto flex max-w-[18rem] flex-col items-start gap-2" data-testid="guest-pointer-control">
-      {status === "ask" && (
-        <button type="button" onClick={ask} disabled={asked} className={LK_BUTTON_CLASS} title="Ask the presenter to let you point at the shared screen">
-          <MousePointer2 className="h-4 w-4" />
-          <span className="hidden sm:inline">{asked ? "Waiting for the presenter…" : "Ask to use pointer"}</span>
-        </button>
-      )}
-      {status === "pending" && (
-        <button type="button" disabled className={LK_BUTTON_CLASS}>
-          <MousePointer2 className="h-4 w-4" />
-          <span className="hidden sm:inline">Waiting for the presenter…</span>
-        </button>
-      )}
-      {status === "allowed" && (
-        <button
-          type="button"
-          onClick={() => setUsing((value) => !value)}
-          aria-pressed={using}
-          className={`${LK_BUTTON_CLASS} ${using ? LK_BUTTON_ACTIVE_CLASS : ""}`}
-          title="Point with your index finger, other fingers curled, to show a dot on the shared screen"
-        >
-          <MousePointer2 className="h-4 w-4" />
-          <span className="hidden sm:inline">{using ? "Stop pointer" : "Use pointer"}</span>
-        </button>
-      )}
-      {status === "allowed" && using && (
-        <p role="status" className={`rounded-md border px-2 py-1 text-xs ${LK_PANEL_CLASS}`}>
-          Point with your index finger, other fingers curled, and hold for a moment.
-        </p>
-      )}
+      {(["pointer", "draw"] as const).map((ability) => {
+        const Icon = ability === "pointer" ? MousePointer2 : Pencil;
+        const text = labels[ability];
+        const current = status[ability];
+        return (
+          <div key={ability} className="flex flex-col items-start gap-2" data-testid={`guest-${ability}-control`}>
+            {current === "ask" && (
+              <button type="button" onClick={() => ask(ability)} disabled={asked[ability]} className={LK_BUTTON_CLASS} title={text.askTitle}>
+                <Icon className="h-4 w-4" />
+                <span className="hidden sm:inline">{asked[ability] ? "Waiting for the presenter…" : text.ask}</span>
+              </button>
+            )}
+            {current === "pending" && (
+              <button type="button" disabled className={LK_BUTTON_CLASS}>
+                <Icon className="h-4 w-4" />
+                <span className="hidden sm:inline">Waiting for the presenter…</span>
+              </button>
+            )}
+            {current === "allowed" && (
+              <button
+                type="button"
+                onClick={() => setUsing((previous) => ({ ...previous, [ability]: !previous[ability] }))}
+                aria-pressed={using[ability]}
+                className={`${LK_BUTTON_CLASS} ${using[ability] ? LK_BUTTON_ACTIVE_CLASS : ""}`}
+                title={text.useTitle}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="hidden sm:inline">{using[ability] ? text.stop : text.use}</span>
+              </button>
+            )}
+            {current === "allowed" && using[ability] && (
+              <p role="status" className={`rounded-md border px-2 py-1 text-xs ${LK_PANEL_CLASS}`}>
+                {text.hint}
+              </p>
+            )}
+          </div>
+        );
+      })}
       {notice && (
         <p role="status" className={`rounded-md border px-2 py-1 text-xs ${LK_PANEL_CLASS}`}>
           {notice}

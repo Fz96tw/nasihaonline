@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FADE_MS, HOLD_MS, MAX_POINTS, StrokeBoard } from "./drawing.ts";
+import { FADE_MS, HOLD_MS, MAX_POINTS, MAX_POINTS_PER_GUEST, StrokeBoard, strokeColor } from "./drawing.ts";
 
 test("a stroke collects points while drawing and stays fully visible", () => {
   const board = new StrokeBoard();
@@ -90,4 +90,87 @@ test("a single endless stroke is trimmed from its oldest end rather than growing
   for (let i = 0; i < MAX_POINTS * 2; i++) board.add((i % 500) * 0.0021, Math.floor(i / 500) * 0.01);
   assert.ok(board.pointCount <= MAX_POINTS);
   assert.equal(board.drawing, true);
+});
+
+test("each guest draws a stroke of their own, next to the presenter's, in their own colour", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "red");
+  board.begin(0, "#22d3ee", "guest-a");
+  board.begin(0, "#a3e635", "guest-b");
+  board.add(0.1, 0.1);
+  board.add(0.5, 0.5, "guest-a");
+  board.add(0.9, 0.9, "guest-b");
+  assert.equal(board.drawing, true, "the presenter is still drawing");
+  assert.deepEqual(board.drawingOwners.sort(), ["guest-a", "guest-b", "host"]);
+  const shown = board.visible(0);
+  assert.equal(shown.length, 3);
+  assert.deepEqual(shown.map(({ stroke }) => stroke.owner).sort(), ["guest-a", "guest-b", "host"]);
+  assert.equal(shown.find(({ stroke }) => stroke.owner === "guest-a")?.stroke.color, "#22d3ee");
+  // Ending one guest's stroke leaves the others going.
+  board.end(100, "guest-a");
+  assert.equal(board.isDrawing("guest-a"), false);
+  assert.equal(board.isDrawing("guest-b"), true);
+  assert.equal(board.drawing, true);
+  // A guest's finished stroke holds and fades like the presenter's.
+  assert.equal(board.visible(100 + HOLD_MS).find(({ stroke }) => stroke.owner === "guest-a")?.alpha, 1);
+  assert.equal(board.visible(100 + HOLD_MS + FADE_MS).find(({ stroke }) => stroke.owner === "guest-a"), undefined);
+});
+
+test("a guest starting a new stroke ends their own previous one only", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "red");
+  board.begin(0, "#22d3ee", "guest-a");
+  board.add(0.5, 0.5, "guest-a");
+  board.begin(50, "#22d3ee", "guest-a");
+  const first = board.visible(60).filter(({ stroke }) => stroke.owner === "guest-a");
+  assert.equal(first.length, 2);
+  assert.equal(first[0].stroke.endedAt, 50);
+  assert.equal(board.isDrawing(), true, "the presenter's stroke is untouched");
+});
+
+test("one guest can't exhaust the shared point cap: they keep only their newest points", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "red");
+  for (let i = 0; i < 300; i++) board.add(0.001 * (i % 10) + 0.1, 0.005 * i);
+  board.begin(0, "#22d3ee", "guest-a");
+  for (let i = 0; i < MAX_POINTS * 2; i++) board.add((i % 100) / 100, Math.floor(i / 100) / 50, "guest-a");
+  assert.ok(board.pointsOf("guest-a") <= MAX_POINTS_PER_GUEST, `guest kept ${board.pointsOf("guest-a")}`);
+  assert.ok(board.pointsOf("guest-a") > 0);
+  assert.ok(MAX_POINTS_PER_GUEST < MAX_POINTS);
+  assert.equal(board.pointsOf("host"), 300, "the presenter's strokes are untouched by a guest's scribble");
+  assert.ok(board.pointCount <= MAX_POINTS);
+});
+
+test("a guest's older strokes are dropped first when they go over their share", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "#22d3ee", "guest-a");
+  for (let i = 0; i < 300; i++) board.add(i / 300, 0.1, "guest-a");
+  board.end(10, "guest-a");
+  board.begin(20, "#22d3ee", "guest-a");
+  for (let i = 0; i < 300; i++) board.add(i / 300, 0.9, "guest-a");
+  assert.ok(board.pointsOf("guest-a") <= MAX_POINTS_PER_GUEST);
+  const strokes = board.visible(30).map(({ stroke }) => stroke);
+  const current = strokes.find((stroke) => stroke.endedAt === null);
+  assert.equal(current?.points.length, 300, "the stroke being drawn keeps its newest points");
+});
+
+test("Clear drawing removes the presenter's and every guest's strokes at once", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "red");
+  board.add(0.2, 0.2);
+  board.begin(0, "#22d3ee", "guest-a");
+  board.add(0.4, 0.4, "guest-a");
+  board.end(10, "guest-a");
+  board.clear();
+  assert.deepEqual(board.visible(20), []);
+  assert.equal(board.drawing, false);
+  assert.deepEqual(board.drawingOwners, []);
+  // Points added after a clear, with no stroke begun, go nowhere.
+  board.add(0.3, 0.3, "guest-a");
+  assert.equal(board.pointCount, 0);
+});
+
+test("strokeColor resolves the presenter's pen names and passes a guest's colour through", () => {
+  assert.equal(strokeColor("red"), "#ff3030");
+  assert.equal(strokeColor("#22d3ee"), "#22d3ee");
 });

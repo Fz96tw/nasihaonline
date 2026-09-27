@@ -31,8 +31,8 @@
 import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
 import { REACTION_EMOJI, ReactionPlayer, reactionPosition } from "./reactions.ts";
 import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement } from "./gestures.ts";
-import { mapGuestPointer, type GuestPointerDot } from "./guest-pointer.ts";
-import { PEN_COLORS, StrokeBoard, type PenColor } from "./drawing.ts";
+import { mapGuestPenToScreen, mapGuestPointer, type GuestPointerDot } from "./guest-pointer.ts";
+import { HOST_OWNER, StrokeBoard, strokeColor, type PenColor } from "./drawing.ts";
 import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
 import { SizeNormalizer, measureFromRows } from "./size-normalize.ts";
 import { WindowSmoother, clampWindow, panelAspect, personBounds, targetCentre, tracePanelPath, windowSize, type PanelShape, type PersonBounds } from "./panel.ts";
@@ -191,6 +191,8 @@ export type PresenterOverlayCompositor = {
   setSpotlight: (on: boolean) => void;
   /** The guests' laser dots for this moment (fingertips in each guest's camera frame). A dot is drawn only while that guest's ghost is on the share; call it every tick. */
   setGuestPointers: (dots: GuestPointerDot[]) => void;
+  /** Guests who are drawing this moment (pen tip in their camera frame, their colour). Each becomes a stroke of their own, kept in screen coordinates; a guest missing from the list, or whose ghost isn't on the share, has their stroke ended. Call it every tick. */
+  setGuestPens: (pens: GuestPointerDot[]) => void;
   /** Stops all readers and the output track (the segmenter is kept for reuse). Does NOT stop the input tracks — the caller owns those. */
   stop: () => void;
 };
@@ -400,6 +402,7 @@ export async function startPresenterOverlayCompositor({
   let lastLabel: GestureState["label"] | "unavailable" = null;
   let pointer: GestureState["pointer"] = null;
   let guestPointers: GuestPointerDot[] = [];
+  let guestPens: GuestPointerDot[] = [];
   let lastPan: { x: number; y: number } | null = null;
   let trail: { x: number; y: number; t: number }[] = [];
 
@@ -765,6 +768,26 @@ export async function startPresenterOverlayCompositor({
     outputCtx.fillRect(0, 0, width, height);
   }
 
+  /**
+   * Guests' pen tips become strokes on the same board as the presenter's, one stroke each, in screen coordinates (through the
+   * guest's ghost and the zoom view showing now). A stroke ends when the guest stops, or their ghost is no longer on the share.
+   */
+  function applyGuestPens(now: number, width: number, height: number) {
+    const active = new Set<string>();
+    const view = viewport.rect(now);
+    for (const pen of guestPens) {
+      const placement = placementFor(pen.id);
+      if (!placement) continue;
+      active.add(pen.id);
+      const at = mapGuestPenToScreen(pen.u, pen.v, placement, { width, height }, view);
+      if (!board.isDrawing(pen.id)) board.begin(now, pen.color, pen.id);
+      board.add(at.x, at.y, pen.id);
+    }
+    for (const owner of board.drawingOwners) {
+      if (owner !== HOST_OWNER && !active.has(owner)) board.end(now, owner);
+    }
+  }
+
   /** Air-drawn strokes, on top of the screen layer and under the ghosts. They live in screen coordinates, so they follow the zoom view. */
   function drawStrokes(now: number, width: number, height: number) {
     const shown = board.visible(now);
@@ -780,7 +803,7 @@ export async function startPresenterOverlayCompositor({
         const at = screenToOutput(view, point.x, point.y);
         return { x: at.x * width, y: at.y * height };
       });
-      const color = PEN_COLORS[stroke.color];
+      const color = strokeColor(stroke.color);
       outputCtx.globalAlpha = alpha;
       outputCtx.strokeStyle = color;
       outputCtx.shadowColor = color;
@@ -1004,6 +1027,7 @@ export async function startPresenterOverlayCompositor({
     }
 
     drawSpotlight(now, width, height);
+    applyGuestPens(now, width, height);
     drawStrokes(now, width, height);
 
     // Fading-out sources first, then the ones on their way in, so a new speaker fades in over the old one.
@@ -1124,6 +1148,10 @@ export async function startPresenterOverlayCompositor({
     guestPointers = dots;
   }
 
+  function setGuestPens(pens: GuestPointerDot[]) {
+    guestPens = pens;
+  }
+
   function stop() {
     if (stopped) return;
     stopped = true;
@@ -1142,5 +1170,5 @@ export async function startPresenterOverlayCompositor({
     onError(error);
   });
 
-  return { track: generator, settings, addSource, removeSource, setVisible, zoomIn, resetZoom, clearDrawing, setSpotlight, setGuestPointers, stop };
+  return { track: generator, settings, addSource, removeSource, setVisible, zoomIn, resetZoom, clearDrawing, setSpotlight, setGuestPointers, setGuestPens, stop };
 }
