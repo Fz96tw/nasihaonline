@@ -25,6 +25,7 @@ import {
 import "@livekit/components-styles";
 import { GuestPointerControl } from "@/components/guest-pointer-control";
 import { OverlayGuestControl } from "@/components/overlay-guest-control";
+import { ParticipantList } from "@/components/participant-list";
 import { PresenterOverlayControl } from "@/components/presenter-overlay-control";
 import { LK_BUTTON_CLASS } from "@/components/livekit-control-styles";
 import { LobbyHostPanel } from "@/components/lobby-host-panel";
@@ -370,6 +371,8 @@ export function ShowupRoom({ credentials, onLeave }: { credentials: RoomCredenti
       {isHost && !sharing && <SharePrompt room={room} onError={pushToast} />}
       <Toasts toasts={toasts} />
       <TopLeftOverlay>
+        {/* Everyone in the session by name (camera on or off), from LiveKit's own room state; closed until opened. */}
+        <ParticipantList room={room} overlayIds={overlayIds} isHost={isHost} />
         {/* Anyone else in the meeting can ask to appear on a presenter's share; renders nothing unless someone else is sharing. */}
         <OverlayGuestControl room={room} onOverlayIds={setOverlayIds} />
         {/* Where the presenter allows it and this guest's ghost is on the share, they can point at the screen; hand tracking runs here, on their own camera. */}
