@@ -26,9 +26,20 @@
  * Chrome/Edge only: needs the (non-standard on window) insertable-streams
  * pair MediaStreamTrackProcessor + MediaStreamTrackGenerator — see
  * isPresenterOverlaySupported().
+ *
+ * Host gestures and air-draw (ported from showup/lib/presenter-overlay/,
+ * trimmed to the core poses — see gestures.ts's and drawing.ts's doc
+ * comments): point to show a laser dot, pinch to zoom/pan the screen layer,
+ * open palm to reset, two fingers together to air-draw. Off by default;
+ * loads the hand-landmark model the first time they're switched on. Only
+ * ever active while the overlay itself is on (i.e. while screen-sharing) —
+ * there is no camera-only mode.
  */
 
-import type { ImageSegmenter } from "@mediapipe/tasks-vision";
+import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
+import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement } from "./gestures.ts";
+import { StrokeBoard, strokeColor, type PenColor } from "./drawing.ts";
+import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
 
 // Insertable-streams (Chrome's main-thread flavor) aren't in TS's DOM lib yet.
 type MediaStreamTrackProcessorCtor = new (init: { track: MediaStreamTrack }) => { readable: ReadableStream<VideoFrame> };
@@ -53,6 +64,8 @@ export function isPresenterOverlaySupported(): boolean {
 const MEDIAPIPE_WASM_BASE = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
 const SELFIE_SEGMENTER_MODEL =
   "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite";
+const HAND_LANDMARKER_MODEL =
+  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task";
 
 /** Output cap — matches the recording's EncodingOptions (1280×720 @ 20fps) in lib/livekit-egress.ts. */
 const MAX_OUTPUT_WIDTH = 1280;
@@ -61,8 +74,16 @@ const MIN_FRAME_INTERVAL_MS = 1000 / 20;
 /** Webcam is segmented at this size — plenty for a translucent cut-out, and keeps the per-frame mask readback cheap. */
 const CAMERA_WIDTH = 640;
 const CAMERA_HEIGHT = 360;
+/** Hand detection runs at most ~14 times a second, and slower still if a detection ever takes long — independent of (and
+ * throttled separately from) the 20fps segmentation above, so gestures don't cost the cut-out its frame rate. */
+const HAND_INTERVAL_MS = 70;
+/** The laser dot's trail lasts this long. */
+const LASER_TRAIL_MS = 250;
 
 export type OverlayCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+
+/** What the gesture tracker currently recognizes, for the host's own (not streamed) indicator. */
+export type GestureLabel = GestureState["label"] | "unavailable";
 
 export type PresenterOverlaySettings = {
   /** 0–1, how solid the presenter's cut-out is drawn over the screen. */
@@ -80,6 +101,13 @@ export type PresenterOverlaySettings = {
    * too; the only visible cost is reversed text on clothing.
    */
   mirror: boolean;
+  /**
+   * Host hand gestures: point to show a laser dot, pinch to zoom the screen (pan by moving the pinched
+   * hand), open palm to reset, two fingers together to air-draw. Off by default.
+   */
+  gestures: boolean;
+  /** Colour of the air-draw pen. */
+  penColor: PenColor;
   caption: string;
   image: ImageBitmap | null;
   imageCorner: OverlayCorner;
@@ -90,6 +118,8 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   scale: 1,
   position: "center",
   mirror: true,
+  gestures: false,
+  penColor: "red",
   caption: "",
   image: null,
   imageCorner: "top-right",
@@ -100,6 +130,12 @@ export type PresenterOverlayCompositor = {
   track: MediaStreamTrack;
   /** Mutated in place by the UI; read fresh on every frame, so changes apply without a restart. */
   settings: PresenterOverlaySettings;
+  /** Zooms the screen layer 2x toward its centre (the same zoom a pinch gives). No-op when already zoomed. */
+  zoomIn: () => void;
+  /** Back to the whole screen. */
+  resetZoom: () => void;
+  /** Removes every air-drawn stroke. */
+  clearDrawing: () => void;
   /** Stops both readers and the output track (the segmenter is kept for reuse). Does NOT stop the input tracks — the caller owns those. */
   stop: () => void;
 };
@@ -126,6 +162,27 @@ function loadSegmenter(): Promise<ImageSegmenter> {
   return segmenterPromise;
 }
 
+let handLandmarkerPromise: Promise<HandLandmarker> | null = null;
+
+/** Lazily loads MediaPipe's hand model the first time gestures are switched on; reused afterwards. */
+function loadHandLandmarker(): Promise<HandLandmarker> {
+  if (!handLandmarkerPromise) {
+    handLandmarkerPromise = (async () => {
+      const { FilesetResolver, HandLandmarker } = await import("@mediapipe/tasks-vision");
+      const fileset = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_BASE);
+      return HandLandmarker.createFromOptions(fileset, {
+        baseOptions: { modelAssetPath: HAND_LANDMARKER_MODEL, delegate: "GPU" },
+        runningMode: "VIDEO",
+        numHands: 1,
+      });
+    })().catch((error) => {
+      handLandmarkerPromise = null; // allow a retry the next time gestures are switched on
+      throw error;
+    });
+  }
+  return handLandmarkerPromise;
+}
+
 function context2d(canvas: OffscreenCanvas): OffscreenCanvasRenderingContext2D {
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("2D canvas is unavailable in this browser.");
@@ -142,10 +199,13 @@ export async function startPresenterOverlayCompositor({
   screenTrack,
   cameraTrack,
   onError,
+  onGesture,
 }: {
   screenTrack: MediaStreamTrack;
   cameraTrack: MediaStreamTrack;
   onError: (error: unknown) => void;
+  /** Tells the host's UI what gesture is recognized (or that the hand model couldn't load). Not drawn into the stream. */
+  onGesture?: (label: GestureLabel) => void;
 }): Promise<PresenterOverlayCompositor> {
   const { Processor, Generator } = insertableStreams();
   if (!Processor || !Generator) throw new Error("This browser can't combine video tracks. Try Chrome or Edge.");
@@ -176,6 +236,20 @@ export async function startPresenterOverlayCompositor({
   let stopped = false;
   let lastOutputAt = 0;
   let lastSegmentTimestamp = 0;
+
+  // Gestures: the tracker, the screen zoom, the stroke board and the hand model (loaded on first use).
+  const viewport = new ScreenViewport();
+  const board = new StrokeBoard();
+  let tracker = new GestureTracker();
+  let hand: HandLandmarker | null = null;
+  let handLoading = false;
+  let lastHandAt = 0;
+  let lastHandMs = 0;
+  let lastHandTimestamp = 0;
+  let lastLabel: GestureLabel = null;
+  let pointer: GestureState["pointer"] = null;
+  let lastPan: { x: number; y: number } | null = null;
+  let trail: { x: number; y: number; t: number }[] = [];
 
   const screenReader = new Processor({ track: screenTrack }).readable.getReader();
   const cameraReader = new Processor({ track: cameraTrack }).readable.getReader();
@@ -275,40 +349,218 @@ export async function startPresenterOverlayCompositor({
     outputCtx.drawImage(image, x, y, w, h);
   }
 
+  /** The output frame size for this moment — the screen's own size once one has arrived, or the cap before that. */
+  function outputSize(): { width: number; height: number } {
+    return hasScreenFrame ? { width: screenCanvas.width, height: screenCanvas.height } : { width: MAX_OUTPUT_WIDTH, height: MAX_OUTPUT_HEIGHT };
+  }
+
+  /** Where the cut-out is drawn on the output frame right now — the same placement gestures are mapped through. */
+  function hostPlacement(): GhostPlacement {
+    const { width, height } = outputSize();
+    const personHeight = height * settings.scale;
+    const personWidth = personHeight * (CAMERA_WIDTH / CAMERA_HEIGHT);
+    const x = settings.position === "left" ? 0 : settings.position === "right" ? width - personWidth : (width - personWidth) / 2;
+    return { x, y: height - personHeight, width: personWidth, height: personHeight, mirror: settings.mirror };
+  }
+
+  /** Air-drawn strokes, on top of the (zoomed) screen layer and under the cut-out. They live in screen coordinates, so they follow the zoom view. */
+  function drawStrokes(now: number, width: number, height: number) {
+    const shown = board.visible(now);
+    if (shown.length === 0) return;
+    const view = viewport.rect(now);
+    outputCtx.save();
+    outputCtx.lineCap = "round";
+    outputCtx.lineJoin = "round";
+    outputCtx.lineWidth = Math.max(3, height * 0.006);
+    for (const { stroke, alpha } of shown) {
+      if (stroke.points.length === 0) continue;
+      const points = stroke.points.map((point) => {
+        const at = screenToOutput(view, point.x, point.y);
+        return { x: at.x * width, y: at.y * height };
+      });
+      const color = strokeColor(stroke.color);
+      outputCtx.globalAlpha = alpha;
+      outputCtx.strokeStyle = color;
+      outputCtx.shadowColor = color;
+      outputCtx.shadowBlur = outputCtx.lineWidth * 2;
+      outputCtx.beginPath();
+      outputCtx.moveTo(points[0].x, points[0].y);
+      if (points.length === 1) {
+        outputCtx.lineTo(points[0].x + 0.1, points[0].y);
+      } else {
+        // Curve through the midpoints, so the coarse ~14 Hz samples don't show as corners.
+        for (let i = 1; i < points.length - 1; i++) {
+          outputCtx.quadraticCurveTo(points[i].x, points[i].y, (points[i].x + points[i + 1].x) / 2, (points[i].y + points[i + 1].y) / 2);
+        }
+        const last = points[points.length - 1];
+        outputCtx.lineTo(last.x, last.y);
+      }
+      outputCtx.stroke();
+    }
+    outputCtx.restore();
+  }
+
+  /** The glowing red laser dot at the host's fingertip, with a short fading trail. */
+  function drawLaser(now: number, height: number) {
+    if (!pointer) {
+      trail = [];
+      return;
+    }
+    const at = cameraToOutput(pointer.u, pointer.v, hostPlacement());
+    trail.push({ x: at.x, y: at.y, t: now });
+    trail = trail.filter((point) => now - point.t <= LASER_TRAIL_MS);
+    const radius = Math.max(5, height * 0.012);
+    outputCtx.save();
+    for (const point of trail) {
+      const age = (now - point.t) / LASER_TRAIL_MS;
+      outputCtx.globalAlpha = (1 - age) * 0.35 * pointer.fade;
+      outputCtx.fillStyle = "#ff2a2a";
+      outputCtx.beginPath();
+      outputCtx.arc(point.x, point.y, radius * (1 - age * 0.5), 0, Math.PI * 2);
+      outputCtx.fill();
+    }
+    outputCtx.globalAlpha = pointer.fade;
+    const glow = outputCtx.createRadialGradient(at.x, at.y, 0, at.x, at.y, radius * 3);
+    glow.addColorStop(0, "rgba(255, 60, 60, 0.9)");
+    glow.addColorStop(0.35, "rgba(255, 40, 40, 0.45)");
+    glow.addColorStop(1, "rgba(255, 0, 0, 0)");
+    outputCtx.fillStyle = glow;
+    outputCtx.beginPath();
+    outputCtx.arc(at.x, at.y, radius * 3, 0, Math.PI * 2);
+    outputCtx.fill();
+    outputCtx.fillStyle = "#ff3030";
+    outputCtx.beginPath();
+    outputCtx.arc(at.x, at.y, radius, 0, Math.PI * 2);
+    outputCtx.fill();
+    outputCtx.fillStyle = "#fff";
+    outputCtx.beginPath();
+    outputCtx.arc(at.x, at.y, radius * 0.4, 0, Math.PI * 2);
+    outputCtx.fill();
+    outputCtx.restore();
+  }
+
+  function setLabel(label: GestureLabel) {
+    if (label === lastLabel) return;
+    lastLabel = label;
+    onGesture?.(label);
+  }
+
+  /** Runs hand detection on the latest camera frame (throttled, independent of the segmentation rate) and applies what it recognizes. */
+  function runGestures(now: number) {
+    if (!settings.gestures) {
+      board.end(now);
+      if (pointer || lastLabel) {
+        tracker = new GestureTracker();
+        pointer = null;
+        lastPan = null;
+        setLabel(null);
+      }
+      return;
+    }
+    if (!hand) {
+      if (!handLoading) {
+        handLoading = true;
+        loadHandLandmarker()
+          .then((loaded) => {
+            hand = loaded;
+          })
+          .catch((error) => {
+            console.warn("[presenter-overlay] the hand model didn't load", error);
+            setLabel("unavailable");
+          })
+          .finally(() => {
+            handLoading = false;
+          });
+      }
+      return;
+    }
+    // Skip detection frames rather than delay output frames when the machine is struggling.
+    if (now - lastHandAt < Math.max(HAND_INTERVAL_MS, lastHandMs * 3)) return;
+    lastHandAt = now;
+    const placement = hostPlacement();
+    let landmarks: { x: number; y: number }[] | null = null;
+    const started = performance.now();
+    lastHandTimestamp = Math.max(started, lastHandTimestamp + 1);
+    try {
+      landmarks = hand.detectForVideo(cameraCanvas, lastHandTimestamp).landmarks[0] ?? null;
+    } catch (error) {
+      console.warn("[presenter-overlay] hand detection failed", error);
+    }
+    lastHandMs = performance.now() - started;
+    const state = tracker.update(now, landmarks, CAMERA_WIDTH / CAMERA_HEIGHT);
+    pointer = state.pointer;
+    // Air-draw: the pen tip goes through the same ghost mapping as the laser, then to screen coordinates through the current zoom view.
+    if (state.pen) {
+      const out = cameraToOutput(state.pen.u, state.pen.v, placement);
+      const { width, height } = outputSize();
+      const onScreen = outputToScreen(viewport.rect(now), out.x / width, out.y / height);
+      if (!board.drawing) board.begin(now, settings.penColor);
+      board.add(onScreen.x, onScreen.y);
+    } else {
+      board.end(now);
+    }
+    let panned = false;
+    for (const action of state.actions) {
+      if (action.type === "reset") {
+        viewport.reset(now);
+        continue;
+      }
+      const out = cameraToOutput(action.u, action.v, placement);
+      const { width, height } = outputSize();
+      const at = { x: Math.min(1, Math.max(0, out.x / width)), y: Math.min(1, Math.max(0, out.y / height)) };
+      if (action.type === "zoom") {
+        viewport.zoomIn(now, at.x, at.y);
+        lastPan = at;
+        panned = true;
+      } else {
+        if (lastPan) viewport.pan(at.x - lastPan.x, at.y - lastPan.y);
+        lastPan = at;
+        panned = true;
+      }
+    }
+    if (!panned) lastPan = null;
+    setLabel(state.label);
+  }
+
   function compose(timestamp: number) {
-    const { width, height } = hasScreenFrame ? screenCanvas : { width: MAX_OUTPUT_WIDTH, height: MAX_OUTPUT_HEIGHT };
+    const { width, height } = outputSize();
     if (outputCanvas.width !== width || outputCanvas.height !== height) {
       outputCanvas.width = width;
       outputCanvas.height = height;
     }
     outputCtx.globalAlpha = 1;
+    const now = performance.now();
     if (hasScreenFrame) {
-      outputCtx.drawImage(screenCanvas, 0, 0);
+      // Only the screen layer is zoomed; the cut-out, strokes, caption and image stay at their normal size.
+      const view = viewport.rect(now);
+      if (view.width >= 1) outputCtx.drawImage(screenCanvas, 0, 0);
+      else outputCtx.drawImage(screenCanvas, view.x * width, view.y * height, view.width * width, view.height * height, 0, 0, width, height);
     } else {
       outputCtx.fillStyle = "#000";
       outputCtx.fillRect(0, 0, width, height);
     }
 
+    drawStrokes(now, width, height);
+
     // Presenter cut-out: bottom-aligned, mirrored unless turned off (see settings.mirror).
-    const personHeight = height * settings.scale;
-    const personWidth = personHeight * (CAMERA_WIDTH / CAMERA_HEIGHT);
-    const x =
-      settings.position === "left" ? 0 : settings.position === "right" ? width - personWidth : (width - personWidth) / 2;
+    const placement = hostPlacement();
     outputCtx.globalAlpha = settings.opacity;
     if (settings.mirror) {
       outputCtx.save();
-      outputCtx.translate(x + personWidth, 0);
+      outputCtx.translate(placement.x + placement.width, 0);
       outputCtx.scale(-1, 1);
-      outputCtx.drawImage(cutoutCanvas, 0, height - personHeight, personWidth, personHeight);
+      outputCtx.drawImage(cutoutCanvas, 0, placement.y, placement.width, placement.height);
       outputCtx.restore();
     } else {
-      outputCtx.drawImage(cutoutCanvas, x, height - personHeight, personWidth, personHeight);
+      outputCtx.drawImage(cutoutCanvas, placement.x, placement.y, placement.width, placement.height);
     }
     outputCtx.globalAlpha = 1;
 
     if (settings.image) drawImageOverlay(width, height, settings.image, settings.imageCorner);
     const caption = settings.caption.trim();
     if (caption) drawCaption(width, height, caption);
+
+    drawLaser(now, height);
 
     return new VideoFrame(outputCanvas, { timestamp });
   }
@@ -329,6 +581,7 @@ export async function startPresenterOverlayCompositor({
         const timestamp = frame.timestamp;
         frame.close();
         updateCutout();
+        runGestures(now);
         output = compose(timestamp);
         await writer.write(output);
       } catch (error) {
@@ -339,6 +592,18 @@ export async function startPresenterOverlayCompositor({
         frame.close();
       }
     }
+  }
+
+  function zoomIn() {
+    viewport.zoomIn(performance.now(), 0.5, 0.5);
+  }
+
+  function resetZoom() {
+    viewport.reset(performance.now());
+  }
+
+  function clearDrawing() {
+    board.clear();
   }
 
   function stop() {
@@ -358,5 +623,5 @@ export async function startPresenterOverlayCompositor({
     });
   }
 
-  return { track: generator, settings, stop };
+  return { track: generator, settings, zoomIn, resetZoom, clearDrawing, stop };
 }

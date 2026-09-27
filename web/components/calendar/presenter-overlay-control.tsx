@@ -2,16 +2,36 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { ImagePlus, PictureInPicture2, Presentation, X } from "lucide-react";
+import { Eraser, ImagePlus, PictureInPicture2, Presentation, RotateCcw, ZoomIn, X } from "lucide-react";
 import { RoomEvent, Track, type LocalTrackPublication, type LocalVideoTrack, type Room } from "livekit-client";
 import {
   isPresenterOverlaySupported,
   startPresenterOverlayCompositor,
+  type GestureLabel,
   type OverlayCorner,
   type PresenterOverlayCompositor,
   type PresenterOverlaySettings,
 } from "@/lib/presenter-overlay/compositor";
+import { PEN_COLORS, type PenColor } from "@/lib/presenter-overlay/drawing";
 import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/components/calendar/livekit-control-styles";
+
+/** What the gesture tracker currently recognizes, in the host's own words — never drawn into the stream. */
+function gestureLabelText(label: GestureLabel): string {
+  switch (label) {
+    case "pointing":
+      return "Pointing";
+    case "zooming":
+      return "Zooming";
+    case "reset":
+      return "Zoom reset";
+    case "drawing":
+      return "Drawing";
+    case "unavailable":
+      return "Hand tracking couldn't load";
+    default:
+      return "Point, pinch to zoom, or hold two fingers together to draw";
+  }
+}
 
 /** The presenter's own screen share, started with LiveKit's regular Share screen button. */
 type Share = {
@@ -114,6 +134,9 @@ export function PresenterOverlayControl({
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState<PresenterOverlaySettings["position"]>("center");
   const [mirror, setMirror] = useState(true);
+  const [gestures, setGestures] = useState(false);
+  const [penColor, setPenColor] = useState<PenColor>("red");
+  const [gestureLabel, setGestureLabel] = useState<GestureLabel>(null);
   const [caption, setCaption] = useState("");
   const [imageName, setImageName] = useState<string | null>(null);
   const [imageCorner, setImageCorner] = useState<OverlayCorner>("top-right");
@@ -137,7 +160,7 @@ export function PresenterOverlayControl({
   }, []);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, mirror, caption, image: imageRef.current, imageCorner };
+    return { opacity, scale, position, mirror, gestures, penColor, caption, image: imageRef.current, imageCorner };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -151,6 +174,7 @@ export function PresenterOverlayControl({
     if (!overlay) return;
     overlayRef.current = null;
     setOverlayStatus("off");
+    setGestureLabel(null);
     overlay.compositor.stop();
     overlay.screenClone.stop();
     overlay.cameraTrack.stop();
@@ -196,6 +220,7 @@ export function PresenterOverlayControl({
           onError("The camera overlay stopped unexpectedly.");
           removeOverlay();
         },
+        onGesture: setGestureLabel,
       });
       Object.assign(compositor.settings, currentSettings());
       // Favor sharpness over smoothness — slide text matters more than motion.
@@ -508,6 +533,71 @@ export function PresenterOverlayControl({
           ))}
         </div>
       </div>
+
+      <div className={labelClass}>
+        Screen zoom
+        <div className="flex gap-1">
+          <button
+            type="button"
+            onClick={() => overlayRef.current?.compositor.zoomIn()}
+            className={`${segmentClass(false)} inline-flex items-center justify-center gap-1`}
+          >
+            <ZoomIn className="h-3 w-3" />
+            Zoom in
+          </button>
+          <button
+            type="button"
+            onClick={() => overlayRef.current?.compositor.resetZoom()}
+            className={`${segmentClass(false)} inline-flex items-center justify-center gap-1`}
+          >
+            <RotateCcw className="h-3 w-3" />
+            Reset
+          </button>
+        </div>
+      </div>
+
+      <label className="flex items-center gap-2 text-xs text-white/70">
+        <input
+          type="checkbox"
+          checked={gestures}
+          onChange={(e) => {
+            setGestures(e.target.checked);
+            updateSettings({ gestures: e.target.checked });
+          }}
+        />
+        Hand gestures (point, pinch to zoom, air-draw)
+      </label>
+      {gestures && (
+        <div className={labelClass}>
+          {gestureLabelText(gestureLabel)}
+          <div className="flex items-center gap-2">
+            <span className="text-white/50">Pen</span>
+            {(Object.keys(PEN_COLORS) as PenColor[]).map((color) => (
+              <button
+                key={color}
+                type="button"
+                aria-label={`${color} pen`}
+                aria-pressed={penColor === color}
+                onClick={() => {
+                  setPenColor(color);
+                  updateSettings({ penColor: color });
+                }}
+                className={`h-4 w-4 rounded-full border-2 ${penColor === color ? "border-white" : "border-transparent"}`}
+                style={{ backgroundColor: PEN_COLORS[color] }}
+              />
+            ))}
+            <button
+              type="button"
+              onClick={() => overlayRef.current?.compositor.clearDrawing()}
+              className="ml-auto inline-flex items-center gap-1 text-white/70 hover:text-white"
+              title="Clear drawing"
+            >
+              <Eraser className="h-3.5 w-3.5" />
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
 
       <label className={labelClass}>
         Caption
