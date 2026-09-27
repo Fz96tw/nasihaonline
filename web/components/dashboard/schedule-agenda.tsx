@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useHasMounted } from "@/lib/use-has-mounted";
 
 export type ScheduleItem = {
   id: string;
@@ -48,8 +49,12 @@ const SCHEDULE_BUCKETS: { key: ScheduleBucket; label: string }[] = [
   { key: "later", label: "Next Week and Later" },
 ];
 
+// timeZoneName: "short" (e.g. "EDT") — this combines Event.startsAt and
+// MeetingRequest.scheduledAt into one agenda with no explicit `timeZone`,
+// silently converting to the viewer's own browser zone; the abbreviation
+// confirms that rather than leaving them to guess.
 function formatTime(iso: string) {
-  return new Date(iso).toLocaleString(undefined, { hour: "numeric", minute: "2-digit" });
+  return new Date(iso).toLocaleString(undefined, { hour: "numeric", minute: "2-digit", timeZoneName: "short" });
 }
 
 /** Today's items need only a time — the group heading already says "Today". Anything in a multi-day bucket needs its own date too, since the heading no longer pins it to one day. */
@@ -61,6 +66,13 @@ function formatWhen(iso: string, bucket: ScheduleBucket) {
 }
 
 export function ScheduleAgenda({ items }: { items: ScheduleItem[] }) {
+  // Guards the one viewer-zone-dependent value below (formatWhen) so the
+  // server-rendered HTML (this widget is reached from an async Server
+  // Component, ScheduleWidget) and the client's first hydration pass agree
+  // — same rationale as feed-row.tsx's identical guard. (Which bucket an
+  // item lands in is a separate, pre-existing server-vs-viewer-zone
+  // question this doesn't address — see scheduleBucketOf's own comment.)
+  const hasMounted = useHasMounted();
   const groups = SCHEDULE_BUCKETS.map((bucket) => ({
     bucket,
     items: items.filter((item) => scheduleBucketOf(item.dateTime) === bucket.key),
@@ -90,7 +102,7 @@ export function ScheduleAgenda({ items }: { items: ScheduleItem[] }) {
                     {item.title}
                   </Link>
                   <p className="text-xs text-muted-foreground">
-                    {formatWhen(item.dateTime, bucket.key)}
+                    {hasMounted ? formatWhen(item.dateTime, bucket.key) : null}
                     {item.detail ? ` · ${item.detail}` : ""}
                   </p>
                   {item.joinUrl ? (
