@@ -174,8 +174,12 @@ export function SurveyForm({
 
   async function onSubmit(values: CreateSurveyValues, action: "draft" | "send") {
     if (action === "send") {
+      // timeZoneName: "short" — values.scheduledStartAt was just typed into
+      // the datetime-local field above in this same browser, so there's no
+      // cross-viewer ambiguity here the way there is elsewhere; still worth
+      // confirming which zone "2:00 PM" means before scheduling.
       const confirmMessage = values.scheduledStartAt
-        ? `Schedule this survey to open on ${new Date(values.scheduledStartAt).toLocaleString()}?`
+        ? `Schedule this survey to open on ${new Date(values.scheduledStartAt).toLocaleString(undefined, { timeZoneName: "short" })}?`
         : "Send this survey now? Invitations go out immediately and can't be unsent.";
       if (!window.confirm(confirmMessage)) return;
     }
