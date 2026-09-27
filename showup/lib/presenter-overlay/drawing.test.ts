@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FADE_MS, HOLD_MS, MAX_POINTS, MAX_POINTS_PER_GUEST, ERASER_RADIUS, MAX_PINNED, MAX_TEXT_LENGTH, MIN_ARROW_LENGTH, MIN_SHAPE_SIZE, StrokeBoard, arrowHead, cleanShapeText, shapeBounds, strokeColor } from "./drawing.ts";
+import { FADE_MS, HOLD_MS, MAX_POINTS, MAX_POINTS_PER_GUEST, ERASER_RADIUS, MAX_PINNED, MAX_TEXT_LENGTH, MIN_ARROW_LENGTH, MIN_SHAPE_SIZE, StrokeBoard, arrowHead, cleanShapeText, shapeBounds, strokeColor, takesText } from "./drawing.ts";
 
 test("a stroke collects points while drawing and stays fully visible", () => {
   const board = new StrokeBoard();
@@ -189,15 +189,15 @@ test("an arrow keeps only its tail and the latest fingertip position", () => {
   assert.equal(board.pointCount, 2, "however long the gesture, an arrow costs two points");
 });
 
-test("a finished arrow holds and fades like any stroke", () => {
+test("a finished arrow is pinned: it never fades", () => {
   const board = new StrokeBoard();
   board.begin(0, "green", undefined, "arrow");
   board.add(0.1, 0.1);
   board.add(0.5, 0.5);
   board.end(1000);
-  assert.equal(board.visible(1000 + HOLD_MS)[0].alpha, 1);
-  assert.ok(Math.abs(board.visible(1000 + HOLD_MS + FADE_MS / 2)[0].alpha - 0.5) < 1e-9);
-  assert.equal(board.visible(1000 + HOLD_MS + FADE_MS).length, 0);
+  const later = board.visible(1000 + 10 * 60 * 1000);
+  assert.equal(later.length, 1);
+  assert.equal(later[0].alpha, 1);
 });
 
 test("an arrow shorter than the minimum is discarded when finished, a long enough one is kept", () => {
@@ -335,7 +335,7 @@ function pin(board: StrokeBoard, t: number, kind: "box" | "ellipse" = "box", x =
   return board.end(t + 10);
 }
 
-test("a finished box or ellipse is pinned: fully visible forever, while freehand and arrows still fade", () => {
+test("finished arrows, boxes and ellipses are pinned: fully visible forever, while freehand strokes still fade", () => {
   const board = new StrokeBoard();
   const box = pin(board, 0, "box");
   const ellipse = pin(board, 100, "ellipse", 0.5);
@@ -350,26 +350,31 @@ test("a finished box or ellipse is pinned: fully visible forever, while freehand
   board.end(230);
   const much = 10 * 60 * 1000;
   const later = board.visible(much);
-  assert.equal(later.length, 2, "only the two pinned shapes are left");
-  assert.ok(later.every(({ stroke, alpha }) => alpha === 1 && (stroke.kind === "box" || stroke.kind === "ellipse")));
+  assert.deepEqual(later.map(({ stroke }) => stroke.kind).sort(), ["arrow", "box", "ellipse"], "only the freehand stroke is gone");
+  assert.ok(later.every(({ alpha }) => alpha === 1));
 });
 
-test("end() returns nothing for strokes that aren't kept pinned shapes", () => {
+test("end() returns the finished stroke for pinned kinds only, and nothing for freehand or a too-small mark", () => {
   const board = new StrokeBoard();
   board.begin(0, "red", undefined, "free");
   board.add(0.1, 0.1);
   board.add(0.3, 0.3);
-  assert.equal(board.end(10), null);
+  assert.equal(board.end(10), null, "freehand fades, it isn't pinned");
   board.begin(20, "red", undefined, "arrow");
   board.add(0.1, 0.1);
   board.add(0.5, 0.5);
-  assert.equal(board.end(30), null);
-  board.begin(40, "red", undefined, "box");
+  const arrowStroke = board.end(30);
+  assert.ok(arrowStroke && arrowStroke.kind === "arrow", "a finished arrow is pinned");
+  board.begin(40, "red", undefined, "arrow");
+  board.add(0.5, 0.5);
+  board.add(0.5 + MIN_ARROW_LENGTH / 2, 0.5);
+  assert.equal(board.end(50), null, "a too-short arrow is discarded, not pinned");
+  board.begin(60, "red", undefined, "box");
   board.add(0.5, 0.5);
   board.add(0.5 + MIN_SHAPE_SIZE / 2, 0.9);
-  assert.equal(board.end(50), null, "a too-small shape is discarded, not pinned");
-  assert.equal(board.pinnedShapes().length, 0);
-  assert.equal(board.end(60), null, "nothing being drawn");
+  assert.equal(board.end(70), null, "a too-small shape is discarded, not pinned");
+  assert.equal(board.pinnedShapes().length, 1);
+  assert.equal(board.end(80), null, "nothing being drawn");
 });
 
 test("a shape still being drawn is not listed as pinned until it is finished", () => {
@@ -598,4 +603,56 @@ test("clear() still removes everything and undo still removes the newest pinned 
   pin(board, 200);
   board.clear();
   assert.equal(board.visible(300).length, 0);
+});
+
+function pinArrow(board: StrokeBoard, t: number, x = 0.1) {
+  board.begin(t, "red", undefined, "arrow");
+  board.add(x, 0.1);
+  board.add(x + 0.3, 0.5);
+  return board.end(t + 10) as { id: number };
+}
+
+test("arrows are listed with the other pinned shapes, in order, and carry no label", () => {
+  const board = new StrokeBoard();
+  const box = pin(board, 0, "box", 0.5) as { id: number };
+  const arrowStroke = pinArrow(board, 100);
+  assert.deepEqual(board.pinnedShapes().map((shape) => [shape.id, shape.kind]), [[box.id, "box"], [arrowStroke.id, "arrow"]]);
+  assert.equal(board.setText(arrowStroke.id, "no room for text"), false, "an arrow can't be labelled");
+  assert.equal(board.pinnedShapes()[1].text, "");
+  assert.equal(board.setText(box.id, "ok"), true, "boxes still can");
+  assert.equal(takesText("arrow"), false);
+  assert.equal(takesText("box") && takesText("ellipse"), true);
+  assert.equal(takesText("free"), false);
+});
+
+test("an arrow can be removed, undone and cleared like any pinned shape", () => {
+  const board = new StrokeBoard();
+  const a = pinArrow(board, 0, 0.05);
+  const b = pinArrow(board, 100, 0.4);
+  const c = pinArrow(board, 200, 0.7);
+  assert.equal(board.remove(b.id), true);
+  assert.deepEqual(board.pinnedShapes().map((shape) => shape.id), [a.id, c.id]);
+  assert.equal(board.undoLast(), c.id);
+  board.clear();
+  assert.equal(board.visible(300).length, 0);
+  assert.deepEqual(board.pinnedShapes(), []);
+});
+
+test("arrows count toward the pinned cap: the oldest pinned mark goes first", () => {
+  const board = new StrokeBoard();
+  const first = pinArrow(board, 0);
+  for (let i = 1; i <= MAX_PINNED; i++) pin(board, i * 100, i % 2 ? "box" : "ellipse", 0.01 * (i % 20));
+  const kept = board.pinnedShapes();
+  assert.equal(kept.length, MAX_PINNED);
+  assert.ok(!kept.some((shape) => shape.id === first.id), "the oldest (an arrow) was dropped");
+});
+
+test("erasing a pinned arrow updates the pinned list and, unlike a box, works anywhere along the line", () => {
+  const board = new StrokeBoard();
+  const arrowStroke = pinArrow(board, 0); // from (0.1, 0.1) to (0.4, 0.5)
+  const before = board.version;
+  assert.equal(board.eraseAt(0.9, 0.9), 0);
+  assert.equal(board.eraseAt(0.25, 0.3), 1, "the middle of the line");
+  assert.ok(board.version > before);
+  assert.equal(board.pinnedShapes().some((shape) => shape.id === arrowStroke.id), false);
 });

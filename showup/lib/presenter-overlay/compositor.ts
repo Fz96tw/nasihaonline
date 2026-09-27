@@ -32,7 +32,7 @@ import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
 import { REACTION_EMOJI, ReactionPlayer, reactionPosition } from "./reactions.ts";
 import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement } from "./gestures.ts";
 import { mapGuestPenToScreen, mapGuestPointer, type GuestPointerDot } from "./guest-pointer.ts";
-import { ERASER_RADIUS, HOST_OWNER, StrokeBoard, arrowHead, shapeBounds, strokeColor, type PenColor, type PinnedShape } from "./drawing.ts";
+import { ERASER_RADIUS, HOST_OWNER, StrokeBoard, arrowHead, shapeBounds, strokeColor, takesText, type PenColor, type PinnedShape } from "./drawing.ts";
 import { fitText, textArea, type FittedText } from "./text-fit.ts";
 import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
 import { SizeNormalizer, measureFromRows } from "./size-normalize.ts";
@@ -371,7 +371,7 @@ export async function startPresenterOverlayCompositor({
   onError: (error: unknown) => void;
   /** Tells the host's UI what gesture is recognized (or that the hand model couldn't load). Not drawn into the stream. */
   onGesture?: (label: GestureState["label"] | "unavailable") => void;
-  /** A box or ellipse was just finished and pinned (it can be given a label). Not drawn into the stream. */
+  /** A box or ellipse was just finished and pinned (it can be given a label; arrows are pinned without this). Not drawn into the stream. */
   onShapeFinished?: (id: number) => void;
   /** The pinned shapes changed (one finished, removed, labelled or all cleared); the whole list, oldest first. */
   onShapes?: (shapes: PinnedShape[]) => void;
@@ -1008,10 +1008,11 @@ export async function startPresenterOverlayCompositor({
     outputCtx.restore();
   }
 
-  /** Finishes the presenter's stroke; a box or ellipse that survives becomes a pinned shape the host can label. */
+  /** Finishes the presenter's stroke; an arrow, box or ellipse that survives is pinned, and a box or ellipse can then be labelled. */
   function endHostStroke(now: number) {
     const finished = board.end(now);
-    if (finished) onShapeFinished?.(finished.id);
+    // Only a box or ellipse can take a label, so only they open the prompt; an arrow is pinned quietly (the list still updates).
+    if (finished && takesText(finished.kind)) onShapeFinished?.(finished.id);
   }
 
   function setLabel(label: GestureState["label"] | "unavailable") {

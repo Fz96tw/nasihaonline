@@ -35,12 +35,17 @@ export const MIN_SHAPE_SIZE = 0.02;
  */
 export type StrokeKind = "free" | "arrow" | "box" | "ellipse";
 
-/** Boxes and ellipses are deliberate annotations: they never fade and stay until the host removes them. */
+/** Arrows, boxes and ellipses are deliberate annotations: they never fade and stay until the host removes them. Freehand strokes still fade. */
 export function isPinnedKind(kind: StrokeKind): boolean {
+  return kind === "arrow" || kind === "box" || kind === "ellipse";
+}
+
+/** Only boxes and ellipses can carry a label; there is nowhere inside an arrow to put text. */
+export function takesText(kind: StrokeKind): boolean {
   return kind === "box" || kind === "ellipse";
 }
 
-/** Pinned shapes kept at once; drawing another drops the oldest. */
+/** Pinned marks (arrows, boxes, ellipses) kept at once; drawing another drops the oldest. */
 export const MAX_PINNED = 20;
 /** How far from the eraser's centre it wipes, as a fraction of the shared screen's height. */
 export const ERASER_RADIUS = 0.035;
@@ -72,7 +77,7 @@ export type Stroke = {
 };
 
 /** What the host UI needs to list and remove a pinned shape. */
-export type PinnedShape = { id: number; kind: "box" | "ellipse"; text: string };
+export type PinnedShape = { id: number; kind: "arrow" | "box" | "ellipse"; text: string };
 
 export class StrokeBoard {
   private strokes: Stroke[] = [];
@@ -190,12 +195,12 @@ export class StrokeBoard {
   pinnedShapes(): PinnedShape[] {
     return this.strokes
       .filter((stroke) => isPinnedKind(stroke.kind) && stroke.endedAt !== null)
-      .map((stroke) => ({ id: stroke.id, kind: stroke.kind as "box" | "ellipse", text: stroke.text ?? "" }));
+      .map((stroke) => ({ id: stroke.id, kind: stroke.kind as "arrow" | "box" | "ellipse", text: stroke.text ?? "" }));
   }
 
   /** Sets (or, with empty text, clears) a pinned shape's label. False when there's no such shape. */
   setText(id: number, text: string): boolean {
-    const stroke = this.strokes.find((other) => other.id === id && isPinnedKind(other.kind));
+    const stroke = this.strokes.find((other) => other.id === id && takesText(other.kind));
     if (!stroke) return false;
     const cleaned = cleanShapeText(text);
     if ((stroke.text ?? "") === cleaned) return true;
@@ -356,7 +361,8 @@ function outlineSegments(stroke: Stroke): [{ x: number; y: number }, { x: number
 function strokeTouches(stroke: Stroke, x: number, y: number, radius: number, aspect: number): boolean {
   const points = stroke.points;
   if (points.length === 0) return false;
-  if (isPinnedKind(stroke.kind)) {
+  // A box or ellipse is hit only on its outline; freehand strokes and arrows (pinned or not) are hit anywhere along their line.
+  if (stroke.kind === "box" || stroke.kind === "ellipse") {
     if (points.length < 2) return false;
     return outlineSegments(stroke).some(([a, b]) => distanceToSegment(x, y, a, b, aspect) <= radius);
   }
