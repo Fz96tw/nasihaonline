@@ -28,6 +28,8 @@ import {
   type PresenterOverlayCompositor,
   type PresenterOverlaySettings,
 } from "@/lib/presenter-overlay/compositor";
+import type { PinnedShape } from "@/lib/presenter-overlay/drawing";
+import { ShapeTextPanel } from "@/components/shape-text-panel";
 import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/components/livekit-control-styles";
 
 /** The presenter's own screen share, started with LiveKit's regular Share screen button. */
@@ -162,6 +164,9 @@ export function PresenterOverlayControl({
   const [spotlightOn, setSpotlightOn] = useState(false);
   const [penColor, setPenColor] = useState<PresenterOverlaySettings["penColor"]>("red");
   const [arrowMode, setArrowMode] = useState(false);
+  /** Boxes and ellipses pinned to the share, and the one just drawn that is waiting for its optional label. */
+  const [shapes, setShapes] = useState<PinnedShape[]>([]);
+  const [pendingShapeId, setPendingShapeId] = useState<number | null>(null);
   const [shapeKind, setShapeKind] = useState<PresenterOverlaySettings["shapeKind"]>("box");
   const [background, setBackground] = useState<PresenterOverlaySettings["background"]>("remove");
   const [panelShape, setPanelShape] = useState<PanelShape>("rounded");
@@ -236,6 +241,8 @@ export function PresenterOverlayControl({
     clearInterval(overlay.tick);
     setGestureLabel(null);
     setSpotlightOn(false);
+    setShapes([]);
+    setPendingShapeId(null);
     setPeople([]);
     setGuests([]);
     // Everyone who was on the overlay, or waiting to be, is told it's gone.
@@ -292,6 +299,11 @@ export function PresenterOverlayControl({
         cameraTrack,
         cameraLabel: room.localParticipant.name || "",
         onGesture: setGestureLabel,
+        onShapeFinished: setPendingShapeId,
+        onShapes: (list) => {
+          setShapes(list);
+          setPendingShapeId((pending) => (pending !== null && list.some((shape) => shape.id === pending) ? pending : null));
+        },
         onError: (error) => {
           console.error("[presenter-overlay] compositor failed", error);
           onError("The camera overlay stopped unexpectedly.");
@@ -1102,7 +1114,7 @@ export function PresenterOverlayControl({
             <li>Raise a fist (hand up in the camera frame) and hold it for a moment: the screen dims except a circle around your hand. Open your hand to bring the light back.</li>
             <li>Thumbs up or thumbs down (other fingers curled), held for a moment, or a wave of an open hand: a 👍, 👎 or 👋 floats up beside you. One reaction every few seconds.</li>
             <li>Hold two fingers together (index and middle, others curled) for a moment to draw in the air; lower them to stop. Drawings fade after a few seconds. Switch on &ldquo;Straight arrow&rdquo; and the same gesture draws a straight arrow from where you start to where you lower your fingers.</li>
-            <li>Hold your thumb and index finger out in an &ldquo;L&rdquo; (other fingers curled) for a moment to draw a box or ellipse: the point where you start is one corner and your fingertip is the opposite corner. Choose Box or Ellipse below; drop the L to finish.</li>
+            <li>Hold your thumb and index finger out in an &ldquo;L&rdquo; (other fingers curled) for a moment to draw a box or ellipse: the point where you start is one corner and your fingertip is the opposite corner. Choose Box or Ellipse below; drop the L to finish. Boxes and ellipses stay on the screen until you remove them (Clear drawing, Undo last shape, or the list under Shapes) and can carry a short label. They stay put while you zoom or pan, but do not follow the shared content if it scrolls or changes, so clear them when the content changes.</li>
             <li>Keep your hand fully in the camera frame. Only the screen zooms, not you.</li>
           </ul>
         </details>
@@ -1177,6 +1189,14 @@ export function PresenterOverlayControl({
             Clear drawing
           </button>
         </div>
+        <ShapeTextPanel
+          shapes={shapes}
+          pendingId={pendingShapeId}
+          onText={(id, text) => overlayRef.current?.compositor.setShapeText(id, text)}
+          onDone={() => setPendingShapeId(null)}
+          onRemove={(id) => overlayRef.current?.compositor.removeShape(id)}
+          onUndo={() => overlayRef.current?.compositor.undoShape()}
+        />
       </div>
 
       <label className={`${labelClass} ${span ? "opacity-40" : ""}`}>

@@ -35,13 +35,32 @@ export const MIN_SHAPE_SIZE = 0.02;
  */
 export type StrokeKind = "free" | "arrow" | "box" | "ellipse";
 
+/** Boxes and ellipses are deliberate annotations: they never fade and stay until the host removes them. */
+export function isPinnedKind(kind: StrokeKind): boolean {
+  return kind === "box" || kind === "ellipse";
+}
+
+/** Pinned shapes kept at once; drawing another drops the oldest. */
+export const MAX_PINNED = 20;
+/** Longest label a shape can carry. */
+export const MAX_TEXT_LENGTH = 80;
+
+/** A label as stored: whitespace (and newlines) collapsed, trimmed, capped; empty means no label. */
+export function cleanShapeText(text: string): string {
+  return text.replace(/\s+/g, " ").trim().slice(0, MAX_TEXT_LENGTH).trim();
+}
+
 /** Kinds that are just two points, tail and latest fingertip. */
 export function isRubberBand(kind: StrokeKind): boolean {
   return kind !== "free";
 }
 
 export type Stroke = {
+  /** Unique within the board; how the host UI refers to a pinned shape. */
+  id: number;
   kind: StrokeKind;
+  /** A label shown inside a pinned box or ellipse. */
+  text?: string;
   /** One of the presenter's pen colours, or (for a guest) a CSS colour. */
   color: string;
   owner: string;
@@ -50,8 +69,13 @@ export type Stroke = {
   endedAt: number | null;
 };
 
+/** What the host UI needs to list and remove a pinned shape. */
+export type PinnedShape = { id: number; kind: "box" | "ellipse"; text: string };
+
 export class StrokeBoard {
   private strokes: Stroke[] = [];
+  private nextId = 1;
+  private pinnedVersion = 0;
   /** The stroke each owner is drawing right now. */
   private current = new Map<string, Stroke>();
 
@@ -85,7 +109,7 @@ export class StrokeBoard {
   /** Starts a stroke for `owner` (ending any of theirs that is still going). */
   begin(now: number, color: string, owner: string = HOST_OWNER, kind: StrokeKind = "free") {
     this.end(now, owner);
-    const stroke: Stroke = { kind, color, owner, points: [], endedAt: null };
+    const stroke: Stroke = { id: this.nextId++, kind, color, owner, points: [], endedAt: null };
     this.current.set(owner, stroke);
     this.strokes.push(stroke);
   }
@@ -108,16 +132,68 @@ export class StrokeBoard {
   }
 
   /** Finishes `owner`'s stroke being drawn; it starts to fade after HOLD_MS. */
-  end(now: number, owner: string = HOST_OWNER) {
+  end(now: number, owner: string = HOST_OWNER): Stroke | null {
     const stroke = this.current.get(owner);
-    if (!stroke) return;
+    if (!stroke) return null;
     this.current.delete(owner);
     if (isRubberBand(stroke.kind) && !isBigEnough(stroke)) {
       // A twitch, not an arrow or shape: drop it instead of leaving a dot on the screen.
       this.strokes = this.strokes.filter((other) => other !== stroke);
-      return;
+      return null;
     }
     stroke.endedAt = now;
+    if (!isPinnedKind(stroke.kind)) return null;
+    this.enforcePinnedCap();
+    this.pinnedVersion++;
+    return stroke;
+  }
+
+  /** Bumps whenever the set of pinned shapes or their labels changes, so the UI can tell without diffing. */
+  get version(): number {
+    return this.pinnedVersion;
+  }
+
+  /** The pinned shapes, oldest first. */
+  pinnedShapes(): PinnedShape[] {
+    return this.strokes
+      .filter((stroke) => isPinnedKind(stroke.kind) && stroke.endedAt !== null)
+      .map((stroke) => ({ id: stroke.id, kind: stroke.kind as "box" | "ellipse", text: stroke.text ?? "" }));
+  }
+
+  /** Sets (or, with empty text, clears) a pinned shape's label. False when there's no such shape. */
+  setText(id: number, text: string): boolean {
+    const stroke = this.strokes.find((other) => other.id === id && isPinnedKind(other.kind));
+    if (!stroke) return false;
+    const cleaned = cleanShapeText(text);
+    if ((stroke.text ?? "") === cleaned) return true;
+    if (cleaned) stroke.text = cleaned;
+    else delete stroke.text;
+    this.pinnedVersion++;
+    return true;
+  }
+
+  /** Removes one pinned shape. False when there's no such shape. */
+  remove(id: number): boolean {
+    const index = this.strokes.findIndex((stroke) => stroke.id === id && isPinnedKind(stroke.kind) && stroke.endedAt !== null);
+    if (index < 0) return false;
+    this.strokes.splice(index, 1);
+    this.pinnedVersion++;
+    return true;
+  }
+
+  /** Removes the most recently finished pinned shape; returns its id, or null when there is none. */
+  undoLast(): number | null {
+    const last = this.pinnedShapes().pop();
+    if (!last) return null;
+    this.remove(last.id);
+    return last.id;
+  }
+
+  private enforcePinnedCap() {
+    const pinned = this.strokes.filter((stroke) => isPinnedKind(stroke.kind) && stroke.endedAt !== null);
+    for (const stroke of pinned.slice(0, Math.max(0, pinned.length - MAX_PINNED))) {
+      this.strokes.splice(this.strokes.indexOf(stroke), 1);
+    }
   }
 
   /** Points `owner` has on the board. */
@@ -127,14 +203,18 @@ export class StrokeBoard {
 
   /** Removes everything at once, the presenter's strokes and every guest's. */
   clear() {
+    if (this.strokes.some((stroke) => isPinnedKind(stroke.kind))) this.pinnedVersion++;
     this.strokes = [];
     this.current.clear();
   }
 
   /** Drops strokes that have faded out, then returns the rest with their opacity (1 while drawing or holding, fading to 0). */
   visible(now: number): { stroke: Stroke; alpha: number }[] {
-    this.strokes = this.strokes.filter((stroke) => this.isCurrent(stroke) || (stroke.endedAt !== null && now - stroke.endedAt < HOLD_MS + FADE_MS));
+    this.strokes = this.strokes.filter(
+      (stroke) => this.isCurrent(stroke) || isPinnedKind(stroke.kind) || (stroke.endedAt !== null && now - stroke.endedAt < HOLD_MS + FADE_MS),
+    );
     return this.strokes.map((stroke) => {
+      if (isPinnedKind(stroke.kind)) return { stroke, alpha: 1 };
       const age = stroke.endedAt === null ? 0 : now - stroke.endedAt;
       return { stroke, alpha: age <= HOLD_MS ? 1 : Math.max(0, 1 - (age - HOLD_MS) / FADE_MS) };
     });
@@ -161,11 +241,13 @@ export class StrokeBoard {
 
   private enforceCap() {
     let excess = this.pointCount - MAX_POINTS;
-    while (excess > 0 && this.strokes.length > 0) {
-      const oldest = this.strokes[0];
+    while (excess > 0) {
+      // Pinned shapes are never dropped to make room for freehand points (they cost two points each and are capped on their own).
+      const oldest = this.strokes.find((stroke) => !isPinnedKind(stroke.kind));
+      if (!oldest) break;
       if (oldest.points.length <= excess && !this.isCurrent(oldest)) {
         excess -= oldest.points.length;
-        this.strokes.shift();
+        this.strokes.splice(this.strokes.indexOf(oldest), 1);
       } else {
         // The only stroke left over the cap (a very long one): trim its oldest points.
         oldest.points.splice(0, Math.min(excess, oldest.points.length));

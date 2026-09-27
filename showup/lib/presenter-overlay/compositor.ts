@@ -32,7 +32,8 @@ import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
 import { REACTION_EMOJI, ReactionPlayer, reactionPosition } from "./reactions.ts";
 import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement } from "./gestures.ts";
 import { mapGuestPenToScreen, mapGuestPointer, type GuestPointerDot } from "./guest-pointer.ts";
-import { HOST_OWNER, StrokeBoard, arrowHead, shapeBounds, strokeColor, type PenColor } from "./drawing.ts";
+import { HOST_OWNER, StrokeBoard, arrowHead, shapeBounds, strokeColor, type PenColor, type PinnedShape } from "./drawing.ts";
+import { fitText, textArea, type FittedText } from "./text-fit.ts";
 import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
 import { SizeNormalizer, measureFromRows } from "./size-normalize.ts";
 import { WindowSmoother, clampWindow, panelAspect, personBounds, targetCentre, tracePanelPath, windowSize, type PanelShape, type PersonBounds } from "./panel.ts";
@@ -191,8 +192,14 @@ export type PresenterOverlayCompositor = {
   zoomIn: () => void;
   /** Back to the whole screen. */
   resetZoom: () => void;
-  /** Removes every air-drawn stroke at once. */
+  /** Removes every air-drawn stroke at once, pinned shapes included. */
   clearDrawing: () => void;
+  /** Sets (or with empty text clears) the label inside a pinned box or ellipse. False when the shape is gone. */
+  setShapeText: (id: number, text: string) => boolean;
+  /** Removes one pinned shape. */
+  removeShape: (id: number) => boolean;
+  /** Removes the most recently drawn pinned shape; returns its id, or null when there is none. */
+  undoShape: () => number | null;
   /** Turns the sticky spotlight (screen dimmed except around the host's hand, or the screen centre) on or off. */
   setSpotlight: (on: boolean) => void;
   /** The guests' laser dots for this moment (fingertips in each guest's camera frame). A dot is drawn only while that guest's ghost is on the share; call it every tick. */
@@ -354,6 +361,8 @@ export async function startPresenterOverlayCompositor({
   cameraLabel = "",
   onError,
   onGesture,
+  onShapeFinished,
+  onShapes,
 }: {
   screenTrack: MediaStreamTrack;
   /** The host's own camera. Its frames drive the output, so it must stay live for as long as the overlay does. */
@@ -362,6 +371,10 @@ export async function startPresenterOverlayCompositor({
   onError: (error: unknown) => void;
   /** Tells the host's UI what gesture is recognized (or that the hand model couldn't load). Not drawn into the stream. */
   onGesture?: (label: GestureState["label"] | "unavailable") => void;
+  /** A box or ellipse was just finished and pinned (it can be given a label). Not drawn into the stream. */
+  onShapeFinished?: (id: number) => void;
+  /** The pinned shapes changed (one finished, removed, labelled or all cleared); the whole list, oldest first. */
+  onShapes?: (shapes: PinnedShape[]) => void;
 }): Promise<PresenterOverlayCompositor> {
   const { Processor, Generator } = insertableStreams();
   if (!Processor || !Generator) throw new Error("This browser can't combine video tracks. Try Chrome or Edge.");
@@ -391,6 +404,9 @@ export async function startPresenterOverlayCompositor({
   // Gestures: the tracker, the screen zoom, the laser dot and the hand model (loaded on first use).
   const viewport = new ScreenViewport();
   const board = new StrokeBoard();
+  let shownVersion = board.version;
+  /** Laid-out labels, so a shape's text isn't re-fitted every frame; keyed by shape, text and pixel size. */
+  const fitCache = new Map<string, FittedText | null>();
   const reactions = new ReactionPlayer();
   // Spotlight: the fist gesture's fade (from the tracker) and the sticky button's own fade; where the light last was, for fading out.
   let gestureSpotlight = 0;
@@ -844,7 +860,42 @@ export async function startPresenterOverlayCompositor({
         outputCtx.lineTo(last.x, last.y);
       }
       outputCtx.stroke();
+      if (stroke.text && (stroke.kind === "box" || stroke.kind === "ellipse") && points.length >= 2) {
+        drawShapeText(stroke.id, stroke.text, stroke.kind, shapeBounds(points[0], points[1]));
+      }
     }
+    outputCtx.restore();
+  }
+
+  /** A label centred inside a pinned shape, shrunk to fit, with a dark outline so it reads over any screen content. */
+  function drawShapeText(id: number, text: string, kind: "box" | "ellipse", bounds: { x: number; y: number; width: number; height: number }) {
+    const area = textArea(bounds, kind);
+    const key = `${id}|${text}|${Math.round(area.width)}x${Math.round(area.height)}`;
+    let fitted = fitCache.get(key);
+    if (fitted === undefined) {
+      fitted = fitText(text, area, (candidate, fontPx) => {
+        outputCtx.font = `600 ${fontPx}px sans-serif`;
+        return outputCtx.measureText(candidate).width;
+      });
+      if (fitCache.size > 200) fitCache.clear();
+      fitCache.set(key, fitted);
+    }
+    if (!fitted) return;
+    outputCtx.save();
+    outputCtx.shadowBlur = 0;
+    outputCtx.font = `600 ${fitted.fontPx}px sans-serif`;
+    outputCtx.textAlign = "center";
+    outputCtx.textBaseline = "middle";
+    outputCtx.lineJoin = "round";
+    outputCtx.lineWidth = Math.max(2, fitted.fontPx * 0.18);
+    outputCtx.strokeStyle = "rgba(0, 0, 0, 0.85)";
+    outputCtx.fillStyle = "#ffffff";
+    const top = area.y + area.height / 2 - (fitted.lines.length * fitted.lineHeight) / 2 + fitted.lineHeight / 2;
+    fitted.lines.forEach((line, i) => {
+      const y = top + i * fitted.lineHeight;
+      outputCtx.strokeText(line, area.x + area.width / 2, y);
+      outputCtx.fillText(line, area.x + area.width / 2, y);
+    });
     outputCtx.restore();
   }
 
@@ -937,6 +988,12 @@ export async function startPresenterOverlayCompositor({
     outputCtx.restore();
   }
 
+  /** Finishes the presenter's stroke; a box or ellipse that survives becomes a pinned shape the host can label. */
+  function endHostStroke(now: number) {
+    const finished = board.end(now);
+    if (finished) onShapeFinished?.(finished.id);
+  }
+
   function setLabel(label: GestureState["label"] | "unavailable") {
     if (label === lastLabel) return;
     lastLabel = label;
@@ -946,7 +1003,7 @@ export async function startPresenterOverlayCompositor({
   /** Runs hand detection on the host's latest camera frame (throttled) and applies what it recognizes. */
   function runGestures(source: Source, now: number) {
     if (!settings.gestures) {
-      board.end(now);
+      endHostStroke(now);
       reactions.clear();
       gestureSpotlight = 0;
       handPoint = null;
@@ -1002,10 +1059,13 @@ export async function startPresenterOverlayCompositor({
       const out = cameraToOutput(hostTip.u, hostTip.v, placement);
       const onScreen = outputToScreen(viewport.rect(now), out.x / outputCanvas.width, out.y / outputCanvas.height);
       const kind = state.pen ? (settings.arrowMode ? "arrow" : "free") : settings.shapeKind;
-      if (board.kindOf() !== kind) board.begin(now, settings.penColor, HOST_OWNER, kind);
+      if (board.kindOf() !== kind) {
+        endHostStroke(now);
+        board.begin(now, settings.penColor, HOST_OWNER, kind);
+      }
       board.add(onScreen.x, onScreen.y);
     } else {
-      board.end(now);
+      endHostStroke(now);
     }
     let panned = false;
     for (const action of state.actions) {
@@ -1054,6 +1114,10 @@ export async function startPresenterOverlayCompositor({
 
     drawSpotlight(now, width, height);
     applyGuestPens(now, width, height);
+    if (board.version !== shownVersion) {
+      shownVersion = board.version;
+      onShapes?.(board.pinnedShapes());
+    }
     drawStrokes(now, width, height);
 
     // Fading-out sources first, then the ones on their way in, so a new speaker fades in over the old one.
@@ -1166,6 +1230,18 @@ export async function startPresenterOverlayCompositor({
     board.clear();
   }
 
+  function setShapeText(id: number, text: string) {
+    return board.setText(id, text);
+  }
+
+  function removeShape(id: number) {
+    return board.remove(id);
+  }
+
+  function undoShape() {
+    return board.undoLast();
+  }
+
   function setSpotlight(on: boolean) {
     stickyTarget = on ? 1 : 0;
   }
@@ -1196,5 +1272,5 @@ export async function startPresenterOverlayCompositor({
     onError(error);
   });
 
-  return { track: generator, settings, addSource, removeSource, setVisible, zoomIn, resetZoom, clearDrawing, setSpotlight, setGuestPointers, setGuestPens, stop };
+  return { track: generator, settings, addSource, removeSource, setVisible, zoomIn, resetZoom, clearDrawing, setShapeText, removeShape, undoShape, setSpotlight, setGuestPointers, setGuestPens, stop };
 }
