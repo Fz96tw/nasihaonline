@@ -35,6 +35,10 @@ import type { EventNotificationBroadcastItem } from "@/lib/events";
 
 function formatEventDateRange(startsAt: string, endsAt: string | null) {
   const start = new Date(startsAt);
+  // timeZoneName: "short" (e.g. "EDT") — no explicit `timeZone` above means
+  // this already converts to the viewer's own browser zone; the
+  // abbreviation just confirms that rather than leaving them to guess
+  // whether it's already been converted or is someone else's time.
   const startLabel = start.toLocaleString(undefined, {
     weekday: "long",
     month: "long",
@@ -42,19 +46,26 @@ function formatEventDateRange(startsAt: string, endsAt: string | null) {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZoneName: "short",
   });
   if (!endsAt) return startLabel;
 
   const end = new Date(endsAt);
   const sameDay = start.toDateString() === end.toDateString();
-  const endLabel = end.toLocaleString(undefined, sameDay ? { hour: "numeric", minute: "2-digit" } : {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const endLabel = end.toLocaleString(
+    undefined,
+    sameDay
+      ? { hour: "numeric", minute: "2-digit", timeZoneName: "short" }
+      : {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+          timeZoneName: "short",
+        },
+  );
   return `${startLabel} – ${endLabel}`;
 }
 

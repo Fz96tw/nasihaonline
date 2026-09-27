@@ -12,6 +12,9 @@ import { EVENT_TYPE_LABELS, getEventAudienceBadge, type EventWithRsvp } from "@/
 import { EventVisibility } from "@/lib/generated/prisma/enums";
 import { useHasMounted } from "@/lib/use-has-mounted";
 
+// timeZoneName: "short" (e.g. "EDT") — no explicit `timeZone` above means
+// this already converts to the viewer's own browser zone; the
+// abbreviation just confirms that rather than leaving them to guess.
 function formatEventDate(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
     year: "numeric",
@@ -19,6 +22,7 @@ function formatEventDate(iso: string) {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZoneName: "short",
   });
 }
 

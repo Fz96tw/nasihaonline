@@ -25,28 +25,43 @@ export const DEFAULT_EVENT_TIME_ZONE = "America/New_York";
 
 /**
  * Formats an event's start (or any event-related) instant as e.g.
- * "Tuesday, January 6, 2026 at 7:00 PM", in the given IANA timezone —
- * normally Event.timezone, the zone captured from the organizer's browser
- * at create/edit time. Without an explicit `timeZone` here,
- * toLocaleString falls back to the *server process's* timezone (Node
- * defaults to UTC in this app's containers), which is almost never the
- * timezone the organizer actually meant — that was the bug this exists to
- * prevent from recurring at each new call site.
+ * "Tuesday, January 6, 2026 at 7:00 PM Eastern Standard Time", in the
+ * given IANA timezone — normally Event.timezone, the zone captured from
+ * the organizer's browser at create/edit time. Without an explicit
+ * `timeZone` here, toLocaleString falls back to the *server process's*
+ * timezone (Node defaults to UTC in this app's containers), which is
+ * almost never the timezone the organizer actually meant — that was the
+ * bug this exists to prevent from recurring at each new call site.
+ *
+ * Spells out the full zone name (`timeZoneName: "long"`) rather than an
+ * abbreviation — this text is server-rendered once for every recipient
+ * of an email/notification regardless of their own timezone (unlike the
+ * in-app display components, which each viewer's browser already
+ * converts to their own zone), so an ambiguous abbreviation like "CST"
+ * or "IST" would leave an out-of-zone reader no better off than no label
+ * at all. Uses explicit component options instead of dateStyle/timeStyle
+ * — Intl doesn't allow combining those with timeZoneName.
  */
 export function formatEventDateTime(date: Date, timeZone?: string | null): string {
   return date.toLocaleString("en-US", {
-    dateStyle: "full",
-    timeStyle: "short",
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
     timeZone: timeZone ?? DEFAULT_EVENT_TIME_ZONE,
+    timeZoneName: "long",
   });
 }
 
-/** Time-only counterpart to formatEventDateTime, e.g. "7:00 PM" — same explicit-timeZone rationale. */
+/** Time-only counterpart to formatEventDateTime, e.g. "7:00 PM Eastern Standard Time" — same explicit-timeZone, full-name rationale. */
 export function formatEventTime(date: Date, timeZone?: string | null): string {
   return date.toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
     timeZone: timeZone ?? DEFAULT_EVENT_TIME_ZONE,
+    timeZoneName: "long",
   });
 }
 

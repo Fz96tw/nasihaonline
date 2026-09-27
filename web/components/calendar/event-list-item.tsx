@@ -9,13 +9,20 @@ import { EVENT_TYPE_LABELS, getEventAudienceBadge, type MemberEvent } from "@/li
 import { EventVisibility } from "@/lib/generated/prisma/enums";
 import { useHasMounted } from "@/lib/use-has-mounted";
 
-function formatEventDateTime(iso: string) {
+// Renamed from formatEventDateTime, which shadowed lib/format-date.ts's
+// export of the same name — that one formats in the *organizer's* stored
+// Event.timezone (for server-rendered email/notification text); this one
+// (no explicit `timeZone`) converts to the *viewer's own browser* zone.
+// timeZoneName: "short" (e.g. "EDT") confirms that rather than leaving the
+// viewer to guess whether it's already been converted.
+function formatViewerLocalEventDateTime(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
     weekday: "short",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZoneName: "short",
   });
 }
 
@@ -89,7 +96,7 @@ export function EventListItem({
             <p className="text-sm text-muted-foreground">Hosted by {event.hostName}</p>
           ) : null}
           <p className="text-sm text-muted-foreground">
-            {hasMounted ? formatEventDateTime(event.startsAt) : null}
+            {hasMounted ? formatViewerLocalEventDateTime(event.startsAt) : null}
           </p>
           {!isPast && (rsvped || isHost) && (meetingUrl || livekitRoomName) ? (
             <Link
