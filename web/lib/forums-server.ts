@@ -132,10 +132,11 @@ export type EventThreadAccess = {
   visibility: EventVisibility;
   hostId: string;
   invitees: { userId: string }[];
+  cancelledAt: Date | null;
 } | null;
 
 export const EVENT_THREAD_ACCESS_SELECT = {
-  select: { visibility: true, hostId: true, invitees: { select: { userId: true } } },
+  select: { visibility: true, hostId: true, invitees: { select: { userId: true } }, cancelledAt: true },
 } as const;
 
 function isEventThreadVisible(event: EventThreadAccess, viewerId: string | undefined): boolean {
@@ -555,6 +556,14 @@ export async function deleteForumThread(
  * see (`isPrivileged` reflects the viewer's own Steward/admin status) — a
  * profile page is otherwise a side channel for the same leak
  * getForumThreadDetail blocks directly.
+ *
+ * Also drops a thread whose linked event is cancelled — same "dead event
+ * shouldn't clutter the profile" rationale as getEventsHostedByMember's
+ * includeCancelled gate on the Events tab. Deliberately not folded into
+ * isEventThreadVisible/isThreadVisible (which stay unchanged for the thread's
+ * own direct link/view-count path) — someone who already has the thread's
+ * URL, e.g. from a cancellation notification, should still be able to open
+ * it; only its surfacing on this profile listing is suppressed.
  */
 export async function getMemberForumThreads(
   userId: string,
@@ -586,6 +595,7 @@ export async function getMemberForumThreads(
     if (seenThreadIds.has(post.threadId)) continue;
     seenThreadIds.add(post.threadId);
     if (!isThreadVisible(post.thread, viewerId, isPrivileged, member)) continue;
+    if (post.thread.event?.cancelledAt) continue;
     threads.push({
       id: post.threadId,
       title: post.thread.title,
