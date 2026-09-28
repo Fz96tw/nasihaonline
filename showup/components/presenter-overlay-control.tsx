@@ -28,7 +28,7 @@ import {
   type PresenterOverlayCompositor,
   type PresenterOverlaySettings,
 } from "@/lib/presenter-overlay/compositor";
-import type { PinnedShape } from "@/lib/presenter-overlay/drawing";
+import { MAX_TEXT_LENGTH, type PinnedShape } from "@/lib/presenter-overlay/drawing";
 import { clampPanelPosition, dragPanelPosition, nudgePanelPosition, parseStoredPanel, serializePanel, type PanelPosition } from "@/lib/presenter-overlay/panel-position";
 import { ShapePromptField, ShapeTextPanel, useShapePrompt } from "@/components/shape-text-panel";
 import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/components/livekit-control-styles";
@@ -229,6 +229,10 @@ export function PresenterOverlayControl({
     () => setPendingShapeId(null),
   );
   const [shapeKind, setShapeKind] = useState<PresenterOverlaySettings["shapeKind"]>("box");
+  // The stamp tool: what a thumb-to-middle-finger pinch drops (point aims it), and the text it currently carries.
+  // Retyping the text doesn't touch stamps already dropped — only the next one uses it.
+  const [stampShapeKind, setStampShapeKind] = useState<PresenterOverlaySettings["stampShapeKind"]>("box");
+  const [stampText, setStampText] = useState("");
   const [background, setBackground] = useState<PresenterOverlaySettings["background"]>("remove");
   const [panelShape, setPanelShape] = useState<PanelShape>("rounded");
   const [softEdge, setSoftEdge] = useState(false);
@@ -325,7 +329,7 @@ export function PresenterOverlayControl({
   }, [panelPos !== null]);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, span, gestures, penColor, arrowMode, shapeKind, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
+    return { opacity, scale, position, span, gestures, penColor, arrowMode, shapeKind, stampShapeKind, stampText, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -1512,6 +1516,44 @@ export function PresenterOverlayControl({
             Clear drawing
           </button>
         </div>
+        <div className="flex flex-wrap items-center gap-1 border-b border-white/10 pb-3">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Stamp</span>
+          {(["box", "ellipse", "text"] as const).map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              data-testid={`overlay-stamp-${kind}`}
+              aria-pressed={stampShapeKind === kind}
+              title="What a thumb-to-middle-finger pinch drops, aimed by pointing"
+              onClick={() => {
+                setStampShapeKind(kind);
+                updateSettings({ stampShapeKind: kind });
+              }}
+              className={`${segmentClass(stampShapeKind === kind)} ml-1`}
+            >
+              {kind === "box" ? "Rectangle" : kind === "ellipse" ? "Circle" : "Plain text"}
+            </button>
+          ))}
+        </div>
+        {pipWindow !== null && fileInput !== pipFileInputRef ? (
+          <p className="text-[11px] text-white/60">Type the stamp text in the pop-out preview window.</p>
+        ) : (
+          <label className={labelClass}>
+            Stamp text
+            <input
+              type="text"
+              data-testid="overlay-stamp-text"
+              value={stampText}
+              maxLength={MAX_TEXT_LENGTH}
+              placeholder="Point, then thumb-to-middle pinch to drop it"
+              onChange={(e) => {
+                setStampText(e.target.value);
+                updateSettings({ stampText: e.target.value });
+              }}
+              className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-sm text-white placeholder:text-white/40"
+            />
+          </label>
+        )}
         <ShapeTextPanel
           shapes={shapes}
           prompt={shapePrompt}

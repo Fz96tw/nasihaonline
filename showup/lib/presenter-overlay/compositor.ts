@@ -32,8 +32,8 @@ import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
 import { REACTION_EMOJI, ReactionPlayer, reactionPosition } from "./reactions.ts";
 import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement } from "./gestures.ts";
 import { mapGuestPenToScreen, mapGuestPointer, type GuestPointerDot } from "./guest-pointer.ts";
-import { ERASER_RADIUS, HOST_OWNER, StrokeBoard, arrowHead, shapeBounds, strokeColor, takesText, type PenColor, type PinnedShape } from "./drawing.ts";
-import { fitText, textArea, type FittedText } from "./text-fit.ts";
+import { ERASER_RADIUS, HOST_OWNER, StrokeBoard, arrowHead, cleanShapeText, shapeBounds, strokeColor, takesText, type PenColor, type PinnedShape } from "./drawing.ts";
+import { fitText, growToFit, textArea, type FittedText } from "./text-fit.ts";
 import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
 import { SizeNormalizer, measureFromRows } from "./size-normalize.ts";
 import { WindowSmoother, clampWindow, panelAspect, personBounds, targetCentre, tracePanelPath, windowSize, type PanelShape, type PersonBounds } from "./panel.ts";
@@ -88,6 +88,11 @@ const PANEL_SEGMENT_INTERVAL_MS = 250;
 /** How long a ghost takes to fade in or out when the shown person changes. */
 const CROSSFADE_MS = 300;
 
+/** A stamp's font size, as a fraction of the output canvas height. */
+const STAMP_FONT_FRACTION = 0.05;
+/** A stamp wraps once its text would be wider than this fraction of the output canvas width. */
+const STAMP_MAX_WIDTH_FRACTION = 0.32;
+
 export type OverlayCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 export type PresenterOverlaySettings = {
@@ -114,6 +119,10 @@ export type PresenterOverlaySettings = {
   arrowMode: boolean;
   /** What the "L" gesture draws: a box or the ellipse inscribed in it. */
   shapeKind: "box" | "ellipse";
+  /** What a thumb-to-middle-finger pinch stamps: a box, an ellipse, or plain text with no shape at all. */
+  stampShapeKind: "box" | "ellipse" | "text";
+  /** The text the next stamp will carry; retyping this doesn't change stamps already dropped. */
+  stampText: string;
   /**
    * Scale each cut-out by how far its person sits from their camera, so everyone looks the same size.
    * Host-controlled; on by default. Off = every camera frame is scaled the same (zoom 1).
@@ -157,6 +166,8 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   penColor: "red",
   arrowMode: false,
   shapeKind: "box",
+  stampShapeKind: "box",
+  stampText: "",
   normalizeSize: true,
   background: "remove",
   panelShape: "rounded",
@@ -502,6 +513,8 @@ export async function startPresenterOverlayCompositor({
   let lastPan: { x: number; y: number } | null = null;
   /** Where the eraser ring is (screen-content coordinates) while the eraser pose is held; null otherwise. */
   let eraserAt: { x: number; y: number } | null = null;
+  /** Where a stamp would land (screen-content coordinates) while the pointer is live, so it can be previewed before it's dropped. */
+  let stampPreviewAt: { x: number; y: number } | null = null;
   let trail: { x: number; y: number; t: number }[] = [];
 
   const screenReader = new Processor({ track: screenTrack }).readable.getReader();
@@ -925,6 +938,9 @@ export async function startPresenterOverlayCompositor({
         outputCtx.moveTo(barbA.x, barbA.y);
         outputCtx.lineTo(tip.x, tip.y);
         outputCtx.lineTo(barbB.x, barbB.y);
+      } else if (stroke.kind === "text") {
+        // A stamp is its text alone: no border or fill, just the label drawn below.
+        if (points.length < 2) continue;
       } else if (points.length === 1) {
         outputCtx.lineTo(points[0].x + 0.1, points[0].y);
       } else {
@@ -935,8 +951,8 @@ export async function startPresenterOverlayCompositor({
         const last = points[points.length - 1];
         outputCtx.lineTo(last.x, last.y);
       }
-      outputCtx.stroke();
-      if (stroke.text && (stroke.kind === "box" || stroke.kind === "ellipse") && points.length >= 2) {
+      if (stroke.kind !== "text") outputCtx.stroke();
+      if (stroke.text && (stroke.kind === "box" || stroke.kind === "ellipse" || stroke.kind === "text") && points.length >= 2) {
         drawShapeText(stroke.id, stroke.text, stroke.kind, shapeBounds(points[0], points[1]));
       }
     }
@@ -961,8 +977,47 @@ export async function startPresenterOverlayCompositor({
     outputCtx.restore();
   }
 
-  /** A label centred inside a pinned shape, shrunk to fit, with a dark outline so it reads over any screen content. */
-  function drawShapeText(id: number, text: string, kind: "box" | "ellipse", bounds: { x: number; y: number; width: number; height: number }) {
+  /**
+   * A faint, dashed preview of the stamp that would land where the pointer is right now — same grow-to-fit sizing
+   * as the real thing, just not yet pinned to the board. Nothing to preview with an empty stamp field.
+   */
+  function drawStampPreview(now: number, width: number, height: number) {
+    if (!stampPreviewAt) return;
+    const text = cleanShapeText(settings.stampText);
+    if (!text) return;
+    const kind = settings.stampShapeKind;
+    const fontPx = height * STAMP_FONT_FRACTION;
+    const maxWidthPx = width * STAMP_MAX_WIDTH_FRACTION;
+    const fitted = growToFit(text, maxWidthPx, fontPx, (candidate, fp) => {
+      outputCtx.font = `600 ${fp}px sans-serif`;
+      return outputCtx.measureText(candidate).width;
+    }, kind);
+    if (!fitted) return;
+    const view = viewport.rect(now);
+    const at = screenToOutput(view, stampPreviewAt.x, stampPreviewAt.y);
+    const cx = at.x * width;
+    const cy = at.y * height;
+    const bounds = { x: cx - fitted.width / 2, y: cy - fitted.height / 2, width: fitted.width, height: fitted.height };
+    outputCtx.save();
+    outputCtx.globalAlpha = 0.55;
+    if (kind !== "text") {
+      outputCtx.strokeStyle = strokeColor(settings.penColor);
+      outputCtx.lineWidth = Math.max(2, height * 0.004);
+      outputCtx.setLineDash([height * 0.012, height * 0.01]);
+      outputCtx.beginPath();
+      if (kind === "box") outputCtx.roundRect(bounds.x, bounds.y, bounds.width, bounds.height, Math.min(bounds.width, bounds.height) * 0.08);
+      else outputCtx.ellipse(cx, cy, bounds.width / 2, bounds.height / 2, 0, 0, Math.PI * 2);
+      outputCtx.stroke();
+    }
+    outputCtx.restore();
+    outputCtx.save();
+    outputCtx.globalAlpha = 0.55;
+    drawShapeText(-1, text, kind, bounds);
+    outputCtx.restore();
+  }
+
+  /** A label centred inside a pinned shape (or, for a plain-text stamp, in its own grown-to-fit bounds), shrunk to fit, with a dark outline so it reads over any screen content. */
+  function drawShapeText(id: number, text: string, kind: "box" | "ellipse" | "text", bounds: { x: number; y: number; width: number; height: number }) {
     const area = textArea(bounds, kind);
     const key = `${id}|${text}|${Math.round(area.width)}x${Math.round(area.height)}`;
     let fitted = fitCache.get(key);
@@ -1085,8 +1140,36 @@ export async function startPresenterOverlayCompositor({
   /** Finishes the presenter's stroke; an arrow, box or ellipse that survives is pinned, and a box or ellipse can then be labelled. */
   function endHostStroke(now: number) {
     const finished = board.end(now);
-    // Only a box or ellipse can take a label, so only they open the prompt; an arrow is pinned quietly (the list still updates).
-    if (finished && takesText(finished.kind)) onShapeFinished?.(finished.id);
+    // Only a box or ellipse drawn this way can take a label, so only they open the prompt; an arrow is pinned
+    // quietly (the list still updates). A stamp (also `takesText`) never reaches here — commitStamp finishes and
+    // labels its own stroke directly, since its text is already known before it's ever drawn.
+    if (finished && finished.kind !== "text" && takesText(finished.kind)) onShapeFinished?.(finished.id);
+  }
+
+  /**
+   * Drops a stamp centred on `at` (output-frame fraction coordinates): grows a box, ellipse or plain-text block to
+   * fit whatever text is currently set, then pins it at that point. A no-op with no text to stamp.
+   */
+  function commitStamp(now: number, at: { x: number; y: number }) {
+    const text = cleanShapeText(settings.stampText);
+    if (!text) return;
+    const kind = settings.stampShapeKind;
+    const fontPx = outputCanvas.height * STAMP_FONT_FRACTION;
+    const maxWidthPx = outputCanvas.width * STAMP_MAX_WIDTH_FRACTION;
+    const fitted = growToFit(text, maxWidthPx, fontPx, (candidate, fp) => {
+      outputCtx.font = `600 ${fp}px sans-serif`;
+      return outputCtx.measureText(candidate).width;
+    }, kind);
+    if (!fitted) return;
+    const view = viewport.rect(now);
+    const center = outputToScreen(view, at.x, at.y);
+    const width = (fitted.width / outputCanvas.width) * view.width;
+    const height = (fitted.height / outputCanvas.height) * view.height;
+    board.begin(now, settings.penColor, HOST_OWNER, kind);
+    board.add(center.x - width / 2, center.y - height / 2);
+    board.add(center.x + width / 2, center.y + height / 2);
+    const finished = board.end(now);
+    if (finished) board.setText(finished.id, text);
   }
 
   function setLabel(label: GestureState["label"] | "unavailable") {
@@ -1146,6 +1229,15 @@ export async function startPresenterOverlayCompositor({
     // With the host's ghost off the share there's nothing for a gesture to point at, so it sees no hand.
     const state = tracker.update(now, placement ? landmarks : null, source.aspect);
     pointer = state.pointer;
+    // Where a stamp would land right now, so it can be previewed before it's dropped: wherever the laser dot is,
+    // through the same ghost mapping and zoom view as everything else the fingertip drives.
+    if (placement && pointer) {
+      const out = cameraToOutput(pointer.u, pointer.v, placement);
+      const at = { x: Math.min(1, Math.max(0, out.x / outputCanvas.width)), y: Math.min(1, Math.max(0, out.y / outputCanvas.height)) };
+      stampPreviewAt = outputToScreen(viewport.rect(now), at.x, at.y);
+    } else {
+      stampPreviewAt = null;
+    }
     gestureSpotlight = state.spotlight ? state.spotlight.alpha : 0;
     handPoint = state.hand;
     // Air-draw: the pen tip (two fingers) or the shape corner (the "L") goes through the same ghost mapping as the laser,
@@ -1190,6 +1282,8 @@ export async function startPresenterOverlayCompositor({
         viewport.zoomIn(now, at.x, at.y);
         lastPan = at;
         panned = true;
+      } else if (action.type === "stamp") {
+        commitStamp(now, at);
       } else {
         if (lastPan) viewport.pan(at.x - lastPan.x, at.y - lastPan.y);
         lastPan = at;
@@ -1226,6 +1320,7 @@ export async function startPresenterOverlayCompositor({
     }
     drawStrokes(now, width, height);
     drawEraser(now, width, height);
+    drawStampPreview(now, width, height);
 
     // Fading-out sources first, then the ones on their way in, so a new speaker fades in over the old one.
     // Each real camera keeps its own aspect ratio; the visible ones are spaced out in the order given.

@@ -16,12 +16,41 @@ export const LINE_HEIGHT = 1.2;
 /** Fraction of the shape's box kept clear around the text. */
 export const TEXT_PADDING = 0.06;
 
-/** The rectangle to lay text out in: the box itself, or for an ellipse the largest axis-aligned rectangle inside it (about 70%), less padding. */
-export function textArea(bounds: FitRect, kind: "box" | "ellipse"): FitRect {
-  const fraction = kind === "ellipse" ? Math.SQRT1_2 : 1;
-  const width = bounds.width * fraction * (1 - 2 * TEXT_PADDING);
-  const height = bounds.height * fraction * (1 - 2 * TEXT_PADDING);
+/** How much of a shape's own width/height is usable text area: all of a box (less padding), the inscribed rectangle of an ellipse, or — for plain text with no shape at all — the whole thing, no padding. */
+function textAreaFraction(kind: "box" | "ellipse" | "text"): number {
+  return kind === "ellipse" ? Math.SQRT1_2 : 1;
+}
+
+/** The rectangle to lay text out in: the box itself, or for an ellipse the largest axis-aligned rectangle inside it (about 70%), less padding. Plain text (no shape) gets the bounds back unchanged. */
+export function textArea(bounds: FitRect, kind: "box" | "ellipse" | "text"): FitRect {
+  const fraction = textAreaFraction(kind);
+  const padding = kind === "text" ? 0 : TEXT_PADDING;
+  const width = bounds.width * fraction * (1 - 2 * padding);
+  const height = bounds.height * fraction * (1 - 2 * padding);
   return { x: bounds.x + (bounds.width - width) / 2, y: bounds.y + (bounds.height - height) / 2, width, height };
+}
+
+/**
+ * The inverse of `textArea`: given the text and a fixed font size (not shrunk to fit, since there's no
+ * pre-drawn shape to fit into — a stamp grows the shape to the text instead), the smallest bounds that
+ * would make `textArea` hand that text exactly this much room. Wraps at `maxWidth`. Null for empty text.
+ */
+export function growToFit(
+  text: string,
+  maxWidth: number,
+  fontPx: number,
+  measure: (text: string, fontPx: number) => number,
+  kind: "box" | "ellipse" | "text",
+): (FittedText & { width: number; height: number }) | null {
+  if (!text) return null;
+  const lines = wrapText(text, maxWidth, (candidate) => measure(candidate, fontPx));
+  const lineHeight = fontPx * LINE_HEIGHT;
+  const textWidth = lines.reduce((max, line) => Math.max(max, measure(line, fontPx)), 0);
+  const textHeight = lines.length * lineHeight;
+  const fraction = textAreaFraction(kind);
+  const padding = kind === "text" ? 0 : TEXT_PADDING;
+  const divisor = fraction * (1 - 2 * padding);
+  return { fontPx, lineHeight, lines, width: textWidth / divisor, height: textHeight / divisor };
 }
 
 /** Greedy word wrap; a single word wider than the line is broken by characters. */

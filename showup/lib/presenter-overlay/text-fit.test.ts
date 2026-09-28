@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { LINE_HEIGHT, MAX_FONT_PX, MIN_FONT_PX, TEXT_PADDING, fitText, textArea, wrapText } from "./text-fit.ts";
+import { LINE_HEIGHT, MAX_FONT_PX, MIN_FONT_PX, TEXT_PADDING, fitText, growToFit, textArea, wrapText } from "./text-fit.ts";
 
 /** Every character is 0.5 em wide, so widths are easy to reason about. */
 const measure = (text: string, fontPx: number) => text.length * fontPx * 0.5;
@@ -70,4 +70,47 @@ test("no text, or an area too small to read, draws nothing", () => {
   assert.equal(fitText("", { x: 0, y: 0, width: 200, height: 100 }, measure), null);
   assert.equal(fitText("Hi", { x: 0, y: 0, width: 5, height: 100 }, measure), null);
   assert.equal(fitText("Hi", { x: 0, y: 0, width: 200, height: 5 }, measure), null);
+});
+
+test("plain text (no shape) gets its bounds back unchanged: no fraction, no padding", () => {
+  const bounds = { x: 10, y: 20, width: 200, height: 80 };
+  assert.deepEqual(textArea(bounds, "text"), bounds);
+});
+
+test("growToFit is the inverse of textArea: feeding its bounds back in gives exactly the text's own size", () => {
+  for (const kind of ["box", "ellipse", "text"] as const) {
+    const grown = growToFit("Check this", 1000, 20, measure, kind);
+    assert.ok(grown);
+    const area = textArea({ x: 0, y: 0, width: grown.width, height: grown.height }, kind);
+    const lineWidth = Math.max(...grown.lines.map((line) => measure(line, grown.fontPx)));
+    assert.ok(Math.abs(area.width - lineWidth) < 1e-6, `${kind}: width round-trips`);
+    assert.ok(Math.abs(area.height - grown.lines.length * grown.lineHeight) < 1e-6, `${kind}: height round-trips`);
+  }
+});
+
+test("growToFit never shrinks the font: it wraps at maxWidth and grows the shape to fit instead", () => {
+  const grown = growToFit("a fairly long label that would need to shrink if it had to fit a fixed box", 150, 18, measure, "box");
+  assert.ok(grown);
+  assert.equal(grown.fontPx, 18);
+  assert.ok(grown.lines.length > 1, "wraps across multiple lines rather than shrinking");
+  assert.ok(grown.lines.every((line) => measure(line, 18) <= 150 + 1e-9));
+});
+
+test("an ellipse grows bigger than a box would for the same text, since only the inscribed rectangle is usable", () => {
+  const box = growToFit("Check this", 1000, 20, measure, "box");
+  const ellipse = growToFit("Check this", 1000, 20, measure, "ellipse");
+  assert.ok(box && ellipse);
+  assert.ok(ellipse.width > box.width && ellipse.height > box.height);
+});
+
+test("plain text grows to exactly the text's own size, with no shape padding added", () => {
+  const grown = growToFit("Hi there", 1000, 20, measure, "text");
+  assert.ok(grown);
+  const lineWidth = Math.max(...grown.lines.map((line) => measure(line, 20)));
+  assert.ok(Math.abs(grown.width - lineWidth) < 1e-9);
+  assert.ok(Math.abs(grown.height - grown.lines.length * grown.lineHeight) < 1e-9);
+});
+
+test("growToFit draws nothing for empty text", () => {
+  assert.equal(growToFit("", 200, 20, measure, "box"), null);
 });

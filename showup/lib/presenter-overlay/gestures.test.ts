@@ -17,6 +17,7 @@ import {
   GestureTracker,
   PALM_HOLD_MS,
   PINCH_HOLD_MS,
+  STAMP_HOLD_MS,
   POINTER_FADE_MS,
   POINT_HOLD_MS,
   cameraToOutput,
@@ -29,7 +30,7 @@ import { ScreenViewport, ZOOM, ZOOM_GLIDE_MS, outputToScreen, screenToOutput } f
 type Finger = "ext" | "curl" | "half";
 
 /** A right-side-up hand with the wrist at the bottom; `ox` shifts it sideways. Fingers: index, middle, ring, pinky. */
-function hand(fingers: [Finger, Finger, Finger, Finger], opts: { pinch?: boolean; ox?: number; oy?: number; apart?: boolean } = {}): Landmark[] {
+function hand(fingers: [Finger, Finger, Finger, Finger], opts: { pinch?: boolean; midpinch?: boolean; ox?: number; oy?: number; apart?: boolean } = {}): Landmark[] {
   const ox = opts.ox ?? 0;
   const oy = opts.oy ?? 0;
   const points: Landmark[] = Array.from({ length: 21 }, () => ({ x: 0.5 + ox, y: 0.9 + oy }));
@@ -56,12 +57,15 @@ function hand(fingers: [Finger, Finger, Finger, Finger], opts: { pinch?: boolean
   });
   points[9] = { x: 0.5 + ox, y: 0.7 + oy }; // middle MCP defines the hand size (0.2)
   if (opts.pinch) points[4] = { x: points[8].x + 0.01, y: points[8].y + 0.01 };
+  if (opts.midpinch) points[4] = { x: points[12].x + 0.01, y: points[12].y + 0.01 };
   return points;
 }
 
 const POINT = () => hand(["ext", "curl", "curl", "curl"]);
 // A pinch holds the fingertips out in front of the palm (the index finger only half curled), unlike a fist.
 const PINCH = () => hand(["half", "curl", "curl", "curl"], { pinch: true });
+// Thumb to the middle fingertip instead, index kept out (aiming) so it's never mistaken for a fist or the real pinch.
+const MIDPINCH = () => hand(["ext", "curl", "curl", "curl"], { midpinch: true });
 /** A raised fist (wrist up in the frame) and a resting one (wrist low). */
 const FIST = () => hand(["curl", "curl", "curl", "curl"], { oy: -0.3 });
 const FIST_LOW = () => hand(["curl", "curl", "curl", "curl"]);
@@ -197,6 +201,39 @@ test("a pinch shorter than the hold does nothing", () => {
   const tracker = new GestureTracker();
   const { actions } = run(tracker, 0, PINCH_HOLD_MS - 150, PINCH);
   assert.equal(actions.length, 0);
+});
+
+test("the thumb-to-middle pinch is its own pose, distinct from the thumb-to-index pinch", () => {
+  assert.equal(classifyPose(MIDPINCH()).pose, "midpinch");
+  assert.equal(classifyPose(PINCH()).pose, "pinch");
+});
+
+test("a held thumb-to-middle pinch drops a stamp once, aimed at the index fingertip, and does not zoom", () => {
+  const tracker = new GestureTracker();
+  const { actions } = run(tracker, 0, STAMP_HOLD_MS + 600, MIDPINCH);
+  const stamps = actions.filter(([, a]) => a.type === "stamp");
+  assert.equal(stamps.length, 1, "fires once per touch, not repeatedly while held");
+  assert.ok(stamps[0][0] >= STAMP_HOLD_MS);
+  const stamp = stamps[0][1] as Extract<GestureAction, { type: "stamp" }>;
+  const m = MIDPINCH();
+  assert.ok(Math.abs(stamp.u - m[8].x) < 1e-9 && Math.abs(stamp.v - m[8].y) < 1e-9, "aimed at the index tip, not the thumb-middle touch point");
+  assert.equal(actions.filter(([, a]) => a.type === "zoom").length, 0, "the ordinary thumb-index pinch/zoom is unaffected");
+});
+
+test("a thumb-to-middle pinch shorter than the hold drops no stamp", () => {
+  const tracker = new GestureTracker();
+  const { actions } = run(tracker, 0, STAMP_HOLD_MS - 150, MIDPINCH);
+  assert.equal(actions.length, 0);
+});
+
+test("releasing and re-touching the thumb-to-middle pinch drops a second stamp", () => {
+  const tracker = new GestureTracker();
+  const first = run(tracker, 0, STAMP_HOLD_MS + 100, MIDPINCH);
+  assert.equal(first.actions.filter(([, a]) => a.type === "stamp").length, 1);
+  const firedAt = first.actions[0][0];
+  run(tracker, firedAt + 33, firedAt + GRACE_MS + 200, POINT); // release: back to plain pointing, long enough to clear the grace period
+  const second = run(tracker, firedAt + GRACE_MS + 300, firedAt + GRACE_MS + STAMP_HOLD_MS + 500, MIDPINCH);
+  assert.equal(second.actions.filter(([, a]) => a.type === "stamp").length, 1, "a fresh touch fires again");
 });
 
 test("a held open palm resets once", () => {

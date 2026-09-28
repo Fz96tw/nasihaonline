@@ -6,7 +6,7 @@
  */
 
 export type Landmark = { x: number; y: number };
-export type Pose = "point" | "pinch" | "palm" | "pen" | "shape" | "eraser" | "fist" | "thumbsup" | "thumbsdown" | "none";
+export type Pose = "point" | "pinch" | "midpinch" | "palm" | "pen" | "shape" | "eraser" | "fist" | "thumbsup" | "thumbsdown" | "none";
 export type ReactionKind = "thumbsup" | "thumbsdown" | "wave";
 
 /** Hold times before a gesture takes effect. */
@@ -18,6 +18,8 @@ export const PEN_HOLD_MS = 300;
 export const SHAPE_HOLD_MS = 400;
 /** Hold the eraser pose (three fingers together) this long before it starts erasing. */
 export const ERASER_HOLD_MS = 300;
+/** Hold the thumb-to-middle-finger pinch this long before it drops a stamp (index finger free to keep aiming). */
+export const STAMP_HOLD_MS = 300;
 /** A fist must be held this long to turn the spotlight on (longer, so a resting fist doesn't trigger it). */
 export const FIST_HOLD_MS = 800;
 /** A thumb must be held up or down this long to react. */
@@ -70,6 +72,12 @@ const RING_TIP = 16;
 const EDGE = 0.01;
 /** Thumb and index tips closer than this fraction of the hand's size are pinching. */
 const PINCH_RATIO = 0.3;
+/**
+ * Thumb and middle tips closer than this (tighter than PINCH_RATIO) count as a deliberate touch for a stamp.
+ * A resting/tucked thumb can drift this close to a curled middle fingertip without the two ever actually
+ * touching, since the palm is compact — a tighter radius than the index pinch keeps that from misfiring.
+ */
+const MIDPINCH_RATIO = 0.2;
 /** A finger is extended when its tip is this much farther from the wrist than its middle joint, and curled when it is nearer. */
 const EXTENDED_RATIO = 1.1;
 const CURLED_RATIO = 1.0;
@@ -159,6 +167,9 @@ export function classifyPose(landmarks: readonly Landmark[], aspect = 1): PoseRe
     return wrist.y <= FIST_RAISED_Y ? { pose: "fist", tip, middleTip, pinchPoint, palm } : none;
   }
   if (dist(thumb, tip) < PINCH_RATIO * size) return { pose: "pinch", tip, middleTip, pinchPoint, palm };
+  // Thumb to the middle fingertip (not the index): a second, distinct pinch that drops a stamp instead of zooming,
+  // so the index finger stays free to keep aiming at the same time.
+  if (dist(thumb, middleTip) < MIDPINCH_RATIO * size) return { pose: "midpinch", tip, middleTip, pinchPoint, palm };
   const [index, ...others] = state;
   // The "L" before the laser: same fingers, but the thumb is held out square to the index finger.
   if (index === "extended" && others.every((s) => s === "curled") && isThumbSquare(landmarks, aspect, size)) {
@@ -228,6 +239,8 @@ export type GestureAction =
   /** The pinch is being held after the zoom: the pinched hand is now at this point (drives panning). */
   | { type: "pan"; u: number; v: number }
   | { type: "reset" }
+  /** Drop a stamp (whatever text is currently set, in the currently chosen shape) at this point (camera-frame coordinates of the aimed fingertip). */
+  | { type: "stamp"; u: number; v: number }
   /** A quick reaction to show near the host's ghost. */
   | { type: "reaction"; kind: ReactionKind };
 
@@ -249,11 +262,11 @@ export type GestureState = {
   label: "pointing" | "zooming" | "reset" | "drawing" | "shape" | "erasing" | "spotlight" | ReactionKind | null;
 };
 
-const POSES: readonly Pose[] = ["point", "pinch", "palm", "pen", "shape", "eraser", "fist", "thumbsup", "thumbsdown"];
+const POSES: readonly Pose[] = ["point", "pinch", "midpinch", "palm", "pen", "shape", "eraser", "fist", "thumbsup", "thumbsdown"];
 
 export class GestureTracker {
-  private since: Record<string, number | null> = { point: null, pinch: null, palm: null, pen: null, shape: null, eraser: null, fist: null, thumbsup: null, thumbsdown: null };
-  private lastSeen: Record<string, number> = { point: 0, pinch: 0, palm: 0, pen: 0, shape: 0, eraser: 0, fist: 0, thumbsup: 0, thumbsdown: 0 };
+  private since: Record<string, number | null> = { point: null, pinch: null, midpinch: null, palm: null, pen: null, shape: null, eraser: null, fist: null, thumbsup: null, thumbsdown: null };
+  private lastSeen: Record<string, number> = { point: 0, pinch: 0, midpinch: 0, palm: 0, pen: 0, shape: 0, eraser: 0, fist: 0, thumbsup: 0, thumbsdown: 0 };
   private thumbFired: Record<string, boolean> = { thumbsup: false, thumbsdown: false };
   private waveFired = false;
   private reactionCooldownUntil = 0;
@@ -286,6 +299,7 @@ export class GestureTracker {
   private pointerAt: number | null = null;
   private cooldownUntil = 0;
   private pinchFired = false;
+  private stampFired = false;
   private palmFired = false;
   private pinching = false;
   private resetLabelUntil = 0;
@@ -326,6 +340,7 @@ export class GestureTracker {
       } else if (this.since[pose] !== null && now - this.lastSeen[pose] > GRACE_MS) {
         this.since[pose] = null;
         if (pose === "pinch") this.pinchFired = false;
+        if (pose === "midpinch") this.stampFired = false;
         if (pose === "palm") {
           this.palmFired = false;
           this.waveFired = false;
@@ -458,6 +473,14 @@ export class GestureTracker {
     if (this.pinching && now - this.lastSeen.pinch > GRACE_MS) {
       this.pinching = false;
       this.panAt = null;
+    }
+
+    // Stamp: thumb touches the middle fingertip (not the index), held briefly, fires once per touch — at wherever
+    // the index fingertip currently is, so aiming (the point pose) and firing (this pose) can happen back to back
+    // without the drop point jumping to where the thumb happens to be.
+    if (this.held("midpinch", now, STAMP_HOLD_MS) && !this.stampFired && reading) {
+      this.stampFired = true;
+      actions.push({ type: "stamp", u: reading.tip.x, v: reading.tip.y });
     }
 
     // Reactions: a thumb held up or down, or a wave. Each fires once per hold; nothing reacts again for REACTION_COOLDOWN_MS

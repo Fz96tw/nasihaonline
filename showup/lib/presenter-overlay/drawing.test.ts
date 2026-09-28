@@ -623,6 +623,21 @@ test("arrows are listed with the other pinned shapes, in order, and carry no lab
   assert.equal(takesText("arrow"), false);
   assert.equal(takesText("box") && takesText("ellipse"), true);
   assert.equal(takesText("free"), false);
+  assert.equal(takesText("text"), true, "a text stamp's whole point is its text");
+});
+
+test("a text stamp is pinned, never fades, and is erased only by its outline like a box, not its middle", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "red", undefined, "text");
+  board.add(0.1, 0.1);
+  board.add(0.3, 0.4);
+  const stamp = board.end(10) as { id: number };
+  assert.ok(stamp, "big enough to keep");
+  board.setText(stamp.id, "Hello");
+  assert.deepEqual(board.pinnedShapes(), [{ id: stamp.id, kind: "text", text: "Hello" }]);
+  assert.equal(board.visible(100000).find(({ stroke }) => stroke.id === stamp.id)?.alpha, 1, "never fades");
+  assert.equal(board.eraseAt(0.2, 0.25, 0.02), 0, "the middle of the stamp is not on its outline");
+  assert.equal(board.eraseAt(0.1, 0.25, 0.02), 1, "its left edge is");
 });
 
 test("an arrow can be removed, undone and cleared like any pinned shape", () => {

@@ -31,18 +31,20 @@ export const MIN_SHAPE_SIZE = 0.02;
 
 /**
  * "free" follows the fingertip. The others keep only where the pen started and where it is now (a rubber band):
- * "arrow" is a straight line with a head, "box" a rectangle and "ellipse" the ellipse inscribed in it, with those two points as opposite corners.
+ * "arrow" is a straight line with a head, "box" a rectangle and "ellipse" the ellipse inscribed in it, with those two
+ * points as opposite corners. "text" is a stamp (Showup's gesture-dropped text stamps): the same two-corner rubber-band
+ * shape as a box, but drawn as plain text with no border — its corners are grown to fit the text, not dragged by hand.
  */
-export type StrokeKind = "free" | "arrow" | "box" | "ellipse";
+export type StrokeKind = "free" | "arrow" | "box" | "ellipse" | "text";
 
-/** Arrows, boxes and ellipses are deliberate annotations: they never fade and stay until the host removes them. Freehand strokes still fade. */
+/** Arrows, boxes, ellipses and text stamps are deliberate annotations: they never fade and stay until the host removes them. Freehand strokes still fade. */
 export function isPinnedKind(kind: StrokeKind): boolean {
-  return kind === "arrow" || kind === "box" || kind === "ellipse";
+  return kind === "arrow" || kind === "box" || kind === "ellipse" || kind === "text";
 }
 
-/** Only boxes and ellipses can carry a label; there is nowhere inside an arrow to put text. */
+/** Boxes, ellipses and text stamps carry their text as the whole point of the mark; there is nowhere inside an arrow to put text. */
 export function takesText(kind: StrokeKind): boolean {
-  return kind === "box" || kind === "ellipse";
+  return kind === "box" || kind === "ellipse" || kind === "text";
 }
 
 /** Pinned marks (arrows, boxes, ellipses) kept at once; drawing another drops the oldest. */
@@ -77,7 +79,7 @@ export type Stroke = {
 };
 
 /** What the host UI needs to list and remove a pinned shape. */
-export type PinnedShape = { id: number; kind: "arrow" | "box" | "ellipse"; text: string };
+export type PinnedShape = { id: number; kind: "arrow" | "box" | "ellipse" | "text"; text: string };
 
 export class StrokeBoard {
   private strokes: Stroke[] = [];
@@ -195,7 +197,7 @@ export class StrokeBoard {
   pinnedShapes(): PinnedShape[] {
     return this.strokes
       .filter((stroke) => isPinnedKind(stroke.kind) && stroke.endedAt !== null)
-      .map((stroke) => ({ id: stroke.id, kind: stroke.kind as "arrow" | "box" | "ellipse", text: stroke.text ?? "" }));
+      .map((stroke) => ({ id: stroke.id, kind: stroke.kind as "arrow" | "box" | "ellipse" | "text", text: stroke.text ?? "" }));
   }
 
   /** Sets (or, with empty text, clears) a pinned shape's label. False when there's no such shape. */
@@ -361,8 +363,10 @@ function outlineSegments(stroke: Stroke): [{ x: number; y: number }, { x: number
 function strokeTouches(stroke: Stroke, x: number, y: number, radius: number, aspect: number): boolean {
   const points = stroke.points;
   if (points.length === 0) return false;
-  // A box or ellipse is hit only on its outline; freehand strokes and arrows (pinned or not) are hit anywhere along their line.
-  if (stroke.kind === "box" || stroke.kind === "ellipse") {
+  // A box, ellipse or text stamp is hit only on its outline (a stamp has no drawn border, but the same rectangle
+  // outline is used so pointing anywhere across its middle doesn't erase it, only its edge does); freehand
+  // strokes and arrows (pinned or not) are hit anywhere along their line.
+  if (stroke.kind === "box" || stroke.kind === "ellipse" || stroke.kind === "text") {
     if (points.length < 2) return false;
     return outlineSegments(stroke).some(([a, b]) => distanceToSegment(x, y, a, b, aspect) <= radius);
   }
