@@ -120,8 +120,8 @@ export type PresenterOverlaySettings = {
    */
   normalizeSize: boolean;
   /**
-   * The host's own ghost: "remove" cuts the person out (default); "keep" shows the camera with its real
-   * background as a shaped panel centred on them. Guests are always cut out.
+   * "remove" cuts the person out (default); "keep" shows the camera with its real background as a shaped
+   * panel centred on them. Applies to every ghost, host and guests alike.
    */
   background: "remove" | "keep";
   /** Outline of the "keep" panel. */
@@ -174,7 +174,7 @@ export type OverlaySource = {
   /** Shown as the auto caption. */
   label: string;
   track: MediaStreamTrack;
-  /** The host's own camera. Mirroring doesn't depend on it (settings.mirror applies to every ghost); it picks the pump and the keep-background panel, which is host-only. */
+  /** The host's own camera. Mirroring doesn't depend on it (settings.mirror applies to every ghost); it only picks which pump reads the track. */
   isLocal: boolean;
 };
 
@@ -626,7 +626,7 @@ export async function startPresenterOverlayCompositor({
   /** Handles one camera frame for a source; always closes it. Returns true if a fresh cut-out was made. */
   function processFrame(source: Source, frame: VideoFrame, now: number, minIntervalMs: number): boolean {
     try {
-      if (source.isLocal && settings.background === "keep") {
+      if (settings.background === "keep") {
         drawCamera(source, frame);
         frame.close();
         if (now - source.lastSegmentAt >= PANEL_SEGMENT_INTERVAL_MS) {
