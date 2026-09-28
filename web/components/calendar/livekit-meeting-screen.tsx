@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { LogOut, RotateCcw, Users, X } from "lucide-react";
 import { RoomEvent, VideoPreset, VideoPresets, type RemoteParticipant, type Room } from "livekit-client";
-import { LiveKitRoom, VideoConference, useChat, useParticipants, useRoomContext } from "@livekit/components-react";
+import { LiveKitRoom, useChat, useParticipants, useRoomContext } from "@livekit/components-react";
 import "@livekit/components-styles";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { getPublicMeetingClosingNote } from "@/lib/legal";
 import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/components/calendar/livekit-control-styles";
 import { PresenterOverlayControl } from "@/components/calendar/presenter-overlay-control";
 import { OverlayGuestControl } from "@/components/calendar/overlay-guest-control";
+import { ShareStage } from "@/components/calendar/share-stage";
 
 /**
  * Title/host banner pinned to the top of the call — per-viewer local state
@@ -817,6 +818,7 @@ function QuickRecordingOverlay({
   onExit,
   onError,
   room,
+  onOverlayIds,
 }: {
   recording: boolean;
   secondsRemaining: number | null;
@@ -828,6 +830,7 @@ function QuickRecordingOverlay({
   onExit: () => void;
   onError: (message: string) => void;
   room: Room | null;
+  onOverlayIds: (ids: string[]) => void;
 }) {
   const { active, ...fade } = useIdleFade();
 
@@ -842,8 +845,8 @@ function QuickRecordingOverlay({
           <RecordingControl recording={recording} startEndpoint={startEndpoint} stopEndpoint={stopEndpoint} onError={onError} />
         )}
         {recording && <ResetControl pending={resetPending} onClick={onReset} />}
-        <PresenterOverlayControl room={room} onError={onError} panelPlacement="above-right" />
-        <OverlayGuestControl room={room} />
+        <PresenterOverlayControl room={room} onError={onError} onOverlayIds={onOverlayIds} panelPlacement="above-right" />
+        <OverlayGuestControl room={room} onOverlayIds={onOverlayIds} />
         <ExitControl onClick={onExit} />
       </div>
     </div>
@@ -959,6 +962,8 @@ export function LiveKitMeetingScreen({
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
   const [room, setRoom] = useState<Room | null>(null);
   const [resetPending, setResetPending] = useState(false);
+  // Identities whose camera is on the presenter overlay; their camera tiles are hidden (see ShareStage).
+  const [overlayIds, setOverlayIds] = useState<string[]>([]);
   const wasRecordingRef = useRef(false);
   // Set right before calling the discard endpoint (handleReset), checked
   // instead of firing onRecordingStopped in the recording-transition effect
@@ -1106,6 +1111,7 @@ export function LiveKitMeetingScreen({
           onExit={() => room?.disconnect()}
           room={room}
           onError={pushToast}
+          onOverlayIds={setOverlayIds}
         />
       ) : (
         <TopLeftOverlay>
@@ -1125,8 +1131,8 @@ export function LiveKitMeetingScreen({
             kickEndpoint={kickEndpoint}
             onError={pushToast}
           />
-          <PresenterOverlayControl room={room} onError={pushToast} />
-          <OverlayGuestControl room={room} />
+          <PresenterOverlayControl room={room} onError={pushToast} onOverlayIds={setOverlayIds} />
+          <OverlayGuestControl room={room} onOverlayIds={setOverlayIds} />
         </TopLeftOverlay>
       )}
       <LiveKitRoom
@@ -1153,7 +1159,7 @@ export function LiveKitMeetingScreen({
         <ChatCaptureListener chatEndpoint={chatEndpoint} />
         <ParticipantsListener hostId={hostId} coHostUserIds={coHostUserIds} onChange={setParticipants} />
         <RoomExitBridge onRoomReady={setRoom} />
-        <VideoConference />
+        <ShareStage overlayIds={overlayIds} />
       </LiveKitRoom>
     </div>
   );

@@ -272,12 +272,17 @@ export type GhostPlacement = {
   height: number;
   /** The ghost is drawn flipped left-to-right. */
   mirror: boolean;
+  /** For a keep-background panel: the part of the camera frame it shows (0–1 of the frame). Null = the whole frame. */
+  crop?: { x: number; y: number; width: number; height: number } | null;
 };
 
 /**
  * Maps a point in the camera frame (0–1) to output-frame pixels through the same transform the ghost is drawn with
- * — placement, size and mirroring — so a fingertip lands exactly on the ghost's fingertip.
+ * — placement, size, panel crop and mirroring — so a fingertip lands exactly on the ghost's fingertip.
  */
 export function cameraToOutput(u: number, v: number, ghost: GhostPlacement): { x: number; y: number } {
-  return { x: ghost.x + (ghost.mirror ? 1 - u : u) * ghost.width, y: ghost.y + v * ghost.height };
+  const crop = ghost.crop;
+  const nu = crop ? (u - crop.x) / crop.width : u;
+  const nv = crop ? (v - crop.y) / crop.height : v;
+  return { x: ghost.x + (ghost.mirror ? 1 - nu : nu) * ghost.width, y: ghost.y + nv * ghost.height };
 }

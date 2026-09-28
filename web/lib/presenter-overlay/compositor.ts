@@ -58,6 +58,7 @@ import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement 
 import { StrokeBoard, strokeColor, type PenColor } from "./drawing.ts";
 import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
 import { SizeNormalizer, measureFromRows } from "./size-normalize.ts";
+import { WindowSmoother, clampWindow, panelAspect, personBounds, targetCentre, tracePanelPath, windowSize, type PanelShape, type PersonBounds } from "./panel.ts";
 
 // Insertable-streams (Chrome's main-thread flavor) aren't in TS's DOM lib yet.
 type MediaStreamTrackProcessorCtor = new (init: { track: MediaStreamTrack }) => { readable: ReadableStream<VideoFrame> };
@@ -94,6 +95,8 @@ const CAMERA_WIDTH = 640;
 const CAMERA_HEIGHT = 360;
 /** The host's own camera drives the output frame rate and is segmented every output frame; a guest shown via "Follow the speaker" is throttled. */
 const GUEST_SEGMENT_INTERVAL_MS = 1000 / 12;
+/** Keep-background panel mode: how often the person is re-located in the frame (the crop itself still redraws every frame). */
+const PANEL_SEGMENT_INTERVAL_MS = 250;
 /** How long a ghost takes to fade in or out when the shown person changes. */
 const CROSSFADE_MS = 300;
 /** Hand detection runs at most ~14 times a second, and slower still if a detection ever takes long — independent of (and
@@ -128,6 +131,15 @@ export type PresenterOverlaySettings = {
    */
   normalizeSize: boolean;
   /**
+   * "remove" cuts the person out (default); "keep" shows the camera with its real background as a shaped
+   * panel centred on them. Applies to every ghost, host and guests alike.
+   */
+  background: "remove" | "keep";
+  /** Outline of the "keep" panel. */
+  panelShape: PanelShape;
+  /** Feather the panel's edge so it fades out instead of ending in a hard line. */
+  softEdge: boolean;
+  /**
    * Flip the cut-out horizontally, like a mirror — on by default, because
    * the presenter aims by watching their own image over the slide: when it
    * moves the way a mirror would, reaching toward something on their screen
@@ -156,6 +168,9 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   position: "center",
   span: false,
   normalizeSize: true,
+  background: "remove",
+  panelShape: "rounded",
+  softEdge: false,
   mirror: true,
   gestures: false,
   penColor: "red",
@@ -357,10 +372,22 @@ export async function startPresenterOverlayCompositor({
     alpha: number;
     target: number;
     lastSegmentAt: number;
-    /** Sits-close-or-far correction for this camera. */
+    /** What was last drawn for this source: a background-removed cut-out (cutoutCanvas) or a shaped "keep background" panel (panelCanvas). */
+    mode: "cutout" | "panel";
+    /** Sits-close-or-far correction for this camera (cut-outs only). */
     normalizer: SizeNormalizer;
     /** Person pixels per mask row, filled while the mask is converted; reused between frames. */
     rowCounts: Uint32Array;
+    panelCanvas: OffscreenCanvas;
+    panelCtx: OffscreenCanvasRenderingContext2D;
+    panelShape: PanelShape;
+    /** The part of the camera frame the panel shows (0–1 of the frame), so a fingertip can be mapped onto it. */
+    panelCrop: { x: number; y: number; width: number; height: number } | null;
+    /** Latest person location (panel mode); null when nobody was found. */
+    person: PersonBounds | null;
+    smoother: WindowSmoother;
+    /** Camera size and shape the smoother's position refers to; a change re-centres it. */
+    smootherKey: string;
     /** Where this source is drawn, computed fresh each frame while it's the visible one and kept (unchanged) while it fades out. */
     box: { x: number; y: number; width: number; height: number } | null;
   };
@@ -374,6 +401,7 @@ export async function startPresenterOverlayCompositor({
     const cameraCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
     const maskCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
     const cutoutCanvas = new OffscreenCanvas(CAMERA_WIDTH, CAMERA_HEIGHT);
+    const panelCanvas = new OffscreenCanvas(2, 2);
     return {
       id,
       label,
@@ -391,8 +419,16 @@ export async function startPresenterOverlayCompositor({
       alpha: 0,
       target: visibleIds.includes(id) ? 1 : 0,
       lastSegmentAt: 0,
+      mode: "cutout",
       normalizer: new SizeNormalizer(),
       rowCounts: new Uint32Array(CAMERA_HEIGHT),
+      panelCanvas,
+      panelCtx: context2d(panelCanvas),
+      panelShape: "rounded",
+      panelCrop: null,
+      person: null,
+      smoother: new WindowSmoother(CAMERA_WIDTH / 2, CAMERA_HEIGHT / 2),
+      smootherKey: "",
       box: null,
     };
   }
@@ -463,11 +499,76 @@ export async function startPresenterOverlayCompositor({
     cutoutCtx.filter = "none";
     cutoutCtx.globalCompositeOperation = "source-over";
     source.hasCutout = true;
+    source.mode = "cutout";
   }
 
-  /** Handles one camera frame for a source; always closes it. Returns true if a fresh cut-out was made. */
+  /** Panel mode: segment only to find where the person is (no cut-out is made). */
+  function updatePerson(source: Source) {
+    const timestamp = Math.max(performance.now(), lastSegmentTimestamp + 1);
+    lastSegmentTimestamp = timestamp;
+    segmenter.segmentForVideo(source.cameraCanvas, timestamp, (result) => {
+      const masks = result.confidenceMasks;
+      if (!masks || masks.length === 0) return;
+      const mask = masks[0];
+      source.person = personBounds(mask.getAsFloat32Array(), mask.width, mask.height, masks.length === 1);
+    });
+  }
+
+  /** Panel mode: crops the camera to a window centred on the person (clamped to the frame) and masks it to the chosen shape. */
+  function updatePanel(source: Source, now: number) {
+    const camW = source.cameraCanvas.width;
+    const camH = source.cameraCanvas.height;
+    const shape = settings.panelShape;
+    const size = windowSize(shape, camW, camH);
+    const target = targetCentre(shape, source.person, camW, camH);
+    const key = `${shape}:${camW}x${camH}`;
+    if (source.smootherKey !== key) {
+      source.smootherKey = key;
+      source.smoother.reset(target.x, target.y);
+    }
+    const centre = source.smoother.update(now, target.x, target.y, camW);
+    const win = clampWindow(centre.x, centre.y, size.width, size.height, camW, camH);
+    const w = Math.max(2, Math.round(win.width));
+    const h = Math.max(2, Math.round(win.height));
+    const { panelCanvas, panelCtx } = source;
+    if (panelCanvas.width !== w || panelCanvas.height !== h) {
+      panelCanvas.width = w;
+      panelCanvas.height = h;
+    }
+    panelCtx.globalCompositeOperation = "copy";
+    panelCtx.drawImage(source.cameraCanvas, win.x, win.y, win.width, win.height, 0, 0, w, h);
+    // Keep only what's inside the shape; with a soft edge the outline is drawn blurred, so the panel fades out.
+    panelCtx.globalCompositeOperation = "destination-in";
+    if (settings.softEdge) {
+      const margin = Math.min(w, h) * 0.08;
+      panelCtx.filter = `blur(${margin * 0.6}px)`;
+      tracePanelPath(panelCtx, shape, { x: margin, y: margin, width: w - margin * 2, height: h - margin * 2 });
+    } else {
+      tracePanelPath(panelCtx, shape, { x: 0, y: 0, width: w, height: h });
+    }
+    panelCtx.fillStyle = "#000";
+    panelCtx.fill();
+    panelCtx.filter = "none";
+    panelCtx.globalCompositeOperation = "source-over";
+    source.panelShape = shape;
+    source.panelCrop = { x: win.x / camW, y: win.y / camH, width: win.width / camW, height: win.height / camH };
+    source.hasCutout = true;
+    source.mode = "panel";
+  }
+
+  /** Handles one camera frame for a source; always closes it. Returns true if fresh content (cut-out or panel) was made. */
   function processFrame(source: Source, frame: VideoFrame, now: number, minIntervalMs: number): boolean {
     try {
+      if (settings.background === "keep") {
+        drawCamera(source, frame);
+        frame.close();
+        if (now - source.lastSegmentAt >= PANEL_SEGMENT_INTERVAL_MS) {
+          source.lastSegmentAt = now;
+          updatePerson(source);
+        }
+        updatePanel(source, now);
+        return true;
+      }
       if (!isNeeded(source) || now - source.lastSegmentAt < minIntervalMs) return false;
       source.lastSegmentAt = now;
       drawCamera(source, frame);
@@ -517,7 +618,14 @@ export async function startPresenterOverlayCompositor({
   function placementFor(id: string): GhostPlacement | null {
     const source = sources.get(id);
     if (!source || !source.box || source.target <= 0 || !source.hasCutout) return null;
-    return { x: source.box.x, y: source.box.y, width: source.box.width, height: source.box.height, mirror: settings.mirror };
+    return {
+      x: source.box.x,
+      y: source.box.y,
+      width: source.box.width,
+      height: source.box.height,
+      mirror: settings.mirror,
+      crop: source.mode === "panel" ? source.panelCrop : null,
+    };
   }
 
   /** Where the host's own ghost is drawn; null when a guest is currently shown instead (or the host isn't ready yet). Gestures act only through this. */
@@ -721,16 +829,29 @@ export async function startPresenterOverlayCompositor({
     }
   }
 
+  /** Width / height a source is laid out at: its panel's shape, or the camera's own aspect for a cut-out. */
+  function layoutAspect(source: Source): number {
+    return source.mode === "panel" ? panelAspect(source.panelShape) : source.aspect;
+  }
+
+  /** The top edge a ghost is drawn at: bottom-aligned, and a panel circle floats a little above the bottom edge (only if there's room). */
+  function ghostTop(source: Source, box: GhostBox, height: number): number {
+    let y = height - box.height;
+    if (source.mode === "panel" && source.panelShape === "circle") y -= Math.min(height * 0.03, y);
+    return y;
+  }
+
   function drawGhost(source: Source, box: { x: number; y: number; width: number; height: number }) {
     outputCtx.globalAlpha = settings.opacity * source.alpha;
+    const image = source.mode === "panel" ? source.panelCanvas : source.cutoutCanvas;
     if (settings.mirror) {
       outputCtx.save();
       outputCtx.translate(box.x + box.width, 0);
       outputCtx.scale(-1, 1);
-      outputCtx.drawImage(source.cutoutCanvas, 0, box.y, box.width, box.height);
+      outputCtx.drawImage(image, 0, box.y, box.width, box.height);
       outputCtx.restore();
     } else {
-      outputCtx.drawImage(source.cutoutCanvas, box.x, box.y, box.width, box.height);
+      outputCtx.drawImage(image, box.x, box.y, box.width, box.height);
     }
     outputCtx.globalAlpha = 1;
   }
@@ -759,11 +880,12 @@ export async function startPresenterOverlayCompositor({
     // one); a source still fading out keeps whatever box it was drawn at last, so its outline doesn't jump
     // right before it disappears. Each source's own aspect ratio and zoom, in the order setVisible was given.
     const shown = visibleIds.map((id) => sources.get(id)).filter((source): source is Source => !!source);
-    const zooms = shown.map((source) => source.normalizer.zoom(now, settings.normalizeSize));
-    const boxes = layoutGhosts(shown.map((source) => source.aspect), width, height, settings.scale, settings.position, settings.span, zooms);
+    // A keep-background panel isn't a cut-out of a person to size, so it stays at zoom 1.
+    const zooms = shown.map((source) => (source.mode === "panel" ? 1 : source.normalizer.zoom(now, settings.normalizeSize)));
+    const boxes = layoutGhosts(shown.map(layoutAspect), width, height, settings.scale, settings.position, settings.span, zooms);
     shown.forEach((source, index) => {
       const box = boxes[index];
-      source.box = { x: box.x, y: height - box.height, width: box.width, height: box.height };
+      source.box = { x: box.x, y: ghostTop(source, box, height), width: box.width, height: box.height };
     });
     // Fading-out first, then the ones fading in, so a new speaker/co-ghost fades in over the old one.
     const drawable = Array.from(sources.values())

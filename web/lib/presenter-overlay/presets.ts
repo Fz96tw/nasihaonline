@@ -1,7 +1,7 @@
 import type { PresenterOverlaySettings } from "./compositor.ts";
 import type { JoinPolicy } from "./co-ghosts.ts";
 
-export type LookPresetFields = Partial<Pick<PresenterOverlaySettings, "scale" | "opacity" | "position" | "span">>;
+export type LookPresetFields = Partial<Pick<PresenterOverlaySettings, "scale" | "opacity" | "position" | "span" | "background" | "panelShape">>;
 
 /** `pinnedId: "self"` stands in for the host's own id, which is private to the component. */
 export type TrustPresetFields = Partial<{
@@ -24,17 +24,18 @@ export function presetMatches<F extends Record<string, unknown>>(fields: F, curr
   return (Object.keys(fields) as (keyof F)[]).every((key) => current[key] === fields[key]);
 }
 
-// Every Look preset fully specifies `span` (even where its own look doesn't care about it) — it's the one
-// field whose stale leftover value from a *previous* Look preset is actually visible (span makes the cut-out
-// fill the frame, ignoring scale/position entirely) — so switching between any two Look presets always lands
-// in a fully coherent state instead of carrying over an invisible setting from whichever preset was applied
-// before. (showup's equivalent presets also pin `background`/`panelShape` for the same reason — this overlay
-// has no "keep background" panel mode, so those fields don't exist here.)
+// Every Look preset fully specifies `span` and `background` (even where its own look doesn't care about
+// scale/position) — they're the fields whose stale leftover value from a *previous* Look preset is actually
+// visible (span makes the cut-out fill the frame, ignoring scale/position entirely; background swaps a
+// cut-out for a real-background panel) — so switching between any two Look presets always lands in a fully
+// coherent state instead of carrying over an invisible setting from whichever preset was applied before.
+// Picture-in-Picture is the one preset that keeps the background (a small corner bubble reads as a real PiP
+// tile, not a ghost); the rest cut the person out, same as showup's equivalent presets.
 export const LOOK_PRESETS: Preset<LookPresetFields>[] = [
-  { id: "pip", label: "Picture-in-Picture", fields: { scale: 0.3, opacity: 1, position: "right", span: false } },
-  { id: "full-screen-reach", label: "Full-screen Reach", fields: { span: true, opacity: 0.45 } },
-  { id: "talking-head", label: "Talking Head", fields: { scale: 1, position: "center", opacity: 1, span: false } },
-  { id: "minimal-corner", label: "Minimal Corner", fields: { scale: 0.3, opacity: 0.35, position: "left", span: false } },
+  { id: "pip", label: "Picture-in-Picture", fields: { scale: 0.3, background: "keep", panelShape: "rounded", opacity: 1, position: "right", span: false } },
+  { id: "full-screen-reach", label: "Full-screen Reach", fields: { span: true, opacity: 0.45, background: "remove" } },
+  { id: "talking-head", label: "Talking Head", fields: { scale: 1, position: "center", background: "remove", opacity: 1, span: false } },
+  { id: "minimal-corner", label: "Minimal Corner", fields: { scale: 0.3, opacity: 0.35, background: "remove", position: "left", span: false } },
 ];
 
 // showup also has "Open Floor" and "Q&A Only" here, differentiated by guest pointer/draw permissions — this

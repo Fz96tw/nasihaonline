@@ -85,6 +85,17 @@ test("cameraToOutput maps a camera-frame point through the ghost's placement, wi
   assert.deepEqual(cameraToOutput(0.25, 0.5, mirrored), { x: 250, y: 250 });
 });
 
+test("cameraToOutput maps through a keep-background panel's crop", () => {
+  const ghost = { x: 100, y: 200, width: 400, height: 300, mirror: false, crop: null };
+  assert.deepEqual(cameraToOutput(0, 0, ghost), { x: 100, y: 200 });
+  assert.deepEqual(cameraToOutput(1, 1, ghost), { x: 500, y: 500 });
+  const panel = { ...ghost, crop: { x: 0.25, y: 0, width: 0.5, height: 1 } };
+  const centre = cameraToOutput(0.5, 0.5, panel);
+  assert.ok(Math.abs(centre.x - 300) < 1e-9 && Math.abs(centre.y - 350) < 1e-9, "the crop's centre is the panel's centre");
+  const left = cameraToOutput(0.25, 0, panel);
+  assert.ok(Math.abs(left.x - 100) < 1e-9, "the crop's left edge is the panel's left edge");
+});
+
 test("the laser pointer needs POINT_HOLD_MS held, then fades out after pointing stops", () => {
   const tracker = new GestureTracker();
   assert.equal(tracker.update(0, POINT()).pointer, null, "not yet — the hold hasn't elapsed");

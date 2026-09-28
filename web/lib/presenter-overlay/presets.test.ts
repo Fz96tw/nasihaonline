@@ -34,10 +34,10 @@ test("preset catalog matches the agreed spec", () => {
   assert.deepEqual(
     LOOK_PRESETS.map((p) => [p.id, p.fields]),
     [
-      ["pip", { scale: 0.3, opacity: 1, position: "right", span: false }],
-      ["full-screen-reach", { span: true, opacity: 0.45 }],
-      ["talking-head", { scale: 1, position: "center", opacity: 1, span: false }],
-      ["minimal-corner", { scale: 0.3, opacity: 0.35, position: "left", span: false }],
+      ["pip", { scale: 0.3, background: "keep", panelShape: "rounded", opacity: 1, position: "right", span: false }],
+      ["full-screen-reach", { span: true, opacity: 0.45, background: "remove" }],
+      ["talking-head", { scale: 1, position: "center", background: "remove", opacity: 1, span: false }],
+      ["minimal-corner", { scale: 0.3, opacity: 0.35, background: "remove", position: "left", span: false }],
     ],
   );
   assert.deepEqual(

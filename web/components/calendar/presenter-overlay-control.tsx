@@ -12,6 +12,7 @@ import {
   type PresenterOverlayCompositor,
   type PresenterOverlaySettings,
 } from "@/lib/presenter-overlay/compositor";
+import { PANEL_SHAPES, type PanelShape } from "@/lib/presenter-overlay/panel";
 import { SpeakerFollower } from "@/lib/presenter-overlay/speaker-follow";
 import { CoGhostRoster, MAX_GUEST_GHOSTS, type GuestOverlayState, type JoinPolicy } from "@/lib/presenter-overlay/co-ghosts";
 import { OVERLAY_TOPIC, encodeMessage, parseToPresenter, type ToGuest, type ToPresenter } from "@/lib/presenter-overlay/overlay-protocol";
@@ -179,10 +180,13 @@ function copyStyleSheets(target: Window) {
 export function PresenterOverlayControl({
   room,
   onError,
+  onOverlayIds,
   panelPlacement = "below-left",
 }: {
   room: Room | null;
   onError: (message: string) => void;
+  /** Called with everyone whose camera is on the overlay (empty when off), so the meeting view can hide their camera tiles. */
+  onOverlayIds: (ids: string[]) => void;
   /** Where the settings panel opens: under the button (TopLeftOverlay), or above it for the bottom-right quick-recording controls, which sit right on top of LiveKit's control bar. */
   panelPlacement?: "below-left" | "above-right";
 }) {
@@ -204,6 +208,9 @@ export function PresenterOverlayControl({
   const [position, setPosition] = useState<PresenterOverlaySettings["position"]>("center");
   const [span, setSpan] = useState(false);
   const [normalizeSize, setNormalizeSize] = useState(true);
+  const [background, setBackground] = useState<PresenterOverlaySettings["background"]>("remove");
+  const [panelShape, setPanelShape] = useState<PanelShape>("rounded");
+  const [softEdge, setSoftEdge] = useState(false);
   const [mirror, setMirror] = useState(true);
   const [gestures, setGestures] = useState(false);
   const [penColor, setPenColor] = useState<PenColor>("red");
@@ -221,11 +228,18 @@ export function PresenterOverlayControl({
   // truth, and this version counter re-renders the UI when it changes.
   const [guests, setGuests] = useState<Person[]>([]);
   const [policy, setPolicy] = useState<JoinPolicy>("ask");
-  // Read via the ref, not this value — the setter alone forces the re-render a roster change (via a button click or the tick) needs.
-  const [, setRosterVersion] = useState(0);
+  // Mostly read via the ref (rosterRef), not this value — the value itself is only needed as an effect
+  // dependency, to re-broadcast the overlay-roster below whenever a button click or the tick changes it.
+  const [rosterVersion, setRosterVersion] = useState(0);
   const rosterRef = useRef(new CoGhostRoster());
   const hadGuestsRef = useRef(false);
   const followBeforeGuestsRef = useRef(true);
+  // Whose camera is currently on the overlay, last broadcast via overlay-roster; announcedRef distinguishes
+  // "nothing on the overlay yet" from "was sharing, now stopped" so a guest's own client never wipes the
+  // host's list (this effect also runs — vacuously — on a guest's copy of PresenterOverlayControl, since it's
+  // unconditionally rendered for everyone; only the actual host ever has `share` set).
+  const overlayIdsRef = useRef<string[]>([]);
+  const announcedRef = useRef(false);
   const imageRef = useRef<ImageBitmap | null>(null);
   const shareRef = useRef<Share | null>(null);
   const overlayRef = useRef<Overlay | null>(null);
@@ -281,7 +295,22 @@ export function PresenterOverlayControl({
   }, [panelPos !== null]);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, span, normalizeSize, mirror, gestures, penColor, caption, image: imageRef.current, imageCorner };
+    return {
+      opacity,
+      scale,
+      position,
+      span,
+      normalizeSize,
+      background,
+      panelShape,
+      softEdge,
+      mirror,
+      gestures,
+      penColor,
+      caption,
+      image: imageRef.current,
+      imageCorner,
+    };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -637,6 +666,38 @@ export function PresenterOverlayControl({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room]);
 
+  // Tell everyone (and the meeting view) whose camera is on the overlay, so their camera tiles are hidden. Only while this
+  // client is the one sharing; when the share ends, clear it once so a guest's client doesn't wipe the presenter's list.
+  useEffect(() => {
+    if (!room) return;
+    let ids: string[] | null = null;
+    if (share) {
+      announcedRef.current = true;
+      ids = overlayStatus === "on" ? [room.localParticipant.identity, ...rosterRef.current.pinned] : [];
+    } else if (announcedRef.current) {
+      announcedRef.current = false;
+      ids = [];
+    }
+    if (!ids) return;
+    overlayIdsRef.current = ids;
+    onOverlayIds(ids);
+    room.remoteParticipants.forEach((participant) => sendToGuest(participant.identity, { t: "overlay-roster", ids: ids as string[] }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room, share, overlayStatus, rosterVersion]);
+
+  // Someone who joins later needs the current list too.
+  useEffect(() => {
+    if (!room) return;
+    const onJoined = (participant: { identity: string }) => {
+      if (announcedRef.current) sendToGuest(participant.identity, { t: "overlay-roster", ids: overlayIdsRef.current });
+    };
+    room.on(RoomEvent.ParticipantConnected, onJoined);
+    return () => {
+      room.off(RoomEvent.ParticipantConnected, onJoined);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room]);
+
   // Requests and answers from guests wanting to appear on the overlay. Addressed to this participant only, and ignored unless they parse exactly.
   useEffect(() => {
     if (!room) return;
@@ -794,7 +855,7 @@ export function PresenterOverlayControl({
 
   // Live values for the fields each preset category cares about, recomputed every render — a preset's
   // highlighted state is never cached, so it can never go stale (see PresetRow / presetMatches).
-  const currentLookValues: LookPresetFields = { scale, opacity, position, span };
+  const currentLookValues: LookPresetFields = { scale, opacity, position, span, background, panelShape };
   const currentTrustValues: TrustPresetFields = {
     policy,
     followSpeaker,
@@ -818,6 +879,14 @@ export function PresenterOverlayControl({
     if (fields.span !== undefined) {
       setSpan(fields.span);
       updateSettings({ span: fields.span });
+    }
+    if (fields.background !== undefined) {
+      setBackground(fields.background);
+      updateSettings({ background: fields.background });
+    }
+    if (fields.panelShape !== undefined) {
+      setPanelShape(fields.panelShape);
+      updateSettings({ panelShape: fields.panelShape });
     }
   }
 
@@ -1072,6 +1141,61 @@ export function PresenterOverlayControl({
         />
         Mirror me (point at things naturally)
       </label>
+
+      <div className={labelClass}>
+        My background
+        <div className="flex gap-1">
+          {(["remove", "keep"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              data-testid={`overlay-background-${value}`}
+              onClick={() => {
+                setBackground(value);
+                updateSettings({ background: value });
+              }}
+              className={segmentClass(background === value)}
+            >
+              {value === "remove" ? "Remove" : "Keep"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {background === "keep" && (
+        <>
+          <div className={labelClass}>
+            Panel shape
+            <div className="flex gap-1">
+              {PANEL_SHAPES.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    setPanelShape(value);
+                    updateSettings({ panelShape: value });
+                  }}
+                  className={segmentClass(panelShape === value)}
+                >
+                  {value[0].toUpperCase() + value.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-xs text-white/70">
+            <input
+              type="checkbox"
+              checked={softEdge}
+              onChange={(e) => {
+                setSoftEdge(e.target.checked);
+                updateSettings({ softEdge: e.target.checked });
+              }}
+            />
+            Soft edge
+          </label>
+        </>
+      )}
 
       <div className={labelClass}>
         Position
