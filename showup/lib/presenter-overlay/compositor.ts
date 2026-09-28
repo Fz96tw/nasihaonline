@@ -122,6 +122,11 @@ const VOICE_TYPING_CYCLE_MS = 900;
 /** Voice Pin also auto-stops after this long with no speech activity at all (interim or final), whether that's
  * silence right from the start or a pause partway through a sentence. */
 const VOICE_SILENCE_STOP_MS = 3000;
+/** A hard ceiling, independent of the other stop paths: if the host just keeps talking with no 3s pause, no
+ * V-sign, and their hand never leaves frame, capture still stops here rather than listening indefinitely. The
+ * interim-transcript fallback (see startVoiceCapture) means cutting mid-word here still keeps the last guess
+ * rather than losing it outright. */
+const VOICE_MAX_DURATION_MS = 15000;
 /** The dimmed area's darkness, and the spotlight's radius as a fraction of the frame height. */
 const SPOTLIGHT_DIM = 0.65;
 const SPOTLIGHT_RADIUS = 0.12;
@@ -596,6 +601,8 @@ export async function startPresenterOverlayCompositor({
   let voiceHandGoneSince: number | null = null;
   /** When speech was last detected (interim or final) — reset on every result, checked every frame for the silence auto-stop. */
   let voiceLastActivityAt = 0;
+  /** When the current capture started — drives the VOICE_MAX_DURATION_MS hard ceiling. */
+  let voiceCaptureStartedAt = 0;
   /** True while the current capture was started by finishing a drawn stroke rather than an explicit V-sign — only this kind can be cancelled by a fresh point elsewhere before any speech. */
   let voiceAutoFromDraw = false;
   /** True once any speech (interim or final) has been recognized during the current capture. */
@@ -1495,6 +1502,7 @@ export async function startPresenterOverlayCompositor({
     voiceInterimText = "";
     voiceAnchorAt = anchor;
     voiceLastActivityAt = performance.now();
+    voiceCaptureStartedAt = performance.now();
     voiceAutoFromDraw = autoFromDraw;
     voiceHasSpoken = false;
     voiceLinkedStrokeId = linkedStrokeId;
@@ -1645,6 +1653,9 @@ export async function startPresenterOverlayCompositor({
     // Independent of the hand check above: silence (nothing recognized, interim or final) for a while also
     // means the host is done, even with their hand still up.
     if (voiceCaptureOn && now - voiceLastActivityAt >= VOICE_SILENCE_STOP_MS) stopVoiceCapture(now);
+    // A hard ceiling regardless of activity: someone who just keeps talking, hand never leaving frame and never
+    // pausing 3s, still gets stopped rather than listened to indefinitely.
+    if (voiceCaptureOn && now - voiceCaptureStartedAt >= VOICE_MAX_DURATION_MS) stopVoiceCapture(now);
     // Air-draw: the pen tip (two fingers) or the shape corner (the "L") goes through the same ghost mapping as the laser,
     // then to screen coordinates through the current zoom view. Only one of them is ever active.
     const hostTip = state.pen ?? state.shape;
