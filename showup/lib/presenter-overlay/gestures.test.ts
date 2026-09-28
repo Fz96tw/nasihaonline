@@ -105,6 +105,12 @@ test("a hand only partly in frame, or too small, is not classified", () => {
   assert.equal(classifyPose(POINT().slice(0, 10)).pose, "none");
 });
 
+test("a hand with the wrist below the bottom of frame still classifies, as long as the fingers are in view", () => {
+  const low = hand(["ext", "curl", "curl", "curl"], { oy: 0.15 });
+  assert.ok(low[0].y > 1, "the wrist itself is past the bottom edge");
+  assert.equal(classifyPose(low).pose, "point");
+});
+
 /** Runs the tracker at 30 Hz from `from` to `to`; returns every action and the last state. */
 function run(tracker: GestureTracker, from: number, to: number, landmarks: () => Landmark[] | null) {
   const actions: [number, GestureAction][] = [];

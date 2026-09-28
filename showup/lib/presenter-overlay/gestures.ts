@@ -61,7 +61,12 @@ const INDEX_TIP = 8;
 const MIDDLE_TIP = 12;
 const RING_TIP = 16;
 
-/** A hand with any landmark this close to (or past) the frame edge is only partly in frame. */
+/**
+ * A hand with any landmark this close to (or past) the left, right or top frame edge is only partly in
+ * frame there, so its read is unreliable and discarded. The bottom edge is not checked the same way: a
+ * raised hand's wrist and palm base are the lowest points and routinely sit below the visible frame while
+ * the fingers above them (what's actually being classified) are still fully in view.
+ */
 const EDGE = 0.01;
 /** Thumb and index tips closer than this fraction of the hand's size are pinching. */
 const PINCH_RATIO = 0.3;
@@ -117,8 +122,8 @@ function isThumbSquare(landmarks: readonly Landmark[], aspect: number, size: num
 
 /**
  * Classifies one hand (21 landmarks, coordinates 0–1 of the camera frame). `aspect` is the frame's width / height,
- * so distances aren't skewed on a wide frame. Ambiguous hands (a finger half-curled) are "none", and so is a hand that
- * is only partly in frame.
+ * so distances aren't skewed on a wide frame. Ambiguous hands (a finger half-curled) are "none", and so is a hand
+ * clipped on the left, right or top of frame.
  */
 export function classifyPose(landmarks: readonly Landmark[], aspect = 1): PoseReading {
   const tip = landmarks[INDEX_TIP];
@@ -129,7 +134,7 @@ export function classifyPose(landmarks: readonly Landmark[], aspect = 1): PoseRe
   const palm = { x: palmPoints.reduce((t, p) => t + p.x, 0) / (palmPoints.length || 1), y: palmPoints.reduce((t, p) => t + p.y, 0) / (palmPoints.length || 1) };
   const none: PoseReading = { pose: "none", tip, middleTip, pinchPoint, palm };
   if (landmarks.length < 21) return none;
-  if (landmarks.some((p) => p.x < EDGE || p.x > 1 - EDGE || p.y < EDGE || p.y > 1 - EDGE)) return none;
+  if (landmarks.some((p) => p.x < EDGE || p.x > 1 - EDGE || p.y < EDGE)) return none;
   const dist = (a: Landmark, b: Landmark) => Math.hypot((a.x - b.x) * aspect, a.y - b.y);
   const wrist = landmarks[WRIST];
   const size = dist(wrist, landmarks[MIDDLE_MCP]);
