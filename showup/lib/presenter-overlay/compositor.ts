@@ -582,6 +582,8 @@ export async function startPresenterOverlayCompositor({
   let recognition: SpeechRecognitionLike | null = null;
   let voiceCaptureOn = false;
   let voiceText = "";
+  /** The current not-yet-finalized segment's latest guess, if any — see startVoiceCapture's onresult comment. */
+  let voiceInterimText = "";
   let voiceAnchorAt: { x: number; y: number } | null = null;
   /** When the hand was last seen at all (any pose); null while a hand is currently visible. Drives the auto-stop below. */
   let voiceHandGoneSince: number | null = null;
@@ -1225,7 +1227,11 @@ export async function startPresenterOverlayCompositor({
     const cy = at.y * height;
     const fontPx = height * STAMP_FONT_FRACTION;
     const padding = fontPx * VOICE_BUBBLE_PADDING_FRACTION;
-    const text = cleanShapeText(voiceText);
+    // Includes the still-in-progress segment's latest guess, not just finalized words — so the live caption
+    // shows something as soon as the recognizer has any guess at all, rather than sitting on typing dots until
+    // a segment happens to finalize (which, per stopVoiceCapture's comment, isn't even guaranteed to happen
+    // before capture stops).
+    const text = cleanShapeText(voiceInterimText ? `${voiceText} ${voiceInterimText}` : voiceText);
 
     // Before any word is recognized, the bubble holds a fixed-size "typing…" indicator; once text arrives, it
     // holds that instead — same wrap-and-grow sizing as the stamp preview, so a longer sentence grows the
@@ -1427,16 +1433,21 @@ export async function startPresenterOverlayCompositor({
     if (!Ctor || voiceCaptureOn) return;
     const rec = new Ctor();
     rec.continuous = true;
-    // Interim results are requested so the silence auto-stop has a "still talking" heartbeat to reset on — but
-    // only finalized ones are ever appended to voiceText, so the drawn caption itself never flickers.
+    // Interim results are requested for the silence auto-stop's "still talking" heartbeat, and — since
+    // stopVoiceCapture() reads voiceText synchronously the instant it's called, while the recognizer's own
+    // finalization of whatever's still in progress arrives asynchronously, sometimes after that read already
+    // happened — voiceInterimText is a fallback for exactly that race: a hand-gone or V-sign stop right on the
+    // last word, with no natural pause for the segment to have finalized before we asked it to stop.
     rec.interimResults = true;
     rec.lang = "en-US";
     rec.onresult = (event) => {
       voiceLastActivityAt = performance.now();
       voiceHasSpoken = true;
+      voiceInterimText = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) voiceText = `${voiceText} ${result[0].transcript}`.trim();
+        else voiceInterimText = result[0].transcript;
       }
     };
     rec.onerror = (event) => {
@@ -1446,6 +1457,7 @@ export async function startPresenterOverlayCompositor({
       voiceCaptureOn = false;
       recognition = null;
       voiceText = "";
+      voiceInterimText = "";
       voiceAnchorAt = null;
       onVoiceError?.(event.error === "audio-capture" ? "Voice Pin couldn't find a microphone." : "Voice Pin couldn't start — microphone permission was denied.");
     };
@@ -1458,6 +1470,7 @@ export async function startPresenterOverlayCompositor({
         } catch {
           voiceCaptureOn = false;
           voiceText = "";
+          voiceInterimText = "";
           voiceAnchorAt = null;
           onVoiceError?.("Voice Pin stopped unexpectedly.");
         }
@@ -1472,6 +1485,7 @@ export async function startPresenterOverlayCompositor({
     recognition = rec;
     voiceCaptureOn = true;
     voiceText = "";
+    voiceInterimText = "";
     voiceAnchorAt = anchor;
     voiceLastActivityAt = performance.now();
     voiceAutoFromDraw = autoFromDraw;
@@ -1493,10 +1507,15 @@ export async function startPresenterOverlayCompositor({
         /* already stopped */
       }
     }
-    const text = cleanShapeText(voiceText);
+    // Falls back to the latest not-yet-finalized guess: rec.stop() only asks the recognizer to wrap up, and its
+    // finalization of whatever's still in progress can arrive after this synchronous read, especially when
+    // there was no natural pause (a hand-gone or V-sign stop right on the last word) for it to have finalized
+    // on its own already. Without this, that case would pin nothing at all despite the host having said something.
+    const text = cleanShapeText(voiceInterimText ? `${voiceText} ${voiceInterimText}` : voiceText);
     const anchor = voiceAnchorAt;
     const linkedStrokeId = voiceLinkedStrokeId;
     voiceText = "";
+    voiceInterimText = "";
     voiceAnchorAt = null;
     voiceLinkedStrokeId = null;
     if (text && anchor) {
@@ -1525,6 +1544,7 @@ export async function startPresenterOverlayCompositor({
     }
     if (voiceLinkedStrokeId !== null) board.unpin(voiceLinkedStrokeId, performance.now());
     voiceText = "";
+    voiceInterimText = "";
     voiceAnchorAt = null;
     voiceLinkedStrokeId = null;
   }
