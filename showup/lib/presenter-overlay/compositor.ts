@@ -278,10 +278,12 @@ export type GhostBox = { x: number; width: number; height: number };
 const GROUP_SCALE = [1, 1, 0.85, 0.7];
 
 /**
- * Lays ghosts out bottom-aligned. One ghost follows the `position` setting;
- * two or three are spaced evenly across the width in the order given (the
- * order they were added), each centred in its own slot. With `span`, a lone
- * ghost instead covers the whole frame (ignoring zoom). `zooms` scales each ghost about its bottom edge (see size-normalize.ts).
+ * Lays ghosts out bottom-aligned. One ghost follows the `position` setting.
+ * Two or three are anchored the same way, as a compact block placed adjacently
+ * in the order given, when that block fits inside the frame; otherwise they
+ * fall back to being spaced evenly across the whole width, each centred in
+ * its own slot. With `span`, a lone ghost instead covers the whole frame
+ * (ignoring zoom). `zooms` scales each ghost about its bottom edge (see size-normalize.ts).
  * Pure, for testing.
  */
 export function layoutGhosts(
@@ -301,17 +303,28 @@ export function layoutGhosts(
     return [{ x: (outputWidth - width) / 2, width, height }];
   }
   const groupHeight = outputHeight * scale * (GROUP_SCALE[Math.min(count, GROUP_SCALE.length - 1)] ?? 1);
-  return aspects.map((aspect, index) => {
-    // A zoomed ghost keeps its bottom edge and its anchor; it may run past the sides or top and is clipped by the output.
-    const height = groupHeight * (zooms[index] ?? 1);
-    const width = height * aspect;
-    if (count === 1) {
-      const x = position === "left" ? 0 : position === "right" ? outputWidth - width : (outputWidth - width) / 2;
-      return { x, width, height };
-    }
+  // A zoomed ghost keeps its bottom edge and its anchor; it may run past the sides or top and is clipped by the output.
+  const heights = aspects.map((_aspect, index) => groupHeight * (zooms[index] ?? 1));
+  const widths = aspects.map((aspect, index) => heights[index] * aspect);
+  if (count === 1) {
+    const width = widths[0];
+    const x = position === "left" ? 0 : position === "right" ? outputWidth - width : (outputWidth - width) / 2;
+    return [{ x, width, height: heights[0] }];
+  }
+  const totalWidth = widths.reduce((sum, width) => sum + width, 0);
+  if (totalWidth <= outputWidth) {
+    // The whole group fits: anchor it as one block, exactly like a lone ghost would be, ghosts placed adjacently in order.
+    let x = position === "left" ? 0 : position === "right" ? outputWidth - totalWidth : (outputWidth - totalWidth) / 2;
+    return widths.map((width, index) => {
+      const box = { x, width, height: heights[index] };
+      x += width;
+      return box;
+    });
+  }
+  return widths.map((width, index) => {
     const centre = (outputWidth * (index + 0.5)) / count;
     const x = width >= outputWidth ? (outputWidth - width) / 2 : Math.min(Math.max(centre - width / 2, 0), outputWidth - width);
-    return { x, width, height };
+    return { x, width, height: heights[index] };
   });
 }
 

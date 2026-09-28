@@ -82,3 +82,38 @@ test("each ghost in a group gets its own zoom", () => {
   const [a, b] = layoutGhosts([1, 1], 1000, 500, 1, "left", false, [1, 1.4]);
   assert.ok(Math.abs(b.height / a.height - 1.4) < 1e-9);
 });
+
+test("a group that fits is anchored to position like a lone ghost, placed adjacently in order", () => {
+  // Small (PiP-scale) group: well under the frame width either way.
+  const left = layoutGhosts([16 / 9, 16 / 9], 1000, 500, 0.3, "left");
+  assert.equal(left[0].x, 0, "first ghost starts at the left edge");
+  assert.equal(left[1].x, left[0].width, "second ghost sits right after the first, no gap");
+
+  const right = layoutGhosts([16 / 9, 16 / 9], 1000, 500, 0.3, "right");
+  const totalWidthRight = right[0].width + right[1].width;
+  assert.ok(Math.abs(right[1].x + right[1].width - 1000) < 1e-6, "last ghost ends flush with the right edge");
+  assert.ok(Math.abs(right[0].x - (1000 - totalWidthRight)) < 1e-6, "whole block starts exactly totalWidth from the right edge");
+
+  const centre = layoutGhosts([1, 1, 1], 900, 500, 0.3, "center");
+  const totalWidthCentre = centre.reduce((sum, box) => sum + box.width, 0);
+  assert.ok(Math.abs(centre[0].x - (900 - totalWidthCentre) / 2) < 1e-6, "whole block is centred, not each ghost individually");
+  assert.equal(centre[1].x, centre[0].x + centre[0].width);
+  assert.equal(centre[2].x, centre[1].x + centre[1].width);
+});
+
+test("a group that doesn't fit falls back to spreading evenly across the whole width", () => {
+  // scale 1 with wide 16:9 cameras: the group is wider than the frame, so it can't be anchored as a block.
+  const boxes = layoutGhosts([16 / 9, 16 / 9], 1000, 500, 1, "right");
+  const totalWidth = boxes[0].width + boxes[1].width;
+  assert.ok(totalWidth > 1000, "sanity check: this group doesn't fit");
+  // Block-anchoring by "right" would start the first box at outputWidth - totalWidth, which is negative here
+  // (never happens once the block is spread instead) — the actual box must not match that formula.
+  assert.notEqual(boxes[0].x, 1000 - totalWidth);
+  // Matches the pre-existing (unchanged) even-slot-with-clamp formula exactly.
+  const count = boxes.length;
+  boxes.forEach((box, index) => {
+    const centre = (1000 * (index + 0.5)) / count;
+    const expectedX = box.width >= 1000 ? (1000 - box.width) / 2 : Math.min(Math.max(centre - box.width / 2, 0), 1000 - box.width);
+    assert.ok(Math.abs(box.x - expectedX) < 1e-9, `box ${index} matches the pre-existing spread formula`);
+  });
+});
