@@ -314,7 +314,13 @@ export function EventDetail({
             </Link>
           </Button>
         )}
-        {canEdit && !event.cancelled && <CancelEventButton eventId={event.seriesId} title={event.title} />}
+        {canEdit && !event.cancelled && (
+          <CancelEventButton
+            eventId={event.seriesId}
+            title={event.title}
+            hasRecordings={Boolean(event.recordingUrl) || event.liveKitRecordingSegments.length > 0}
+          />
+        )}
       </div>
 
       {roster ? (

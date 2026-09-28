@@ -19,9 +19,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const { id } = await params;
+  const body = await request.json().catch(() => null);
+  const deleteRecordings = body?.deleteRecordings === true;
 
   try {
-    await cancelEvent(id, user);
+    await cancelEvent(id, user, { deleteRecordings });
     await enqueueEventIndexSync(id);
     return NextResponse.json({ ok: true });
   } catch (error) {

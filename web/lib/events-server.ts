@@ -3164,8 +3164,17 @@ async function notifyEventAudience(
  * Cancels an event (host or admin only) — a one-way, soft-delete-style flag
  * (Event.cancelledAt), not a status a host can clear. Also deletes the
  * underlying Google Calendar event if the Meet link was auto-generated.
+ *
+ * `deleteRecordings` lets the host opt into cleaning up the event's
+ * recording(s) at cancel time instead of leaving that for a later trip to
+ * My Posts / the event detail page — see deleteAllEventRecordings below for
+ * what "delete" means per recording origin.
  */
-export async function cancelEvent(eventId: string, actingUser: UserModel): Promise<void> {
+export async function cancelEvent(
+  eventId: string,
+  actingUser: UserModel,
+  options?: { deleteRecordings?: boolean },
+): Promise<void> {
   const event = await db.event.findUnique({
     where: { id: eventId },
     select: { title: true, hostId: true, visibility: true, googleEventId: true, cancelledAt: true },
@@ -3181,6 +3190,10 @@ export async function cancelEvent(eventId: string, actingUser: UserModel): Promi
 
   await db.event.update({ where: { id: eventId }, data: { cancelledAt: new Date() } });
 
+  if (options?.deleteRecordings) {
+    await deleteAllEventRecordings(eventId);
+  }
+
   await notifyEventAudience(eventId, event.visibility, {
     type: NotificationType.event_cancelled,
     subject: `Cancelled: ${event.title}`,
@@ -3189,6 +3202,45 @@ export async function cancelEvent(eventId: string, actingUser: UserModel): Promi
 
   if (event.googleEventId) {
     await cancelMeetingCalendarEvent(event.googleEventId);
+  }
+}
+
+/**
+ * Best-effort delete of every recording attached to an event — the bulk
+ * counterpart to deleteEventRecording/deleteEventRecordingSegment below,
+ * used when a host cancels an event and opts to delete its recording(s) in
+ * the same step. Cancellation has already been committed by the time this
+ * runs, so one recording's external-delete failure is caught and skipped
+ * rather than thrown — its row is left in place for the host to retry later
+ * from the (still-reachable, per cancelEvent's own cancelled-event
+ * handling) event detail page, same as if they'd never asked to delete it.
+ *
+ * A LiveKit segment with no objectKey and no failedAt is left untouched
+ * rather than force-deleted: it may still be actively recording, and
+ * deleting that row would just get it silently recreated once its
+ * egress_ended webhook lands — see deleteEventRecordingSegment's own doc
+ * comment for the same race.
+ */
+async function deleteAllEventRecordings(eventId: string): Promise<void> {
+  const recordings = await db.eventRecording.findMany({
+    where: { eventId },
+    select: { id: true, origin: true, driveFileId: true, objectKey: true, failedAt: true },
+  });
+
+  for (const recording of recordings) {
+    try {
+      if (recording.origin === RecordingOrigin.meet) {
+        if (!recording.driveFileId) continue;
+        if (!(await deleteMeetingRecording(recording.driveFileId))) continue;
+      } else if (recording.objectKey) {
+        await deleteRecordingObject(recording.objectKey);
+      } else if (!recording.failedAt) {
+        continue;
+      }
+      await db.eventRecording.delete({ where: { id: recording.id } });
+    } catch {
+      // Best-effort — leave this row for a later manual retry.
+    }
   }
 }
 
