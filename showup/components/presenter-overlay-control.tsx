@@ -266,6 +266,11 @@ export function PresenterOverlayControl({
   const [imageCorner, setImageCorner] = useState<OverlayCorner>("top-right");
   const imageRef = useRef<ImageBitmap | null>(null);
   const followRef = useRef({ follow: true, pinned: null as string | null });
+  // Mirrors `span` into the 100 ms tick, which reads refs rather than state to avoid stale closures.
+  const spanRef = useRef(span);
+  useEffect(() => {
+    spanRef.current = span;
+  }, [span]);
   const shareRef = useRef<Share | null>(null);
   const overlayRef = useRef<Overlay | null>(null);
   const previewRef = useRef<HTMLVideoElement | null>(null);
@@ -497,17 +502,26 @@ export function PresenterOverlayControl({
     room.activeSpeakers.forEach((participant) => {
       if (participant.isSpeaking) speakers.set(participant.isLocal ? LOCAL_ID : participant.identity, participant.audioLevel);
     });
-    const shown = follower.update(now, speakers, eligible, LOCAL_ID);
     const coGhosts = roster.pinned;
     if (coGhosts.length > 0) {
-      // Guests the presenter added stay up with them, in the order added; who's speaking no longer picks the ghost.
+      // Guests the presenter added stay up with them, in the order added; who's speaking no longer picks who is shown.
       compositor.setVisible([LOCAL_ID, ...coGhosts]);
       shownIdsRef.current = coGhosts;
       setShownId(LOCAL_ID);
+      if (spanRef.current) {
+        // Full-screen Reach with co-ghosts: one of the ghosts still covers the whole frame, picked by the
+        // same sustained-speech rules as normal follow-the-speaker, restricted to who is actually on the share.
+        const featuredEligible = new Set<string>([LOCAL_ID, ...coGhosts]);
+        compositor.setFeatured(follower.update(now, speakers, featuredEligible, LOCAL_ID));
+      } else {
+        compositor.setFeatured(null);
+      }
     } else {
+      const shown = follower.update(now, speakers, eligible, LOCAL_ID);
       compositor.setVisible([shown]);
       shownIdsRef.current = shown === LOCAL_ID ? [] : [shown];
       setShownId(shown);
+      compositor.setFeatured(null);
     }
     syncGuestPointers(compositor, present, now);
     setGuests((previous) =>

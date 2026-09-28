@@ -117,3 +117,39 @@ test("a group that doesn't fit falls back to spreading evenly across the whole w
     assert.ok(Math.abs(box.x - expectedX) < 1e-9, `box ${index} matches the pre-existing spread formula`);
   });
 });
+
+test("omitting featuredIndex leaves span+group behavior unchanged", () => {
+  assert.deepEqual(
+    layoutGhosts([1, 1], 1000, 500, 1, "left", true, [1, 1.2]),
+    layoutGhosts([1, 1], 1000, 500, 1, "left", false, [1, 1.2]),
+    "span is still a no-op for a group when featuredIndex isn't given",
+  );
+});
+
+test("the featured ghost cover-fits the frame exactly like the lone-span case, ignoring scale and zoom", () => {
+  const [aloneWide] = layoutGhosts([16 / 9], 2000, 500, 0.3, "left", true);
+  const group = layoutGhosts([16 / 9, 1], 2000, 500, 0.3, "left", true, [5, 5], 0);
+  assert.deepEqual(group[0], aloneWide, "featured box matches the lone-span box for the same aspect, regardless of scale/zoom");
+
+  const [aloneTall] = layoutGhosts([1], 500, 2000, 1, "center", true);
+  const groupTall = layoutGhosts([16 / 9, 1], 500, 2000, 1, "center", true, [], 1);
+  assert.deepEqual(groupTall[1], aloneTall, "works with the featured ghost at any index");
+});
+
+test("non-featured ghosts render small and anchored by position while one ghost is featured", () => {
+  const left = layoutGhosts([1, 1, 1], 1000, 500, 1, "left", true, [], 0);
+  // box 0 is featured (covers the frame); boxes 1 and 2 are the small secondary ghosts.
+  assert.ok(left[0].height >= 500, "featured ghost still covers the frame");
+  assert.ok(left[1].height < left[0].height * 0.5, "secondary ghost is much smaller than the featured one");
+  assert.equal(left[1].x, 0, "secondary block starts at the left edge, same anchor rule as the main group");
+  assert.equal(left[2].x, left[1].x + left[1].width, "secondary ghosts sit adjacently, in order");
+
+  const right = layoutGhosts([1, 1, 1], 1000, 500, 1, "right", true, [], 1);
+  // box 1 is featured here; boxes 0 and 2 are secondary.
+  assert.ok(Math.abs(right[2].x + right[2].width - 1000) < 1e-6, "secondary block ends flush with the right edge");
+
+  // A secondary ghost's size doesn't grow with `scale` — it stays small regardless.
+  const smallScale = layoutGhosts([1, 1], 1000, 500, 0.3, "left", true, [], 0);
+  const largeScale = layoutGhosts([1, 1], 1000, 500, 1, "left", true, [], 0);
+  assert.equal(smallScale[1].height, largeScale[1].height, "secondary size is independent of the scale setting");
+});

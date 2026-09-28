@@ -188,6 +188,8 @@ export type PresenterOverlayCompositor = {
   removeSource: (id: string) => void;
   /** Which sources are shown, spaced out in this order (one ghost follows `position`); auto caption names them all. Others fade out over ~300 ms. */
   setVisible: (ids: string[]) => void;
+  /** Who covers the whole frame while `span` is on and more than one ghost is shown; the rest render small on top of them. Null = no one (today's equal-peers layout). */
+  setFeatured: (id: string | null) => void;
   /** Zooms the screen layer 2x toward its centre (the same zoom a pinch gives). No-op when already zoomed. */
   zoomIn: () => void;
   /** Back to the whole screen. */
@@ -276,6 +278,36 @@ export type GhostBox = { x: number; width: number; height: number };
 
 /** With several ghosts each is drawn a little smaller, so they read as a group rather than a pile. */
 const GROUP_SCALE = [1, 1, 0.85, 0.7];
+/** How small the non-featured ghosts render, relative to the frame height, while one ghost covers the whole frame (see `featuredIndex`). Deliberately not tied to `scale`, so "small" stays small regardless of what `scale` was last set to. */
+const FEATURED_SECONDARY_SCALE = 0.32;
+
+/** Lays out the non-featured ghosts of a featured-ghost group: a compact block anchored by `position`, like the main group layout, falling back to an even spread if it doesn't fit. Pure helper for `layoutGhosts`. */
+function layoutSecondaryGhosts(
+  aspects: number[],
+  outputWidth: number,
+  outputHeight: number,
+  position: PresenterOverlaySettings["position"],
+  zooms: number[],
+): GhostBox[] {
+  const count = aspects.length;
+  const groupHeight = outputHeight * FEATURED_SECONDARY_SCALE * (GROUP_SCALE[Math.min(count, GROUP_SCALE.length - 1)] ?? 1);
+  const heights = aspects.map((_aspect, index) => groupHeight * (zooms[index] ?? 1));
+  const widths = aspects.map((aspect, index) => heights[index] * aspect);
+  const totalWidth = widths.reduce((sum, width) => sum + width, 0);
+  if (totalWidth <= outputWidth) {
+    let x = position === "left" ? 0 : position === "right" ? outputWidth - totalWidth : (outputWidth - totalWidth) / 2;
+    return widths.map((width, index) => {
+      const box = { x, width, height: heights[index] };
+      x += width;
+      return box;
+    });
+  }
+  return widths.map((width, index) => {
+    const centre = (outputWidth * (index + 0.5)) / count;
+    const x = width >= outputWidth ? (outputWidth - width) / 2 : Math.min(Math.max(centre - width / 2, 0), outputWidth - width);
+    return { x, width, height: heights[index] };
+  });
+}
 
 /**
  * Lays ghosts out bottom-aligned. One ghost follows the `position` setting.
@@ -283,8 +315,11 @@ const GROUP_SCALE = [1, 1, 0.85, 0.7];
  * in the order given, when that block fits inside the frame; otherwise they
  * fall back to being spaced evenly across the whole width, each centred in
  * its own slot. With `span`, a lone ghost instead covers the whole frame
- * (ignoring zoom). `zooms` scales each ghost about its bottom edge (see size-normalize.ts).
- * Pure, for testing.
+ * (ignoring zoom). With `span` AND more than one ghost, passing `featuredIndex`
+ * makes that one ghost cover the whole frame the same way, while the rest lay
+ * out small (see `layoutSecondaryGhosts`) — omitting it leaves the group
+ * layout above unchanged. `zooms` scales each ghost about its bottom edge
+ * (see size-normalize.ts). Pure, for testing.
  */
 export function layoutGhosts(
   aspects: number[],
@@ -294,6 +329,7 @@ export function layoutGhosts(
   position: PresenterOverlaySettings["position"],
   span = false,
   zooms: number[] = [],
+  featuredIndex?: number,
 ): GhostBox[] {
   const count = aspects.length;
   if (count === 1 && span) {
@@ -301,6 +337,29 @@ export function layoutGhosts(
     const height = Math.max(outputHeight, outputWidth / aspects[0]);
     const width = height * aspects[0];
     return [{ x: (outputWidth - width) / 2, width, height }];
+  }
+  if (span && count > 1 && featuredIndex !== undefined) {
+    // One ghost covers the whole frame (ignoring scale/zoom, like the lone-span case above); the
+    // rest render small on top of it — the caller is responsible for drawing the featured ghost first.
+    const featuredAspect = aspects[featuredIndex];
+    const featuredHeight = Math.max(outputHeight, outputWidth / featuredAspect);
+    const featuredWidth = featuredHeight * featuredAspect;
+    const featuredBox: GhostBox = { x: (outputWidth - featuredWidth) / 2, width: featuredWidth, height: featuredHeight };
+
+    const secondaryIndices = aspects.map((_aspect, index) => index).filter((index) => index !== featuredIndex);
+    const secondaryBoxes = layoutSecondaryGhosts(
+      secondaryIndices.map((index) => aspects[index]),
+      outputWidth,
+      outputHeight,
+      position,
+      secondaryIndices.map((index) => zooms[index] ?? 1),
+    );
+    const boxes: GhostBox[] = new Array(count);
+    boxes[featuredIndex] = featuredBox;
+    secondaryIndices.forEach((originalIndex, i) => {
+      boxes[originalIndex] = secondaryBoxes[i];
+    });
+    return boxes;
   }
   const groupHeight = outputHeight * scale * (GROUP_SCALE[Math.min(count, GROUP_SCALE.length - 1)] ?? 1);
   // A zoomed ghost keeps its bottom edge and its anchor; it may run past the sides or top and is clipped by the output.
@@ -411,6 +470,8 @@ export async function startPresenterOverlayCompositor({
   let lastFadeAt = 0;
   let lastSegmentTimestamp = 0;
   let visibleIds: string[] = [];
+  /** Which visible source (if any) covers the whole frame while `span` is on and more than one ghost is shown. */
+  let featuredId: string | null = null;
   const sources = new Map<string, Source>();
   const LOCAL_ID = "local";
 
@@ -1171,13 +1232,29 @@ export async function startPresenterOverlayCompositor({
     const shown = visibleIds.map((id) => sources.get(id)).filter((source): source is Source => !!source);
     // The host's keep-background panel isn't a cut-out of a person to size, so it stays at zoom 1.
     const zooms = shown.map((source) => (source.mode === "panel" ? 1 : source.normalizer.zoom(now, settings.normalizeSize)));
-    const boxes = layoutGhosts(shown.map(layoutAspect), width, height, settings.scale, settings.position, settings.span, zooms);
+    const featuredIndex = featuredId ? shown.findIndex((source) => source.id === featuredId) : -1;
+    const boxes = layoutGhosts(
+      shown.map(layoutAspect),
+      width,
+      height,
+      settings.scale,
+      settings.position,
+      settings.span,
+      zooms,
+      featuredIndex >= 0 ? featuredIndex : undefined,
+    );
     shown.forEach((source, index) => {
       source.box = boxes[index];
     });
     const drawable = Array.from(sources.values())
       .filter((source) => source.hasCutout && source.alpha > 0.003 && source.box)
-      .sort((a, b) => a.target - b.target);
+      .sort((a, b) => {
+        // The featured (full-frame) ghost is always the bottom layer, or an incoming one would paint over the small ghosts on top of it.
+        const aFeatured = a.id === featuredId ? 0 : 1;
+        const bFeatured = b.id === featuredId ? 0 : 1;
+        if (aFeatured !== bFeatured) return aFeatured - bFeatured;
+        return a.target - b.target;
+      });
     for (const source of drawable) drawGhost(source, source.box as GhostBox, height);
     drawLaser(now, height);
     drawGuestPointers(height);
@@ -1264,6 +1341,11 @@ export async function startPresenterOverlayCompositor({
     for (const source of Array.from(sources.values())) source.target = ids.includes(source.id) ? 1 : 0;
   }
 
+  /** Who covers the whole frame while `span` is on and more than one ghost is shown (null = no one, today's equal-peers layout). */
+  function setFeatured(id: string | null) {
+    featuredId = id;
+  }
+
   function zoomIn() {
     viewport.zoomIn(performance.now(), 0.5, 0.5);
   }
@@ -1318,5 +1400,5 @@ export async function startPresenterOverlayCompositor({
     onError(error);
   });
 
-  return { track: generator, settings, addSource, removeSource, setVisible, zoomIn, resetZoom, clearDrawing, setShapeText, removeShape, undoShape, setSpotlight, setGuestPointers, setGuestPens, stop };
+  return { track: generator, settings, addSource, removeSource, setVisible, setFeatured, zoomIn, resetZoom, clearDrawing, setShapeText, removeShape, undoShape, setSpotlight, setGuestPointers, setGuestPens, stop };
 }
