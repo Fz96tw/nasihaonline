@@ -62,12 +62,14 @@ export function isPresenterOverlaySupported(): boolean {
 // whatever the browser/OS considers the default microphone.
 type SpeechRecognitionResultLike = ArrayLike<{ transcript: string }> & { isFinal: boolean };
 type SpeechRecognitionEventLike = { resultIndex: number; results: ArrayLike<SpeechRecognitionResultLike> };
+/** `error` is one of the spec's fixed codes: "not-allowed", "service-not-allowed", "audio-capture", "no-speech", "network", "aborted", etc. */
+type SpeechRecognitionErrorEventLike = { error: string };
 type SpeechRecognitionLike = {
   continuous: boolean;
   interimResults: boolean;
   lang: string;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: unknown) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
   onend: (() => void) | null;
   start: () => void;
   stop: () => void;
@@ -482,6 +484,7 @@ export async function startPresenterOverlayCompositor({
   onGesture,
   onShapeFinished,
   onShapes,
+  onVoiceError,
 }: {
   screenTrack: MediaStreamTrack;
   /** The host's own camera. Its frames drive the output, so it must stay live for as long as the overlay does. */
@@ -494,6 +497,12 @@ export async function startPresenterOverlayCompositor({
   onShapeFinished?: (id: number) => void;
   /** The pinned shapes changed (one finished, removed, labelled or all cleared); the whole list, oldest first. */
   onShapes?: (shapes: PinnedShape[]) => void;
+  /**
+   * Voice Pin's mic capture failed to start or was cut off (permission denied, no microphone, or the browser's
+   * recognizer gave up) — unlike `onError`, this is never fatal to the rest of the overlay, so the caller
+   * should just tell the host, not tear anything down.
+   */
+  onVoiceError?: (message: string) => void;
 }): Promise<PresenterOverlayCompositor> {
   const { Processor, Generator } = insertableStreams();
   if (!Processor || !Generator) throw new Error("This browser can't combine video tracks. Try Chrome or Edge.");
@@ -1274,20 +1283,34 @@ export async function startPresenterOverlayCompositor({
         if (result.isFinal) voiceText = `${voiceText} ${result[0].transcript}`.trim();
       }
     };
-    rec.onerror = () => {}; // e.g. "no-speech": swallowed, capture just keeps waiting
+    rec.onerror = (event) => {
+      // "no-speech"/"network"/"aborted" etc. are routine (a pause, a hiccup) — onend decides whether to retry.
+      // These three mean capture can't work at all right now, so stop retrying and tell the host why.
+      if (event.error !== "not-allowed" && event.error !== "service-not-allowed" && event.error !== "audio-capture") return;
+      voiceCaptureOn = false;
+      recognition = null;
+      voiceText = "";
+      voiceAnchorAt = null;
+      onVoiceError?.(event.error === "audio-capture" ? "Voice Pin couldn't find a microphone." : "Voice Pin couldn't start — microphone permission was denied.");
+    };
     rec.onend = () => {
       // Some implementations end recognition after a pause even with continuous:true; restart while still on.
+      // (onerror above already turned voiceCaptureOn off for a permission/device failure, so this won't loop on one.)
       if (voiceCaptureOn) {
         try {
           rec.start();
         } catch {
           voiceCaptureOn = false;
+          voiceText = "";
+          voiceAnchorAt = null;
+          onVoiceError?.("Voice Pin stopped unexpectedly.");
         }
       }
     };
     try {
       rec.start();
     } catch {
+      onVoiceError?.("Voice Pin couldn't start.");
       return;
     }
     recognition = rec;

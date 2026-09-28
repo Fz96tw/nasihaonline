@@ -420,6 +420,9 @@ export function PresenterOverlayControl({
           onError("The camera overlay stopped unexpectedly.");
           removeOverlay();
         },
+        // Unlike onError above, a Voice Pin failure (permission denied, no mic) isn't fatal to the rest of the
+        // overlay — just tell the host, don't tear anything down.
+        onVoiceError: (message) => onError(message),
       });
       Object.assign(compositor.settings, currentSettings());
       // Favor sharpness over smoothness — slide text matters more than motion.
