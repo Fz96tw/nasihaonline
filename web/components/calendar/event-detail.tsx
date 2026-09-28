@@ -124,7 +124,7 @@ export function EventDetail({
     .filter(({ segment }) => segment.ready || segment.failed || isRecordingAvailable);
   const hostName = event.hostName ?? "NASIHA Member";
   const audienceBadge = getEventAudienceBadge(event);
-  const showJoinLink = !isPast && (event.rsvped || isHost) && (event.meetingUrl || event.livekitRoomName);
+  const showJoinLink = !event.cancelled && !isPast && (event.rsvped || isHost) && (event.meetingUrl || event.livekitRoomName);
   const showRecordingUrl = isRecordingAvailable && event.recordingUrl;
   const hasMeetingSection =
     showJoinLink || showRecordingUrl || visibleLiveKitSegments.length > 0 || event.chatTranscriptPostId;
@@ -202,7 +202,12 @@ export function EventDetail({
         )}
       </div>
 
-      {isPast ? (
+      {event.cancelled ? (
+        <div className="rounded-lg border bg-muted px-4 py-3 text-sm text-muted-foreground">
+          This event has been cancelled. Only you (as host/admin) can still see this page — its recording and
+          discussion, if any, remain here.
+        </div>
+      ) : isPast ? (
         <div className="rounded-lg border bg-muted px-4 py-3 text-sm text-muted-foreground">
           This event has already taken place.
         </div>
@@ -292,8 +297,10 @@ export function EventDetail({
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3">
-        {!isPast && !isHost && <RsvpButton eventId={event.seriesId} rsvped={event.rsvped} onToggled={handleRsvpToggled} />}
-        {!isPast && (
+        {!event.cancelled && !isPast && !isHost && (
+          <RsvpButton eventId={event.seriesId} rsvped={event.rsvped} onToggled={handleRsvpToggled} />
+        )}
+        {!event.cancelled && !isPast && (
           <AddToCalendarButton
             eventId={event.seriesId}
             occurrenceIso={event.isRecurring ? event.startsAt : undefined}
@@ -307,7 +314,7 @@ export function EventDetail({
             </Link>
           </Button>
         )}
-        {canEdit && <CancelEventButton eventId={event.seriesId} title={event.title} />}
+        {canEdit && !event.cancelled && <CancelEventButton eventId={event.seriesId} title={event.title} />}
       </div>
 
       {roster ? (

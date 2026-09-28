@@ -46,11 +46,20 @@ export default async function EventDetailPage({
   if (!event) notFound();
   const q = searchParams.q?.trim() || undefined;
 
-  // A cancellation notification links straight here, so this can't 404 once
-  // the organizer cancels (getMemberEventById deliberately doesn't filter
-  // cancelledAt like the /calendar listing does) — show a plain "cancelled"
-  // state instead of the full RSVP/edit/discussion detail view.
-  if (event.cancelled) {
+  const isHost = user.id === event.hostId;
+  const canEdit = isHost || user.role === Role.admin;
+
+  // A cancellation notification links straight here for any viewer
+  // (getMemberEventById deliberately doesn't filter cancelledAt like the
+  // /calendar listing does) — show a plain "cancelled" state instead of the
+  // full detail view for an ordinary member/invitee. The host/admin/
+  // moderator specifically still needs the full page afterward, though: its
+  // recording and discussion thread both remain manageable post-
+  // cancellation (deleteEventRecording/deleteForumThread), and /my-posts is
+  // now the only way back here once the event drops off /calendar's own
+  // listing — EventDetail itself suppresses the RSVP/Join/Cancel actions
+  // that don't make sense for a cancelled event and shows its own banner.
+  if (event.cancelled && !canEdit && !isPrivileged) {
     return (
       <main className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
         <BackLink fallbackHref="/calendar" />
@@ -68,8 +77,6 @@ export default async function EventDetailPage({
     );
   }
 
-  const isHost = user.id === event.hostId;
-  const canEdit = isHost || user.role === Role.admin;
   // Full invitee roster (Objective 02) — visible to every invited member,
   // not just the organizer, so it's fetched independently of `canEdit`.
   // Only restricted events have one; reaching this point at all means the

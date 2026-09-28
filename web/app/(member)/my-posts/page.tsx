@@ -77,8 +77,14 @@ export default async function MyPostsPage() {
     title: event.title,
     status: eventStatus(event, now),
     date: event.createdAt,
-    href: `/calendar/${event.id}/edit`,
-    actionLabel: "Edit",
+    // A cancelled event dropped off /calendar's own listing (getMemberEvents
+    // filters cancelledAt: null), so /my-posts is the only remaining way for
+    // its host to reach it — but /calendar/[eventId]/edit is just the title/
+    // date form; the recording, discussion, and everything else actually
+    // worth revisiting live on the view page (/calendar/[eventId]) instead.
+    // A live event still routes to Edit, unchanged.
+    href: event.cancelledAt ? `/calendar/${event.id}` : `/calendar/${event.id}/edit`,
+    actionLabel: event.cancelledAt ? "View" : "Edit",
   }));
 
   const forumRows: ActivityRow[] = threads.map((thread) => ({
