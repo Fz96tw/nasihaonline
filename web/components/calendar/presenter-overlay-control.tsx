@@ -17,6 +17,16 @@ import { CoGhostRoster, MAX_GUEST_GHOSTS, type GuestOverlayState, type JoinPolic
 import { OVERLAY_TOPIC, encodeMessage, parseToPresenter, type ToGuest, type ToPresenter } from "@/lib/presenter-overlay/overlay-protocol";
 import { PEN_COLORS, type PenColor } from "@/lib/presenter-overlay/drawing";
 import { clampPanelPosition, dragPanelPosition, nudgePanelPosition, parseStoredPanel, serializePanel, type PanelPosition } from "@/lib/presenter-overlay/panel-position";
+import {
+  ANNOTATION_PRESETS,
+  LOOK_PRESETS,
+  TRUST_PRESETS,
+  presetMatches,
+  type AnnotationPresetFields,
+  type LookPresetFields,
+  type Preset,
+  type TrustPresetFields,
+} from "@/lib/presenter-overlay/presets";
 import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/components/calendar/livekit-control-styles";
 
 /** What the gesture tracker currently recognizes, in the host's own words — never drawn into the stream. */
@@ -62,6 +72,40 @@ type Overlay = {
 
 /** A camera the host can pin the ghost to. */
 type Person = { id: string; label: string };
+
+/** One row of preset buttons in the Presets tab. A button highlights only while every field its preset defines still matches `current`. */
+function PresetRow<F extends Record<string, unknown>>({
+  title,
+  presets,
+  current,
+  onApply,
+  segmentClass,
+}: {
+  title: string;
+  presets: Preset<F>[];
+  current: Partial<F>;
+  onApply: (fields: F) => void;
+  segmentClass: (selected: boolean) => string;
+}) {
+  return (
+    <div className="flex flex-col gap-1 text-xs text-white/70">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-white/40">{title}</span>
+      <div className="flex flex-wrap gap-1">
+        {presets.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            onClick={() => onApply(preset.fields)}
+            aria-pressed={presetMatches(preset.fields, current)}
+            className={`${segmentClass(presetMatches(preset.fields, current))} flex-none`}
+          >
+            {preset.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /** How often speech is sampled to decide who the ghost shows. */
 const FOLLOW_TICK_MS = 100;
@@ -154,6 +198,7 @@ export function PresenterOverlayControl({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ origin: PanelPosition; start: { x: number; y: number }; last: PanelPosition } | null>(null);
   // Overlay settings — kept for the whole page, so turning the overlay off and on again restores them.
+  const [settingsTab, setSettingsTab] = useState<"presets" | "finetune">("presets");
   const [opacity, setOpacity] = useState(0.5);
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState<PresenterOverlaySettings["position"]>("center");
@@ -747,6 +792,66 @@ export function PresenterOverlayControl({
   const segmentClass = (selected: boolean) =>
     `flex-1 rounded-md px-2 py-1 text-xs ${selected ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"}`;
 
+  // Live values for the fields each preset category cares about, recomputed every render — a preset's
+  // highlighted state is never cached, so it can never go stale (see PresetRow / presetMatches).
+  const currentLookValues: LookPresetFields = { scale, opacity, position, span };
+  const currentTrustValues: TrustPresetFields = {
+    policy,
+    followSpeaker,
+    pinnedId: pinnedId === LOCAL_ID ? "self" : pinnedId === null ? null : undefined,
+  };
+  const currentAnnotationValues: AnnotationPresetFields = { gestures, penColor };
+
+  function applyLookPreset(fields: LookPresetFields) {
+    if (fields.scale !== undefined) {
+      setScale(fields.scale);
+      updateSettings({ scale: fields.scale });
+    }
+    if (fields.opacity !== undefined) {
+      setOpacity(fields.opacity);
+      updateSettings({ opacity: fields.opacity });
+    }
+    if (fields.position !== undefined) {
+      setPosition(fields.position);
+      updateSettings({ position: fields.position });
+    }
+    if (fields.span !== undefined) {
+      setSpan(fields.span);
+      updateSettings({ span: fields.span });
+    }
+  }
+
+  // Each field here reuses the same handler its Fine-tune control calls, not a raw setState — those
+  // handlers carry side effects (declining pending requests, poking the live follower) a preset must not skip.
+  function applyTrustPreset(fields: TrustPresetFields) {
+    if (fields.policy !== undefined) changePolicy(fields.policy);
+    if (fields.followSpeaker !== undefined) changeFollow(fields.followSpeaker);
+    if (fields.pinnedId !== undefined) changePinned(fields.pinnedId === "self" ? LOCAL_ID : fields.pinnedId);
+  }
+
+  function applyAnnotationPreset(fields: AnnotationPresetFields) {
+    if (fields.gestures !== undefined) {
+      setGestures(fields.gestures);
+      updateSettings({ gestures: fields.gestures });
+    }
+    if (fields.penColor !== undefined) {
+      setPenColor(fields.penColor);
+      updateSettings({ penColor: fields.penColor });
+    }
+  }
+
+  function presetsTabBody() {
+    return (
+      <>
+        <PresetRow title="Look" presets={LOOK_PRESETS} current={currentLookValues} onApply={applyLookPreset} segmentClass={segmentClass} />
+        {overlayOn && (
+          <PresetRow title="Collaboration" presets={TRUST_PRESETS} current={currentTrustValues} onApply={applyTrustPreset} segmentClass={segmentClass} />
+        )}
+        <PresetRow title="Annotation" presets={ANNOTATION_PRESETS} current={currentAnnotationValues} onApply={applyAnnotationPreset} segmentClass={segmentClass} />
+      </>
+    );
+  }
+
   // Rendered twice when the pop-out is open (page panel + pop-out panel), each with its own file input.
   const settingsFields = (fileInput: RefObject<HTMLInputElement>) => (
     <>
@@ -770,6 +875,33 @@ export function PresenterOverlayControl({
         <p className="text-[11px] text-white/50">Viewers see your plain screen share. Settings below apply when you turn it on.</p>
       )}
 
+      <div className="flex gap-1 border-b border-white/10 pb-3" role="tablist" aria-label="Overlay settings tabs">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={settingsTab === "presets"}
+          onClick={() => setSettingsTab("presets")}
+          className={segmentClass(settingsTab === "presets")}
+        >
+          Presets
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={settingsTab === "finetune"}
+          onClick={() => setSettingsTab("finetune")}
+          className={segmentClass(settingsTab === "finetune")}
+        >
+          Fine-tune
+        </button>
+      </div>
+      {settingsTab === "presets" ? presetsTabBody() : fineTuneTabBody(fileInput)}
+    </>
+  );
+
+  function fineTuneTabBody(fileInput: RefObject<HTMLInputElement>) {
+    return (
+      <>
       <label className="flex items-center justify-between gap-2 text-xs text-white/70">
         Follow the speaker
         <input type="checkbox" checked={followSpeaker} onChange={(e) => changeFollow(e.target.checked)} />
@@ -1078,8 +1210,9 @@ export function PresenterOverlayControl({
           </div>
         )}
       </div>
-    </>
-  );
+      </>
+    );
+  }
 
   return (
     <div className="pointer-events-auto relative">
