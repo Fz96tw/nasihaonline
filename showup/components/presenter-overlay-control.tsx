@@ -23,6 +23,7 @@ import {
 } from "@/lib/presenter-overlay/guest-pointer";
 import {
   isPresenterOverlaySupported,
+  isVoicePinSupported,
   startPresenterOverlayCompositor,
   type OverlayCorner,
   type PresenterOverlayCompositor,
@@ -215,10 +216,14 @@ export function PresenterOverlayControl({
   const [normalizeSize, setNormalizeSize] = useState(true);
   // Host hand gestures (default off) and what's recognized right now — for the host's own indicator, never drawn into the stream.
   const [gestures, setGestures] = useState(false);
-  const [gestureLabel, setGestureLabel] = useState<"pointing" | "zooming" | "reset" | "drawing" | "shape" | "erasing" | "spotlight" | "thumbsup" | "thumbsdown" | "wave" | "unavailable" | null>(null);
+  const [gestureLabel, setGestureLabel] = useState<
+    "pointing" | "zooming" | "reset" | "drawing" | "shape" | "erasing" | "spotlight" | "voice" | "thumbsup" | "thumbsdown" | "wave" | "unavailable" | null
+  >(null);
   const [spotlightOn, setSpotlightOn] = useState(false);
   const [penColor, setPenColor] = useState<PresenterOverlaySettings["penColor"]>("red");
   const [arrowMode, setArrowMode] = useState(false);
+  const [voicePin, setVoicePin] = useState(false);
+  const [voicePinSupported, setVoicePinSupported] = useState(false);
   /** Boxes and ellipses pinned to the share, and the one just drawn that is waiting for its optional label. */
   const [shapes, setShapes] = useState<PinnedShape[]>([]);
   const [pendingShapeId, setPendingShapeId] = useState<number | null>(null);
@@ -291,6 +296,7 @@ export function PresenterOverlayControl({
 
   useEffect(() => {
     setSupported(isPresenterOverlaySupported());
+    setVoicePinSupported(isVoicePinSupported());
   }, []);
 
   // Where the panel was left last time. Storage can be missing or blocked; the panel works without it.
@@ -329,7 +335,7 @@ export function PresenterOverlayControl({
   }, [panelPos !== null]);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, span, gestures, penColor, arrowMode, shapeKind, stampShapeKind, stampText, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
+    return { opacity, scale, position, span, gestures, penColor, arrowMode, voicePin, shapeKind, stampShapeKind, stampText, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -1027,7 +1033,7 @@ export function PresenterOverlayControl({
     followSpeaker,
     pinnedId: pinnedId === LOCAL_ID ? "self" : pinnedId === null ? null : undefined,
   };
-  const currentAnnotationValues: AnnotationPresetFields = { gestures, arrowMode, penColor };
+  const currentAnnotationValues: AnnotationPresetFields = { gestures, arrowMode, penColor, voicePin };
 
   function applyLookPreset(fields: LookPresetFields) {
     if (fields.scale !== undefined) {
@@ -1079,16 +1085,52 @@ export function PresenterOverlayControl({
       setPenColor(fields.penColor);
       updateSettings({ penColor: fields.penColor });
     }
+    if (fields.voicePin !== undefined) {
+      changeVoicePin(fields.voicePin);
+    }
+  }
+
+  /** Reused by the Fine-tune checkbox and the Whiteboard preset alike, so both go through one place. */
+  function changeVoicePin(next: boolean) {
+    setVoicePin(next);
+    updateSettings({ voicePin: next });
   }
 
   function presetsTabBody() {
+    // Whether Whiteboard Mode is "the" active look right now, judged only by the fields it shares with the old
+    // Pointer Only (gestures/arrowMode/penColor) — not by voicePin, which is exactly the field this checkbox
+    // itself controls. Gating the checkbox's own visibility on the field it sets would hide it the instant it's
+    // unticked, with no way back short of re-clicking Whiteboard Mode (which would also reset pen/arrow).
+    const whiteboardLook = ANNOTATION_PRESETS.find((preset) => preset.id === "whiteboard")!.fields;
+    const whiteboardLookActive = gestures === whiteboardLook.gestures && arrowMode === whiteboardLook.arrowMode && penColor === whiteboardLook.penColor;
     return (
       <>
         <PresetRow title="Look" presets={LOOK_PRESETS} current={currentLookValues} onApply={applyLookPreset} segmentClass={segmentClass} />
         {overlayOn && (
           <PresetRow title="Collaboration" presets={TRUST_PRESETS} current={currentTrustValues} onApply={applyTrustPreset} segmentClass={segmentClass} />
         )}
-        <PresetRow title="Annotation" presets={ANNOTATION_PRESETS} current={currentAnnotationValues} onApply={applyAnnotationPreset} segmentClass={segmentClass} />
+        <div className="flex flex-col gap-1 text-xs text-white/70">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Annotation</span>
+          <div className="flex flex-wrap items-center gap-1">
+            {ANNOTATION_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => applyAnnotationPreset(preset.fields)}
+                aria-pressed={presetMatches(preset.fields, currentAnnotationValues)}
+                className={`${segmentClass(presetMatches(preset.fields, currentAnnotationValues))} flex-none`}
+              >
+                {preset.label}
+              </button>
+            ))}
+            {whiteboardLookActive && voicePinSupported && (
+              <label className="ml-1 flex flex-none items-center gap-1 text-xs text-white/70">
+                <input type="checkbox" data-testid="overlay-voice-pin-preset" checked={voicePin} onChange={(e) => changeVoicePin(e.target.checked)} />
+                Voice Pin
+              </label>
+            )}
+          </div>
+        </div>
       </>
     );
   }
@@ -1428,8 +1470,18 @@ export function PresenterOverlayControl({
                           ? "Thumbs down 👎"
                           : gestureLabel === "wave"
                             ? "Wave 👋"
-                            : "Couldn't load the hand model — gestures are off"}
+                            : gestureLabel === "voice"
+                              ? "Voice Pin: toggled"
+                              : "Couldn't load the hand model — gestures are off"}
           </span>
+        )}
+        {voicePinSupported ? (
+          <label className="flex items-center gap-2 text-xs text-white/70">
+            <input type="checkbox" data-testid="overlay-voice-pin" checked={voicePin} onChange={(e) => changeVoicePin(e.target.checked)} />
+            Voice Pin — hold a V-sign to dictate a label at your pointer
+          </label>
+        ) : (
+          <p className="text-[11px] text-white/50">Voice Pin needs Chrome or Edge.</p>
         )}
         <details className="text-[11px] text-white/60">
           <summary className="cursor-pointer select-none">Which gestures?</summary>
@@ -1442,6 +1494,7 @@ export function PresenterOverlayControl({
             <li>Hold two fingers together (index and middle, others curled) for a moment to draw in the air; lower them to stop. Freehand drawings fade after a few seconds. Switch on &ldquo;Straight arrow&rdquo; and the same gesture draws a straight arrow from where you start to where you lower your fingers, and it stays until you remove it.</li>
             <li>Hold your thumb and index finger out in an &ldquo;L&rdquo; (other fingers curled) for a moment to draw a box or ellipse: the point where you start is one corner and your fingertip is the opposite corner. Choose Box or Ellipse below; drop the L to finish. Boxes, ellipses and straight arrows stay on the screen until you remove them (Clear drawing, Undo last shape, or the list under Shapes) and can carry a short label. They stay put while you zoom or pan, but do not follow the shared content if it scrolls or changes, so clear them when the content changes.</li>
             <li>Hold three fingers together (index, middle and ring, pinky curled) for a moment to erase: a ring around your middle fingertip wipes any drawing it touches as you move your hand. A box or ellipse is erased only when the ring touches its outline, so you can point inside one safely. Erasing can&apos;t be undone.</li>
+            <li>With Voice Pin on: point first so there&apos;s somewhere to anchor it, then hold a &ldquo;V&rdquo; (index and middle apart, other fingers curled — wider than the two-finger pen) for a moment to start dictating; what you say appears where you last pointed. Hold the V again (or lower your hand) to pin it there for good.</li>
             <li>Keep your hand fully in the camera frame. Only the screen zooms, not you.</li>
           </ul>
         </details>

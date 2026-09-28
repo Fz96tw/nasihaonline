@@ -15,7 +15,7 @@ export type TrustPresetFields = Partial<{
   pinnedId: "self" | null;
 }>;
 
-export type AnnotationPresetFields = Partial<Pick<PresenterOverlaySettings, "gestures" | "arrowMode" | "penColor">>;
+export type AnnotationPresetFields = Partial<Pick<PresenterOverlaySettings, "gestures" | "arrowMode" | "penColor" | "voicePin">>;
 
 export type Preset<F> = { id: string; label: string; fields: F };
 
@@ -47,8 +47,12 @@ export const TRUST_PRESETS: Preset<TrustPresetFields>[] = [
   { id: "qa-only", label: "Q&A Only", fields: { policy: "ask", pointerPolicy: "on", drawPolicy: "off" } },
 ];
 
+// Voice Pin (dictate a label at the pointer, Showup's V-sign gesture) rides along with Whiteboard Mode rather
+// than getting its own button: "Pointer Only" used to be the third button here, but its fields were a strict,
+// permanent subset of Whiteboard Mode's, so it was always shown "active" the moment Whiteboard was — a
+// redundant button, removed rather than replaced. A host who wants pointing without drawing tools, or drawing
+// tools without Voice Pin, reaches for the Fine-tune tab's individual toggles instead of a third preset.
 export const ANNOTATION_PRESETS: Preset<AnnotationPresetFields>[] = [
   { id: "annotation-off", label: "Off", fields: { gestures: false } },
-  { id: "whiteboard", label: "Whiteboard Mode", fields: { gestures: true, arrowMode: false, penColor: "red" } },
-  { id: "pointer-only", label: "Pointer Only", fields: { gestures: true } },
+  { id: "whiteboard", label: "Whiteboard Mode", fields: { gestures: true, arrowMode: false, penColor: "red", voicePin: true } },
 ];

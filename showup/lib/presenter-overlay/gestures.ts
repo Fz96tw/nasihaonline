@@ -6,7 +6,7 @@
  */
 
 export type Landmark = { x: number; y: number };
-export type Pose = "point" | "pinch" | "midpinch" | "palm" | "pen" | "shape" | "eraser" | "fist" | "thumbsup" | "thumbsdown" | "none";
+export type Pose = "point" | "pinch" | "midpinch" | "palm" | "pen" | "v" | "shape" | "eraser" | "fist" | "thumbsup" | "thumbsdown" | "none";
 export type ReactionKind = "thumbsup" | "thumbsdown" | "wave";
 
 /** Hold times before a gesture takes effect. */
@@ -18,6 +18,10 @@ export const PEN_HOLD_MS = 300;
 export const SHAPE_HOLD_MS = 400;
 /** Hold the eraser pose (three fingers together) this long before it starts erasing. */
 export const ERASER_HOLD_MS = 300;
+/** Hold the "V" (index and middle apart, unlike the pen's together) this long before it toggles Voice Pin capture. */
+export const V_SIGN_HOLD_MS = 400;
+/** How long the transient "voice" label stays up after the V-sign fires, like the reset/reaction labels. */
+const VOICE_LABEL_MS = 800;
 /** Hold the thumb-to-middle-finger pinch this long before it drops a stamp (index finger free to keep aiming). */
 export const STAMP_HOLD_MS = 300;
 /** A fist must be held this long to turn the spotlight on (longer, so a resting fist doesn't trigger it). */
@@ -83,6 +87,12 @@ const EXTENDED_RATIO = 1.1;
 const CURLED_RATIO = 1.0;
 /** Index and middle fingertips closer than this fraction of the hand's size are "together" (the pen pose); a peace sign is wider. */
 const PEN_TOGETHER_RATIO = 0.3;
+/**
+ * Index and middle fingertips farther apart than this (fraction of the hand's size) are clearly spread — the "V"
+ * that toggles Voice Pin. Between PEN_TOGETHER_RATIO and this, the hand is mid-transition between pen and V and
+ * reads as neither, so brushing through that gap while relaxing two fingers together never misfires either one.
+ */
+const V_APART_RATIO = 0.55;
 /**
  * The "L" (shape) pose: index out, the other fingers curled, and the thumb held clearly away from the index knuckle
  * (this far, as a fraction of the hand's size; a relaxed pointing thumb sits well inside it) at roughly a right angle
@@ -177,8 +187,11 @@ export function classifyPose(landmarks: readonly Landmark[], aspect = 1): PoseRe
   }
   if (index === "extended" && others.every((s) => s === "curled")) return { pose: "point", tip, middleTip, pinchPoint, palm };
   const [middle, ring, pinky] = others;
-  if (index === "extended" && middle === "extended" && ring === "curled" && pinky === "curled" && dist(tip, landmarks[MIDDLE_TIP]) < PEN_TOGETHER_RATIO * size) {
-    return { pose: "pen", tip, middleTip, pinchPoint, palm };
+  if (index === "extended" && middle === "extended" && ring === "curled" && pinky === "curled") {
+    const spread = dist(tip, landmarks[MIDDLE_TIP]);
+    if (spread < PEN_TOGETHER_RATIO * size) return { pose: "pen", tip, middleTip, pinchPoint, palm };
+    if (spread >= V_APART_RATIO * size) return { pose: "v", tip, middleTip, pinchPoint, palm };
+    return none;
   }
   // Three fingers together (index, middle, ring), pinky curled: the eraser. Each finger must sit right against the next, or it is a fan of fingers.
   if (
@@ -242,7 +255,9 @@ export type GestureAction =
   /** Drop a stamp (whatever text is currently set, in the currently chosen shape) at this point (camera-frame coordinates of the aimed fingertip). */
   | { type: "stamp"; u: number; v: number }
   /** A quick reaction to show near the host's ghost. */
-  | { type: "reaction"; kind: ReactionKind };
+  | { type: "reaction"; kind: ReactionKind }
+  /** The V-sign fired: start Voice Pin capture (anchored at `voiceAnchor`), or, if capture is already on, stop it and pin the caption. */
+  | { type: "voice-toggle" };
 
 export type GestureState = {
   /** The laser dot, in camera-frame coordinates, while pointing or fading out; `fade` goes 1 → 0. */
@@ -257,16 +272,22 @@ export type GestureState = {
   hand: { u: number; v: number } | null;
   /** The fist spotlight: 1 while the fist is held (after the hold), fading to 0 after it opens; null when off. */
   spotlight: { alpha: number } | null;
+  /**
+   * Where the point pose last placed the laser dot (camera-frame coordinates) — kept even after the dot has fully
+   * faded, so Voice Pin's V-sign toggle (a separate hand shape, not pointing) still has somewhere to anchor the
+   * caption. Null until the host has pointed at least once this session.
+   */
+  voiceAnchor: { u: number; v: number } | null;
   actions: GestureAction[];
   /** What is currently recognized, for the host's (not streamed) indicator. */
-  label: "pointing" | "zooming" | "reset" | "drawing" | "shape" | "erasing" | "spotlight" | ReactionKind | null;
+  label: "pointing" | "zooming" | "reset" | "drawing" | "shape" | "erasing" | "spotlight" | "voice" | ReactionKind | null;
 };
 
-const POSES: readonly Pose[] = ["point", "pinch", "midpinch", "palm", "pen", "shape", "eraser", "fist", "thumbsup", "thumbsdown"];
+const POSES: readonly Pose[] = ["point", "pinch", "midpinch", "palm", "pen", "v", "shape", "eraser", "fist", "thumbsup", "thumbsdown"];
 
 export class GestureTracker {
-  private since: Record<string, number | null> = { point: null, pinch: null, midpinch: null, palm: null, pen: null, shape: null, eraser: null, fist: null, thumbsup: null, thumbsdown: null };
-  private lastSeen: Record<string, number> = { point: 0, pinch: 0, midpinch: 0, palm: 0, pen: 0, shape: 0, eraser: 0, fist: 0, thumbsup: 0, thumbsdown: 0 };
+  private since: Record<string, number | null> = { point: null, pinch: null, midpinch: null, palm: null, pen: null, v: null, shape: null, eraser: null, fist: null, thumbsup: null, thumbsdown: null };
+  private lastSeen: Record<string, number> = { point: 0, pinch: 0, midpinch: 0, palm: 0, pen: 0, v: 0, shape: 0, eraser: 0, fist: 0, thumbsup: 0, thumbsdown: 0 };
   private thumbFired: Record<string, boolean> = { thumbsup: false, thumbsdown: false };
   private waveFired = false;
   private reactionCooldownUntil = 0;
@@ -300,9 +321,12 @@ export class GestureTracker {
   private cooldownUntil = 0;
   private pinchFired = false;
   private stampFired = false;
+  private vFired = false;
   private palmFired = false;
   private pinching = false;
   private resetLabelUntil = 0;
+  private voiceLabelUntil = 0;
+  private pointerEverSet = false;
   private panX = 0;
   private panY = 0;
   private panAt: number | null = null;
@@ -341,6 +365,7 @@ export class GestureTracker {
         this.since[pose] = null;
         if (pose === "pinch") this.pinchFired = false;
         if (pose === "midpinch") this.stampFired = false;
+        if (pose === "v") this.vFired = false;
         if (pose === "palm") {
           this.palmFired = false;
           this.waveFired = false;
@@ -371,6 +396,7 @@ export class GestureTracker {
       }
       this.pointerAt = now;
       this.pointerActive = true;
+      this.pointerEverSet = true;
     } else if (this.pointerActive && now - this.lastSeen.point > GRACE_MS) {
       this.pointerActive = false;
       this.pointerEndedAt = this.lastSeen.point;
@@ -483,6 +509,14 @@ export class GestureTracker {
       actions.push({ type: "stamp", u: reading.tip.x, v: reading.tip.y });
     }
 
+    // Voice Pin toggle: the V-sign held briefly fires once per hold (like the stamp pinch), starting or stopping
+    // capture — never a passive side effect of pointing, which only ever set voiceAnchor above.
+    if (this.held("v", now, V_SIGN_HOLD_MS) && !this.vFired) {
+      this.vFired = true;
+      this.voiceLabelUntil = now + VOICE_LABEL_MS;
+      actions.push({ type: "voice-toggle" });
+    }
+
     // Reactions: a thumb held up or down, or a wave. Each fires once per hold; nothing reacts again for REACTION_COOLDOWN_MS
     // (a hold that finishes during the cooldown is used up, so a lingering thumb doesn't fire the moment it ends).
     for (const kind of ["thumbsup", "thumbsdown"] as const) {
@@ -510,8 +544,11 @@ export class GestureTracker {
     const pen = this.penActive ? { u: this.penX, v: this.penY } : null;
     const shape = this.shapeActive ? { u: this.shapeX, v: this.shapeY } : null;
     const eraser = this.eraserActive ? { u: this.eraserX, v: this.eraserY } : null;
+    const voiceAnchor = this.pointerEverSet ? { u: this.pointerX, v: this.pointerY } : null;
     const label = this.reactionLabel && now < this.reactionLabelUntil
       ? this.reactionLabel
+      : now < this.voiceLabelUntil
+        ? "voice"
       : this.pointerActive
       ? "pointing"
       : this.penActive
@@ -527,7 +564,7 @@ export class GestureTracker {
             : now < this.resetLabelUntil
               ? "reset"
               : null;
-    return { pointer, pen, shape, eraser, hand, spotlight, actions, label };
+    return { pointer, pen, shape, eraser, hand, spotlight, voiceAnchor, actions, label };
   }
 }
 

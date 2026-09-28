@@ -20,6 +20,7 @@ import {
   STAMP_HOLD_MS,
   POINTER_FADE_MS,
   POINT_HOLD_MS,
+  V_SIGN_HOLD_MS,
   cameraToOutput,
   classifyPose,
   type GestureAction,
@@ -93,7 +94,7 @@ test("classifies pointing, pinching and an open palm", () => {
   assert.equal(classifyPose(PALM()).pose, "palm");
   assert.equal(classifyPose(hand(["curl", "curl", "curl", "curl"])).pose, "none", "a fist is nothing");
   assert.equal(classifyPose(PEN()).pose, "pen", "two fingers together is the pen");
-  assert.equal(classifyPose(PEACE()).pose, "none", "a peace sign is nothing");
+  assert.equal(classifyPose(PEACE()).pose, "v", "a peace sign is the V that toggles Voice Pin");
   assert.equal(classifyPose(hand(["ext", "ext", "ext", "curl"])).pose, "eraser", "three fingers together is the eraser");
   assert.equal(classifyPose(TALK()).pose, "none", "half-curled talking hands are nothing");
   assert.equal(classifyPose(FIST()).pose, "fist", "a raised fist");
@@ -234,6 +235,49 @@ test("releasing and re-touching the thumb-to-middle pinch drops a second stamp",
   run(tracker, firedAt + 33, firedAt + GRACE_MS + 200, POINT); // release: back to plain pointing, long enough to clear the grace period
   const second = run(tracker, firedAt + GRACE_MS + 300, firedAt + GRACE_MS + STAMP_HOLD_MS + 500, MIDPINCH);
   assert.equal(second.actions.filter(([, a]) => a.type === "stamp").length, 1, "a fresh touch fires again");
+});
+
+test("a held V-sign toggles Voice Pin once per hold, not repeatedly while held", () => {
+  const tracker = new GestureTracker();
+  const { actions } = run(tracker, 0, V_SIGN_HOLD_MS + 600, PEACE);
+  const toggles = actions.filter(([, a]) => a.type === "voice-toggle");
+  assert.equal(toggles.length, 1, "fires once, however long the V is held");
+  assert.ok(toggles[0][0] >= V_SIGN_HOLD_MS);
+});
+
+test("a V-sign shorter than the hold toggles nothing", () => {
+  const tracker = new GestureTracker();
+  const { actions } = run(tracker, 0, V_SIGN_HOLD_MS - 150, PEACE);
+  assert.equal(actions.filter(([, a]) => a.type === "voice-toggle").length, 0);
+});
+
+test("releasing and re-showing the V-sign toggles a second time", () => {
+  const tracker = new GestureTracker();
+  const first = run(tracker, 0, V_SIGN_HOLD_MS + 100, PEACE);
+  assert.equal(first.actions.filter(([, a]) => a.type === "voice-toggle").length, 1);
+  const firedAt = first.actions[0][0];
+  run(tracker, firedAt + 33, firedAt + GRACE_MS + 200, POINT); // release: back to plain pointing, long enough to clear the grace period
+  const second = run(tracker, firedAt + GRACE_MS + 300, firedAt + GRACE_MS + V_SIGN_HOLD_MS + 500, PEACE);
+  assert.equal(second.actions.filter(([, a]) => a.type === "voice-toggle").length, 1, "a fresh hold fires again");
+});
+
+test("voiceAnchor keeps the last pointer position even after the dot has fully faded, for the V-sign to pin to", () => {
+  const tracker = new GestureTracker();
+  run(tracker, 0, POINT_HOLD_MS + 100, POINT);
+  const p = POINT();
+  const afterFade = run(tracker, POINT_HOLD_MS + 133, POINT_HOLD_MS + 100 + GRACE_MS + POINTER_FADE_MS + 200, () => null);
+  assert.equal(afterFade.state.pointer, null, "the dot itself is gone");
+  assert.ok(afterFade.state.voiceAnchor, "but the anchor survives");
+  assert.ok(
+    Math.abs(afterFade.state.voiceAnchor!.u - p[8].x) < 1e-6 && Math.abs(afterFade.state.voiceAnchor!.v - p[8].y) < 1e-6,
+    "at the last place the host pointed",
+  );
+});
+
+test("voiceAnchor is null until the host has pointed at least once", () => {
+  const tracker = new GestureTracker();
+  const { state } = run(tracker, 0, V_SIGN_HOLD_MS + 100, PEACE);
+  assert.equal(state.voiceAnchor, null);
 });
 
 test("a held open palm resets once", () => {

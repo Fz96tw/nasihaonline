@@ -22,12 +22,11 @@ test("a preset with a partial field set never checks fields it omits, so it neve
   assert.equal(presetMatches(fields, { span: true, opacity: 0.45 }), true);
 });
 
-test("a preset whose fields are a strict subset of another's can match alongside it", () => {
+test("Voice Pin's checkbox unsyncs Whiteboard Mode's button the moment it drifts from the bundled value", () => {
   const whiteboard = ANNOTATION_PRESETS.find((p) => p.id === "whiteboard")!;
-  const pointerOnly = ANNOTATION_PRESETS.find((p) => p.id === "pointer-only")!;
-  const current = { gestures: true, arrowMode: false, penColor: "red" as const };
-  assert.equal(presetMatches(whiteboard.fields, current), true);
-  assert.equal(presetMatches(pointerOnly.fields, current), true, "Pointer Only's fields are a subset of Whiteboard Mode's, so both can match at once");
+  const current = { gestures: true, arrowMode: false, penColor: "red" as const, voicePin: true };
+  assert.equal(presetMatches(whiteboard.fields, current), true, "matches while voicePin still agrees with the bundled value");
+  assert.equal(presetMatches(whiteboard.fields, { ...current, voicePin: false }), false, "unticking the in-context Voice Pin checkbox un-highlights Whiteboard Mode's own button");
 });
 
 test("preset catalog matches the agreed spec", () => {
@@ -52,8 +51,7 @@ test("preset catalog matches the agreed spec", () => {
     ANNOTATION_PRESETS.map((p) => [p.id, p.fields]),
     [
       ["annotation-off", { gestures: false }],
-      ["whiteboard", { gestures: true, arrowMode: false, penColor: "red" }],
-      ["pointer-only", { gestures: true }],
+      ["whiteboard", { gestures: true, arrowMode: false, penColor: "red", voicePin: true }],
     ],
   );
 });

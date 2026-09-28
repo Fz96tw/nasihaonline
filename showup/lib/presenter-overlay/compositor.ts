@@ -57,6 +57,35 @@ export function isPresenterOverlaySupported(): boolean {
   return Boolean(Processor && Generator && typeof navigator.mediaDevices?.getDisplayMedia === "function" && typeof OffscreenCanvas !== "undefined");
 }
 
+// The (non-standard, not in TS's DOM lib) Web Speech API that Voice Pin dictates through. There is no way to
+// pass it an existing MediaStreamTrack or pick a device — `start()` always opens its own opaque capture from
+// whatever the browser/OS considers the default microphone.
+type SpeechRecognitionResultLike = ArrayLike<{ transcript: string }> & { isFinal: boolean };
+type SpeechRecognitionEventLike = { resultIndex: number; results: ArrayLike<SpeechRecognitionResultLike> };
+type SpeechRecognitionLike = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: unknown) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+};
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+function speechRecognitionCtor(): SpeechRecognitionCtor | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
+/** True on Chrome/Edge; false wherever the Web Speech API isn't implemented (Firefox, Safari). */
+export function isVoicePinSupported(): boolean {
+  return speechRecognitionCtor() !== null;
+}
+
 // Pinned to the installed package version so the JS glue and wasm always match.
 const MEDIAPIPE_WASM_BASE = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
 const SELFIE_SEGMENTER_MODEL =
@@ -117,6 +146,12 @@ export type PresenterOverlaySettings = {
   penColor: PenColor;
   /** Air-draw draws a straight arrow from where the pen started to where it is now, instead of following the fingertip. Host pen only. */
   arrowMode: boolean;
+  /**
+   * Voice Pin: hold the V-sign (index and middle apart) to dictate a caption at wherever the point pose last was,
+   * then hold V again to pin it there. Off by default; needs `gestures` on too, and does nothing in a browser
+   * without the (non-standard) Web Speech API.
+   */
+  voicePin: boolean;
   /** What the "L" gesture draws: a box or the ellipse inscribed in it. */
   shapeKind: "box" | "ellipse";
   /** What a thumb-to-middle-finger pinch stamps: a box, an ellipse, or plain text with no shape at all. */
@@ -165,6 +200,7 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   gestures: false,
   penColor: "red",
   arrowMode: false,
+  voicePin: false,
   shapeKind: "box",
   stampShapeKind: "box",
   stampText: "",
@@ -516,6 +552,13 @@ export async function startPresenterOverlayCompositor({
   /** Where a stamp would land (screen-content coordinates) while the pointer is live, so it can be previewed before it's dropped. */
   let stampPreviewAt: { x: number; y: number } | null = null;
   let trail: { x: number; y: number; t: number }[] = [];
+  // Voice Pin: the live Web Speech API session while capturing (null otherwise), the finalized transcript
+  // gathered so far, and where it's anchored (screen-content coordinates, fixed at the point pose's last spot
+  // when the V-sign turned capture on — not re-read every frame, since the hand is busy making the V by then).
+  let recognition: SpeechRecognitionLike | null = null;
+  let voiceCaptureOn = false;
+  let voiceText = "";
+  let voiceAnchorAt: { x: number; y: number } | null = null;
 
   const screenReader = new Processor({ track: screenTrack }).readable.getReader();
 
@@ -1097,6 +1140,44 @@ export async function startPresenterOverlayCompositor({
     }
   }
 
+  /**
+   * The live dictated caption while Voice Pin is capturing, at the fixed anchor the V-sign set, reprojected
+   * through the current zoom view every frame (so it stays on the same spot if the host zooms/pans while
+   * talking) — plus a pulsing dot beside it (distinct from the laser dot's steady glow) so it's obvious the
+   * mic is actually on. Nothing to preview before the first finalized word comes back.
+   */
+  function drawVoiceCaption(now: number, width: number, height: number) {
+    if (!voiceCaptureOn || !voiceAnchorAt) return;
+    const view = viewport.rect(now);
+    const at = screenToOutput(view, voiceAnchorAt.x, voiceAnchorAt.y);
+    const cx = at.x * width;
+    const cy = at.y * height;
+    const fontPx = height * STAMP_FONT_FRACTION;
+    const dotRadius = fontPx * 0.28;
+    outputCtx.save();
+    const pulse = 0.5 + 0.5 * Math.sin(now / 250);
+    outputCtx.globalAlpha = 0.6 + 0.4 * pulse;
+    outputCtx.fillStyle = "#ff3b30";
+    outputCtx.beginPath();
+    outputCtx.arc(cx, cy, dotRadius, 0, Math.PI * 2);
+    outputCtx.fill();
+    outputCtx.restore();
+    const text = cleanShapeText(voiceText);
+    if (!text) return;
+    outputCtx.save();
+    outputCtx.font = `600 ${fontPx}px sans-serif`;
+    outputCtx.textAlign = "left";
+    outputCtx.textBaseline = "middle";
+    outputCtx.lineJoin = "round";
+    outputCtx.lineWidth = Math.max(2, fontPx * 0.18);
+    outputCtx.strokeStyle = "rgba(0, 0, 0, 0.85)";
+    outputCtx.fillStyle = "#ffffff";
+    const textX = cx + dotRadius * 3;
+    outputCtx.strokeText(text, textX, cy);
+    outputCtx.fillText(text, textX, cy);
+    outputCtx.restore();
+  }
+
   /** The glowing red laser dot at the host's fingertip, with a short fading trail. */
   function drawLaser(now: number, height: number) {
     const placement = hostPlacement();
@@ -1150,10 +1231,12 @@ export async function startPresenterOverlayCompositor({
    * Drops a stamp centred on `at` (output-frame fraction coordinates): grows a box, ellipse or plain-text block to
    * fit whatever text is currently set, then pins it at that point. A no-op with no text to stamp.
    */
-  function commitStamp(now: number, at: { x: number; y: number }) {
-    const text = cleanShapeText(settings.stampText);
-    if (!text) return;
-    const kind = settings.stampShapeKind;
+  /**
+   * Grows a box, ellipse or plain-text block to fit `text`, then pins it centred on `center` (screen-content
+   * coordinates). Shared by the thumb-pinch stamp (aimed live, its own point each time) and Voice Pin (aimed once,
+   * where the point pose last was).
+   */
+  function commitTextMark(now: number, center: { x: number; y: number }, text: string, kind: "box" | "ellipse" | "text") {
     const fontPx = outputCanvas.height * STAMP_FONT_FRACTION;
     const maxWidthPx = outputCanvas.width * STAMP_MAX_WIDTH_FRACTION;
     const fitted = growToFit(text, maxWidthPx, fontPx, (candidate, fp) => {
@@ -1162,7 +1245,6 @@ export async function startPresenterOverlayCompositor({
     }, kind);
     if (!fitted) return;
     const view = viewport.rect(now);
-    const center = outputToScreen(view, at.x, at.y);
     const width = (fitted.width / outputCanvas.width) * view.width;
     const height = (fitted.height / outputCanvas.height) * view.height;
     board.begin(now, settings.penColor, HOST_OWNER, kind);
@@ -1170,6 +1252,87 @@ export async function startPresenterOverlayCompositor({
     board.add(center.x + width / 2, center.y + height / 2);
     const finished = board.end(now);
     if (finished) board.setText(finished.id, text);
+  }
+
+  function commitStamp(now: number, at: { x: number; y: number }) {
+    const text = cleanShapeText(settings.stampText);
+    if (!text) return;
+    commitTextMark(now, outputToScreen(viewport.rect(now), at.x, at.y), text, settings.stampShapeKind);
+  }
+
+  /** Starts Web Speech API capture, anchored at `anchor` (screen-content coordinates). No-op if unsupported or already on. */
+  function startVoiceCapture(anchor: { x: number; y: number }) {
+    const Ctor = speechRecognitionCtor();
+    if (!Ctor || voiceCaptureOn) return;
+    const rec = new Ctor();
+    rec.continuous = true;
+    rec.interimResults = false; // only finalized segments — no flicker as words get revised
+    rec.lang = "en-US";
+    rec.onresult = (event) => {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) voiceText = `${voiceText} ${result[0].transcript}`.trim();
+      }
+    };
+    rec.onerror = () => {}; // e.g. "no-speech": swallowed, capture just keeps waiting
+    rec.onend = () => {
+      // Some implementations end recognition after a pause even with continuous:true; restart while still on.
+      if (voiceCaptureOn) {
+        try {
+          rec.start();
+        } catch {
+          voiceCaptureOn = false;
+        }
+      }
+    };
+    try {
+      rec.start();
+    } catch {
+      return;
+    }
+    recognition = rec;
+    voiceCaptureOn = true;
+    voiceText = "";
+    voiceAnchorAt = anchor;
+  }
+
+  /** Stops capture and, if anything was said, pins it as a permanent label at the anchor. */
+  function stopVoiceCapture(now: number) {
+    if (!voiceCaptureOn) return;
+    voiceCaptureOn = false;
+    const rec = recognition;
+    recognition = null;
+    if (rec) {
+      rec.onend = null;
+      try {
+        rec.stop();
+      } catch {
+        /* already stopped */
+      }
+    }
+    const text = cleanShapeText(voiceText);
+    const anchor = voiceAnchorAt;
+    voiceText = "";
+    voiceAnchorAt = null;
+    if (text && anchor) commitTextMark(now, anchor, text, "text");
+  }
+
+  /** Drops whatever was captured without pinning it — turning `gestures` or `voicePin` off mid-dictation, or tearing the overlay down. */
+  function abortVoiceCapture() {
+    if (!voiceCaptureOn && !recognition) return;
+    voiceCaptureOn = false;
+    const rec = recognition;
+    recognition = null;
+    if (rec) {
+      rec.onend = null;
+      try {
+        rec.abort();
+      } catch {
+        /* already stopped */
+      }
+    }
+    voiceText = "";
+    voiceAnchorAt = null;
   }
 
   function setLabel(label: GestureState["label"] | "unavailable") {
@@ -1186,6 +1349,7 @@ export async function startPresenterOverlayCompositor({
       reactions.clear();
       gestureSpotlight = 0;
       handPoint = null;
+      abortVoiceCapture();
       if (pointer || lastLabel) {
         tracker = new GestureTracker();
         pointer = null;
@@ -1194,6 +1358,9 @@ export async function startPresenterOverlayCompositor({
       }
       return;
     }
+    // The host turned Voice Pin off mid-dictation (Fine-tune tab, or un-syncing from the Whiteboard preset):
+    // drop whatever was captured rather than pin a label the setting no longer allows.
+    if (!settings.voicePin && voiceCaptureOn) abortVoiceCapture();
     if (!hand) {
       if (!handLoading) {
         handLoading = true;
@@ -1276,6 +1443,17 @@ export async function startPresenterOverlayCompositor({
         viewport.reset(now);
         continue;
       }
+      if (action.type === "voice-toggle") {
+        if (!settings.voicePin) continue;
+        if (voiceCaptureOn) {
+          stopVoiceCapture(now);
+        } else if (state.voiceAnchor) {
+          const anchorOut = cameraToOutput(state.voiceAnchor.u, state.voiceAnchor.v, placement);
+          const anchorFraction = { x: Math.min(1, Math.max(0, anchorOut.x / outputCanvas.width)), y: Math.min(1, Math.max(0, anchorOut.y / outputCanvas.height)) };
+          startVoiceCapture(outputToScreen(viewport.rect(now), anchorFraction.x, anchorFraction.y));
+        }
+        continue;
+      }
       const out = cameraToOutput(action.u, action.v, placement);
       const at = { x: Math.min(1, Math.max(0, out.x / outputCanvas.width)), y: Math.min(1, Math.max(0, out.y / outputCanvas.height)) };
       if (action.type === "zoom") {
@@ -1352,6 +1530,7 @@ export async function startPresenterOverlayCompositor({
       });
     for (const source of drawable) drawGhost(source, source.box as GhostBox, height);
     drawLaser(now, height);
+    drawVoiceCaption(now, width, height);
     drawGuestPointers(height);
     drawReaction(now, width, height);
 
@@ -1480,6 +1659,7 @@ export async function startPresenterOverlayCompositor({
   function stop() {
     if (stopped) return;
     stopped = true;
+    abortVoiceCapture();
     screenReader.cancel().catch(() => {});
     for (const source of Array.from(sources.values())) source.reader.cancel().catch(() => {});
     sources.clear();
