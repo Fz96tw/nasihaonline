@@ -34,17 +34,19 @@ export const MIN_SHAPE_SIZE = 0.02;
  * "arrow" is a straight line with a head, "box" a rectangle and "ellipse" the ellipse inscribed in it, with those two
  * points as opposite corners. "text" is a stamp (Showup's gesture-dropped text stamps): the same two-corner rubber-band
  * shape as a box, but drawn as plain text with no border — its corners are grown to fit the text, not dragged by hand.
+ * "note" is Voice Pin's dictated label: a sticky-note-style bubble, its two corners grown to fit the text the same
+ * way as "text", just drawn with a background instead of plain floating letters.
  */
-export type StrokeKind = "free" | "arrow" | "box" | "ellipse" | "text";
+export type StrokeKind = "free" | "arrow" | "box" | "ellipse" | "text" | "note";
 
-/** Arrows, boxes, ellipses and text stamps are deliberate annotations: they never fade and stay until the host removes them. Freehand strokes still fade. */
+/** Arrows, boxes, ellipses, text stamps and notes are deliberate annotations: they never fade and stay until the host removes them. Freehand strokes still fade. */
 export function isPinnedKind(kind: StrokeKind): boolean {
-  return kind === "arrow" || kind === "box" || kind === "ellipse" || kind === "text";
+  return kind === "arrow" || kind === "box" || kind === "ellipse" || kind === "text" || kind === "note";
 }
 
-/** Boxes, ellipses and text stamps carry their text as the whole point of the mark; there is nowhere inside an arrow to put text. */
+/** Boxes, ellipses, text stamps and notes carry their text as the whole point of the mark; there is nowhere inside an arrow to put text. */
 export function takesText(kind: StrokeKind): boolean {
-  return kind === "box" || kind === "ellipse" || kind === "text";
+  return kind === "box" || kind === "ellipse" || kind === "text" || kind === "note";
 }
 
 /** Pinned marks (arrows, boxes, ellipses) kept at once; drawing another drops the oldest. */
@@ -59,9 +61,9 @@ export function cleanShapeText(text: string): string {
   return text.replace(/\s+/g, " ").trim().slice(0, MAX_TEXT_LENGTH).trim();
 }
 
-/** Kinds that are just two points, tail and latest fingertip. */
+/** Kinds that are just two points, tail and latest fingertip — hand-dragged, so a twitch shorter than MIN_SHAPE_SIZE/MIN_ARROW_LENGTH is discarded on end(). Text stamps and notes are also just two points, but grown to fit their text rather than dragged, so that twitch filter doesn't apply to them: a short word is still a real mark, not a twitch. */
 export function isRubberBand(kind: StrokeKind): boolean {
-  return kind !== "free";
+  return kind === "arrow" || kind === "box" || kind === "ellipse";
 }
 
 export type Stroke = {
@@ -79,7 +81,7 @@ export type Stroke = {
 };
 
 /** What the host UI needs to list and remove a pinned shape. */
-export type PinnedShape = { id: number; kind: "arrow" | "box" | "ellipse" | "text"; text: string };
+export type PinnedShape = { id: number; kind: "arrow" | "box" | "ellipse" | "text" | "note"; text: string };
 
 export class StrokeBoard {
   private strokes: Stroke[] = [];
@@ -206,7 +208,7 @@ export class StrokeBoard {
   pinnedShapes(): PinnedShape[] {
     return this.strokes
       .filter((stroke) => isPinnedKind(stroke.kind) && stroke.endedAt !== null)
-      .map((stroke) => ({ id: stroke.id, kind: stroke.kind as "arrow" | "box" | "ellipse" | "text", text: stroke.text ?? "" }));
+      .map((stroke) => ({ id: stroke.id, kind: stroke.kind as "arrow" | "box" | "ellipse" | "text" | "note", text: stroke.text ?? "" }));
   }
 
   /** Sets (or, with empty text, clears) a pinned shape's label. False when there's no such shape. */
@@ -372,10 +374,10 @@ function outlineSegments(stroke: Stroke): [{ x: number; y: number }, { x: number
 function strokeTouches(stroke: Stroke, x: number, y: number, radius: number, aspect: number): boolean {
   const points = stroke.points;
   if (points.length === 0) return false;
-  // A box, ellipse or text stamp is hit only on its outline (a stamp has no drawn border, but the same rectangle
-  // outline is used so pointing anywhere across its middle doesn't erase it, only its edge does); freehand
-  // strokes and arrows (pinned or not) are hit anywhere along their line.
-  if (stroke.kind === "box" || stroke.kind === "ellipse" || stroke.kind === "text") {
+  // A box, ellipse, text stamp or note is hit only on its outline (a stamp/note has no drawn border to touch, but
+  // the same rectangle outline is used so pointing anywhere across its middle doesn't erase it, only its edge
+  // does); freehand strokes and arrows (pinned or not) are hit anywhere along their line.
+  if (stroke.kind === "box" || stroke.kind === "ellipse" || stroke.kind === "text" || stroke.kind === "note") {
     if (points.length < 2) return false;
     return outlineSegments(stroke).some(([a, b]) => distanceToSegment(x, y, a, b, aspect) <= radius);
   }

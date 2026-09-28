@@ -388,6 +388,32 @@ test("end() returns the finished stroke for pinned kinds only, and nothing for f
   assert.equal(board.end(80), null, "nothing being drawn");
 });
 
+test("a Voice Pin note is pinned even when its grown bounds are narrower than MIN_SHAPE_SIZE, unlike a hand-dragged box", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "red", undefined, "note");
+  board.add(0.5, 0.5);
+  board.add(0.5 + MIN_SHAPE_SIZE / 4, 0.5 + MIN_SHAPE_SIZE / 4);
+  const finished = board.end(10);
+  assert.ok(finished && finished.kind === "note", "grown-to-fit text isn't a hand-dragged twitch, so it's kept regardless of size");
+  assert.equal(board.pinnedShapes().length, 1);
+});
+
+test("a note is pinned forever like other annotations, takes a label, and is hit-tested on its outline like a text stamp", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "red", undefined, "note");
+  board.add(0.2, 0.2);
+  board.add(0.4, 0.3);
+  const finished = board.end(10);
+  assert.ok(finished);
+  board.setText(finished!.id, "hello");
+  const much = 10 * 60 * 1000;
+  const shown = board.visible(much);
+  assert.equal(shown.length, 1);
+  assert.equal(shown[0].alpha, 1, "pinned, never fades");
+  assert.equal(shown[0].stroke.text, "hello");
+  assert.equal(board.eraseAt(0.2, 0.25, 0.01), 1, "touching the left edge erases it");
+});
+
 test("a shape still being drawn is not listed as pinned until it is finished", () => {
   const board = new StrokeBoard();
   board.begin(0, "red", undefined, "box");

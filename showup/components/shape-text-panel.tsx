@@ -155,7 +155,8 @@ export function ShapeTextPanel({
           {shapes.map((shape, index) => (
             <li key={shape.id} className="flex items-center justify-between gap-2 rounded bg-white/5 px-2 py-1">
               <span className="min-w-0 truncate">
-                {shape.text || `${shape.kind === "box" ? "Box" : shape.kind === "ellipse" ? "Ellipse" : shape.kind === "text" ? "Text stamp" : "Arrow"} ${index + 1}`}
+                {shape.text ||
+                  `${shape.kind === "box" ? "Box" : shape.kind === "ellipse" ? "Ellipse" : shape.kind === "text" ? "Text stamp" : shape.kind === "note" ? "Voice note" : "Arrow"} ${index + 1}`}
               </span>
               <button type="button" aria-label="Remove this shape" data-testid={`shape-remove-${shape.id}`} onClick={() => onRemove(shape.id)} className="text-white/60 hover:text-white">
                 <X className="h-3 w-3" aria-hidden />

@@ -1016,6 +1016,9 @@ export async function startPresenterOverlayCompositor({
       } else if (stroke.kind === "text") {
         // A stamp is its text alone: no border or fill, just the label drawn below.
         if (points.length < 2) continue;
+      } else if (stroke.kind === "note") {
+        // Voice Pin's sticky note draws its own bubble background below; nothing to stroke here.
+        if (points.length < 2) continue;
       } else if (points.length === 1) {
         outputCtx.lineTo(points[0].x + 0.1, points[0].y);
       } else {
@@ -1026,11 +1029,45 @@ export async function startPresenterOverlayCompositor({
         const last = points[points.length - 1];
         outputCtx.lineTo(last.x, last.y);
       }
-      if (stroke.kind !== "text") outputCtx.stroke();
-      if (stroke.text && (stroke.kind === "box" || stroke.kind === "ellipse" || stroke.kind === "text") && points.length >= 2) {
+      if (stroke.kind !== "text" && stroke.kind !== "note") outputCtx.stroke();
+      if (stroke.text && stroke.kind === "note" && points.length >= 2) {
+        drawPinnedNote(points[0], points[1], stroke.text, alpha);
+      } else if (stroke.text && (stroke.kind === "box" || stroke.kind === "ellipse" || stroke.kind === "text") && points.length >= 2) {
         drawShapeText(stroke.id, stroke.text, stroke.kind, shapeBounds(points[0], points[1]));
       }
     }
+    outputCtx.restore();
+  }
+
+  /** Voice Pin's pinned sticky note: the same bubble the live caption showed, frozen in place (no tail — that only makes sense while it's still following where the host is speaking). */
+  function drawPinnedNote(corner1: { x: number; y: number }, corner2: { x: number; y: number }, text: string, alpha: number) {
+    const bounds = shapeBounds(corner1, corner2);
+    outputCtx.save();
+    outputCtx.globalAlpha = alpha;
+    outputCtx.beginPath();
+    outputCtx.roundRect(bounds.x, bounds.y, bounds.width, bounds.height, Math.min(bounds.width, bounds.height) * VOICE_BUBBLE_RADIUS_FRACTION);
+    outputCtx.fillStyle = "rgba(255, 255, 255, 0.92)";
+    outputCtx.fill();
+    outputCtx.lineWidth = Math.max(1, Math.min(bounds.width, bounds.height) * 0.03);
+    outputCtx.strokeStyle = "rgba(0, 0, 0, 0.15)";
+    outputCtx.stroke();
+    outputCtx.restore();
+
+    const padding = Math.min(bounds.width, bounds.height) * 0.18;
+    const area = { x: bounds.x + padding, y: bounds.y + padding, width: bounds.width - padding * 2, height: bounds.height - padding * 2 };
+    const fitted = fitText(text, area, (candidate, fontPx) => {
+      outputCtx.font = `600 ${fontPx}px sans-serif`;
+      return outputCtx.measureText(candidate).width;
+    });
+    if (!fitted) return;
+    outputCtx.save();
+    outputCtx.globalAlpha = alpha;
+    outputCtx.font = `600 ${fitted.fontPx}px sans-serif`;
+    outputCtx.textAlign = "center";
+    outputCtx.textBaseline = "middle";
+    outputCtx.fillStyle = "#1a1a1a";
+    const top = area.y + area.height / 2 - (fitted.lines.length * fitted.lineHeight) / 2 + fitted.lineHeight / 2;
+    fitted.lines.forEach((line, i) => outputCtx.fillText(line, area.x + area.width / 2, top + i * fitted.lineHeight));
     outputCtx.restore();
   }
 
@@ -1332,20 +1369,34 @@ export async function startPresenterOverlayCompositor({
    * coordinates). Shared by the thumb-pinch stamp (aimed live, its own point each time) and Voice Pin (aimed once,
    * where the point pose last was).
    */
-  function commitTextMark(now: number, center: { x: number; y: number }, text: string, kind: "box" | "ellipse" | "text") {
+  function commitTextMark(now: number, center: { x: number; y: number }, text: string, kind: "box" | "ellipse" | "text" | "note") {
     const fontPx = outputCanvas.height * STAMP_FONT_FRACTION;
     const maxWidthPx = outputCanvas.width * STAMP_MAX_WIDTH_FRACTION;
+    // "note" grows to fit its text exactly like "text" does (no shape-fraction shrink) — the bubble padding
+    // added below is extra, not something growToFit itself needs to know about.
     const fitted = growToFit(text, maxWidthPx, fontPx, (candidate, fp) => {
       outputCtx.font = `600 ${fp}px sans-serif`;
       return outputCtx.measureText(candidate).width;
-    }, kind);
+    }, kind === "note" ? "text" : kind);
     if (!fitted) return;
     const view = viewport.rect(now);
     const width = (fitted.width / outputCanvas.width) * view.width;
     const height = (fitted.height / outputCanvas.height) * view.height;
     board.begin(now, settings.penColor, HOST_OWNER, kind);
-    board.add(center.x - width / 2, center.y - height / 2);
-    board.add(center.x + width / 2, center.y + height / 2);
+    if (kind === "note") {
+      // Same bubble padding/offset the live caption (drawVoiceCaption) uses, so pinning never visibly jumps —
+      // the bubble's own position freezes exactly where it already was; only its tail (drawn live only) goes.
+      const padding = ((fontPx * VOICE_BUBBLE_PADDING_FRACTION) / outputCanvas.height) * view.height;
+      const tailHeight = ((fontPx * VOICE_BUBBLE_TAIL_HEIGHT_FRACTION) / outputCanvas.height) * view.height;
+      const bubbleWidth = width + padding * 2;
+      const bubbleHeight = height + padding * 2;
+      const bubbleBottom = center.y - tailHeight;
+      board.add(center.x - bubbleWidth / 2, bubbleBottom - bubbleHeight);
+      board.add(center.x + bubbleWidth / 2, bubbleBottom);
+    } else {
+      board.add(center.x - width / 2, center.y - height / 2);
+      board.add(center.x + width / 2, center.y + height / 2);
+    }
     const finished = board.end(now);
     if (finished) board.setText(finished.id, text);
   }
@@ -1435,7 +1486,7 @@ export async function startPresenterOverlayCompositor({
     const anchor = voiceAnchorAt;
     voiceText = "";
     voiceAnchorAt = null;
-    if (text && anchor) commitTextMark(now, anchor, text, "text");
+    if (text && anchor) commitTextMark(now, anchor, text, "note");
   }
 
   /** Drops whatever was captured without pinning it — turning `gestures` or `voicePin` off mid-dictation, or tearing the overlay down. */
