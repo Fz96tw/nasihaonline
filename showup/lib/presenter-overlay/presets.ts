@@ -29,11 +29,16 @@ export function presetMatches<F extends Record<string, unknown>>(fields: F, curr
   return (Object.keys(fields) as (keyof F)[]).every((key) => current[key] === fields[key]);
 }
 
+// Every Look preset fully specifies `span` and `background` (even where its own look doesn't care about
+// one of them) — these are the two fields whose stale leftover value from a *previous* Look preset is
+// actually visible (span makes layoutGhosts ignore scale/position entirely; background swaps the whole
+// cutout-vs-panel render path) — so switching between any two Look presets always lands in a fully
+// coherent state instead of carrying over an invisible setting from whichever preset was applied before.
 export const LOOK_PRESETS: Preset<LookPresetFields>[] = [
-  { id: "pip", label: "Picture-in-Picture", fields: { scale: 0.3, background: "keep", panelShape: "rounded", opacity: 1, position: "right" } },
-  { id: "full-screen-reach", label: "Full-screen Reach", fields: { span: true, opacity: 0.45 } },
+  { id: "pip", label: "Picture-in-Picture", fields: { scale: 0.3, background: "keep", panelShape: "rounded", opacity: 1, position: "right", span: false } },
+  { id: "full-screen-reach", label: "Full-screen Reach", fields: { span: true, opacity: 0.45, background: "remove" } },
   { id: "talking-head", label: "Talking Head", fields: { scale: 1, position: "center", background: "remove", opacity: 1, span: false } },
-  { id: "minimal-corner", label: "Minimal Corner", fields: { scale: 0.3, opacity: 0.35, background: "remove", position: "left" } },
+  { id: "minimal-corner", label: "Minimal Corner", fields: { scale: 0.3, opacity: 0.35, background: "remove", position: "left", span: false } },
 ];
 
 export const TRUST_PRESETS: Preset<TrustPresetFields>[] = [
