@@ -107,6 +107,15 @@ const LASER_TRAIL_MS = 250;
 /** Voice Pin auto-stops (pinning whatever was said) once the hand has been fully out of frame this long — long
  * enough that gesturing naturally, or a brief tracking hiccup, doesn't cut a sentence off mid-way. */
 const VOICE_HAND_GONE_STOP_MS = 1500;
+/** The Voice Pin speech bubble's rounded-corner radius, tail size and content padding, all as fractions of the font size. */
+const VOICE_BUBBLE_RADIUS_FRACTION = 0.35;
+const VOICE_BUBBLE_PADDING_FRACTION = 0.7;
+const VOICE_BUBBLE_TAIL_HALF_WIDTH_FRACTION = 0.5;
+const VOICE_BUBBLE_TAIL_HEIGHT_FRACTION = 0.6;
+/** The "typing…" dots shown before any word has been recognized yet: diameter, gap and how often each bounces (staggered per dot). */
+const VOICE_TYPING_DOT_FRACTION = 0.32;
+const VOICE_TYPING_GAP_FRACTION = 0.4;
+const VOICE_TYPING_CYCLE_MS = 900;
 /** Voice Pin also auto-stops after this long with no speech activity at all (interim or final), whether that's
  * silence right from the start or a pause partway through a sentence. */
 const VOICE_SILENCE_STOP_MS = 3000;
@@ -1176,27 +1185,83 @@ export async function startPresenterOverlayCompositor({
     const cx = at.x * width;
     const cy = at.y * height;
     const fontPx = height * STAMP_FONT_FRACTION;
-    const dotRadius = fontPx * 0.28;
-    outputCtx.save();
-    const pulse = 0.5 + 0.5 * Math.sin(now / 250);
-    outputCtx.globalAlpha = 0.6 + 0.4 * pulse;
-    outputCtx.fillStyle = "#ff3b30";
-    outputCtx.beginPath();
-    outputCtx.arc(cx, cy, dotRadius, 0, Math.PI * 2);
-    outputCtx.fill();
-    outputCtx.restore();
+    const padding = fontPx * VOICE_BUBBLE_PADDING_FRACTION;
     const text = cleanShapeText(voiceText);
-    if (!text) return;
-    // Grows (never shrinks) to fit, same as the stamp preview — a longer dictated sentence wraps across
-    // several lines rather than running off the edge of the frame as one long line.
-    const maxWidthPx = width * STAMP_MAX_WIDTH_FRACTION;
-    const fitted = growToFit(text, maxWidthPx, fontPx, (candidate, fp) => {
-      outputCtx.font = `600 ${fp}px sans-serif`;
-      return outputCtx.measureText(candidate).width;
-    }, "text");
-    if (!fitted) return;
-    const textX = cx + dotRadius * 3;
-    drawShapeText(-1, text, "text", { x: textX, y: cy - fitted.height / 2, width: fitted.width, height: fitted.height });
+
+    // Before any word is recognized, the bubble holds a fixed-size "typing…" indicator; once text arrives, it
+    // holds that instead — same wrap-and-grow sizing as the stamp preview, so a longer sentence grows the
+    // bubble rather than running off the frame.
+    let contentWidth: number;
+    let contentHeight: number;
+    let lines: string[] | null = null;
+    let lineHeight = 0;
+    if (text) {
+      const maxWidthPx = width * STAMP_MAX_WIDTH_FRACTION;
+      const fitted = growToFit(text, maxWidthPx, fontPx, (candidate, fp) => {
+        outputCtx.font = `600 ${fp}px sans-serif`;
+        return outputCtx.measureText(candidate).width;
+      }, "text");
+      if (!fitted) return;
+      contentWidth = fitted.width;
+      contentHeight = fitted.height;
+      lines = fitted.lines;
+      lineHeight = fitted.lineHeight;
+    } else {
+      const dot = fontPx * VOICE_TYPING_DOT_FRACTION;
+      const gap = fontPx * VOICE_TYPING_GAP_FRACTION;
+      contentWidth = dot * 3 + gap * 2;
+      contentHeight = dot;
+    }
+
+    // A classic chat-bubble shape, its tail pointing straight down at the anchor — the tail itself marks the
+    // spot the old pointer dot used to, so there's no need for both.
+    const bubbleWidth = contentWidth + padding * 2;
+    const bubbleHeight = contentHeight + padding * 2;
+    const tailHeight = fontPx * VOICE_BUBBLE_TAIL_HEIGHT_FRACTION;
+    const tailHalfWidth = fontPx * VOICE_BUBBLE_TAIL_HALF_WIDTH_FRACTION;
+    const bubbleBottom = cy - tailHeight;
+    const bubbleTop = bubbleBottom - bubbleHeight;
+    const bubbleLeft = cx - bubbleWidth / 2;
+    const radius = Math.min(bubbleWidth, bubbleHeight) * VOICE_BUBBLE_RADIUS_FRACTION;
+
+    outputCtx.save();
+    outputCtx.beginPath();
+    outputCtx.roundRect(bubbleLeft, bubbleTop, bubbleWidth, bubbleHeight, radius);
+    outputCtx.moveTo(cx - tailHalfWidth, bubbleBottom);
+    outputCtx.lineTo(cx, cy);
+    outputCtx.lineTo(cx + tailHalfWidth, bubbleBottom);
+    outputCtx.closePath();
+    outputCtx.fillStyle = "rgba(255, 255, 255, 0.92)";
+    outputCtx.fill();
+    outputCtx.lineWidth = Math.max(1, fontPx * 0.03);
+    outputCtx.strokeStyle = "rgba(0, 0, 0, 0.15)";
+    outputCtx.stroke();
+    outputCtx.restore();
+
+    outputCtx.save();
+    if (lines) {
+      outputCtx.font = `600 ${fontPx}px sans-serif`;
+      outputCtx.textAlign = "center";
+      outputCtx.textBaseline = "middle";
+      outputCtx.fillStyle = "#1a1a1a";
+      const top = bubbleTop + padding + contentHeight / 2 - (lines.length * lineHeight) / 2 + lineHeight / 2;
+      lines.forEach((line, i) => outputCtx.fillText(line, cx, top + i * lineHeight));
+    } else {
+      const dot = fontPx * VOICE_TYPING_DOT_FRACTION;
+      const gap = fontPx * VOICE_TYPING_GAP_FRACTION;
+      const dotsY = bubbleTop + bubbleHeight / 2;
+      const startX = cx - contentWidth / 2 + dot / 2;
+      outputCtx.fillStyle = "rgba(60, 60, 60, 0.9)";
+      for (let i = 0; i < 3; i++) {
+        const phase = ((now / VOICE_TYPING_CYCLE_MS + i * 0.28) % 1) * Math.PI * 2;
+        const bounce = 0.5 + 0.5 * Math.sin(phase);
+        const x = startX + i * (dot + gap);
+        outputCtx.beginPath();
+        outputCtx.arc(x, dotsY - bounce * dot * 0.35, (dot / 2) * (0.6 + bounce * 0.5), 0, Math.PI * 2);
+        outputCtx.fill();
+      }
+    }
+    outputCtx.restore();
   }
 
   /** The glowing red laser dot at the host's fingertip, with a short fading trail. */
