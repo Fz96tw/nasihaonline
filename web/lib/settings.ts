@@ -57,6 +57,32 @@ export async function setWelcomeAnnouncementSettings(
   });
 }
 
+/** /admin/email-notifications — see SiteSettings.announcementEmailEnabled's schema comment. */
+export type BroadcastEmailSettings = {
+  announcementEmailEnabled: boolean;
+  eventAnnouncementEmailEnabled: boolean;
+};
+
+export async function getBroadcastEmailSettings(): Promise<BroadcastEmailSettings> {
+  const settings = await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID },
+    update: {},
+  });
+  return {
+    announcementEmailEnabled: settings.announcementEmailEnabled,
+    eventAnnouncementEmailEnabled: settings.eventAnnouncementEmailEnabled,
+  };
+}
+
+export async function setBroadcastEmailSettings(input: BroadcastEmailSettings): Promise<void> {
+  await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID, ...input },
+    update: input,
+  });
+}
+
 /** Quick Video Recording & Sharing initiative — see SiteSettings.quickRecordingMaxDurationSeconds's schema comment. */
 export async function getQuickRecordingMaxDuration(): Promise<number> {
   const settings = await db.siteSettings.upsert({

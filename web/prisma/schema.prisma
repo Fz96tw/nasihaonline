@@ -267,6 +267,17 @@ model SiteSettings {
   welcomeAnnouncementInFeed        Boolean        @default(true)
   welcomeAnnouncementNotify        Boolean        @default(true)
   welcomeAnnouncementEmail         Boolean        @default(true)
+  // Email Notifications admin page — a site-wide kill switch for the two
+  // "email every member" broadcast sends (Board Announcements and public
+  // Event Announcements/reminders), independent of any per-send checkbox
+  // an admin/host picks when composing one. Added because Resend's daily
+  // send quota is small enough that a single announcement or event, once
+  // membership grows past a couple hundred, can exhaust it by itself — the
+  // in-app feed/bell notification for both still fires either way. Default
+  // false: both start disabled (email-off, in-app-only) until an admin
+  // opts back in from /admin/email-notifications.
+  announcementEmailEnabled         Boolean        @default(false)
+  eventAnnouncementEmailEnabled    Boolean        @default(false)
   // Quick Video Recording & Sharing initiative — max length of a one-click
   // self/self quick recording, enforced both client-side (visible countdown,
   // LiveKitMeetingScreen) and server-side (an in-process delayed stopEgress

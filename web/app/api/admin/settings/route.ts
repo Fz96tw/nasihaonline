@@ -8,6 +8,8 @@ import {
   setAdmissionPhase,
   getWelcomeAnnouncementSettings,
   setWelcomeAnnouncementSettings,
+  getBroadcastEmailSettings,
+  setBroadcastEmailSettings,
   getQuickRecordingMaxDuration,
   setQuickRecordingMaxDuration,
   getSiteFonts,
@@ -19,6 +21,8 @@ const patchSchema = z.object({
   welcomeAnnouncementInFeed: z.boolean().optional(),
   welcomeAnnouncementNotify: z.boolean().optional(),
   welcomeAnnouncementEmail: z.boolean().optional(),
+  announcementEmailEnabled: z.boolean().optional(),
+  eventAnnouncementEmailEnabled: z.boolean().optional(),
   quickRecordingMaxDurationSeconds: z.number().int().min(1).max(3600).optional(),
   bodyFont: z.nativeEnum(BodyFont).optional(),
   headingFont: z.nativeEnum(HeadingFont).optional(),
@@ -30,6 +34,7 @@ export async function GET() {
     return NextResponse.json({
       admissionPhase: await getAdmissionPhase(),
       ...(await getWelcomeAnnouncementSettings()),
+      ...(await getBroadcastEmailSettings()),
       quickRecordingMaxDurationSeconds: await getQuickRecordingMaxDuration(),
       ...(await getSiteFonts()),
     });
@@ -70,6 +75,15 @@ export async function PATCH(request: Request) {
     });
   }
 
+  const { announcementEmailEnabled, eventAnnouncementEmailEnabled } = parsed.data;
+  if (announcementEmailEnabled !== undefined || eventAnnouncementEmailEnabled !== undefined) {
+    const current = await getBroadcastEmailSettings();
+    await setBroadcastEmailSettings({
+      announcementEmailEnabled: announcementEmailEnabled ?? current.announcementEmailEnabled,
+      eventAnnouncementEmailEnabled: eventAnnouncementEmailEnabled ?? current.eventAnnouncementEmailEnabled,
+    });
+  }
+
   if (parsed.data.quickRecordingMaxDurationSeconds !== undefined) {
     await setQuickRecordingMaxDuration(parsed.data.quickRecordingMaxDurationSeconds);
   }
@@ -86,6 +100,7 @@ export async function PATCH(request: Request) {
   return NextResponse.json({
     admissionPhase: await getAdmissionPhase(),
     ...(await getWelcomeAnnouncementSettings()),
+    ...(await getBroadcastEmailSettings()),
     quickRecordingMaxDurationSeconds: await getQuickRecordingMaxDuration(),
     ...(await getSiteFonts()),
   });

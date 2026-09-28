@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { NotificationType, Role, type Tier } from "@/lib/generated/prisma/enums";
 import { uploadAnnouncementHeroImage, getAnnouncementHeroImageUrl } from "@/lib/storage";
 import { sendAnnouncementEmail } from "@/lib/email";
+import { getBroadcastEmailSettings } from "@/lib/settings";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
@@ -15,6 +16,13 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
  * any NotificationPreference opt-out check: no other NotificationType
  * enforces opt-out yet either (that lands in a later objective), and Board
  * Announcements are specced to ignore it even once it exists.
+ *
+ * The email leg is additionally gated on SiteSettings.announcementEmailEnabled
+ * (/admin/email-notifications) — a site-wide kill switch, off by default,
+ * separate from `input.sendEmail`'s per-send checkbox. `input.sendEmail` is
+ * still stored on the Announcement row as the composer's stated intent even
+ * when the global switch suppresses the actual send, so history stays an
+ * honest record of what was chosen versus what the switch allowed through.
  *
  * `templateHeroImageUrl` supports "use as template" resends: when the admin
  * didn't pick a new file, the new Announcement reuses a prior announcement's
@@ -56,8 +64,10 @@ export async function createAndSendAnnouncement(
   });
 
   const detailPath = `/whats-new/announcements/${announcement.id}`;
+  const emailGloballyEnabled = (await getBroadcastEmailSettings()).announcementEmailEnabled;
+  const shouldEmail = input.sendEmail && emailGloballyEnabled;
 
-  if (input.notifyInApp || input.sendEmail) {
+  if (input.notifyInApp || shouldEmail) {
     const recipients = await db.user.findMany({
       where: { role: { in: [Role.member, Role.moderator, Role.admin] }, tier: { not: null } },
       select: { id: true, email: true, name: true },
@@ -75,7 +85,7 @@ export async function createAndSendAnnouncement(
         });
       }
 
-      if (input.sendEmail) {
+      if (shouldEmail) {
         // Best-effort per recipient, same rationale as every other email in
         // lib/email.ts — a failed/unconfigured send must not undo the broadcast,
         // whose Announcement + Notification rows already exist by this point.

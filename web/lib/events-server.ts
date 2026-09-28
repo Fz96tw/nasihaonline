@@ -48,6 +48,7 @@ import {
   sendRsvpConfirmationEmail,
 } from "@/lib/email";
 import { formatEventDateTime, formatEventTime } from "@/lib/format-date";
+import { getBroadcastEmailSettings } from "@/lib/settings";
 import { createForumPost } from "@/lib/forums-server";
 import { enqueueForumThreadIndexSync } from "@/lib/queues/search-index-queue";
 import { buildRRule, buildRRuleString, describeRecurrence, expandOccurrences, type RecurrenceInput } from "@/lib/recurrence";
@@ -1378,6 +1379,12 @@ async function broadcastEventNotification(
  * "scheduled a new event" copy for "reminder" copy on a manual resend
  * (resendEventNotifications) — the automatic send at creation time never
  * sets it.
+ *
+ * Gated on SiteSettings.eventAnnouncementEmailEnabled (/admin/email-notifications)
+ * — off by default. The in-app bell notification (broadcastEventNotification,
+ * called by every caller of this function regardless) still fires either way;
+ * this only suppresses the member-email leg, same kill-switch shape as
+ * createAndSendAnnouncement's announcementEmailEnabled check.
  */
 async function emailEventBroadcast(
   users: { email: string; name: string | null }[],
@@ -1392,6 +1399,8 @@ async function emailEventBroadcast(
   },
 ): Promise<void> {
   if (users.length === 0) return;
+  const { eventAnnouncementEmailEnabled } = await getBroadcastEmailSettings();
+  if (!eventAnnouncementEmailEnabled) return;
   const link = `${APP_URL}/calendar/${params.eventId}`;
   await Promise.allSettled(
     users.map((user) =>
