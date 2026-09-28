@@ -104,6 +104,9 @@ const MIN_FRAME_INTERVAL_MS = 1000 / 20;
 const HAND_INTERVAL_MS = 70;
 /** The laser dot's trail lasts this long. */
 const LASER_TRAIL_MS = 250;
+/** Voice Pin auto-stops (pinning whatever was said) once the hand has been fully out of frame this long — long
+ * enough that gesturing naturally, or a brief tracking hiccup, doesn't cut a sentence off mid-way. */
+const VOICE_HAND_GONE_STOP_MS = 1500;
 /** The dimmed area's darkness, and the spotlight's radius as a fraction of the frame height. */
 const SPOTLIGHT_DIM = 0.65;
 const SPOTLIGHT_RADIUS = 0.12;
@@ -568,6 +571,8 @@ export async function startPresenterOverlayCompositor({
   let voiceCaptureOn = false;
   let voiceText = "";
   let voiceAnchorAt: { x: number; y: number } | null = null;
+  /** When the hand was last seen at all (any pose); null while a hand is currently visible. Drives the auto-stop below. */
+  let voiceHandGoneSince: number | null = null;
 
   const screenReader = new Processor({ track: screenTrack }).readable.getReader();
 
@@ -1428,6 +1433,15 @@ export async function startPresenterOverlayCompositor({
     }
     gestureSpotlight = state.spotlight ? state.spotlight.alpha : 0;
     handPoint = state.hand;
+    // Voice Pin has no continuously-held pose (unlike pen/eraser) to end capture when it's released, since
+    // holding a V for a whole sentence isn't practical — so instead, a hand that's genuinely gone (not just
+    // between poses) for a while means the host is done talking and moved on.
+    if (state.hand) {
+      voiceHandGoneSince = null;
+    } else {
+      voiceHandGoneSince ??= now;
+      if (voiceCaptureOn && now - voiceHandGoneSince >= VOICE_HAND_GONE_STOP_MS) stopVoiceCapture(now);
+    }
     // Air-draw: the pen tip (two fingers) or the shape corner (the "L") goes through the same ghost mapping as the laser,
     // then to screen coordinates through the current zoom view. Only one of them is ever active.
     const hostTip = state.pen ?? state.shape;
