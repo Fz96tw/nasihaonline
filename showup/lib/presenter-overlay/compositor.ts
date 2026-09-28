@@ -591,6 +591,8 @@ export async function startPresenterOverlayCompositor({
   let voiceAutoFromDraw = false;
   /** True once any speech (interim or final) has been recognized during the current capture. */
   let voiceHasSpoken = false;
+  /** The freehand stroke (by id) this capture was auto-triggered from, if any — pinned (kept from fading) once the caption actually commits, so the mark and its caption stay or go together. Arrows need no such tracking; they're pinned by kind already. */
+  let voiceLinkedStrokeId: number | null = null;
 
   const screenReader = new Processor({ track: screenTrack }).readable.getReader();
 
@@ -1344,9 +1346,10 @@ export async function startPresenterOverlayCompositor({
   /** Finishes the presenter's stroke; an arrow, box or ellipse that survives is pinned, and a box or ellipse can then be labelled. */
   function endHostStroke(now: number) {
     // Read before end() — a freehand stroke isn't a pinned kind, so end() itself returns null for it (see
-    // drawing.ts's own comment on currentPoints), leaving this as the only way to get its start point.
+    // drawing.ts's own comment on currentPoints), leaving this as the only way to get its start point and id.
     const kind = board.kindOf();
     const freeStart = kind === "free" ? board.currentPoints()?.[0] ?? null : null;
+    const freeId = kind === "free" ? board.currentId() : null;
     const finished = board.end(now);
     // Only a box or ellipse drawn this way can take a label, so only they open the prompt; an arrow is pinned
     // quietly (the list still updates). A stamp (also `takesText`) never reaches here — commitStamp finishes and
@@ -1356,8 +1359,15 @@ export async function startPresenterOverlayCompositor({
     // point, without needing the V-sign at all. Boxes/ellipses already have their own typed-label prompt above,
     // so they're deliberately excluded. Never steps on a session already running (manual or another auto one).
     if (!settings.voicePin || voiceCaptureOn) return;
-    if (kind === "free" && freeStart) startVoiceCapture(freeStart, true);
-    else if (finished?.kind === "arrow") startVoiceCapture(finished.points[0], true);
+    if (kind === "free" && freeStart) {
+      startVoiceCapture(freeStart, true, freeId);
+      // Exempted from fading right away, not just once the caption commits — otherwise a longer sentence could
+      // easily outlast the mark's normal ~3s fade before there's anything to pin it for. stopVoiceCapture /
+      // abortVoiceCapture let it resume fading (from that later moment) if nothing ends up being said.
+      if (voiceCaptureOn && freeId !== null) board.pin(freeId);
+    } else if (finished?.kind === "arrow") {
+      startVoiceCapture(finished.points[0], true);
+    }
   }
 
   /**
@@ -1412,7 +1422,7 @@ export async function startPresenterOverlayCompositor({
    * already on. `autoFromDraw` marks a capture started by finishing a stroke rather than an explicit V-sign —
    * only that kind can be cancelled by a fresh point elsewhere before any speech (see `runGestures`).
    */
-  function startVoiceCapture(anchor: { x: number; y: number }, autoFromDraw = false) {
+  function startVoiceCapture(anchor: { x: number; y: number }, autoFromDraw = false, linkedStrokeId: number | null = null) {
     const Ctor = speechRecognitionCtor();
     if (!Ctor || voiceCaptureOn) return;
     const rec = new Ctor();
@@ -1466,6 +1476,7 @@ export async function startPresenterOverlayCompositor({
     voiceLastActivityAt = performance.now();
     voiceAutoFromDraw = autoFromDraw;
     voiceHasSpoken = false;
+    voiceLinkedStrokeId = linkedStrokeId;
   }
 
   /** Stops capture and, if anything was said, pins it as a permanent label at the anchor. */
@@ -1484,9 +1495,18 @@ export async function startPresenterOverlayCompositor({
     }
     const text = cleanShapeText(voiceText);
     const anchor = voiceAnchorAt;
+    const linkedStrokeId = voiceLinkedStrokeId;
     voiceText = "";
     voiceAnchorAt = null;
-    if (text && anchor) commitTextMark(now, anchor, text, "note");
+    voiceLinkedStrokeId = null;
+    if (text && anchor) {
+      commitTextMark(now, anchor, text, "note");
+      // The linked air-draw mark (if any) was already exempted from fading when capture started; it just stays that way.
+    } else if (linkedStrokeId !== null) {
+      // Nothing was said after all: let the mark resume fading, starting fresh from now rather than from
+      // whenever it actually finished drawing.
+      board.unpin(linkedStrokeId, now);
+    }
   }
 
   /** Drops whatever was captured without pinning it — turning `gestures` or `voicePin` off mid-dictation, or tearing the overlay down. */
@@ -1503,8 +1523,10 @@ export async function startPresenterOverlayCompositor({
         /* already stopped */
       }
     }
+    if (voiceLinkedStrokeId !== null) board.unpin(voiceLinkedStrokeId, performance.now());
     voiceText = "";
     voiceAnchorAt = null;
+    voiceLinkedStrokeId = null;
   }
 
   function setLabel(label: GestureState["label"] | "unavailable") {

@@ -46,6 +46,36 @@ test("a finished stroke holds, then fades out about 3 seconds after it ended, an
   assert.equal(board.pointCount, 0);
 });
 
+test("pin() exempts a freehand stroke from fading; unpin() lets it resume, fading fresh from the given time", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "red", undefined, "free");
+  board.add(0.1, 0.1);
+  board.add(0.3, 0.3);
+  board.end(1000);
+  const strokeId = board.visible(1000)[0].stroke.id;
+  assert.equal(board.pin(strokeId), true);
+  const wayLater = 1000 + HOLD_MS + FADE_MS + 5000;
+  assert.equal(board.visible(wayLater).length, 1, "pinned, so it never fades");
+  assert.equal(board.visible(wayLater)[0].alpha, 1);
+
+  assert.equal(board.unpin(strokeId, wayLater), true, "unpinning at wayLater resets its fade clock to wayLater");
+  assert.equal(board.visible(wayLater).length, 1, "still fully visible the instant it's unpinned");
+  assert.equal(board.visible(wayLater + HOLD_MS).length, 1, "holds for HOLD_MS from the unpin time, not from when it was drawn");
+  assert.equal(board.visible(wayLater + HOLD_MS + FADE_MS).length, 0, "then fades out on the usual schedule");
+});
+
+test("pin()/unpin() are no-ops on the wrong id, an already-pinned-by-kind shape, or a stroke still being drawn", () => {
+  const board = new StrokeBoard();
+  assert.equal(board.pin(999), false, "no such stroke");
+  board.begin(0, "red", undefined, "free");
+  board.add(0.1, 0.1);
+  assert.equal(board.pin(1), false, "still being drawn, not yet ended");
+  board.end(10);
+  assert.equal(board.unpin(1, 20), false, "wasn't pinned in the first place");
+  const box = pin(board, 100, "box");
+  assert.equal(board.pin(box!.id), false, "a pinned-by-kind shape doesn't need pin()");
+});
+
 test("each stroke fades on its own clock", () => {
   const board = new StrokeBoard();
   board.begin(0, "red");

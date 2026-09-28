@@ -78,6 +78,12 @@ export type Stroke = {
   points: { x: number; y: number }[];
   /** When the stroke was finished; null while it's still being drawn. */
   endedAt: number | null;
+  /**
+   * A normally-fading kind (freehand) that's been individually exempted from fading via `pin()` — e.g. Voice
+   * Pin keeping the air-draw mark its caption is anchored to around for as long as the caption itself. Never
+   * set on an already-pinned kind, which doesn't need it.
+   */
+  pinned?: boolean;
 };
 
 /** What the host UI needs to list and remove a pinned shape. */
@@ -111,6 +117,37 @@ export class StrokeBoard {
    */
   currentPoints(owner: string = HOST_OWNER): readonly { x: number; y: number }[] | null {
     return this.current.get(owner)?.points ?? null;
+  }
+
+  /** The id of the stroke `owner` is drawing right now, or null if they aren't drawing — same "read before end()" need as `currentPoints`. */
+  currentId(owner: string = HOST_OWNER): number | null {
+    return this.current.get(owner)?.id ?? null;
+  }
+
+  /**
+   * Exempts one already-finished, normally-fading stroke (freehand) from fading, without changing its kind or
+   * its rendering — e.g. keeping an air-draw mark around for as long as a Voice Pin caption anchored to it.
+   * False if there's no such stroke (already gone, wrong id, or already a pinned kind that doesn't need this).
+   */
+  pin(id: number): boolean {
+    const stroke = this.strokes.find((other) => other.id === id && other.endedAt !== null && !isPinnedKind(other.kind));
+    if (!stroke) return false;
+    stroke.pinned = true;
+    return true;
+  }
+
+  /**
+   * The inverse of `pin()`: lets a stroke resume fading, starting fresh from `now` rather than from whenever it
+   * actually finished — e.g. Voice Pin decided against captioning an air-draw mark after all, and the mark
+   * shouldn't vanish the instant that's decided just because time passed while capture was pending. False if
+   * there's no such currently-pinned (via `pin()`) stroke.
+   */
+  unpin(id: number, now: number): boolean {
+    const stroke = this.strokes.find((other) => other.id === id && other.pinned);
+    if (!stroke) return false;
+    stroke.pinned = false;
+    stroke.endedAt = now;
+    return true;
   }
 
   /** Everyone with a stroke in progress. */
@@ -262,10 +299,10 @@ export class StrokeBoard {
   /** Drops strokes that have faded out, then returns the rest with their opacity (1 while drawing or holding, fading to 0). */
   visible(now: number): { stroke: Stroke; alpha: number }[] {
     this.strokes = this.strokes.filter(
-      (stroke) => this.isCurrent(stroke) || isPinnedKind(stroke.kind) || (stroke.endedAt !== null && now - stroke.endedAt < HOLD_MS + FADE_MS),
+      (stroke) => this.isCurrent(stroke) || isPinnedKind(stroke.kind) || stroke.pinned || (stroke.endedAt !== null && now - stroke.endedAt < HOLD_MS + FADE_MS),
     );
     return this.strokes.map((stroke) => {
-      if (isPinnedKind(stroke.kind)) return { stroke, alpha: 1 };
+      if (isPinnedKind(stroke.kind) || stroke.pinned) return { stroke, alpha: 1 };
       const age = stroke.endedAt === null ? 0 : now - stroke.endedAt;
       return { stroke, alpha: age <= HOLD_MS ? 1 : Math.max(0, 1 - (age - HOLD_MS) / FADE_MS) };
     });
@@ -293,8 +330,8 @@ export class StrokeBoard {
   private enforceCap() {
     let excess = this.pointCount - MAX_POINTS;
     while (excess > 0) {
-      // Pinned shapes are never dropped to make room for freehand points (they cost two points each and are capped on their own).
-      const oldest = this.strokes.find((stroke) => !isPinnedKind(stroke.kind));
+      // Pinned shapes (by kind, or individually via pin()) are never trimmed to make room for ordinary freehand points.
+      const oldest = this.strokes.find((stroke) => !isPinnedKind(stroke.kind) && !stroke.pinned);
       if (!oldest) break;
       if (oldest.points.length <= excess && !this.isCurrent(oldest)) {
         excess -= oldest.points.length;
