@@ -107,8 +107,11 @@ const LASER_TRAIL_MS = 250;
 /** Voice Pin auto-stops (pinning whatever was said) once the hand has been fully out of frame this long — long
  * enough that gesturing naturally, or a brief tracking hiccup, doesn't cut a sentence off mid-way. */
 const VOICE_HAND_GONE_STOP_MS = 1500;
-/** The Voice Pin speech bubble's rounded-corner radius, tail size and content padding, all as fractions of the font size. */
-const VOICE_BUBBLE_RADIUS_FRACTION = 0.35;
+/** The sticky-note look: a warm, translucent yellow — deliberately see-through so it never blocks the shared screen underneath, live or pinned. */
+const VOICE_BUBBLE_FILL = "rgba(255, 235, 130, 0.55)";
+const VOICE_BUBBLE_BORDER = "rgba(0, 0, 0, 0.15)";
+/** The Voice Pin sticky note's corner radius (0 = square, like a real sticky note), tail size and content padding, all as fractions of the font size. */
+const VOICE_BUBBLE_RADIUS_FRACTION = 0;
 const VOICE_BUBBLE_PADDING_FRACTION = 0.7;
 const VOICE_BUBBLE_TAIL_HALF_WIDTH_FRACTION = 0.5;
 const VOICE_BUBBLE_TAIL_HEIGHT_FRACTION = 0.6;
@@ -138,6 +141,10 @@ const CROSSFADE_MS = 300;
 const STAMP_FONT_FRACTION = 0.05;
 /** A stamp wraps once its text would be wider than this fraction of the output canvas width. */
 const STAMP_MAX_WIDTH_FRACTION = 0.32;
+/** Voice Pin's own font size — half of the stamp tool's, since a sticky note reads fine smaller and a bigger
+ * one felt oversized. Drives both the live bubble and, by sizing the bubble at commit time, the pinned note
+ * (fitText then fills whatever box that produced). */
+const VOICE_FONT_FRACTION = STAMP_FONT_FRACTION / 2;
 
 export type OverlayCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
@@ -1050,10 +1057,10 @@ export async function startPresenterOverlayCompositor({
     outputCtx.globalAlpha = alpha;
     outputCtx.beginPath();
     outputCtx.roundRect(bounds.x, bounds.y, bounds.width, bounds.height, Math.min(bounds.width, bounds.height) * VOICE_BUBBLE_RADIUS_FRACTION);
-    outputCtx.fillStyle = "rgba(255, 255, 255, 0.92)";
+    outputCtx.fillStyle = VOICE_BUBBLE_FILL;
     outputCtx.fill();
     outputCtx.lineWidth = Math.max(1, Math.min(bounds.width, bounds.height) * 0.03);
-    outputCtx.strokeStyle = "rgba(0, 0, 0, 0.15)";
+    outputCtx.strokeStyle = VOICE_BUBBLE_BORDER;
     outputCtx.stroke();
     outputCtx.restore();
 
@@ -1225,7 +1232,7 @@ export async function startPresenterOverlayCompositor({
     const at = screenToOutput(view, voiceAnchorAt.x, voiceAnchorAt.y);
     const cx = at.x * width;
     const cy = at.y * height;
-    const fontPx = height * STAMP_FONT_FRACTION;
+    const fontPx = height * VOICE_FONT_FRACTION;
     const padding = fontPx * VOICE_BUBBLE_PADDING_FRACTION;
     // Includes the still-in-progress segment's latest guess, not just finalized words — so the live caption
     // shows something as soon as the recognizer has any guess at all, rather than sitting on typing dots until
@@ -1276,10 +1283,10 @@ export async function startPresenterOverlayCompositor({
     outputCtx.lineTo(cx, cy);
     outputCtx.lineTo(cx + tailHalfWidth, bubbleBottom);
     outputCtx.closePath();
-    outputCtx.fillStyle = "rgba(255, 255, 255, 0.92)";
+    outputCtx.fillStyle = VOICE_BUBBLE_FILL;
     outputCtx.fill();
     outputCtx.lineWidth = Math.max(1, fontPx * 0.03);
-    outputCtx.strokeStyle = "rgba(0, 0, 0, 0.15)";
+    outputCtx.strokeStyle = VOICE_BUBBLE_BORDER;
     outputCtx.stroke();
     outputCtx.restore();
 
@@ -1386,7 +1393,7 @@ export async function startPresenterOverlayCompositor({
    * where the point pose last was).
    */
   function commitTextMark(now: number, center: { x: number; y: number }, text: string, kind: "box" | "ellipse" | "text" | "note") {
-    const fontPx = outputCanvas.height * STAMP_FONT_FRACTION;
+    const fontPx = outputCanvas.height * (kind === "note" ? VOICE_FONT_FRACTION : STAMP_FONT_FRACTION);
     const maxWidthPx = outputCanvas.width * STAMP_MAX_WIDTH_FRACTION;
     // "note" grows to fit its text exactly like "text" does (no shape-fraction shrink) — the bubble padding
     // added below is extra, not something growToFit itself needs to know about.
