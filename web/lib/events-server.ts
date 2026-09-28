@@ -241,13 +241,20 @@ export function isEventVisibleToMember(
  * Query-level counterpart to isEventVisibleToMember — spread alongside
  * `visibility: EventVisibility.community` in a where clause's OR branch
  * (never used standalone, since it says nothing about `invited` events).
- * `{}` for a member who follows all communities (no extra restriction);
- * otherwise matches an untagged (grandfathered) event OR one tagged with a
- * community the member belongs to.
+ * `{}` (no extra restriction) for a member who follows all communities, or
+ * for `member === null` — a signed-out visitor, or the rare signed-in
+ * member with no profile row yet. Per PRD §4.6, a `visibility: community`
+ * event is "fully public"; the topic-community tag (community-based-
+ * categorization initiative) is a categorization/browse-filter label, not
+ * an audience-restriction mechanism — that's what `Event.visibility:
+ * invited` is for — so it must never narrow what an anonymous visitor to
+ * the public /events listing can see. A signed-in member who follows only
+ * specific communities still gets narrowed to an untagged (grandfathered)
+ * event OR one tagged with a community they belong to.
  */
 export function communityVisibilityWhere(member: MemberCommunityContext | null): Prisma.EventWhereInput {
-  if (member?.followsAllCommunities) return {};
-  const memberCommunityIds = member?.communityIds ?? [];
+  if (!member || member.followsAllCommunities) return {};
+  const memberCommunityIds = member.communityIds;
   return {
     OR: [
       { communities: { none: {} } },

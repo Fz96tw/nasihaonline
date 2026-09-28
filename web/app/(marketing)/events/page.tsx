@@ -25,18 +25,25 @@ export default async function EventsPage({
   const user = await getSessionUser();
   const isSignedIn = Boolean(user);
 
+  // Community/category browse filtering (community-based-categorization
+  // initiative) only means something for a signed-in member — it's built
+  // around "my own communities" personalization, and now that a tag is
+  // purely a categorization label (not an audience restriction), a
+  // signed-out visitor gets the plain, unfiltered public list instead:
+  // simpler, and free of a membership-flavored filter that doesn't apply
+  // to them.
   const [profile, communities, categories] = await Promise.all([
     user ? getOrCreateProfile(user.id) : null,
-    getAllCommunities(),
-    getEventCategories(),
+    isSignedIn ? getAllCommunities() : Promise.resolve([]),
+    isSignedIn ? getEventCategories() : Promise.resolve([]),
   ]);
-  const selectedCommunity = communities.find((c) => c.slug === searchParams.community) ?? null;
-  const selectedCategory = categories.find((c) => c.slug === searchParams.category) ?? null;
-  const communityIds = getDefaultCommunityFilter(profile, selectedCommunity?.id);
+  const selectedCommunity = isSignedIn ? (communities.find((c) => c.slug === searchParams.community) ?? null) : null;
+  const selectedCategory = isSignedIn ? (categories.find((c) => c.slug === searchParams.category) ?? null) : null;
+  const communityIds = isSignedIn ? getDefaultCommunityFilter(profile, selectedCommunity?.id) : undefined;
 
   const events = await getEventsForViewer(user?.id ?? null, {
     communityIds,
-    categorySlug: searchParams.category,
+    categorySlug: isSignedIn ? searchParams.category : undefined,
   });
 
   // Deliberately a second, unfiltered, always-anonymous query rather than
@@ -63,27 +70,29 @@ export default async function EventsPage({
       </section>
 
       <section className="mx-auto flex max-w-[1120px] flex-col gap-6 px-8 py-16">
-        <CommunityCategoryFilter
-          communities={communities}
-          categories={categories}
-          selectedCommunityId={selectedCommunity?.id ?? null}
-          selectedCategoryId={selectedCategory?.id ?? null}
-          buildHref={(next) => {
-            const params = new URLSearchParams();
-            const communitySlug = next.communityId
-              ? communities.find((c) => c.id === next.communityId)?.slug
-              : undefined;
-            if (communitySlug) params.set("community", communitySlug);
-            const categorySlug = next.categoryId ? categories.find((c) => c.id === next.categoryId)?.slug : undefined;
-            if (categorySlug) params.set("category", categorySlug);
-            const qs = params.toString();
-            return qs ? `/events?${qs}` : "/events";
-          }}
-        />
+        {isSignedIn && (
+          <CommunityCategoryFilter
+            communities={communities}
+            categories={categories}
+            selectedCommunityId={selectedCommunity?.id ?? null}
+            selectedCategoryId={selectedCategory?.id ?? null}
+            buildHref={(next) => {
+              const params = new URLSearchParams();
+              const communitySlug = next.communityId
+                ? communities.find((c) => c.id === next.communityId)?.slug
+                : undefined;
+              if (communitySlug) params.set("community", communitySlug);
+              const categorySlug = next.categoryId ? categories.find((c) => c.id === next.categoryId)?.slug : undefined;
+              if (categorySlug) params.set("category", categorySlug);
+              const qs = params.toString();
+              return qs ? `/events?${qs}` : "/events";
+            }}
+          />
+        )}
 
         {events.length === 0 ? (
           <p className="text-center text-muted-foreground">
-            {searchParams.community || searchParams.category
+            {isSignedIn && (searchParams.community || searchParams.category)
               ? "No events match your filters."
               : "No upcoming events right now — check back soon."}
           </p>
