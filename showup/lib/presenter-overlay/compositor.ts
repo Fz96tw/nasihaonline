@@ -1173,18 +1173,16 @@ export async function startPresenterOverlayCompositor({
     outputCtx.restore();
     const text = cleanShapeText(voiceText);
     if (!text) return;
-    outputCtx.save();
-    outputCtx.font = `600 ${fontPx}px sans-serif`;
-    outputCtx.textAlign = "left";
-    outputCtx.textBaseline = "middle";
-    outputCtx.lineJoin = "round";
-    outputCtx.lineWidth = Math.max(2, fontPx * 0.18);
-    outputCtx.strokeStyle = "rgba(0, 0, 0, 0.85)";
-    outputCtx.fillStyle = "#ffffff";
+    // Grows (never shrinks) to fit, same as the stamp preview — a longer dictated sentence wraps across
+    // several lines rather than running off the edge of the frame as one long line.
+    const maxWidthPx = width * STAMP_MAX_WIDTH_FRACTION;
+    const fitted = growToFit(text, maxWidthPx, fontPx, (candidate, fp) => {
+      outputCtx.font = `600 ${fp}px sans-serif`;
+      return outputCtx.measureText(candidate).width;
+    }, "text");
+    if (!fitted) return;
     const textX = cx + dotRadius * 3;
-    outputCtx.strokeText(text, textX, cy);
-    outputCtx.fillText(text, textX, cy);
-    outputCtx.restore();
+    drawShapeText(-1, text, "text", { x: textX, y: cy - fitted.height / 2, width: fitted.width, height: fitted.height });
   }
 
   /** The glowing red laser dot at the host's fingertip, with a short fading trail. */
