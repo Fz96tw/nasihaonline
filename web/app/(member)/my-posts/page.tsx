@@ -45,7 +45,7 @@ export default async function MyPostsPage() {
 
   const [submissions, events, threads, meetings] = await Promise.all([
     getMySubmissions(user.id),
-    getEventsHostedByMember(user.id, user.id),
+    getEventsHostedByMember(user.id, user.id, true),
     getMemberForumThreads(user.id, user.id, true),
     getMyMeetingRequests(user.id),
   ]);

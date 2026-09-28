@@ -1018,12 +1018,25 @@ export async function getTrendingEvents(
  * bypass, matching every other events read path's convention — an admin
  * discovers a restricted event only if they're independently the host or
  * invited, same as any other member.
+ *
+ * `includeCancelled` defaults to false — a public profile visitor shouldn't
+ * see a cancelled event mixed into this host's list with no indication it's
+ * dead (MemberHostedEvents, unlike /my-posts' ActivityTable, renders no
+ * "Cancelled" badge). /my-posts (the host's own all-status activity view)
+ * passes true — the host still needs to find their own cancelled event
+ * there to, e.g., reach its still-manually-deletable recording, now that
+ * it's dropped off /calendar (getMemberEvents filters cancelledAt: null).
  */
-export async function getEventsHostedByMember(hostId: string, viewerId: string): Promise<MemberHostedEvent[]> {
+export async function getEventsHostedByMember(
+  hostId: string,
+  viewerId: string,
+  includeCancelled = false,
+): Promise<MemberHostedEvent[]> {
   const member = await getMemberCommunityContext(viewerId);
   const events = await db.event.findMany({
     where: {
       hostId,
+      ...(includeCancelled ? {} : { cancelledAt: null }),
       // Save as Draft initiative — the host viewing their own profile still
       // sees their own drafts (unconditional `{ hostId: viewerId }` below);
       // anyone else additionally requires publishedAt to be set, so a
