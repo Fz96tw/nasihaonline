@@ -2,9 +2,23 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Loader2, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { getCsrfToken } from "@/lib/csrf-client";
 
 export type BadgeVariant = "neutral" | "success" | "warning" | "danger" | "info";
 
@@ -19,7 +33,74 @@ export type ActivityRow = {
   date: string;
   href: string;
   actionLabel: "Edit" | "View";
+  /**
+   * When set, renders a destructive "Delete" action next to actionLabel
+   * that DELETEs this URL and refreshes the page on success. Currently only
+   * a Forum row (getMemberForumThreads' canDelete) populates this — the
+   * thread's own author, or an event-linked thread's event host.
+   */
+  deleteHref?: string;
+  /** Confirmation copy for deleteHref — required whenever deleteHref is set, since what gets destroyed differs (an event thread's delete also wipes other members' replies; see deleteForumThread's doc comment). */
+  deleteConfirmDescription?: string;
 };
+
+function DeleteRowButton({ href, confirmDescription }: { href: string; confirmDescription: string }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    setPending(true);
+    setError(null);
+    try {
+      const csrfToken = await getCsrfToken();
+      const res = await fetch(href, { method: "DELETE", headers: { "x-csrf-token": csrfToken } });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        throw new Error(typeof payload?.error === "string" ? payload.error : "Something went wrong.");
+      }
+      setOpen(false);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={(next) => (!pending ? setOpen(next) : null)}>
+      <AlertDialogTrigger asChild>
+        <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+          <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+          Delete
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete this thread?</AlertDialogTitle>
+          <AlertDialogDescription>{confirmDescription}</AlertDialogDescription>
+        </AlertDialogHeader>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={pending}
+            onClick={(e) => {
+              e.preventDefault();
+              handleDelete();
+            }}
+            className={buttonVariants({ variant: "destructive" })}
+          >
+            {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 /**
  * Cross-domain activity table shared by the All/Blog/Events/Forum tabs
@@ -94,9 +175,14 @@ export function ActivityTable({
                 </TableCell>
                 <TableCell className="text-muted-foreground">{new Date(row.date).toLocaleDateString()}</TableCell>
                 <TableCell className="text-right">
-                  <Link href={row.href} className="text-sm text-primary hover:underline">
-                    {row.actionLabel}
-                  </Link>
+                  <div className="flex items-center justify-end gap-1">
+                    <Link href={row.href} className="text-sm text-primary hover:underline">
+                      {row.actionLabel}
+                    </Link>
+                    {row.deleteHref && (
+                      <DeleteRowButton href={row.deleteHref} confirmDescription={row.deleteConfirmDescription ?? "This can't be undone."} />
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

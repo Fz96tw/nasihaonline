@@ -90,6 +90,10 @@ export default async function MyPostsPage() {
     date: thread.lastPostAt,
     href: `/forums/${thread.forumSlug}/${thread.id}`,
     actionLabel: "View",
+    deleteHref: thread.canDelete ? `/api/forums/threads/${thread.id}` : undefined,
+    deleteConfirmDescription: thread.isEventThread
+      ? "This permanently deletes the discussion thread for this event, including every reply from other members. This can't be undone — but a new discussion can be started for the event afterward."
+      : "This removes the thread from Forums for everyone and takes it out of search. Any replies from other members are kept but hidden along with it. This can't be undone.",
   }));
 
   const meetingRows: ActivityRow[] = meetings.map((meeting) => ({

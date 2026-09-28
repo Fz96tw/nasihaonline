@@ -98,6 +98,10 @@ export type MemberForumThread = {
   /** True when this member (userId, not viewerId) authored the thread itself, not just a reply in it — used by /my-posts to label "Started" vs "Replied". */
   startedByMember: boolean;
   visibility: ForumThreadVisibility;
+  /** Whether the signed-in viewer can delete this thread from here — see getMemberForumThreads' doc comment. */
+  canDelete: boolean;
+  /** Whether this thread is linked to an Event — deleting one destroys other members' replies too (deleteForumThread hard-deletes it), so the UI needs a stronger confirmation than a standalone thread's soft delete. */
+  isEventThread: boolean;
 };
 
 export type ForumThreadDetail = {

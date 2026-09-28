@@ -9,6 +9,7 @@ import { EVENTS_FORUM_SLUG } from "@/lib/forums";
 import { EventDetail } from "@/components/calendar/event-detail";
 import { SavedBanner } from "@/components/saved-banner";
 import { EventDiscussionLink } from "@/components/calendar/event-discussion-link";
+import { DeleteEventDiscussionButton } from "@/components/calendar/delete-event-discussion-button";
 import { ForumThreadView } from "@/components/forums/forum-thread-view";
 import { BackLink } from "@/components/back-link";
 import { HighlightText } from "@/components/highlight-text";
@@ -143,7 +144,10 @@ export default async function EventDetailPage({
 
       {thread && (
         <div className="border-t pt-8">
-          <h2 className="mb-4 text-lg font-semibold">Discussion</h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Discussion</h2>
+            {(canEdit || isPrivileged) && <DeleteEventDiscussionButton threadId={thread.id} />}
+          </div>
           <ForumThreadView
             threadId={thread.id}
             // Drop the auto-authored opening post (always posts[0] — created

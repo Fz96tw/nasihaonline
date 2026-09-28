@@ -493,20 +493,33 @@ export async function getForumThreadDetail(
 }
 
 /**
- * DELETE /api/forums/threads/:threadId — the thread's author (or a
- * moderator/admin) removing a standalone thread directly, mirroring
- * deleteForumPost's direct self-serve shape rather than ForumPost's
+ * DELETE /api/forums/threads/:threadId — the thread's author, a moderator/
+ * admin, or (new) an event-linked thread's event host, removing it.
+ * Mirrors deleteForumPost's direct self-serve shape rather than ForumPost's
  * separate flag/resolve moderation queue (no review step needed here since
- * only the author or an already-privileged actor can reach this at all).
- * Soft delete (`removed: true`) — the row and its posts are kept (so other
- * members' replies aren't destroyed), but isThreadVisible then hides it
- * from every read path for every viewer, moderators included; the
- * AdminActionLog entry recorded in the same transaction is the only
- * surviving trail. Rejected for a thread carrying an eventId/
- * knowledgeItemId — same 400 as updateForumThread, since that thread's
- * lifecycle is fully owned elsewhere (an Event's thread has no delete path
- * at all yet; a Knowledge Library item's thread is hard-deleted as one step
- * of deleteKnowledgeItem's own cascade, never through this route).
+ * only an already-authorized actor can reach this at all). Rejected for a
+ * thread carrying a knowledgeItemId — a Knowledge Library item's thread is
+ * hard-deleted as one step of deleteKnowledgeItem's own cascade, never
+ * through this route.
+ *
+ * A standalone thread (no eventId) is soft-deleted (`removed: true`) — the
+ * row and its posts are kept (so other members' replies aren't destroyed),
+ * but isThreadVisible then hides it from every read path for every viewer,
+ * moderators included.
+ *
+ * An event-linked thread is instead hard-deleted: `ForumThread.eventId` is
+ * `@unique`, so a soft-deleted row would permanently occupy that event's one
+ * discussion slot and block ever starting a fresh one via "Start a
+ * Discussion" — unlike the standalone case, there's no reason to keep a
+ * dead husk around once the host chooses to remove it. ForumPost/ThreadView/
+ * ForumThreadInvitee/ForumThreadCategory all cascade off ForumThread, so
+ * this also permanently destroys every reply, including ones from other
+ * members — the caller's confirmation UI must say so explicitly, since this
+ * is more destructive than the standalone soft-delete.
+ *
+ * The AdminActionLog entry recorded in the same transaction is the only
+ * surviving trail either way (entityId is a plain, non-FK string column, so
+ * it still resolves after a hard delete).
  */
 export async function deleteForumThread(
   threadId: string,
@@ -515,28 +528,49 @@ export async function deleteForumThread(
 ): Promise<{ id: string }> {
   const thread = await db.forumThread.findUnique({
     where: { id: threadId },
-    select: { id: true, title: true, authorId: true, eventId: true, knowledgeItemId: true, removed: true },
+    select: {
+      id: true,
+      title: true,
+      authorId: true,
+      eventId: true,
+      knowledgeItemId: true,
+      removed: true,
+      event: { select: { hostId: true } },
+    },
   });
   if (!thread) throw new ForumError(404, "Thread not found.");
-  if (thread.eventId || thread.knowledgeItemId) {
+  if (thread.knowledgeItemId) {
     throw new ForumError(400, "This thread is managed automatically and can't be deleted here.");
   }
   if (thread.removed) throw new ForumError(400, "This thread has already been removed.");
-  if (!isPrivileged && actingUserId !== thread.authorId) {
-    throw new ForumError(403, "Only the thread's author or a moderator/admin can delete it.");
+
+  const isEventThread = thread.eventId !== null;
+  const isAuthor = actingUserId === thread.authorId;
+  const isEventHost = isEventThread && thread.event?.hostId === actingUserId;
+  if (!isPrivileged && !isAuthor && !isEventHost) {
+    throw new ForumError(
+      403,
+      isEventThread
+        ? "Only the thread's author, the event's host, or a moderator/admin can delete it."
+        : "Only the thread's author or a moderator/admin can delete it.",
+    );
   }
 
-  const isSelfDelete = actingUserId === thread.authorId;
+  const isSelfDelete = isAuthor;
 
   await db.$transaction(async (tx) => {
-    await tx.forumThread.update({ where: { id: threadId }, data: { removed: true } });
+    if (isEventThread) {
+      await tx.forumThread.delete({ where: { id: threadId } });
+    } else {
+      await tx.forumThread.update({ where: { id: threadId }, data: { removed: true } });
+    }
     await recordAdminAction(
       {
         actorId: actingUserId,
         action: isSelfDelete ? "content.thread_self_deleted" : "content.thread_deleted",
         entityType: "ForumThread",
         entityId: threadId,
-        metadata: { title: thread.title, authorId: thread.authorId },
+        metadata: { title: thread.title, authorId: thread.authorId, eventId: thread.eventId },
       },
       tx,
     );
@@ -564,6 +598,15 @@ export async function deleteForumThread(
  * own direct link/view-count path) — someone who already has the thread's
  * URL, e.g. from a cancellation notification, should still be able to open
  * it; only its surfacing on this profile listing is suppressed.
+ *
+ * `canDelete` mirrors deleteForumThread's own authorization (viewer is the
+ * thread's author, or — for an event-linked thread — the event's host;
+ * never true for a Library-linked thread) so /my-posts (the only caller
+ * that renders a delete action) can decide whether to show one, without
+ * re-deriving that logic client-side. Computed against `viewerId`, not
+ * `userId` — on /my-posts these are the same signed-in caller, but this
+ * keeps the flag correct (always false) on /members/[memberId], where a
+ * third party is merely viewing someone else's thread history.
  */
 export async function getMemberForumThreads(
   userId: string,
@@ -596,6 +639,9 @@ export async function getMemberForumThreads(
     seenThreadIds.add(post.threadId);
     if (!isThreadVisible(post.thread, viewerId, isPrivileged, member)) continue;
     if (post.thread.event?.cancelledAt) continue;
+    const isViewerAuthor = post.thread.authorId === viewerId;
+    const isViewerEventHost = post.thread.event?.hostId === viewerId;
+    const isLibraryLinked = post.thread.knowledgeItem !== null;
     threads.push({
       id: post.threadId,
       title: post.thread.title,
@@ -604,6 +650,8 @@ export async function getMemberForumThreads(
       lastPostAt: post.createdAt.toISOString(),
       startedByMember: post.thread.authorId === userId,
       visibility: post.thread.visibility,
+      canDelete: !isLibraryLinked && (isViewerAuthor || isViewerEventHost),
+      isEventThread: post.thread.event !== null,
     });
   }
   return threads;
