@@ -720,9 +720,54 @@ function ParticipantsControl({
   );
 }
 
-/** Shared top-left overlay slot for Record, Participants, and the camera overlay controls (shown while sharing) — see RecordingControl's doc comment for why this corner (never the right, which LiveKit's chat panel can claim). Only used for non-quick-recording meetings — see QuickRecordingOverlay for the quick-recording equivalent (which also carries the camera overlay controls). */
+/** How long the top-left cluster sits untouched before it fades, so it stops eclipsing whichever participant tile lands in that corner. */
+const TOP_LEFT_IDLE_FADE_MS = 3000;
+
+/**
+ * Shared top-left overlay slot for Record, Participants, and the camera overlay controls (shown while sharing) —
+ * see RecordingControl's doc comment for why this corner (never the right, which LiveKit's chat panel can
+ * claim). Only used for non-quick-recording meetings — see QuickRecordingOverlay for the quick-recording
+ * equivalent (which also carries the camera overlay controls).
+ *
+ * Fades to low opacity after TOP_LEFT_IDLE_FADE_MS of no hover/focus, so it stops fully eclipsing whatever
+ * participant tile happens to render in this corner once nobody's actually using the controls; hovering or
+ * focusing any control (mouse or keyboard) brings it straight back and holds it while the pointer/focus stays
+ * inside — moving over a real gap between buttons re-enters the video grid underneath (this wrapper is
+ * `pointer-events-none`, so gaps are transparent to hit-testing), which is what actually starts the fade.
+ */
 function TopLeftOverlay({ children }: { children: ReactNode }) {
-  return <div className="pointer-events-none absolute left-4 top-4 z-50 flex flex-col items-start gap-2">{children}</div>;
+  const [active, setActive] = useState(true);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function wake() {
+    setActive(true);
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+  }
+
+  function scheduleFade() {
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    idleTimer.current = setTimeout(() => setActive(false), TOP_LEFT_IDLE_FADE_MS);
+  }
+
+  useEffect(() => {
+    scheduleFade();
+    return () => {
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div
+      onMouseEnter={wake}
+      onMouseLeave={scheduleFade}
+      onFocus={wake}
+      onBlur={scheduleFade}
+      className={`pointer-events-none absolute left-4 top-4 z-50 flex flex-col items-start gap-2 transition-opacity duration-500 ${active ? "opacity-100" : "opacity-30"}`}
+    >
+      {children}
+    </div>
+  );
 }
 
 /**
