@@ -36,13 +36,21 @@
  * camera-only mode, and if a guest's ghost is currently shown instead (see
  * "Follow the speaker" below) there's nothing for a gesture to point at.
  *
- * Follow the speaker (ported from showup/lib/presenter-overlay/speaker-follow.ts):
- * the compositor can hold more than one camera at once — the host's own,
- * added at startup, plus any guest's (addSource/removeSource, driven by the
- * caller sampling the room) — but only ever shows one of them at a time
- * (setVisible), crossfading over ~300ms when the shown one changes.
- * Deciding *which* one to show is the caller's job (SpeakerFollower); this
- * module only knows how to fade between whichever ids it's told.
+ * Multiple cameras (ported from showup/lib/presenter-overlay/): the
+ * compositor can hold more than one camera at once — the host's own, added
+ * at startup, plus any guest's (addSource/removeSource, driven by the
+ * caller sampling the room) — and setVisible names which of them are drawn
+ * right now, in this order, spaced along the bottom when there's more than
+ * one (layoutGhosts). Anyone previously shown but no longer named fades out
+ * as the new set fades in, over ~300ms. Deciding *who* is shown is the
+ * caller's job, for either of two independent reasons:
+ * - "Follow the speaker" (speaker-follow.ts): with nobody pinned to the
+ *   overlay, exactly one id is ever named — whoever's currently speaking.
+ * - "Guests on the overlay" / co-ghosts (co-ghosts.ts): the host can invite
+ *   up to two guests who then stay up alongside the host regardless of who
+ *   is speaking, so multiple ids are named at once.
+ * This module doesn't know which reason is in play — it only knows how to
+ * lay out and fade between whichever ids it's told.
  */
 
 import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
@@ -109,14 +117,14 @@ export type PresenterOverlaySettings = {
   /**
    * Scale the cut-out so the camera frame covers the whole shared frame (whichever edge needs the larger
    * scale), so the presenter can reach any part of a wide window. Ignores `scale` and `position`; the top
-   * or sides of the frame may be cropped.
+   * or sides of the frame may be cropped. Only applies when there's a single ghost — a group (co-ghosts)
+   * keeps the normal spaced-out layout.
    */
   span: boolean;
   /**
-   * Scale the shown cut-out by how far that person sits from their camera, so they look the same size
-   * whether they lean back or move their laptop — and a guest shown via "Follow the speaker" looks about
-   * the same size as the host did. On by default. Off = the camera frame is always scaled the same (zoom 1),
-   * driven only by `scale`.
+   * Scale each shown cut-out by how far that person sits from their camera, so everyone looks about the
+   * same size whether they lean back or move their laptop. On by default. Off = every camera frame is
+   * scaled the same (zoom 1), driven only by `scale`.
    */
   normalizeSize: boolean;
   /**
@@ -174,8 +182,8 @@ export type PresenterOverlayCompositor = {
   /** Adds a camera (e.g. a guest whose camera just came on). No-op if the id is already there. Not shown until setVisible names it. */
   addSource: (source: OverlaySource) => void;
   removeSource: (id: string) => void;
-  /** Which camera's cut-out is drawn; the previously-shown one (if any) fades out as this one fades in, over ~300ms. */
-  setVisible: (id: string) => void;
+  /** Which cameras' cut-outs are drawn, in this order (spaced out along the bottom when there's more than one). Anyone previously shown but no longer named fades out as these fade in, over ~300ms. */
+  setVisible: (ids: string[]) => void;
   /** Zooms the screen layer 2x toward its centre (the same zoom a pinch gives). No-op when already zoomed. */
   zoomIn: () => void;
   /** Back to the whole screen. */
@@ -247,6 +255,49 @@ export function fitBox(width: number, height: number): { width: number; height: 
   return { width: Math.max(2, Math.round(width * ratio)), height: Math.max(2, Math.round(height * ratio)) };
 }
 
+/** Where one ghost is drawn on the output frame (bottom-aligned; the top edge is height - box.height). */
+export type GhostBox = { x: number; width: number; height: number };
+
+/** With several ghosts each is drawn a little smaller, so they read as a group rather than a pile. */
+const GROUP_SCALE = [1, 1, 0.85, 0.7];
+
+/**
+ * Lays ghosts out bottom-aligned. One ghost follows the `position` setting; two or three are spaced evenly
+ * across the width in the order given (the order they were added), each centred in its own slot. With
+ * `span`, a lone ghost instead covers the whole frame (ignoring zoom). `zooms` scales each ghost about its
+ * bottom edge (see size-normalize.ts). Pure, for testing.
+ */
+export function layoutGhosts(
+  aspects: number[],
+  outputWidth: number,
+  outputHeight: number,
+  scale: number,
+  position: PresenterOverlaySettings["position"],
+  span = false,
+  zooms: number[] = [],
+): GhostBox[] {
+  const count = aspects.length;
+  if (count === 1 && span) {
+    // Cover fit, bottom-aligned and centred: the camera frame's edges land on (or past) the share's edges.
+    const height = Math.max(outputHeight, outputWidth / aspects[0]);
+    const width = height * aspects[0];
+    return [{ x: (outputWidth - width) / 2, width, height }];
+  }
+  const groupHeight = outputHeight * scale * (GROUP_SCALE[Math.min(count, GROUP_SCALE.length - 1)] ?? 1);
+  return aspects.map((aspect, index) => {
+    // A zoomed ghost keeps its bottom edge and its anchor; it may run past the sides or top and is clipped by the output.
+    const height = groupHeight * (zooms[index] ?? 1);
+    const width = height * aspect;
+    if (count === 1) {
+      const x = position === "left" ? 0 : position === "right" ? outputWidth - width : (outputWidth - width) / 2;
+      return { x, width, height };
+    }
+    const centre = (outputWidth * (index + 0.5)) / count;
+    const x = width >= outputWidth ? (outputWidth - width) / 2 : Math.min(Math.max(centre - width / 2, 0), outputWidth - width);
+    return { x, width, height };
+  });
+}
+
 export async function startPresenterOverlayCompositor({
   screenTrack,
   cameraTrack,
@@ -315,8 +366,8 @@ export async function startPresenterOverlayCompositor({
   };
 
   const sources = new Map<string, Source>();
-  /** The id setVisible last named — what every source's `target` is derived from. */
-  let visibleId: string = LOCAL_ID;
+  /** The ids setVisible last named — what every source's `target` is derived from. */
+  let visibleIds: string[] = [LOCAL_ID];
   let lastFadeAt = 0;
 
   function createSource(id: string, label: string, isLocal: boolean, track: MediaStreamTrack): Source {
@@ -338,7 +389,7 @@ export async function startPresenterOverlayCompositor({
       aspect: CAMERA_WIDTH / CAMERA_HEIGHT,
       hasCutout: false,
       alpha: 0,
-      target: id === visibleId ? 1 : 0,
+      target: visibleIds.includes(id) ? 1 : 0,
       lastSegmentAt: 0,
       normalizer: new SizeNormalizer(),
       rowCounts: new Uint32Array(CAMERA_HEIGHT),
@@ -460,24 +511,6 @@ export async function startPresenterOverlayCompositor({
   /** The output frame size for this moment — the screen's own size once one has arrived, or the cap before that. */
   function outputSize(): { width: number; height: number } {
     return hasScreenFrame ? { width: screenCanvas.width, height: screenCanvas.height } : { width: MAX_OUTPUT_WIDTH, height: MAX_OUTPUT_HEIGHT };
-  }
-
-  /**
-   * Where a lone ghost of this aspect ratio and zoom sits on the output frame: bottom-aligned, and either
-   * anchored to `position` (zoomed about its bottom edge, so it stays anchored while it grows or shrinks —
-   * it may then run past the sides or top and is clipped by the output) or, with `span`, cover-fit to the
-   * whole frame (ignoring scale/position/zoom — there's only ever one ghost to fill it with).
-   */
-  function soloBox(aspect: number, zoom: number, width: number, height: number): { x: number; y: number; width: number; height: number } {
-    if (settings.span) {
-      const h = Math.max(height, width / aspect);
-      const w = h * aspect;
-      return { x: (width - w) / 2, y: height - h, width: w, height: h };
-    }
-    const h = height * settings.scale * zoom;
-    const w = h * aspect;
-    const x = settings.position === "left" ? 0 : settings.position === "right" ? width - w : (width - w) / 2;
-    return { x, y: height - h, width: w, height: h };
   }
 
   /** Where a source is drawn, for mapping a fingertip onto it; null when it isn't on the share. */
@@ -722,14 +755,17 @@ export async function startPresenterOverlayCompositor({
 
     drawStrokes(now, width, height);
 
-    // The currently-visible source gets a fresh box (its own aspect and zoom); a source still fading out
-    // keeps whatever box it was drawn at last, so its outline doesn't jump right before it disappears.
-    const visible = sources.get(visibleId);
-    if (visible) {
-      const zoom = visible.normalizer.zoom(now, settings.normalizeSize);
-      visible.box = soloBox(visible.aspect, zoom, width, height);
-    }
-    // Fading-out first, then the one fading in, so a new speaker fades in over the old one.
+    // Every currently-visible source gets a fresh box, laid out together (spaced out if there's more than
+    // one); a source still fading out keeps whatever box it was drawn at last, so its outline doesn't jump
+    // right before it disappears. Each source's own aspect ratio and zoom, in the order setVisible was given.
+    const shown = visibleIds.map((id) => sources.get(id)).filter((source): source is Source => !!source);
+    const zooms = shown.map((source) => source.normalizer.zoom(now, settings.normalizeSize));
+    const boxes = layoutGhosts(shown.map((source) => source.aspect), width, height, settings.scale, settings.position, settings.span, zooms);
+    shown.forEach((source, index) => {
+      const box = boxes[index];
+      source.box = { x: box.x, y: height - box.height, width: box.width, height: box.height };
+    });
+    // Fading-out first, then the ones fading in, so a new speaker/co-ghost fades in over the old one.
     const drawable = Array.from(sources.values())
       .filter((source) => source.hasCutout && source.alpha > 0.003 && source.box)
       .sort((a, b) => a.target - b.target);
@@ -807,9 +843,9 @@ export async function startPresenterOverlayCompositor({
     source.reader.cancel().catch(() => {});
   }
 
-  function setVisible(id: string) {
-    visibleId = id;
-    for (const source of Array.from(sources.values())) source.target = source.id === id ? 1 : 0;
+  function setVisible(ids: string[]) {
+    visibleIds = ids;
+    for (const source of Array.from(sources.values())) source.target = ids.includes(source.id) ? 1 : 0;
   }
 
   const screenReader = new Processor({ track: screenTrack }).readable.getReader();
@@ -855,7 +891,7 @@ export async function startPresenterOverlayCompositor({
   }
 
   addSource({ id: LOCAL_ID, label: cameraLabel, track: cameraTrack, isLocal: true });
-  setVisible(LOCAL_ID);
+  setVisible([LOCAL_ID]);
   pumpScreen().catch((error) => {
     if (stopped) return;
     stop();

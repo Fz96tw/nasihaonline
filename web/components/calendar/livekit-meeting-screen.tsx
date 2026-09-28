@@ -11,6 +11,7 @@ import { getCsrfToken } from "@/lib/csrf-client";
 import { getPublicMeetingClosingNote } from "@/lib/legal";
 import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/components/calendar/livekit-control-styles";
 import { PresenterOverlayControl } from "@/components/calendar/presenter-overlay-control";
+import { OverlayGuestControl } from "@/components/calendar/overlay-guest-control";
 
 /**
  * Title/host banner pinned to the top of the call — per-viewer local state
@@ -787,6 +788,7 @@ function QuickRecordingOverlay({
         )}
         {recording && <ResetControl pending={resetPending} onClick={onReset} />}
         <PresenterOverlayControl room={room} onError={onError} panelPlacement="above-right" />
+        <OverlayGuestControl room={room} />
         <ExitControl onClick={onExit} />
       </div>
     </div>
@@ -1069,6 +1071,7 @@ export function LiveKitMeetingScreen({
             onError={pushToast}
           />
           <PresenterOverlayControl room={room} onError={pushToast} />
+          <OverlayGuestControl room={room} />
         </TopLeftOverlay>
       )}
       <LiveKitRoom

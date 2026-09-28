@@ -13,6 +13,8 @@ import {
   type PresenterOverlaySettings,
 } from "@/lib/presenter-overlay/compositor";
 import { SpeakerFollower } from "@/lib/presenter-overlay/speaker-follow";
+import { CoGhostRoster, MAX_GUEST_GHOSTS, type GuestOverlayState, type JoinPolicy } from "@/lib/presenter-overlay/co-ghosts";
+import { OVERLAY_TOPIC, encodeMessage, parseToPresenter, type ToGuest, type ToPresenter } from "@/lib/presenter-overlay/overlay-protocol";
 import { PEN_COLORS, type PenColor } from "@/lib/presenter-overlay/drawing";
 import { clampPanelPosition, dragPanelPosition, nudgePanelPosition, parseStoredPanel, serializePanel, type PanelPosition } from "@/lib/presenter-overlay/panel-position";
 import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/components/calendar/livekit-control-styles";
@@ -170,6 +172,15 @@ export function PresenterOverlayControl({
   const [people, setPeople] = useState<Person[]>([]);
   const [shownId, setShownId] = useState<string>(LOCAL_ID);
   const followRef = useRef({ follow: true, pinned: null as string | null });
+  // Guests permanently on the overlay ("co-ghosts", up to MAX_GUEST_GHOSTS) and who's asking / been asked; the roster is the
+  // truth, and this version counter re-renders the UI when it changes.
+  const [guests, setGuests] = useState<Person[]>([]);
+  const [policy, setPolicy] = useState<JoinPolicy>("ask");
+  // Read via the ref, not this value — the setter alone forces the re-render a roster change (via a button click or the tick) needs.
+  const [, setRosterVersion] = useState(0);
+  const rosterRef = useRef(new CoGhostRoster());
+  const hadGuestsRef = useRef(false);
+  const followBeforeGuestsRef = useRef(true);
   const imageRef = useRef<ImageBitmap | null>(null);
   const shareRef = useRef<Share | null>(null);
   const overlayRef = useRef<Overlay | null>(null);
@@ -243,6 +254,10 @@ export function PresenterOverlayControl({
     setGestureLabel(null);
     setPeople([]);
     setShownId(LOCAL_ID);
+    setGuests([]);
+    // Everyone who was on the overlay, or waiting to be, is told it's gone.
+    for (const id of rosterRef.current.clear()) sendToGuest(id, { t: "overlay-state", state: "off" });
+    rosterChanged();
     overlay.compositor.stop();
     overlay.screenClone.stop();
     overlay.cameraTrack.stop();
@@ -254,16 +269,22 @@ export function PresenterOverlayControl({
 
   /**
    * One sample of the room: keeps the compositor's camera sources in step with who has a camera on (guests
-   * joining, leaving, muting), then asks the follower whose cut-out to show. Runs every FOLLOW_TICK_MS while
-   * the overlay is on; polled rather than event-driven so a missed event can't leave a stale source behind.
+   * joining, leaving, muting), drops co-ghosts who left or lost their camera and lapsed invites/requests,
+   * then decides who's shown — the co-ghosts (host plus whoever's pinned to the overlay), or failing that
+   * whoever the follower picks. Runs every FOLLOW_TICK_MS while the overlay is on; polled rather than
+   * event-driven so a missed event can't leave a stale source behind.
    */
   function syncFollow(compositor: PresenterOverlayCompositor, follower: SpeakerFollower, attached: Map<string, MediaStreamTrack>) {
     const room = roomRef.current;
     if (!room) return;
     const eligible = new Set<string>([LOCAL_ID]);
+    const present = new Set<string>([LOCAL_ID]);
     const nextPeople: Person[] = [{ id: LOCAL_ID, label: "You" }];
     const live = new Set<string>();
+    const nextGuests: Person[] = [];
     room.remoteParticipants.forEach((participant) => {
+      present.add(participant.identity);
+      nextGuests.push({ id: participant.identity, label: participant.name || "Guest" });
       const publication = participant.getTrackPublication(Track.Source.Camera);
       const mediaTrack = publication?.track?.mediaStreamTrack;
       if (!publication || !mediaTrack || publication.isMuted) return;
@@ -283,14 +304,40 @@ export function PresenterOverlayControl({
       attached.delete(id);
     });
 
+    // Co-ghosts who left or turned their camera off drop out; unanswered invites/requests lapse.
+    const roster = rosterRef.current;
+    const now = performance.now();
+    let rosterDirty = false;
+    for (const id of roster.prune(now, eligible, present)) {
+      sendToGuest(id, { t: "overlay-state", state: "off" });
+      rosterDirty = true;
+    }
+    const lapsed = roster.expire(now);
+    for (const id of lapsed.invites) sendToGuest(id, { t: "overlay-state", state: "off" });
+    for (const id of lapsed.requests) sendToGuest(id, { t: "overlay-state", state: "timeout" });
+    if (rosterDirty || lapsed.invites.length > 0 || lapsed.requests.length > 0) rosterChanged();
+
     const speakers = new Map<string, number>();
     room.activeSpeakers.forEach((participant) => {
       if (participant.isSpeaking) speakers.set(participant.isLocal ? LOCAL_ID : participant.identity, participant.audioLevel);
     });
-    const shown = follower.update(performance.now(), speakers, eligible, LOCAL_ID);
-    compositor.setVisible(shown);
-    setShownId(shown);
+    // Always fed, so its internal state stays current even while co-ghosts override its pick below.
+    const shown = follower.update(now, speakers, eligible, LOCAL_ID);
+    const coGhosts = roster.pinned;
+    if (coGhosts.length > 0) {
+      // Guests the host added stay up with them, in the order added; who's speaking no longer picks the ghost.
+      compositor.setVisible([LOCAL_ID, ...coGhosts]);
+      setShownId(LOCAL_ID);
+    } else {
+      compositor.setVisible([shown]);
+      setShownId(shown);
+    }
 
+    setGuests((previous) =>
+      previous.length === nextGuests.length && previous.every((guest, i) => guest.id === nextGuests[i].id && guest.label === nextGuests[i].label)
+        ? previous
+        : nextGuests,
+    );
     setPeople((previous) =>
       previous.length === nextPeople.length && previous.every((person, i) => person.id === nextPeople[i].id && person.label === nextPeople[i].label)
         ? previous
@@ -308,6 +355,107 @@ export function PresenterOverlayControl({
     setPinnedId(id);
     followRef.current.pinned = id;
     overlayRef.current?.follower.setPinned(id);
+  }
+
+  /** Sends one overlay message to one guest. Best effort: a guest who has just left simply doesn't get it. */
+  function sendToGuest(id: string, message: ToGuest) {
+    roomRef.current?.localParticipant
+      .publishData(encodeMessage(message), { reliable: true, topic: OVERLAY_TOPIC, destinationIdentities: [id] })
+      .catch(() => {});
+  }
+
+  /**
+   * Call after any roster change. Follow-the-speaker is switched off while a guest is on the overlay (the
+   * host can switch it back on), and goes back to what it was once the last guest is gone.
+   */
+  function rosterChanged() {
+    const hasGuests = rosterRef.current.pinned.length > 0;
+    if (hasGuests && !hadGuestsRef.current) {
+      followBeforeGuestsRef.current = followRef.current.follow;
+      changeFollow(false);
+    } else if (!hasGuests && hadGuestsRef.current && !followRef.current.follow) {
+      changeFollow(followBeforeGuestsRef.current);
+    }
+    hadGuestsRef.current = hasGuests;
+    setRosterVersion((version) => version + 1);
+  }
+
+  function tellGuest(id: string, state: GuestOverlayState) {
+    sendToGuest(id, { t: "overlay-state", state });
+  }
+
+  /** A message from a guest. The roster decides; this only turns its answer into what the guest is told. */
+  function handleGuestMessage(id: string, message: ToPresenter) {
+    const roster = rosterRef.current;
+    const now = performance.now();
+    if (message.t === "overlay-leave") {
+      if (roster.remove(id)) rosterChanged();
+      tellGuest(id, "off");
+      return;
+    }
+    if (message.t === "overlay-response") {
+      if (!roster.invited.includes(id)) return;
+      const result = roster.respond(id, message.accept);
+      if (message.accept) tellGuest(id, result.ok ? "on" : "full");
+      rosterChanged();
+      return;
+    }
+    // overlay-join-request
+    if (!overlayRef.current) {
+      tellGuest(id, "unavailable");
+      return;
+    }
+    const result = roster.guestRequest(id, now);
+    if (result.ok) {
+      tellGuest(id, result.status === "added" ? "on" : "pending");
+      if (result.status === "pending") setPanelOpen(true);
+    } else if (result.reason === "full") {
+      tellGuest(id, "full");
+    } else if (result.reason === "closed") {
+      tellGuest(id, "closed");
+    } else if (roster.has(id)) {
+      tellGuest(id, "on");
+    }
+    rosterChanged();
+  }
+
+  /** "Add to overlay": the guest must Allow before anything is shown. */
+  function inviteGuest(id: string) {
+    const result = rosterRef.current.invite(id, performance.now());
+    if (!result.ok) {
+      if (result.reason === "full") onError("Overlay is full. Remove someone first.");
+      return;
+    }
+    sendToGuest(id, { t: "overlay-request" });
+    rosterChanged();
+  }
+
+  function removeGuest(id: string) {
+    rosterRef.current.remove(id);
+    tellGuest(id, "off");
+    rosterChanged();
+  }
+
+  /** The host's answer to a guest's request (policy "Ask me"). */
+  function decideRequest(id: string, allow: boolean) {
+    const result = rosterRef.current.decide(id, allow);
+    if (!allow) tellGuest(id, "declined");
+    else tellGuest(id, result.ok ? "on" : "full");
+    rosterChanged();
+  }
+
+  function changePolicy(next: JoinPolicy) {
+    const roster = rosterRef.current;
+    roster.policy = next;
+    setPolicy(next);
+    if (next === "off") {
+      // Anyone still waiting is told the door is closed.
+      for (const id of roster.requesting) {
+        roster.decide(id, false);
+        tellGuest(id, "closed");
+      }
+      rosterChanged();
+    }
   }
 
   async function addOverlay() {
@@ -440,6 +588,21 @@ export function PresenterOverlayControl({
     return () => {
       room.off(RoomEvent.LocalTrackPublished, onPublished);
       room.off(RoomEvent.LocalTrackUnpublished, onUnpublished);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room]);
+
+  // Requests and answers from guests wanting to appear on the overlay. Addressed to this participant only, and ignored unless they parse exactly.
+  useEffect(() => {
+    if (!room) return;
+    const onData = (payload: Uint8Array, participant?: { identity: string }, _kind?: unknown, topic?: string) => {
+      if (topic !== OVERLAY_TOPIC || !participant) return;
+      const message = parseToPresenter(payload);
+      if (message) handleGuestMessage(participant.identity, message);
+    };
+    room.on(RoomEvent.DataReceived, onData);
+    return () => {
+      room.off(RoomEvent.DataReceived, onData);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room]);
@@ -577,6 +740,9 @@ export function PresenterOverlayControl({
   if (!supported || !share) return null;
 
   const overlayOn = overlayStatus === "on";
+  const roster = rosterRef.current;
+  const coGhosts = roster.pinned;
+  const labelOf = (id: string) => guests.find((guest) => guest.id === id)?.label ?? "Guest";
   const labelClass = "flex flex-col gap-1 text-xs text-white/70";
   const segmentClass = (selected: boolean) =>
     `flex-1 rounded-md px-2 py-1 text-xs ${selected ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"}`;
@@ -608,7 +774,13 @@ export function PresenterOverlayControl({
         Follow the speaker
         <input type="checkbox" checked={followSpeaker} onChange={(e) => changeFollow(e.target.checked)} />
       </label>
-      {people.length > 1 && (
+      {coGhosts.length > 0 && (
+        <p className="text-[11px] text-white/50">
+          Guests you add stay on the share with you, so who is speaking doesn&apos;t change the ghost. Follow the speaker applies again
+          once they&apos;re removed.
+        </p>
+      )}
+      {people.length > 1 && coGhosts.length === 0 && (
         <div className={labelClass}>
           <span data-testid="overlay-showing">
             Showing: {people.find((person) => person.id === shownId)?.label ?? "You"}{" "}
@@ -628,6 +800,71 @@ export function PresenterOverlayControl({
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {overlayOn && (
+        <div className={labelClass} data-testid="overlay-guests">
+          <span className="text-white">
+            Guests on the overlay ({coGhosts.length}/{MAX_GUEST_GHOSTS})
+            {coGhosts.length > 0 && <span className="text-white/60">: {coGhosts.map(labelOf).join(", ")}</span>}
+          </span>
+          <label className="flex items-center justify-between gap-2">
+            When a guest asks to appear
+            <select
+              value={policy}
+              onChange={(e) => changePolicy(e.target.value as JoinPolicy)}
+              aria-label="When a guest asks to appear"
+              className="rounded-md border border-white/10 bg-white/10 px-1.5 py-1 text-xs text-white"
+            >
+              <option value="ask">Ask me</option>
+              <option value="anyone">Let anyone join</option>
+              <option value="off">Off</option>
+            </select>
+          </label>
+          {guests.length === 0 ? (
+            <span className="text-white/50">Nobody else is in the meeting yet.</span>
+          ) : (
+            <ul className="space-y-1">
+              {guests.map((guest) => {
+                const on = roster.has(guest.id);
+                const waiting = roster.invited.includes(guest.id);
+                const asking = roster.requesting.includes(guest.id);
+                const full = !on && roster.isFull;
+                return (
+                  <li key={guest.id} className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 flex-1 truncate text-white">{guest.label}</span>
+                    {on ? (
+                      <button type="button" onClick={() => removeGuest(guest.id)} className={`${segmentClass(false)} flex-none`}>
+                        Remove
+                      </button>
+                    ) : waiting ? (
+                      <span className="flex-none text-white/60">Waiting for response</span>
+                    ) : asking ? (
+                      <span className="flex flex-none gap-1">
+                        <button type="button" onClick={() => decideRequest(guest.id, true)} className={segmentClass(true)}>
+                          Allow
+                        </button>
+                        <button type="button" onClick={() => decideRequest(guest.id, false)} className={segmentClass(false)}>
+                          Deny
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => inviteGuest(guest.id)}
+                        disabled={full}
+                        title={full ? "Overlay is full" : "Ask this guest to appear on the share"}
+                        className={`${segmentClass(false)} flex-none disabled:opacity-40`}
+                      >
+                        {full ? "Overlay is full" : "Add to overlay"}
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       )}
 
