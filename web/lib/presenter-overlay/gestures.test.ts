@@ -72,6 +72,12 @@ test("a hand only partly in frame, or too small, reads as none", () => {
   assert.equal(classifyPose(tiny).pose, "none");
 });
 
+test("a hand with the wrist below the bottom of frame still classifies, as long as the fingers are in view", () => {
+  const low = POINT({ oy: 0.15 });
+  assert.ok(low[0].y > 1, "the wrist itself is past the bottom edge");
+  assert.equal(classifyPose(low).pose, "point");
+});
+
 test("cameraToOutput maps a camera-frame point through the ghost's placement, with and without mirroring", () => {
   const ghost = { x: 100, y: 50, width: 200, height: 400, mirror: false };
   assert.deepEqual(cameraToOutput(0.25, 0.5, ghost), { x: 150, y: 250 });
