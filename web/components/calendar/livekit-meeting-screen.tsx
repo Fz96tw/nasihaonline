@@ -720,49 +720,54 @@ function ParticipantsControl({
   );
 }
 
-/** How long the top-left cluster sits untouched before it fades, so it stops eclipsing whichever participant tile lands in that corner. */
-const TOP_LEFT_IDLE_FADE_MS = 3000;
+/** How long a floating control cluster sits untouched before it fades, so it stops permanently eclipsing whatever it's drawn on top of (a participant tile, in both places this is used). */
+const IDLE_FADE_MS = 3000;
 
 /**
- * Shared top-left overlay slot for Record, Participants, and the camera overlay controls (shown while sharing) —
- * see RecordingControl's doc comment for why this corner (never the right, which LiveKit's chat panel can
- * claim). Only used for non-quick-recording meetings — see QuickRecordingOverlay for the quick-recording
- * equivalent (which also carries the camera overlay controls).
- *
- * Fades to low opacity after TOP_LEFT_IDLE_FADE_MS of no hover/focus, so it stops fully eclipsing whatever
- * participant tile happens to render in this corner once nobody's actually using the controls; hovering or
- * focusing any control (mouse or keyboard) brings it straight back and holds it while the pointer/focus stays
- * inside — moving over a real gap between buttons re-enters the video grid underneath (this wrapper is
- * `pointer-events-none`, so gaps are transparent to hit-testing), which is what actually starts the fade.
+ * Fades a floating control cluster to low opacity after IDLE_FADE_MS of no hover/focus, snapping straight back
+ * (and cancelling the fade) on interaction. Spread the returned handlers onto the cluster's own wrapper, which
+ * must stay `pointer-events-none` itself with only its buttons interactive: moving off a button into a real gap
+ * is hit-tested as leaving the wrapper entirely (the gap passes through to whatever's underneath), which is
+ * what actually starts the fade — hovering or focusing (mouse or keyboard) any child button bubbles back up
+ * and wakes it.
  */
-function TopLeftOverlay({ children }: { children: ReactNode }) {
+function useIdleFade(idleMs: number = IDLE_FADE_MS) {
   const [active, setActive] = useState(true);
-  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function wake() {
     setActive(true);
-    if (idleTimer.current) clearTimeout(idleTimer.current);
+    if (timer.current) clearTimeout(timer.current);
   }
 
   function scheduleFade() {
-    if (idleTimer.current) clearTimeout(idleTimer.current);
-    idleTimer.current = setTimeout(() => setActive(false), TOP_LEFT_IDLE_FADE_MS);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setActive(false), idleMs);
   }
 
   useEffect(() => {
     scheduleFade();
     return () => {
-      if (idleTimer.current) clearTimeout(idleTimer.current);
+      if (timer.current) clearTimeout(timer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  return { active, onMouseEnter: wake, onMouseLeave: scheduleFade, onFocus: wake, onBlur: scheduleFade };
+}
+
+/**
+ * Shared top-left overlay slot for Record, Participants, and the camera overlay controls (shown while sharing) —
+ * see RecordingControl's doc comment for why this corner (never the right, which LiveKit's chat panel can
+ * claim). Only used for non-quick-recording meetings — see QuickRecordingOverlay for the quick-recording
+ * equivalent (which also carries the camera overlay controls, and fades the same way).
+ */
+function TopLeftOverlay({ children }: { children: ReactNode }) {
+  const { active, ...fade } = useIdleFade();
+
   return (
     <div
-      onMouseEnter={wake}
-      onMouseLeave={scheduleFade}
-      onFocus={wake}
-      onBlur={scheduleFade}
+      {...fade}
       className={`pointer-events-none absolute left-4 top-4 z-50 flex flex-col items-start gap-2 transition-opacity duration-500 ${active ? "opacity-100" : "opacity-30"}`}
     >
       {children}
@@ -797,6 +802,9 @@ function TopLeftOverlay({ children }: { children: ReactNode }) {
  * mobile. At `sm:`+ the wrapper switches to `flex-col`, stacking the
  * countdown above the button row (both right-aligned) — 2 rows here, 3
  * total with LiveKit's bar.
+ *
+ * The button row (not the countdown, which stays fully visible as useful status even while idle) fades the
+ * same way TopLeftOverlay's cluster does — see useIdleFade.
  */
 function QuickRecordingOverlay({
   recording,
@@ -821,13 +829,15 @@ function QuickRecordingOverlay({
   onError: (message: string) => void;
   room: Room | null;
 }) {
+  const { active, ...fade } = useIdleFade();
+
   return (
     <div
       className="pointer-events-none absolute right-4 z-50 flex flex-row flex-wrap items-center justify-end gap-2 sm:flex-col sm:items-end"
       style={{ bottom: "calc(69px + 0.5rem)" }}
     >
       {recording && secondsRemaining !== null && <RecordingCountdown secondsRemaining={secondsRemaining} />}
-      <div className="pointer-events-none flex items-center gap-2">
+      <div {...fade} className={`pointer-events-none flex items-center gap-2 transition-opacity duration-500 ${active ? "opacity-100" : "opacity-30"}`}>
         {isHostOrCoHost && (
           <RecordingControl recording={recording} startEndpoint={startEndpoint} stopEndpoint={stopEndpoint} onError={onError} />
         )}
