@@ -13,6 +13,17 @@ test("a stroke collects points while drawing and stays fully visible", () => {
   assert.equal(only.stroke.points.length, 2);
 });
 
+test("currentPoints reads the in-progress stroke, including a freehand one end() itself returns null for", () => {
+  const board = new StrokeBoard();
+  assert.equal(board.currentPoints(), null, "nothing drawn yet");
+  board.begin(0, "red");
+  board.add(0.1, 0.1);
+  board.add(0.2, 0.3);
+  assert.deepEqual(board.currentPoints(), [{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.3 }]);
+  assert.equal(board.end(10), null, "freehand fades, it isn't pinned — currentPoints was the only way to read its points");
+  assert.equal(board.currentPoints(), null, "nothing in progress once ended");
+});
+
 test("points too close to the last one are skipped", () => {
   const board = new StrokeBoard();
   board.begin(0, "red");

@@ -102,6 +102,15 @@ export class StrokeBoard {
     return this.current.get(owner)?.kind ?? null;
   }
 
+  /**
+   * The points of the stroke `owner` is drawing right now (not yet ended), or null if they aren't drawing.
+   * For a non-pinned kind (freehand) this is the only way to read its points once `end()` is called, since
+   * `end()` itself returns null for those — see `end()`'s own comment.
+   */
+  currentPoints(owner: string = HOST_OWNER): readonly { x: number; y: number }[] | null {
+    return this.current.get(owner)?.points ?? null;
+  }
+
   /** Everyone with a stroke in progress. */
   get drawingOwners(): string[] {
     return Array.from(this.current.keys());

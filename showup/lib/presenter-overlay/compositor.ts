@@ -578,6 +578,10 @@ export async function startPresenterOverlayCompositor({
   let voiceHandGoneSince: number | null = null;
   /** When speech was last detected (interim or final) — reset on every result, checked every frame for the silence auto-stop. */
   let voiceLastActivityAt = 0;
+  /** True while the current capture was started by finishing a drawn stroke rather than an explicit V-sign — only this kind can be cancelled by a fresh point elsewhere before any speech. */
+  let voiceAutoFromDraw = false;
+  /** True once any speech (interim or final) has been recognized during the current capture. */
+  let voiceHasSpoken = false;
 
   const screenReader = new Processor({ track: screenTrack }).readable.getReader();
 
@@ -1237,11 +1241,21 @@ export async function startPresenterOverlayCompositor({
 
   /** Finishes the presenter's stroke; an arrow, box or ellipse that survives is pinned, and a box or ellipse can then be labelled. */
   function endHostStroke(now: number) {
+    // Read before end() — a freehand stroke isn't a pinned kind, so end() itself returns null for it (see
+    // drawing.ts's own comment on currentPoints), leaving this as the only way to get its start point.
+    const kind = board.kindOf();
+    const freeStart = kind === "free" ? board.currentPoints()?.[0] ?? null : null;
     const finished = board.end(now);
     // Only a box or ellipse drawn this way can take a label, so only they open the prompt; an arrow is pinned
     // quietly (the list still updates). A stamp (also `takesText`) never reaches here — commitStamp finishes and
     // labels its own stroke directly, since its text is already known before it's ever drawn.
     if (finished && finished.kind !== "text" && takesText(finished.kind)) onShapeFinished?.(finished.id);
+    // Voice Pin: finishing a freehand mark or an arrow offers to caption it immediately, anchored at its start
+    // point, without needing the V-sign at all. Boxes/ellipses already have their own typed-label prompt above,
+    // so they're deliberately excluded. Never steps on a session already running (manual or another auto one).
+    if (!settings.voicePin || voiceCaptureOn) return;
+    if (kind === "free" && freeStart) startVoiceCapture(freeStart, true);
+    else if (finished?.kind === "arrow") startVoiceCapture(finished.points[0], true);
   }
 
   /**
@@ -1277,8 +1291,12 @@ export async function startPresenterOverlayCompositor({
     commitTextMark(now, outputToScreen(viewport.rect(now), at.x, at.y), text, settings.stampShapeKind);
   }
 
-  /** Starts Web Speech API capture, anchored at `anchor` (screen-content coordinates). No-op if unsupported or already on. */
-  function startVoiceCapture(anchor: { x: number; y: number }) {
+  /**
+   * Starts Web Speech API capture, anchored at `anchor` (screen-content coordinates). No-op if unsupported or
+   * already on. `autoFromDraw` marks a capture started by finishing a stroke rather than an explicit V-sign —
+   * only that kind can be cancelled by a fresh point elsewhere before any speech (see `runGestures`).
+   */
+  function startVoiceCapture(anchor: { x: number; y: number }, autoFromDraw = false) {
     const Ctor = speechRecognitionCtor();
     if (!Ctor || voiceCaptureOn) return;
     const rec = new Ctor();
@@ -1289,6 +1307,7 @@ export async function startPresenterOverlayCompositor({
     rec.lang = "en-US";
     rec.onresult = (event) => {
       voiceLastActivityAt = performance.now();
+      voiceHasSpoken = true;
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) voiceText = `${voiceText} ${result[0].transcript}`.trim();
@@ -1329,6 +1348,8 @@ export async function startPresenterOverlayCompositor({
     voiceText = "";
     voiceAnchorAt = anchor;
     voiceLastActivityAt = performance.now();
+    voiceAutoFromDraw = autoFromDraw;
+    voiceHasSpoken = false;
   }
 
   /** Stops capture and, if anything was said, pins it as a permanent label at the anchor. */
@@ -1430,6 +1451,11 @@ export async function startPresenterOverlayCompositor({
     }
     // With the host's ghost off the share there's nothing for a gesture to point at, so it sees no hand.
     const state = tracker.update(now, placement ? landmarks : null, source.aspect);
+    // A fresh point session (the dot was off, now it's on) starting before an auto-triggered (not V-sign)
+    // capture has heard any speech at all means the host moved on to point at something else instead of
+    // captioning what they just drew — cancel quietly. Once they've said something the intent already stuck,
+    // so a later point elsewhere no longer touches it.
+    if (!pointer && state.pointer && voiceCaptureOn && voiceAutoFromDraw && !voiceHasSpoken) abortVoiceCapture();
     pointer = state.pointer;
     // Where a stamp would land right now, so it can be previewed before it's dropped: wherever the laser dot is,
     // through the same ghost mapping and zoom view as everything else the fingertip drives.
