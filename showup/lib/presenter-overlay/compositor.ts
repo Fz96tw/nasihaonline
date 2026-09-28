@@ -107,6 +107,9 @@ const LASER_TRAIL_MS = 250;
 /** Voice Pin auto-stops (pinning whatever was said) once the hand has been fully out of frame this long — long
  * enough that gesturing naturally, or a brief tracking hiccup, doesn't cut a sentence off mid-way. */
 const VOICE_HAND_GONE_STOP_MS = 1500;
+/** Voice Pin also auto-stops after this long with no speech activity at all (interim or final), whether that's
+ * silence right from the start or a pause partway through a sentence. */
+const VOICE_SILENCE_STOP_MS = 3000;
 /** The dimmed area's darkness, and the spotlight's radius as a fraction of the frame height. */
 const SPOTLIGHT_DIM = 0.65;
 const SPOTLIGHT_RADIUS = 0.12;
@@ -573,6 +576,8 @@ export async function startPresenterOverlayCompositor({
   let voiceAnchorAt: { x: number; y: number } | null = null;
   /** When the hand was last seen at all (any pose); null while a hand is currently visible. Drives the auto-stop below. */
   let voiceHandGoneSince: number | null = null;
+  /** When speech was last detected (interim or final) — reset on every result, checked every frame for the silence auto-stop. */
+  let voiceLastActivityAt = 0;
 
   const screenReader = new Processor({ track: screenTrack }).readable.getReader();
 
@@ -1278,9 +1283,12 @@ export async function startPresenterOverlayCompositor({
     if (!Ctor || voiceCaptureOn) return;
     const rec = new Ctor();
     rec.continuous = true;
-    rec.interimResults = false; // only finalized segments — no flicker as words get revised
+    // Interim results are requested so the silence auto-stop has a "still talking" heartbeat to reset on — but
+    // only finalized ones are ever appended to voiceText, so the drawn caption itself never flickers.
+    rec.interimResults = true;
     rec.lang = "en-US";
     rec.onresult = (event) => {
+      voiceLastActivityAt = performance.now();
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) voiceText = `${voiceText} ${result[0].transcript}`.trim();
@@ -1320,6 +1328,7 @@ export async function startPresenterOverlayCompositor({
     voiceCaptureOn = true;
     voiceText = "";
     voiceAnchorAt = anchor;
+    voiceLastActivityAt = performance.now();
   }
 
   /** Stops capture and, if anything was said, pins it as a permanent label at the anchor. */
@@ -1442,6 +1451,9 @@ export async function startPresenterOverlayCompositor({
       voiceHandGoneSince ??= now;
       if (voiceCaptureOn && now - voiceHandGoneSince >= VOICE_HAND_GONE_STOP_MS) stopVoiceCapture(now);
     }
+    // Independent of the hand check above: silence (nothing recognized, interim or final) for a while also
+    // means the host is done, even with their hand still up.
+    if (voiceCaptureOn && now - voiceLastActivityAt >= VOICE_SILENCE_STOP_MS) stopVoiceCapture(now);
     // Air-draw: the pen tip (two fingers) or the shape corner (the "L") goes through the same ghost mapping as the laser,
     // then to screen coordinates through the current zoom view. Only one of them is ever active.
     const hostTip = state.pen ?? state.shape;
