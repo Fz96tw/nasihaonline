@@ -114,3 +114,11 @@ test("plain text grows to exactly the text's own size, with no shape padding add
 test("growToFit draws nothing for empty text", () => {
   assert.equal(growToFit("", 200, 20, measure, "box"), null);
 });
+
+test("a tiny area draws nothing at the default floor, but shrinks the text when the floor is lowered (zoomed-out Voice Pin note)", () => {
+  const area = { x: 0, y: 0, width: 40, height: 8 };
+  assert.equal(fitText("Check this number", area, measure), null);
+  const fitted = fitText("Check this number", area, measure, 1);
+  assert.ok(fitted);
+  assert.ok(fitted.fontPx < MIN_FONT_PX);
+});

@@ -82,15 +82,15 @@ export function wrapText(text: string, maxWidth: number, measure: (text: string)
  * Lays `text` out in `area`. `measure(text, fontPx)` returns the width the text would be drawn at that size.
  * Returns null when there is nothing to draw (no text, or an area too small for even MIN_FONT_PX).
  */
-export function fitText(text: string, area: FitRect, measure: (text: string, fontPx: number) => number): FittedText | null {
-  if (!text || area.width < MIN_FONT_PX || area.height < MIN_FONT_PX) return null;
+export function fitText(text: string, area: FitRect, measure: (text: string, fontPx: number) => number, minFontPx: number = MIN_FONT_PX): FittedText | null {
+  if (!text || area.width < minFontPx || area.height < minFontPx) return null;
   let fontPx = Math.min(MAX_FONT_PX, Math.floor(area.height));
-  for (; fontPx >= MIN_FONT_PX; fontPx--) {
+  for (; fontPx >= minFontPx; fontPx--) {
     const lines = wrapText(text, area.width, (candidate) => measure(candidate, fontPx));
     if (lines.length * fontPx * LINE_HEIGHT <= area.height) return { fontPx, lineHeight: fontPx * LINE_HEIGHT, lines };
   }
   // Doesn't fit even at the smallest size: keep the lines that do, and end the last with an ellipsis.
-  fontPx = MIN_FONT_PX;
+  fontPx = minFontPx;
   const all = wrapText(text, area.width, (candidate) => measure(candidate, fontPx));
   const fits = Math.max(1, Math.floor(area.height / (fontPx * LINE_HEIGHT)));
   const lines = all.slice(0, fits);

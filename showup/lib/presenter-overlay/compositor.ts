@@ -1186,7 +1186,7 @@ export async function startPresenterOverlayCompositor({
     const fitted = fitText(text, area, (candidate, fontPx) => {
       outputCtx.font = `600 ${fontPx}px sans-serif`;
       return outputCtx.measureText(candidate).width;
-    });
+    }, 1); // A note shrinks with the zoom like its bubble does, so no legibility floor: at the default floor it vanished when zoomed out.
     if (!fitted) return;
     outputCtx.save();
     outputCtx.globalAlpha = alpha;
