@@ -187,7 +187,7 @@ export type PresenterOverlaySettings = {
    * locked to the line it started on. Off by default; needs `gestures` on too.
    */
   highlighter: boolean;
-  /** Highlights stay until removed (listed with the pinned shapes) instead of fading like the pen. */
+  /** Highlights stay until removed (listed with the pinned shapes) instead of fading like the pen. On by default. */
   pinHighlights: boolean;
   /** Colour of the highlighter band. */
   highlightColor: PenColor;
@@ -241,7 +241,7 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   arrowMode: false,
   voicePin: false,
   highlighter: false,
-  pinHighlights: false,
+  pinHighlights: true,
   highlightColor: "yellow",
   shapeKind: "box",
   stampShapeKind: "box",
