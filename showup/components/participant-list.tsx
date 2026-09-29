@@ -116,7 +116,7 @@ export function ParticipantList({ room, overlayIds, isHost }: { room: Room | nul
           role="dialog"
           aria-label="People in this session"
           data-testid="people-list"
-          className={`absolute left-0 top-full z-50 mt-2 w-[min(18rem,calc(100vw-2rem))] rounded-lg border p-2 text-sm shadow-lg ${LK_PANEL_CLASS}`}
+          className={`absolute bottom-full left-0 z-50 mb-2 w-[min(18rem,calc(100vw-2rem))] rounded-lg border p-2 text-sm shadow-lg ${LK_PANEL_CLASS}`}
         >
           <div className="mb-1 flex items-center justify-between px-1 text-xs text-white/60">
             <span>

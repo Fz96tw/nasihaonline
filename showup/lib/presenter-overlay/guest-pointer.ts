@@ -10,9 +10,11 @@ import { outputToScreen, type ViewRect } from "./screen-zoom.ts";
 export const POINTER_TOPIC = "showup-pointer";
 /** Guest air-draw (Showup 22) uses the same rules on its own topic, with its own host setting and permissions. */
 export const DRAW_TOPIC = "showup-draw";
+/** Guest pinch-zoom uses the same permission machinery on its own topic; see ZoomGesture below for why its messages differ from a position. */
+export const ZOOM_TOPIC = "showup-zoom";
 
 /** Which guest ability a message, status or board is about. */
-export type GuestAbility = "pointer" | "draw";
+export type GuestAbility = "pointer" | "draw" | "zoom";
 
 /** Host setting "Guests can point". */
 export type PointerPolicy = "off" | "ask" | "on";
@@ -40,6 +42,21 @@ export type DrawPosition = { t: "draw"; u: number; v: number; on: boolean };
 export type DrawToHost = { t: "draw-request" } | DrawPosition;
 export type DrawToGuest = { t: "draw-status"; status: PointerStatus };
 
+/**
+ * The guest's own pinch-to-zoom-and-pan gesture (the same GestureTracker the host reads on their own camera, run
+ * on the guest's camera instead — see components/guest-pointer-control.tsx). Unlike a pointer/pen position, this
+ * isn't "where's my fingertip right now": it's the tracker's own zoom/pan/reset actions, forwarded as they fire,
+ * so a `reset` (an open-palm hold) carries no position.
+ */
+export type ZoomGesture =
+  | { t: "zoom"; action: "zoom"; u: number; v: number }
+  | { t: "zoom"; action: "pan"; u: number; v: number }
+  | { t: "zoom"; action: "reset" };
+export type ZoomToHost = { t: "zoom-request" } | ZoomGesture;
+export type ZoomToGuest = { t: "zoom-status"; status: PointerStatus };
+/** What the compositor applies a zoom gesture with, once the host has mapped it through the acting guest's ghost. */
+export type GuestZoomAction = { type: "zoom" | "pan"; u: number; v: number } | { type: "reset" };
+
 const STATUSES: readonly PointerStatus[] = ["off", "ask", "pending", "allowed"];
 const MAX_MESSAGE_BYTES = 128;
 
@@ -59,7 +76,9 @@ const DOT_SMOOTH_MS = 70;
 /** Per-guest dot colours, none of them the host's red laser or pen. Handed out in the order guests first point. */
 export const GUEST_POINTER_COLORS: readonly string[] = ["#22d3ee", "#a3e635", "#facc15", "#e879f9", "#fb923c", "#60a5fa"];
 
-export function encodePointerMessage(message: PointerToHost | PointerToGuest | DrawToHost | DrawToGuest): Uint8Array<ArrayBuffer> {
+export function encodePointerMessage(
+  message: PointerToHost | PointerToGuest | DrawToHost | DrawToGuest | ZoomToHost | ZoomToGuest,
+): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(JSON.stringify(message));
 }
 
@@ -109,6 +128,27 @@ export function parseDrawToGuest(payload: Uint8Array): DrawToGuest | null {
   if (!message) return null;
   if (message.t === "draw-status" && STATUSES.includes(message.status as PointerStatus)) {
     return { t: "draw-status", status: message.status as PointerStatus };
+  }
+  return null;
+}
+
+const ZOOM_ACTIONS = ["zoom", "pan", "reset"] as const;
+
+export function parseZoomToHost(payload: Uint8Array): ZoomToHost | null {
+  const message = parseJson(payload);
+  if (!message) return null;
+  if (message.t === "zoom-request") return { t: "zoom-request" };
+  if (message.t !== "zoom" || !ZOOM_ACTIONS.includes(message.action as (typeof ZOOM_ACTIONS)[number])) return null;
+  if (message.action === "reset") return { t: "zoom", action: "reset" };
+  if (inRange(message.u) && inRange(message.v)) return { t: "zoom", action: message.action as "zoom" | "pan", u: message.u, v: message.v };
+  return null;
+}
+
+export function parseZoomToGuest(payload: Uint8Array): ZoomToGuest | null {
+  const message = parseJson(payload);
+  if (!message) return null;
+  if (message.t === "zoom-status" && STATUSES.includes(message.status as PointerStatus)) {
+    return { t: "zoom-status", status: message.status as PointerStatus };
   }
   return null;
 }
@@ -317,4 +357,14 @@ export function mapGuestPenToScreen(
  */
 export function mapGuestPointer(u: number, v: number, ghost: Omit<GhostPlacement, "crop">): { x: number; y: number } {
   return cameraToOutput(u, v, { ...ghost, crop: null });
+}
+
+/**
+ * Where a guest's pinch lands on the output frame, as a fraction of it (0-1, clamped) — the same space
+ * ScreenViewport's zoomIn/pan take, through that guest's ghost placement (their size and the host's single
+ * mirror rule), so their pinch zooms toward the same spot on the shared screen their fingertip is over.
+ */
+export function mapGuestZoomPoint(u: number, v: number, ghost: Omit<GhostPlacement, "crop">, output: { width: number; height: number }): { x: number; y: number } {
+  const at = mapGuestPointer(u, v, ghost);
+  return { x: Math.min(1, Math.max(0, at.x / output.width)), y: Math.min(1, Math.max(0, at.y / output.height)) };
 }

@@ -121,8 +121,19 @@ function RoomBridge({ onRoom, onSharing }: { onRoom: (room: Room) => void; onSha
   return null;
 }
 
-function TopLeftOverlay({ children }: { children: ReactNode }) {
-  return <div className="pointer-events-none absolute left-4 top-4 z-50 flex flex-col items-start gap-2">{children}</div>;
+/**
+ * Sits above the LiveKit ControlBar (like SpeakerChip's `bottom-20`) rather than
+ * top-left, which would otherwise land on top of a guest's own camera tile —
+ * the grid layout fills from the top-left when there's no screen share yet.
+ * `flex-col-reverse` keeps the first child (ParticipantList) closest to the
+ * control bar as more controls stack on above it.
+ */
+function BottomLeftOverlay({ children }: { children: ReactNode }) {
+  return (
+    <div className="pointer-events-none absolute bottom-20 left-4 z-50 flex flex-col-reverse items-start gap-2">
+      {children}
+    </div>
+  );
 }
 
 /** Code and role banner. The host can copy the code to hand to the people who should join. */
@@ -370,7 +381,7 @@ export function ShowupRoom({ credentials, onLeave }: { credentials: RoomCredenti
       {isHost && <LobbyHostPanel credentials={credentials} room={room} sharing={sharing} onToast={pushToast} />}
       {isHost && !sharing && <SharePrompt room={room} onError={pushToast} />}
       <Toasts toasts={toasts} />
-      <TopLeftOverlay>
+      <BottomLeftOverlay>
         {/* Everyone in the session by name (camera on or off), from LiveKit's own room state; closed until opened. */}
         <ParticipantList room={room} overlayIds={overlayIds} isHost={isHost} />
         {/* Anyone else in the meeting can ask to appear on a presenter's share; renders nothing unless someone else is sharing. */}
@@ -379,7 +390,7 @@ export function ShowupRoom({ credentials, onLeave }: { credentials: RoomCredenti
         <GuestPointerControl room={room} />
         {/* Anyone who shares can use the overlay: the control renders nothing until the local participant is sharing. */}
         {overlaySupported ? (
-          <PresenterOverlayControl room={room} onError={pushToast} onOverlayIds={setOverlayIds} />
+          <PresenterOverlayControl room={room} onError={pushToast} onOverlayIds={setOverlayIds} panelPlacement="above-left" />
         ) : (
           isHost && (
             <div className={`pointer-events-auto max-w-[16rem] rounded-lg text-xs ${LK_BUTTON_CLASS}`}>
@@ -387,7 +398,7 @@ export function ShowupRoom({ credentials, onLeave }: { credentials: RoomCredenti
             </div>
           )
         )}
-      </TopLeftOverlay>
+      </BottomLeftOverlay>
       <LiveKitRoom
         token={credentials.token}
         serverUrl={credentials.serverUrl}

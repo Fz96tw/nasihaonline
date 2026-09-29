@@ -31,7 +31,7 @@
 import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
 import { REACTION_EMOJI, ReactionPlayer, reactionPosition } from "./reactions.ts";
 import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement } from "./gestures.ts";
-import { mapGuestPenToScreen, mapGuestPointer, type GuestPointerDot } from "./guest-pointer.ts";
+import { mapGuestPenToScreen, mapGuestPointer, mapGuestZoomPoint, type GuestPointerDot, type GuestZoomAction } from "./guest-pointer.ts";
 import { ERASER_RADIUS, HOST_OWNER, StrokeBoard, arrowHead, cleanShapeText, shapeBounds, strokeColor, takesText, type PenColor, type PinnedShape } from "./drawing.ts";
 import { fitText, growToFit, textArea, type FittedText } from "./text-fit.ts";
 import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
@@ -284,6 +284,12 @@ export type PresenterOverlayCompositor = {
   setGuestPointers: (dots: GuestPointerDot[]) => void;
   /** Guests who are drawing this moment (pen tip in their camera frame, their colour). Each becomes a stroke of their own, kept in screen coordinates; a guest missing from the list, or whose ghost isn't on the share, has their stroke ended. Call it every tick. */
   setGuestPens: (pens: GuestPointerDot[]) => void;
+  /**
+   * Applies one guest's pinch-zoom gesture (already permission-checked by the caller) to the shared screen view,
+   * mapped through that guest's own ghost placement. A no-op if their ghost isn't currently on the share (they
+   * left, or lost the overlay, between sending it and the host reading it).
+   */
+  applyGuestZoom: (id: string, action: GuestZoomAction) => void;
   /** Stops all readers and the output track (the segmenter is kept for reuse). Does NOT stop the input tracks — the caller owns those. */
   stop: () => void;
 };
@@ -583,6 +589,8 @@ export async function startPresenterOverlayCompositor({
   let guestPointers: GuestPointerDot[] = [];
   let guestPens: GuestPointerDot[] = [];
   let lastPan: { x: number; y: number } | null = null;
+  /** Each guest's own last pinch point (output-frame fraction), so their `pan` actions can be applied as deltas like the host's own. Separate from `lastPan` (the host's), so a guest's pinch and the host's don't fight over one cursor. */
+  const guestPan = new Map<string, { x: number; y: number }>();
   /** Where the eraser ring is (screen-content coordinates) while the eraser pose is held; null otherwise. */
   let eraserAt: { x: number; y: number } | null = null;
   /** Where a stamp would land (screen-content coordinates) while the pointer is live, so it can be previewed before it's dropped. */
@@ -1857,6 +1865,7 @@ export async function startPresenterOverlayCompositor({
     if (!source) return;
     sources.delete(id);
     source.reader.cancel().catch(() => {});
+    guestPan.delete(id);
   }
 
   function setVisible(ids: string[]) {
@@ -1905,6 +1914,25 @@ export async function startPresenterOverlayCompositor({
     guestPens = pens;
   }
 
+  function applyGuestZoom(id: string, action: GuestZoomAction) {
+    const now = performance.now();
+    if (action.type === "reset") {
+      viewport.reset(now);
+      guestPan.delete(id);
+      return;
+    }
+    const placement = placementFor(id);
+    if (!placement) return;
+    const at = mapGuestZoomPoint(action.u, action.v, placement, outputCanvas);
+    if (action.type === "zoom") {
+      viewport.zoomIn(now, at.x, at.y);
+    } else {
+      const last = guestPan.get(id);
+      if (last) viewport.pan(at.x - last.x, at.y - last.y);
+    }
+    guestPan.set(id, at);
+  }
+
   function stop() {
     if (stopped) return;
     stopped = true;
@@ -1924,5 +1952,23 @@ export async function startPresenterOverlayCompositor({
     onError(error);
   });
 
-  return { track: generator, settings, addSource, removeSource, setVisible, setFeatured, zoomIn, resetZoom, clearDrawing, setShapeText, removeShape, undoShape, setSpotlight, setGuestPointers, setGuestPens, stop };
+  return {
+    track: generator,
+    settings,
+    addSource,
+    removeSource,
+    setVisible,
+    setFeatured,
+    zoomIn,
+    resetZoom,
+    clearDrawing,
+    setShapeText,
+    removeShape,
+    undoShape,
+    setSpotlight,
+    setGuestPointers,
+    setGuestPens,
+    applyGuestZoom,
+    stop,
+  };
 }

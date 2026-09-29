@@ -11,10 +11,13 @@ import {
   encodePointerMessage,
   mapGuestPenToScreen,
   mapGuestPointer,
+  mapGuestZoomPoint,
   parseDrawToGuest,
   parseDrawToHost,
   parsePointerToGuest,
   parsePointerToHost,
+  parseZoomToGuest,
+  parseZoomToHost,
 } from "./guest-pointer.ts";
 import { ScreenViewport, screenToOutput } from "./screen-zoom.ts";
 
@@ -56,7 +59,7 @@ test("malformed, out-of-range and unknown messages are ignored without throwing"
   assert.equal(parsePointerToHost(raw({ t: "pointer", u: Number.NaN, v: 0.5, on: true })), null);
 });
 
-test("guests can't zoom or do anything but point: no message parses into a zoom", () => {
+test("the pointer channel parses nothing but a pointer position or request: a zoom, pan or draw message isn't one", () => {
   for (const t of ["zoom", "pan", "reset", "spotlight", "draw", "reaction"]) {
     assert.equal(parsePointerToHost(raw({ t, u: 0.5, v: 0.5, on: true })), null, t);
   }
@@ -309,6 +312,48 @@ test("a guest's pen tip lands on their ghost's fingertip in screen coordinates, 
   assert.deepEqual(mapGuestPenToScreen(0.25, 0.5, { ...ghost, mirror: false }, output, whole), { x: 0.2, y: 350 / 800 });
   assert.deepEqual(mapGuestPenToScreen(0.25, 0.5, { ...ghost, mirror: true }, output, whole), { x: 0.4, y: 350 / 800 });
   assert.deepEqual(mapGuestPenToScreen(0, 0, { ...ghost, mirror: true }, output, whole), { x: 0.5, y: 0.25 });
+});
+
+test("zoom gesture messages round-trip", () => {
+  assert.deepEqual(parseZoomToHost(encodePointerMessage({ t: "zoom", action: "zoom", u: 0.25, v: 0.75 })), { t: "zoom", action: "zoom", u: 0.25, v: 0.75 });
+  assert.deepEqual(parseZoomToHost(encodePointerMessage({ t: "zoom", action: "pan", u: 0.1, v: 0.9 })), { t: "zoom", action: "pan", u: 0.1, v: 0.9 });
+  assert.deepEqual(parseZoomToHost(encodePointerMessage({ t: "zoom", action: "reset" })), { t: "zoom", action: "reset" });
+  assert.deepEqual(parseZoomToHost(encodePointerMessage({ t: "zoom-request" })), { t: "zoom-request" });
+  assert.deepEqual(parseZoomToGuest(encodePointerMessage({ t: "zoom-status", status: "allowed" })), { t: "zoom-status", status: "allowed" });
+});
+
+test("malformed, out-of-range or unknown zoom messages are ignored without throwing", () => {
+  for (const bad of [
+    { t: "zoom" },
+    { t: "zoom", action: "spin" },
+    { t: "zoom", action: "zoom" },
+    { t: "zoom", action: "zoom", u: 0.5 },
+    { t: "zoom", action: "zoom", u: "0.5", v: 0.5 },
+    { t: "zoom", action: "zoom", u: 1.5, v: 0.5 },
+    { t: "zoom", action: "zoom", u: -0.1, v: 0.5 },
+    { t: "pointer", u: 0.5, v: 0.5, on: true },
+    { t: "zoom-status", status: "allowed" },
+    [],
+    "text",
+    7,
+    null,
+  ]) {
+    assert.equal(parseZoomToHost(raw(bad)), null, JSON.stringify(bad));
+  }
+  assert.equal(parseZoomToGuest(raw({ t: "zoom-status", status: "admin" })), null);
+  assert.equal(parseZoomToGuest(raw({ t: "zoom-request" })), null);
+  assert.equal(parseZoomToHost(new TextEncoder().encode("{oops")), null);
+  // A reset carries no position, so extra fields on it are simply ignored rather than rejected.
+  assert.deepEqual(parseZoomToHost(raw({ t: "zoom", action: "reset", u: 0.5, v: 0.5 })), { t: "zoom", action: "reset" });
+});
+
+test("a guest's pinch maps to an output-frame fraction through their ghost, mirrored or not, and clamps to 0-1", () => {
+  const ghost = { x: 100, y: 200, width: 400, height: 300 };
+  const output = { width: 1000, height: 1000 };
+  assert.deepEqual(mapGuestZoomPoint(0.25, 0.5, { ...ghost, mirror: false }, output), { x: 0.2, y: 0.35 });
+  assert.deepEqual(mapGuestZoomPoint(0.25, 0.5, { ...ghost, mirror: true }, output), { x: 0.4, y: 0.35 });
+  // A ghost placed on a much smaller output would map outside 0-1; it's clamped back onto the frame.
+  assert.deepEqual(mapGuestZoomPoint(0, 0, { ...ghost, mirror: false }, { width: 50, height: 50 }), { x: 1, y: 1 });
 });
 
 test("guest strokes stay on the screen content when the host zooms or pans", () => {

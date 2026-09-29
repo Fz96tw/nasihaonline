@@ -12,14 +12,17 @@ import {
   DRAW_TOPIC,
   GuestPointerBoard,
   POINTER_TOPIC,
+  ZOOM_TOPIC,
   encodePointerMessage,
   parseDrawToHost,
   parsePointerToHost,
+  parseZoomToHost,
   type DrawToGuest,
   type GuestAbility,
   type PointerPolicy,
   type PointerStatus,
   type PointerToGuest,
+  type ZoomToGuest,
 } from "@/lib/presenter-overlay/guest-pointer";
 import {
   isPresenterOverlaySupported,
@@ -192,8 +195,8 @@ export function PresenterOverlayControl({
   onError: (message: string) => void;
   /** Called with everyone whose camera is on the overlay (empty when off), so the meeting view can hide their camera tiles. */
   onOverlayIds: (ids: string[]) => void;
-  /** Where the settings panel opens: under the button (TopLeftOverlay), or above it for the bottom-right quick-recording controls, which sit right on top of LiveKit's control bar. */
-  panelPlacement?: "below-left" | "above-right";
+  /** Where the settings panel opens relative to its button: below (room enough above the anchor) or above (the anchor sits near the bottom of the screen, on top of LiveKit's control bar). */
+  panelPlacement?: "below-left" | "above-right" | "above-left";
 }) {
   const [supported, setSupported] = useState(false);
   const [share, setShare] = useState<Share | null>(null);
@@ -259,13 +262,18 @@ export function PresenterOverlayControl({
   // "Guests can draw" (default off): its own policy, approvals and revokes, but the same colour per guest as their pointer.
   const [drawPolicy, setDrawPolicy] = useState<PointerPolicy>("off");
   const [drawingIds, setDrawingIds] = useState<string[]>([]);
+  // "Guests can zoom" (default off): same shape again, for pinch-zoom-and-pan of the shared screen.
+  const [zoomPolicy, setZoomPolicy] = useState<PointerPolicy>("off");
+  const [zoomingIds, setZoomingIds] = useState<string[]>([]);
   const guestColorsRef = useRef(new Map<string, string>());
   const pointerBoardRef = useRef(new GuestPointerBoard(guestColorsRef.current));
   const drawBoardRef = useRef(new GuestPointerBoard(guestColorsRef.current));
-  /** Guests whose ghost is on the share right now, and the pointer / draw status each was last told. */
+  const zoomBoardRef = useRef(new GuestPointerBoard(guestColorsRef.current));
+  /** Guests whose ghost is on the share right now, and the pointer / draw / zoom status each was last told. */
   const shownIdsRef = useRef<string[]>([]);
   const pointerSentRef = useRef(new Map<string, PointerStatus>());
   const drawSentRef = useRef(new Map<string, PointerStatus>());
+  const zoomSentRef = useRef(new Map<string, PointerStatus>());
   const announcedRef = useRef(false);
   const overlayIdsRef = useRef<string[]>([]);
   const rosterRef = useRef(new CoGhostRoster());
@@ -362,12 +370,14 @@ export function PresenterOverlayControl({
     // No ghosts, no pointers: every guest is told theirs is off, and any dots go.
     pointerBoardRef.current.clearLive();
     drawBoardRef.current.clearLive();
+    zoomBoardRef.current.clearLive();
     shownIdsRef.current = [];
     const stillHere = new Set<string>();
     roomRef.current?.remoteParticipants.forEach((participant) => stillHere.add(participant.identity));
     pushGuestStatuses(stillHere);
     setPointingIds([]);
     setDrawingIds([]);
+    setZoomingIds([]);
     overlay.compositor.stop();
     overlay.screenClone.stop();
     overlay.cameraTrack.stop();
@@ -550,16 +560,21 @@ export function PresenterOverlayControl({
     );
   }
 
-  const boardOf = (ability: GuestAbility) => (ability === "pointer" ? pointerBoardRef.current : drawBoardRef.current);
-  const sentOf = (ability: GuestAbility) => (ability === "pointer" ? pointerSentRef.current : drawSentRef.current);
+  const ABILITY_TOPIC: Record<GuestAbility, string> = { pointer: POINTER_TOPIC, draw: DRAW_TOPIC, zoom: ZOOM_TOPIC };
+  const boardOf = (ability: GuestAbility) =>
+    ability === "pointer" ? pointerBoardRef.current : ability === "draw" ? drawBoardRef.current : zoomBoardRef.current;
+  const sentOf = (ability: GuestAbility) =>
+    ability === "pointer" ? pointerSentRef.current : ability === "draw" ? drawSentRef.current : zoomSentRef.current;
 
   /**
-   * Each tick: who is on the share decides who may point or draw. Tells any guest whose status changed, feeds the
-   * compositor the dots and pen tips, and updates the host's "pointing" / "drawing" markers.
+   * Each tick: who is on the share decides who may point, draw or zoom. Tells any guest whose status changed, feeds
+   * the compositor the dots and pen tips, and updates the host's "pointing" / "drawing" / "zooming" markers. Zoom
+   * has no dots to draw (it moves the shared view itself, applied as each gesture message arrives — see
+   * handleGuestAbilityMessage) but shares the same permission board shape, so it prunes and expires the same way.
    */
   function syncGuestPointers(compositor: PresenterOverlayCompositor, present: Set<string>, now: number) {
     const shown = shownIdsRef.current;
-    for (const ability of ["pointer", "draw"] as const) {
+    for (const ability of ["pointer", "draw", "zoom"] as const) {
       const board = boardOf(ability);
       board.prune(present);
       for (const id of board.expire(now)) sendGuestStatus(ability, id, board.status(id, false));
@@ -571,15 +586,17 @@ export function PresenterOverlayControl({
     const same = (a: string[], b: string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
     const pointing = marker("pointer");
     const drawing = marker("draw");
+    const zooming = marker("zoom");
     setPointingIds((previous) => (same(previous, pointing) ? previous : pointing));
     setDrawingIds((previous) => (same(previous, drawing) ? previous : drawing));
+    setZoomingIds((previous) => (same(previous, zooming) ? previous : zooming));
   }
 
-  /** Sends each present guest their pointer and draw status if it differs from what they were last told. */
+  /** Sends each present guest their pointer, draw and zoom status if it differs from what they were last told. */
   function pushGuestStatuses(present: Set<string>) {
     const overlayOn = !!overlayRef.current;
     let changed = false;
-    for (const ability of ["pointer", "draw"] as const) {
+    for (const ability of ["pointer", "draw", "zoom"] as const) {
       const board = boardOf(ability);
       const sent = sentOf(ability);
       sent.forEach((_status, id) => {
@@ -598,29 +615,47 @@ export function PresenterOverlayControl({
 
   /** Re-pushes to everyone already told something (after a host decision). */
   function repushGuestStatuses(extra?: string) {
-    const present = new Set<string>(Array.from(pointerSentRef.current.keys()).concat(Array.from(drawSentRef.current.keys())));
+    const present = new Set<string>(
+      Array.from(pointerSentRef.current.keys()).concat(Array.from(drawSentRef.current.keys()), Array.from(zoomSentRef.current.keys())),
+    );
     if (extra) present.add(extra);
     pushGuestStatuses(present);
     setPointerVersion((version) => version + 1);
   }
 
   function sendGuestStatus(ability: GuestAbility, id: string, status: PointerStatus) {
-    const message: PointerToGuest | DrawToGuest = ability === "pointer" ? { t: "pointer-status", status } : { t: "draw-status", status };
+    const message: PointerToGuest | DrawToGuest | ZoomToGuest =
+      ability === "pointer" ? { t: "pointer-status", status } : ability === "draw" ? { t: "draw-status", status } : { t: "zoom-status", status };
     roomRef.current?.localParticipant
-      .publishData(encodePointerMessage(message), { reliable: true, topic: ability === "pointer" ? POINTER_TOPIC : DRAW_TOPIC, destinationIdentities: [id] })
+      .publishData(encodePointerMessage(message), { reliable: true, topic: ABILITY_TOPIC[ability], destinationIdentities: [id] })
       .catch(() => {});
   }
 
-  /** A pointer or draw message from a guest. The board decides; anything from a guest who isn't shown and permitted is ignored. */
+  /**
+   * A pointer, draw or zoom message from a guest. The board decides; anything from a guest who isn't shown and
+   * permitted is ignored. Zoom is applied straight to the compositor's shared screen view as each gesture message
+   * arrives (there's nothing to poll each tick, unlike a pointer dot or a pen stroke).
+   */
   function handleGuestAbilityMessage(ability: GuestAbility, id: string, payload: Uint8Array) {
-    const message = ability === "pointer" ? parsePointerToHost(payload) : parseDrawToHost(payload);
+    const message = ability === "pointer" ? parsePointerToHost(payload) : ability === "draw" ? parseDrawToHost(payload) : parseZoomToHost(payload);
     if (!message || !overlayRef.current) return;
     const board = boardOf(ability);
     const visible = shownIdsRef.current.includes(id);
-    if (message.t === "pointer-request" || message.t === "draw-request") {
+    if (message.t === "pointer-request" || message.t === "draw-request" || message.t === "zoom-request") {
       const status = board.request(id, visible, performance.now());
       if (status === "pending") setPanelOpen(true);
       repushGuestStatuses(id);
+      return;
+    }
+    if (message.t === "zoom") {
+      const now = performance.now();
+      if (message.action === "reset") {
+        if (board.canPoint(id, visible)) overlayRef.current.compositor.applyGuestZoom(id, { type: "reset" });
+        return;
+      }
+      if (board.accept(id, { u: message.u, v: message.v, on: true }, visible, now)) {
+        overlayRef.current.compositor.applyGuestZoom(id, { type: message.action, u: message.u, v: message.v });
+      }
       return;
     }
     board.accept(id, message, visible, performance.now());
@@ -630,7 +665,8 @@ export function PresenterOverlayControl({
     const board = boardOf(ability);
     board.policy = next;
     if (ability === "pointer") setPointerPolicy(next);
-    else setDrawPolicy(next);
+    else if (ability === "draw") setDrawPolicy(next);
+    else setZoomPolicy(next);
     // Anyone still waiting is answered by the status change on the next tick.
     if (next !== "ask") for (const id of board.requesting) board.decide(id, false);
     setPointerVersion((version) => version + 1);
@@ -766,6 +802,21 @@ export function PresenterOverlayControl({
     await disposeOverlay();
   }
 
+  /**
+   * "Remove me" tears down the whole compositor, not just the host's own
+   * cutout — any co-ghost guests go dark too (see disposeOverlay's
+   * roster.clear()). Warn first when that's about to happen, since nothing
+   * else here hints at it.
+   */
+  function confirmRemoveOverlay() {
+    const guestCount = rosterRef.current.pinned.length;
+    if (guestCount > 0) {
+      const noun = guestCount === 1 ? "guest" : "guests";
+      if (!window.confirm(`This will also remove ${guestCount} ${noun} from the share. Continue?`)) return;
+    }
+    removeOverlay();
+  }
+
   // Track the presenter's own screen share: appears when they start
   // sharing with LiveKit's button, and on unpublish (however it happened)
   // tears the overlay down and stops the raw capture LiveKit may have
@@ -864,8 +915,8 @@ export function PresenterOverlayControl({
   useEffect(() => {
     if (!room) return;
     const onData = (payload: Uint8Array, participant?: { identity: string }, _kind?: unknown, topic?: string) => {
-      if (!participant || (topic !== POINTER_TOPIC && topic !== DRAW_TOPIC)) return;
-      handleGuestAbilityMessage(topic === POINTER_TOPIC ? "pointer" : "draw", participant.identity, payload);
+      if (!participant || (topic !== POINTER_TOPIC && topic !== DRAW_TOPIC && topic !== ZOOM_TOPIC)) return;
+      handleGuestAbilityMessage(topic === POINTER_TOPIC ? "pointer" : topic === DRAW_TOPIC ? "draw" : "zoom", participant.identity, payload);
     };
     room.on(RoomEvent.DataReceived, onData);
     return () => {
@@ -1012,7 +1063,7 @@ export function PresenterOverlayControl({
   }
 
   function toggleOverlay() {
-    if (overlayStatus === "on") removeOverlay();
+    if (overlayStatus === "on") confirmRemoveOverlay();
     else if (overlayStatus === "off") addOverlay();
   }
 
@@ -1289,6 +1340,7 @@ export function PresenterOverlayControl({
 
       {overlayOn && guestAbilityBlock("pointer")}
       {overlayOn && guestAbilityBlock("draw")}
+      {overlayOn && guestAbilityBlock("zoom")}
 
       <span className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Framing &amp; Look</span>
       <label className={labelClass}>
@@ -1677,12 +1729,17 @@ export function PresenterOverlayControl({
     );
   }
 
-  /** The host-only list for one guest ability (pointing or drawing): the policy, and per guest their permission, a live marker, and Allow / Deny / Revoke. Never drawn into the stream. */
+  /** The host-only list for one guest ability (pointing, drawing or zooming): the policy, and per guest their permission, a live marker, and Allow / Deny / Revoke. Never drawn into the stream. */
   function guestAbilityBlock(ability: GuestAbility) {
     const board = boardOf(ability);
-    const policy = ability === "pointer" ? pointerPolicy : drawPolicy;
-    const activeIds = ability === "pointer" ? pointingIds : drawingIds;
-    const nouns = ability === "pointer" ? { title: "Guest pointers", setting: "Guests can point", live: "pointing", verb: "point" } : { title: "Guest drawing", setting: "Guests can draw", live: "drawing", verb: "draw" };
+    const policy = ability === "pointer" ? pointerPolicy : ability === "draw" ? drawPolicy : zoomPolicy;
+    const activeIds = ability === "pointer" ? pointingIds : ability === "draw" ? drawingIds : zoomingIds;
+    const nouns =
+      ability === "pointer"
+        ? { title: "Guest pointers", setting: "Guests can point", live: "pointing", verb: "point" }
+        : ability === "draw"
+          ? { title: "Guest drawing", setting: "Guests can draw", live: "drawing", verb: "draw" }
+          : { title: "Guest screen zoom", setting: "Guests can zoom", live: "zooming", verb: "zoom" };
     return (
       <div className={labelClass} data-testid={`guest-${ability}s`}>
         <span className="text-white">{nouns.title}</span>
@@ -1753,7 +1810,7 @@ export function PresenterOverlayControl({
                     <button
                       type="button"
                       onClick={() => revokeGuestAbility(ability, guest.id)}
-                      title={`Take this guest's ${ability === "pointer" ? "pointer" : "pen"} away`}
+                      title={`Take this guest's ${ability === "pointer" ? "pointer" : ability === "draw" ? "pen" : "zoom"} away`}
                       className={`${segmentClass(false)} flex-none`}
                     >
                       Revoke
@@ -1770,9 +1827,10 @@ export function PresenterOverlayControl({
 
   const pendingPointers = overlayOn ? pointerBoardRef.current.requesting : [];
   const pendingDrawers = overlayOn ? drawBoardRef.current.requesting : [];
+  const pendingZoomers = overlayOn ? zoomBoardRef.current.requesting : [];
   const pendingRequests = overlayOn ? roster.requesting : [];
   const requestsBlock =
-    pendingRequests.length > 0 || pendingPointers.length > 0 || pendingDrawers.length > 0 ? (
+    pendingRequests.length > 0 || pendingPointers.length > 0 || pendingDrawers.length > 0 || pendingZoomers.length > 0 ? (
       <div className={`space-y-1.5 rounded-lg border p-2 text-xs shadow-lg ${LK_PANEL_CLASS}`} role="alert" data-testid="overlay-requests">
         {pendingRequests.map((id) => (
           <div key={id} className="flex items-center justify-between gap-2">
@@ -1803,6 +1861,17 @@ export function PresenterOverlayControl({
               Allow
             </button>
             <button type="button" onClick={() => decideGuestAbility("draw", id, false)} className={segmentClass(false)}>
+              Deny
+            </button>
+          </div>
+        ))}
+        {pendingZoomers.map((id) => (
+          <div key={`zoom-${id}`} className="flex items-center justify-between gap-2" data-testid="zoom-requests">
+            <span className="min-w-0 flex-1 truncate text-white">{labelOf(id)} wants to zoom the shared screen</span>
+            <button type="button" onClick={() => decideGuestAbility("zoom", id, true)} className={segmentClass(true)}>
+              Allow
+            </button>
+            <button type="button" onClick={() => decideGuestAbility("zoom", id, false)} className={segmentClass(false)}>
               Deny
             </button>
           </div>
@@ -1857,7 +1926,7 @@ export function PresenterOverlayControl({
           <span className="hidden sm:inline">Pop out preview</span>
         </button>
         {overlayOn && (
-          <button type="button" onClick={removeOverlay} className={LK_BUTTON_CLASS} title="Back to a plain screen share">
+          <button type="button" onClick={confirmRemoveOverlay} className={LK_BUTTON_CLASS} title="Back to a plain screen share">
             <X className="h-4 w-4" />
             <span className="hidden sm:inline">Remove me</span>
           </button>
@@ -1868,7 +1937,17 @@ export function PresenterOverlayControl({
         <div
           ref={panelRef}
           style={panelPos ? { position: "fixed", left: panelPos.x, top: panelPos.y } : undefined}
-          className={`${panelPos ? "" : `absolute ${panelPlacement === "above-right" ? "bottom-full right-0 mb-2" : "left-0 top-full mt-2"}`} w-72 rounded-lg border shadow-lg ${LK_PANEL_CLASS}`}
+          className={`${
+            panelPos
+              ? ""
+              : `absolute ${
+                  panelPlacement === "above-right"
+                    ? "bottom-full right-0 mb-2"
+                    : panelPlacement === "above-left"
+                      ? "bottom-full left-0 mb-2"
+                      : "left-0 top-full mt-2"
+                }`
+          } w-72 rounded-lg border shadow-lg ${LK_PANEL_CLASS}`}
           data-testid="overlay-panel"
         >
           <div
