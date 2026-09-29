@@ -216,6 +216,7 @@ export function PresenterOverlayControl({
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState<PresenterOverlaySettings["position"]>("center");
   const [span, setSpan] = useState(false);
+  const [showGhost, setShowGhost] = useState(true);
   const [normalizeSize, setNormalizeSize] = useState(true);
   // Host hand gestures (default off) and what's recognized right now — for the host's own indicator, never drawn into the stream.
   const [gestures, setGestures] = useState(false);
@@ -345,7 +346,7 @@ export function PresenterOverlayControl({
   }, [panelPos !== null]);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, span, gestures, penColor, arrowMode, voicePin, highlighter: true, pinHighlights, highlightColor, shapeKind, stampShapeKind, stampText, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
+    return { opacity, scale, position, span, gestures, showGhost, penColor, arrowMode, voicePin, highlighter: true, pinHighlights, highlightColor, shapeKind, stampShapeKind, stampText, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -1152,6 +1153,11 @@ export function PresenterOverlayControl({
     updateSettings({ voicePin: next });
   }
 
+  function changeShowGhost(next: boolean) {
+    setShowGhost(next);
+    updateSettings({ showGhost: next });
+  }
+
   function presetsTabBody() {
     // Whether Whiteboard Mode is "the" active look right now, judged only by the fields it shares with the old
     // Pointer Only (gestures/arrowMode/penColor) — not by voicePin, which is exactly the field this checkbox
@@ -1162,6 +1168,16 @@ export function PresenterOverlayControl({
     return (
       <>
         <PresetRow title="Look" presets={LOOK_PRESETS} current={currentLookValues} onApply={applyLookPreset} segmentClass={segmentClass} />
+        <button
+          type="button"
+          data-testid="overlay-hide-ghost-preset"
+          aria-pressed={!showGhost}
+          title="Keep gestures working without showing your own image on the share"
+          onClick={() => changeShowGhost(!showGhost)}
+          className={`${segmentClass(!showGhost)} self-start`}
+        >
+          Hide my ghost
+        </button>
         <label className={labelClass}>
           Visibility ({Math.round(opacity * 100)}%)
           <input
@@ -1406,6 +1422,11 @@ export function PresenterOverlayControl({
             updateSettings({ opacity: value });
           }}
         />
+      </label>
+
+      <label className="flex items-center gap-2 text-xs text-white/70" title="Off: your image is hidden but gestures still work, aimed across the whole screen">
+        <input type="checkbox" data-testid="overlay-show-ghost" checked={showGhost} onChange={(e) => changeShowGhost(e.target.checked)} />
+        Show my ghost on the share
       </label>
 
       <label className="flex items-center gap-2 text-xs text-white/70">

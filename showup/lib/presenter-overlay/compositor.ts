@@ -168,6 +168,11 @@ export type PresenterOverlaySettings = {
    */
   span: boolean;
   /**
+   * Draw the host's own ghost on the share. Off, the host is invisible but gestures still work, mapped from the
+   * camera frame straight onto the whole screen (the same cover fit as `span`).
+   */
+  showGhost: boolean;
+  /**
    * Host hand gestures: point to show a laser dot, pinch to zoom the screen (pan by moving the pinched hand),
    * open palm to reset. Off by default; loads the hand model the first time it is switched on.
    */
@@ -236,6 +241,7 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   scale: 1,
   position: "center",
   span: false,
+  showGhost: true,
   gestures: false,
   penColor: "red",
   arrowMode: false,
@@ -819,6 +825,11 @@ export async function startPresenterOverlayCompositor({
   /** Handles one camera frame for a source; always closes it. Returns true if a fresh cut-out was made. */
   function processFrame(source: Source, frame: VideoFrame, now: number, minIntervalMs: number): boolean {
     try {
+      if (source.id === LOCAL_ID && !settings.showGhost) {
+        // Nothing is drawn or cut out for a hidden host; the camera frame is still kept fresh for hand detection.
+        drawCamera(source, frame);
+        return false;
+      }
       if (settings.background === "keep") {
         drawCamera(source, frame);
         frame.close();
@@ -930,6 +941,14 @@ export async function startPresenterOverlayCompositor({
 
   /** Where the host's ghost is drawn; null when the host isn't on the share. */
   function hostPlacement(): GhostPlacement | null {
+    if (!settings.showGhost) {
+      // Invisible host: the camera frame covers the whole share, bottom-aligned and centred, whatever the layout.
+      const source = sources.get(LOCAL_ID);
+      if (!source || source.target <= 0) return null;
+      const height = Math.max(outputCanvas.height, outputCanvas.width / source.aspect);
+      const width = height * source.aspect;
+      return { x: (outputCanvas.width - width) / 2, y: outputCanvas.height - height, width, height, mirror: ghostsMirrored(), crop: null };
+    }
     return placementFor(LOCAL_ID);
   }
 
@@ -938,7 +957,9 @@ export async function startPresenterOverlayCompositor({
     const frame = reactions.frame(now);
     const placement = hostPlacement();
     if (!frame || !placement) return;
-    const at = reactionPosition(placement, width, height, frame.progress);
+    // With no ghost to float up from, the emoji rises from the lower middle of the share.
+    const origin = settings.showGhost ? placement : { x: width * 0.35, y: height * 0.6, width: width * 0.3, height: height * 0.4 };
+    const at = reactionPosition(origin, width, height, frame.progress);
     outputCtx.save();
     outputCtx.globalAlpha = frame.alpha;
     outputCtx.textAlign = "center";
@@ -1846,7 +1867,7 @@ export async function startPresenterOverlayCompositor({
 
     // Fading-out sources first, then the ones on their way in, so a new speaker fades in over the old one.
     // Each real camera keeps its own aspect ratio; the visible ones are spaced out in the order given.
-    const shown = visibleIds.map((id) => sources.get(id)).filter((source): source is Source => !!source);
+    const shown = visibleIds.map((id) => sources.get(id)).filter((source): source is Source => !!source && (settings.showGhost || source.id !== LOCAL_ID));
     // The host's keep-background panel isn't a cut-out of a person to size, so it stays at zoom 1.
     const zooms = shown.map((source) => (source.mode === "panel" ? 1 : source.normalizer.zoom(now, settings.normalizeSize)));
     const featuredIndex = featuredId ? shown.findIndex((source) => source.id === featuredId) : -1;
@@ -1864,7 +1885,7 @@ export async function startPresenterOverlayCompositor({
       source.box = boxes[index];
     });
     const drawable = Array.from(sources.values())
-      .filter((source) => source.hasCutout && source.alpha > 0.003 && source.box)
+      .filter((source) => source.hasCutout && source.alpha > 0.003 && source.box && (settings.showGhost || source.id !== LOCAL_ID))
       .sort((a, b) => {
         // The featured (full-frame) ghost is always the bottom layer, or an incoming one would paint over the small ghosts on top of it.
         const aFeatured = a.id === featuredId ? 0 : 1;
