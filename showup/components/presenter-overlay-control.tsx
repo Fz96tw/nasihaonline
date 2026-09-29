@@ -230,6 +230,8 @@ export function PresenterOverlayControl({
   const [penColor, setPenColor] = useState<PresenterOverlaySettings["penColor"]>("red");
   const [arrowMode, setArrowMode] = useState(false);
   const [voicePin, setVoicePin] = useState(false);
+  const [voiceNoteWidth, setVoiceNoteWidth] = useState(0.32);
+  const [voiceNoteTextSize, setVoiceNoteTextSize] = useState(1);
   const [pinHighlights, setPinHighlights] = useState(true);
   const [highlightColor, setHighlightColor] = useState<PresenterOverlaySettings["highlightColor"]>("yellow");
   const [voicePinSupported, setVoicePinSupported] = useState(false);
@@ -349,7 +351,7 @@ export function PresenterOverlayControl({
   }, [panelPos !== null]);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, span, gestures, pinchZoom, showGhost, aimWholeScreen, penColor, arrowMode, voicePin, highlighter: true, pinHighlights, highlightColor, shapeKind, stampShapeKind, stampText, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
+    return { opacity, scale, position, span, gestures, pinchZoom, voiceNoteWidth, voiceNoteTextSize, showGhost, aimWholeScreen, penColor, arrowMode, voicePin, highlighter: true, pinHighlights, highlightColor, shapeKind, stampShapeKind, stampText, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -1655,6 +1657,42 @@ export function PresenterOverlayControl({
           </label>
         ) : (
           <p className="text-[11px] text-white/50">Voice Pin needs Chrome or Edge.</p>
+        )}
+        {voicePinSupported && (
+          <label className={labelClass} title="How wide the Voice Pin note gets before its text wraps to another line">
+            Voice note width ({Math.round(voiceNoteWidth * 100)}% of screen)
+            <input
+              type="range"
+              data-testid="overlay-voice-note-width"
+              min={0.15}
+              max={0.7}
+              step={0.05}
+              value={voiceNoteWidth}
+              onChange={(e) => {
+                const value = Number(e.target.value);
+                setVoiceNoteWidth(value);
+                updateSettings({ voiceNoteWidth: value });
+              }}
+            />
+          </label>
+        )}
+        {voicePinSupported && (
+          <label className={labelClass} title="Text size of the Voice Pin note">
+            Voice note text size ({Math.round(voiceNoteTextSize * 100)}%)
+            <input
+              type="range"
+              data-testid="overlay-voice-note-text-size"
+              min={0.5}
+              max={2.5}
+              step={0.1}
+              value={voiceNoteTextSize}
+              onChange={(e) => {
+                const value = Number(e.target.value);
+                setVoiceNoteTextSize(value);
+                updateSettings({ voiceNoteTextSize: value });
+              }}
+            />
+          </label>
         )}
         <details className="text-[11px] text-white/60">
           <summary className="cursor-pointer select-none">Which gestures?</summary>

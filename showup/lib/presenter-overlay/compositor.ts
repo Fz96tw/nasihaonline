@@ -187,6 +187,10 @@ export type PresenterOverlaySettings = {
    * runs but nothing else it sees (laser, pen, stamps, voice...) is acted on. Redundant while `gestures` is on.
    */
   pinchZoom: boolean;
+  /** Voice Pin note's widest line as a fraction of the frame width; the text wraps to more lines past it. */
+  voiceNoteWidth: number;
+  /** Voice Pin note's text size as a multiple of the default (1 = default). */
+  voiceNoteTextSize: number;
   /** Colour of the air-draw pen (the two-finger gesture, part of `gestures`). */
   penColor: PenColor;
   /** Air-draw draws a straight arrow from where the pen started to where it is now, instead of following the fingertip. Host pen only. */
@@ -255,6 +259,8 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   aimWholeScreen: false,
   gestures: false,
   pinchZoom: false,
+  voiceNoteWidth: STAMP_MAX_WIDTH_FRACTION,
+  voiceNoteTextSize: 1,
   penColor: "red",
   arrowMode: false,
   voicePin: false,
@@ -1343,7 +1349,7 @@ export async function startPresenterOverlayCompositor({
     const at = screenToOutput(view, voiceAnchorAt.x, voiceAnchorAt.y);
     const cx = at.x * width;
     const cy = at.y * height;
-    const fontPx = height * VOICE_FONT_FRACTION;
+    const fontPx = height * VOICE_FONT_FRACTION * settings.voiceNoteTextSize;
     const padding = fontPx * VOICE_BUBBLE_PADDING_FRACTION;
     // Includes the still-in-progress segment's latest guess, not just finalized words — so the live caption
     // shows something as soon as the recognizer has any guess at all, rather than sitting on typing dots until
@@ -1359,7 +1365,7 @@ export async function startPresenterOverlayCompositor({
     let lines: string[] | null = null;
     let lineHeight = 0;
     if (text) {
-      const maxWidthPx = width * STAMP_MAX_WIDTH_FRACTION;
+      const maxWidthPx = width * settings.voiceNoteWidth;
       const fitted = growToFit(text, maxWidthPx, fontPx, (candidate, fp) => {
         outputCtx.font = `600 ${fp}px sans-serif`;
         return outputCtx.measureText(candidate).width;
@@ -1518,8 +1524,8 @@ export async function startPresenterOverlayCompositor({
    * where the point pose last was).
    */
   function commitTextMark(now: number, center: { x: number; y: number }, text: string, kind: "box" | "ellipse" | "text" | "note") {
-    const fontPx = outputCanvas.height * (kind === "note" ? VOICE_FONT_FRACTION : STAMP_FONT_FRACTION);
-    const maxWidthPx = outputCanvas.width * STAMP_MAX_WIDTH_FRACTION;
+    const fontPx = outputCanvas.height * (kind === "note" ? VOICE_FONT_FRACTION * settings.voiceNoteTextSize : STAMP_FONT_FRACTION);
+    const maxWidthPx = outputCanvas.width * (kind === "note" ? settings.voiceNoteWidth : STAMP_MAX_WIDTH_FRACTION);
     // "note" grows to fit its text exactly like "text" does (no shape-fraction shrink) — the bubble padding
     // added below is extra, not something growToFit itself needs to know about.
     const fitted = growToFit(text, maxWidthPx, fontPx, (candidate, fp) => {
