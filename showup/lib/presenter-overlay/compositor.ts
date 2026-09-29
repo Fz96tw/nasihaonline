@@ -1465,12 +1465,20 @@ export async function startPresenterOverlayCompositor({
     rec.onresult = (event) => {
       voiceLastActivityAt = performance.now();
       voiceHasSpoken = true;
-      voiceInterimText = "";
+      // Finals are appended once, from resultIndex on (earlier ones were already taken). The interim guess is
+      // rebuilt from EVERY non-final result in the list, not just the ones this event changed: the recognizer can
+      // hold several non-final results at once ("very", "hot"), and an event that only updates the last one would
+      // otherwise drop the earlier words.
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) voiceText = `${voiceText} ${result[0].transcript}`.trim();
-        else voiceInterimText = result[0].transcript;
       }
+      const interim: string[] = [];
+      for (let i = 0; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (!result.isFinal) interim.push(result[0].transcript.trim());
+      }
+      voiceInterimText = interim.filter(Boolean).join(" ");
     };
     rec.onerror = (event) => {
       // "no-speech"/"network"/"aborted" etc. are routine (a pause, a hiccup) — onend decides whether to retry.
