@@ -137,6 +137,22 @@ export class StrokeBoard {
   }
 
   /**
+   * Turns a finished freehand stroke into a straight arrow from its first point to its last: the same pinned
+   * "arrow" kind the rubber-band arrow makes (never fades, listed, removable). False if there's no such finished
+   * freehand stroke.
+   */
+  convertToArrow(id: number): boolean {
+    const stroke = this.strokes.find((other) => other.id === id && other.kind === "free" && other.endedAt !== null);
+    if (!stroke || stroke.points.length < 2) return false;
+    stroke.kind = "arrow";
+    stroke.points = [stroke.points[0], stroke.points[stroke.points.length - 1]];
+    stroke.pinned = false;
+    this.enforcePinnedCap();
+    this.pinnedVersion++;
+    return true;
+  }
+
+  /**
    * The inverse of `pin()`: lets a stroke resume fading, starting fresh from `now` rather than from whenever it
    * actually finished — e.g. Voice Pin decided against captioning an air-draw mark after all, and the mark
    * shouldn't vanish the instant that's decided just because time passed while capture was pending. False if
@@ -352,6 +368,33 @@ function isBigEnough({ kind, points }: Stroke): boolean {
 }
 
 /** The axis-aligned rectangle with these two points as opposite corners (whichever way the pen was dragged). */
+/** A freehand path counts as a line when its wander is small next to its length. */
+const LINE_MAX_DEVIATION = 0.1;
+const LINE_MAX_PATH_RATIO = 1.25;
+
+/**
+ * Whether a freehand stroke is a (roughly) straight line rather than a curve, loop or scribble: it has to travel at
+ * least MIN_ARROW_LENGTH, no point may stray more than LINE_MAX_DEVIATION of that length from the first-to-last
+ * chord, and the path may be at most LINE_MAX_PATH_RATIO times as long as the chord (so a closed shape, whose chord
+ * is near zero, never qualifies). `aspect` is width / height of the space the points are fractions of, so a
+ * diagonal isn't judged squashed.
+ */
+export function isStraightLine(points: readonly { x: number; y: number }[], aspect: number): boolean {
+  if (points.length < 2) return false;
+  const pts = points.map((point) => ({ x: point.x * aspect, y: point.y }));
+  const a = pts[0];
+  const b = pts[pts.length - 1];
+  const chord = Math.hypot(b.x - a.x, b.y - a.y);
+  if (chord < MIN_ARROW_LENGTH) return false;
+  let path = 0;
+  let deviation = 0;
+  for (let i = 0; i < pts.length; i++) {
+    if (i > 0) path += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    deviation = Math.max(deviation, Math.abs((b.x - a.x) * (a.y - pts[i].y) - (a.x - pts[i].x) * (b.y - a.y)) / chord);
+  }
+  return deviation <= chord * LINE_MAX_DEVIATION && path <= chord * LINE_MAX_PATH_RATIO;
+}
+
 export function shapeBounds(a: { x: number; y: number }, b: { x: number; y: number }): { x: number; y: number; width: number; height: number } {
   return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
 }

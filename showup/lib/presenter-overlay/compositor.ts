@@ -32,7 +32,7 @@ import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
 import { REACTION_EMOJI, ReactionPlayer, reactionPosition } from "./reactions.ts";
 import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement } from "./gestures.ts";
 import { mapGuestPenToScreen, mapGuestPointer, mapGuestZoomPoint, type GuestPointerDot, type GuestZoomAction } from "./guest-pointer.ts";
-import { ERASER_RADIUS, HOST_OWNER, StrokeBoard, arrowHead, cleanShapeText, shapeBounds, strokeColor, takesText, type PenColor, type PinnedShape } from "./drawing.ts";
+import { ERASER_RADIUS, HOST_OWNER, StrokeBoard, arrowHead, cleanShapeText, isStraightLine, shapeBounds, strokeColor, takesText, type PenColor, type PinnedShape } from "./drawing.ts";
 import { fitText, growToFit, textArea, type FittedText } from "./text-fit.ts";
 import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
 import { SizeNormalizer, measureFromRows } from "./size-normalize.ts";
@@ -1378,6 +1378,7 @@ export async function startPresenterOverlayCompositor({
     const kind = board.kindOf();
     const freeStart = kind === "free" ? board.currentPoints()?.[0] ?? null : null;
     const freeId = kind === "free" ? board.currentId() : null;
+    const freePoints = kind === "free" ? [...(board.currentPoints() ?? [])] : [];
     const finished = board.end(now);
     // Only a box or ellipse drawn this way can take a label, so only they open the prompt; an arrow is pinned
     // quietly (the list still updates). A stamp (also `takesText`) never reaches here — commitStamp finishes and
@@ -1387,7 +1388,11 @@ export async function startPresenterOverlayCompositor({
     // point, without needing the V-sign at all. Boxes/ellipses already have their own typed-label prompt above,
     // so they're deliberately excluded. Never steps on a session already running (manual or another auto one).
     if (!settings.voicePin || voiceCaptureOn) return;
-    if (kind === "free" && freeStart) {
+    if (kind === "free" && freeStart && freeId !== null && isStraightLine(freePoints, outputCanvas.width / outputCanvas.height) && board.convertToArrow(freeId)) {
+      // A straight line becomes a straight arrow, captioned like any other arrow; a curve, loop or scribble
+      // keeps the freehand behaviour below.
+      startVoiceCapture(freeStart, true);
+    } else if (kind === "free" && freeStart) {
       startVoiceCapture(freeStart, true, freeId);
       // Exempted from fading right away, not just once the caption commits — otherwise a longer sentence could
       // easily outlast the mark's normal ~3s fade before there's anything to pin it for. stopVoiceCapture /

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { isStraightLine } from "./drawing.ts";
 import { FADE_MS, HOLD_MS, MAX_POINTS, MAX_POINTS_PER_GUEST, ERASER_RADIUS, MAX_PINNED, MAX_TEXT_LENGTH, MIN_ARROW_LENGTH, MIN_SHAPE_SIZE, StrokeBoard, arrowHead, cleanShapeText, shapeBounds, strokeColor, takesText } from "./drawing.ts";
 
 test("a stroke collects points while drawing and stays fully visible", () => {
@@ -737,4 +738,31 @@ test("erasing a pinned arrow updates the pinned list and, unlike a box, works an
   assert.equal(board.eraseAt(0.25, 0.3), 1, "the middle of the line");
   assert.ok(board.version > before);
   assert.equal(board.pinnedShapes().some((shape) => shape.id === arrowStroke.id), false);
+});
+
+test("isStraightLine accepts a wobbly line, either direction, and rejects curves, loops and short marks", () => {
+  const line = Array.from({ length: 20 }, (_, i) => ({ x: 0.1 + i * 0.02, y: 0.3 + i * 0.01 + (i % 2 ? 0.002 : -0.002) }));
+  assert.equal(isStraightLine(line, 16 / 9), true);
+  assert.equal(isStraightLine([...line].reverse(), 16 / 9), true);
+  const arc = Array.from({ length: 20 }, (_, i) => ({ x: 0.1 + i * 0.02, y: 0.3 + Math.sin((i / 19) * Math.PI) * 0.12 }));
+  assert.equal(isStraightLine(arc, 16 / 9), false, "a bow is a curve, not a line");
+  const loop = Array.from({ length: 30 }, (_, i) => ({ x: 0.5 + Math.cos((i / 29) * Math.PI * 2) * 0.1, y: 0.5 + Math.sin((i / 29) * Math.PI * 2) * 0.1 }));
+  assert.equal(isStraightLine(loop, 16 / 9), false, "a closed shape is not a line");
+  assert.equal(isStraightLine([{ x: 0.1, y: 0.1 }, { x: 0.11, y: 0.1 }], 16 / 9), false, "too short");
+});
+
+test("convertToArrow turns a finished freehand stroke into a pinned two-point arrow", () => {
+  const board = new StrokeBoard();
+  board.begin(0, "red");
+  board.add(0.1, 0.1);
+  board.add(0.2, 0.15);
+  board.add(0.3, 0.2);
+  const id = board.currentId()!;
+  board.end(10);
+  assert.equal(board.convertToArrow(id), true);
+  const [shown] = board.visible(60000);
+  assert.equal(shown.stroke.kind, "arrow");
+  assert.equal(shown.alpha, 1, "an arrow never fades");
+  assert.deepEqual(shown.stroke.points, [{ x: 0.1, y: 0.1 }, { x: 0.3, y: 0.2 }]);
+  assert.equal(board.convertToArrow(id), false, "already an arrow");
 });
