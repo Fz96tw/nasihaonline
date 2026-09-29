@@ -1162,6 +1162,39 @@ export function PresenterOverlayControl({
     return (
       <>
         <PresetRow title="Look" presets={LOOK_PRESETS} current={currentLookValues} onApply={applyLookPreset} segmentClass={segmentClass} />
+        <label className={labelClass}>
+          Visibility ({Math.round(opacity * 100)}%)
+          <input
+            type="range"
+            data-testid="overlay-preset-opacity"
+            min={0.15}
+            max={1}
+            step={0.05}
+            value={opacity}
+            onChange={(e) => {
+              const value = Number(e.target.value);
+              setOpacity(value);
+              updateSettings({ opacity: value });
+            }}
+          />
+        </label>
+        <label className={`${labelClass} ${span ? "opacity-40" : ""}`} title={span ? "Not used while the ghost fills the screen" : undefined}>
+          Size ({Math.round(scale * 100)}%)
+          <input
+            type="range"
+            data-testid="overlay-preset-size"
+            disabled={span}
+            min={0.3}
+            max={1}
+            step={0.05}
+            value={scale}
+            onChange={(e) => {
+              const value = Number(e.target.value);
+              setScale(value);
+              updateSettings({ scale: value });
+            }}
+          />
+        </label>
         {overlayOn && (
           <PresetRow title="Collaboration" presets={TRUST_PRESETS} current={currentTrustValues} onApply={applyTrustPreset} segmentClass={segmentClass} />
         )}
@@ -1183,6 +1216,20 @@ export function PresenterOverlayControl({
               <label className="ml-1 flex flex-none items-center gap-1 text-xs text-white/70">
                 <input type="checkbox" data-testid="overlay-voice-pin-preset" checked={voicePin} onChange={(e) => changeVoicePin(e.target.checked)} />
                 Voice Pin
+              </label>
+            )}
+            {whiteboardLookActive && (
+              <label className="ml-1 flex flex-none items-center gap-1 text-xs text-white/70" title="Keep highlights on the screen until you remove them">
+                <input
+                  type="checkbox"
+                  data-testid="overlay-pin-highlights-preset"
+                  checked={pinHighlights}
+                  onChange={(e) => {
+                    setPinHighlights(e.target.checked);
+                    updateSettings({ pinHighlights: e.target.checked });
+                  }}
+                />
+                Pin Highlighter
               </label>
             )}
           </div>
