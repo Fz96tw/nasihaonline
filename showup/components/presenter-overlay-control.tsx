@@ -221,6 +221,8 @@ export function PresenterOverlayControl({
   const [normalizeSize, setNormalizeSize] = useState(true);
   // Host hand gestures (default off) and what's recognized right now — for the host's own indicator, never drawn into the stream.
   const [gestures, setGestures] = useState(false);
+  // Pinch zoom/pan/reset that keeps working with Hand gestures (annotation) off.
+  const [pinchZoom, setPinchZoom] = useState(false);
   const [gestureLabel, setGestureLabel] = useState<
     "pointing" | "zooming" | "reset" | "drawing" | "shape" | "erasing" | "highlighting" | "spotlight" | "voice" | "thumbsup" | "thumbsdown" | "wave" | "unavailable" | null
   >(null);
@@ -347,7 +349,7 @@ export function PresenterOverlayControl({
   }, [panelPos !== null]);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, span, gestures, showGhost, aimWholeScreen, penColor, arrowMode, voicePin, highlighter: true, pinHighlights, highlightColor, shapeKind, stampShapeKind, stampText, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
+    return { opacity, scale, position, span, gestures, pinchZoom, showGhost, aimWholeScreen, penColor, arrowMode, voicePin, highlighter: true, pinHighlights, highlightColor, shapeKind, stampShapeKind, stampText, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -1604,7 +1606,20 @@ export function PresenterOverlayControl({
           />
           Hand gestures (point, pinch to zoom)
         </label>
-        {gestures && gestureLabel && (
+        <label className={`flex items-center gap-2 text-xs text-white/70 ${gestures ? "opacity-40" : ""}`} title="Pinch to zoom the shared screen, move to pan, open palm to reset, even with Hand gestures off">
+          <input
+            type="checkbox"
+            data-testid="overlay-pinch-zoom"
+            checked={pinchZoom}
+            disabled={gestures}
+            onChange={(e) => {
+              setPinchZoom(e.target.checked);
+              updateSettings({ pinchZoom: e.target.checked });
+            }}
+          />
+          Pinch to zoom &amp; pan (works with gestures off)
+        </label>
+        {(gestures || pinchZoom) && gestureLabel && (
           <span data-testid="overlay-gesture-label" className="text-[11px] text-emerald-300">
             {gestureLabel === "pointing"
               ? "Pointing: laser on"

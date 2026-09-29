@@ -62,10 +62,12 @@ export const MAX_PINNED = 20;
 export const ERASER_RADIUS = 0.035;
 /** Longest label a shape can carry. */
 export const MAX_TEXT_LENGTH = 80;
+/** Longest Voice Pin note: a spoken sentence runs well past a typed label. */
+export const MAX_VOICE_TEXT_LENGTH = 240;
 
 /** A label as stored: whitespace (and newlines) collapsed, trimmed, capped; empty means no label. */
-export function cleanShapeText(text: string): string {
-  return text.replace(/\s+/g, " ").trim().slice(0, MAX_TEXT_LENGTH).trim();
+export function cleanShapeText(text: string, max: number = MAX_TEXT_LENGTH): string {
+  return text.replace(/\s+/g, " ").trim().slice(0, max).trim();
 }
 
 /** Kinds that are just two points, tail and latest fingertip — hand-dragged, so a twitch shorter than MIN_SHAPE_SIZE/MIN_ARROW_LENGTH is discarded on end(). Text stamps and notes are also just two points, but grown to fit their text rather than dragged, so that twitch filter doesn't apply to them: a short word is still a real mark, not a twitch. */
@@ -280,7 +282,7 @@ export class StrokeBoard {
   setText(id: number, text: string): boolean {
     const stroke = this.strokes.find((other) => other.id === id && takesText(other.kind));
     if (!stroke) return false;
-    const cleaned = cleanShapeText(text);
+    const cleaned = cleanShapeText(text, stroke.kind === "note" ? MAX_VOICE_TEXT_LENGTH : MAX_TEXT_LENGTH);
     if ((stroke.text ?? "") === cleaned) return true;
     if (cleaned) stroke.text = cleaned;
     else delete stroke.text;

@@ -33,7 +33,7 @@ import { REACTION_EMOJI, ReactionPlayer, reactionPosition } from "./reactions.ts
 import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement } from "./gestures.ts";
 import { mapGuestPenToScreen, mapGuestPointer, mapGuestZoomPoint, type GuestPointerDot, type GuestZoomAction } from "./guest-pointer.ts";
 import { HIGHLIGHT_HEIGHT, averageLuminance, bandRect, highlightStyle, lockedToStartY, type HighlightBlend } from "./highlight.ts";
-import { ERASER_RADIUS, HOST_OWNER, StrokeBoard, arrowHead, cleanShapeText, isStraightLine, shapeBounds, strokeColor, takesText, type PenColor, type PinnedShape } from "./drawing.ts";
+import { ERASER_RADIUS, HOST_OWNER, StrokeBoard, arrowHead, MAX_VOICE_TEXT_LENGTH, cleanShapeText, isStraightLine, shapeBounds, strokeColor, takesText, type PenColor, type PinnedShape } from "./drawing.ts";
 import { fitText, growToFit, textArea, type FittedText } from "./text-fit.ts";
 import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
 import { SizeNormalizer, measureFromRows } from "./size-normalize.ts";
@@ -122,7 +122,7 @@ const VOICE_TYPING_GAP_FRACTION = 0.4;
 const VOICE_TYPING_CYCLE_MS = 900;
 /** Voice Pin also auto-stops after this long with no speech activity at all (interim or final), whether that's
  * silence right from the start or a pause partway through a sentence. */
-const VOICE_SILENCE_STOP_MS = 3000;
+const VOICE_SILENCE_STOP_MS = 5000;
 /** A hard ceiling, independent of the other stop paths: if the host just keeps talking with no 3s pause, no
  * V-sign, and their hand never leaves frame, capture still stops here rather than listening indefinitely. The
  * interim-transcript fallback (see startVoiceCapture) means cutting mid-word here still keeps the last guess
@@ -182,6 +182,11 @@ export type PresenterOverlaySettings = {
    * open palm to reset. Off by default; loads the hand model the first time it is switched on.
    */
   gestures: boolean;
+  /**
+   * Pinch to zoom, move to pan and open palm to reset, even with `gestures` off (Annotation Off): the hand model
+   * runs but nothing else it sees (laser, pen, stamps, voice...) is acted on. Redundant while `gestures` is on.
+   */
+  pinchZoom: boolean;
   /** Colour of the air-draw pen (the two-finger gesture, part of `gestures`). */
   penColor: PenColor;
   /** Air-draw draws a straight arrow from where the pen started to where it is now, instead of following the fingertip. Host pen only. */
@@ -249,6 +254,7 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   showGhost: true,
   aimWholeScreen: false,
   gestures: false,
+  pinchZoom: false,
   penColor: "red",
   arrowMode: false,
   voicePin: false,
@@ -1343,7 +1349,7 @@ export async function startPresenterOverlayCompositor({
     // shows something as soon as the recognizer has any guess at all, rather than sitting on typing dots until
     // a segment happens to finalize (which, per stopVoiceCapture's comment, isn't even guaranteed to happen
     // before capture stops).
-    const text = cleanShapeText(voiceInterimText ? `${voiceText} ${voiceInterimText}` : voiceText);
+    const text = cleanShapeText(voiceInterimText ? `${voiceText} ${voiceInterimText}` : voiceText, MAX_VOICE_TEXT_LENGTH);
 
     // Before any word is recognized, the bubble holds a fixed-size "typing…" indicator; once text arrives, it
     // holds that instead — same wrap-and-grow sizing as the stamp preview, so a longer sentence grows the
@@ -1646,7 +1652,7 @@ export async function startPresenterOverlayCompositor({
     // finalization of whatever's still in progress can arrive after this synchronous read, especially when
     // there was no natural pause (a hand-gone or V-sign stop right on the last word) for it to have finalized
     // on its own already. Without this, that case would pin nothing at all despite the host having said something.
-    const text = cleanShapeText(voiceInterimText ? `${voiceText} ${voiceInterimText}` : voiceText);
+    const text = cleanShapeText(voiceInterimText ? `${voiceText} ${voiceInterimText}` : voiceText, MAX_VOICE_TEXT_LENGTH);
     const anchor = voiceAnchorAt;
     const linkedStrokeId = voiceLinkedStrokeId;
     voiceText = "";
@@ -1692,7 +1698,8 @@ export async function startPresenterOverlayCompositor({
 
   /** Runs hand detection on the host's latest camera frame (throttled) and applies what it recognizes. */
   function runGestures(source: Source, now: number) {
-    if (!settings.gestures) {
+    const zoomOnly = !settings.gestures && settings.pinchZoom;
+    if (!settings.gestures && !zoomOnly) {
       endHostStroke(now);
       eraserAt = null;
       reactions.clear();
@@ -1744,6 +1751,34 @@ export async function startPresenterOverlayCompositor({
     }
     // With the host's ghost off the share there's nothing for a gesture to point at, so it sees no hand.
     const state = tracker.update(now, placement ? landmarks : null, source.aspect);
+    if (zoomOnly) {
+      // Annotation is off: drop everything but the screen view (zoom in, pan while pinched, palm reset).
+      endHostStroke(now);
+      eraserAt = null;
+      reactions.clear();
+      gestureSpotlight = 0;
+      handPoint = null;
+      pointer = null;
+      stampPreviewAt = null;
+      abortVoiceCapture();
+      let panned = false;
+      for (const action of state.actions) {
+        if (!placement) break;
+        if (action.type === "reset") {
+          viewport.reset(now);
+        } else if (action.type === "zoom" || action.type === "pan") {
+          const out = cameraToOutput(action.u, action.v, placement);
+          const at = { x: Math.min(1, Math.max(0, out.x / outputCanvas.width)), y: Math.min(1, Math.max(0, out.y / outputCanvas.height)) };
+          if (action.type === "zoom") viewport.zoomIn(now, at.x, at.y);
+          else if (lastPan) viewport.pan(at.x - lastPan.x, at.y - lastPan.y);
+          lastPan = at;
+          panned = true;
+        }
+      }
+      if (!panned) lastPan = null;
+      setLabel(state.label === "zooming" || state.label === "reset" ? state.label : null);
+      return;
+    }
     // A fresh point session (the dot was off, now it's on) starting before an auto-triggered (not V-sign)
     // capture has heard any speech at all means the host moved on to point at something else instead of
     // captioning what they just drew — cancel quietly. Once they've said something the intent already stuck,
@@ -1768,7 +1803,9 @@ export async function startPresenterOverlayCompositor({
       voiceHandGoneSince = null;
     } else {
       voiceHandGoneSince ??= now;
-      if (voiceCaptureOn && now - voiceHandGoneSince >= VOICE_HAND_GONE_STOP_MS) stopVoiceCapture(now);
+      // Only before any speech: once words are coming in, a lowered hand is normal while talking, and the
+      // silence stop ends the capture instead.
+      if (voiceCaptureOn && !voiceHasSpoken && now - voiceHandGoneSince >= VOICE_HAND_GONE_STOP_MS) stopVoiceCapture(now);
     }
     // Independent of the hand check above: silence (nothing recognized, interim or final) for a while also
     // means the host is done, even with their hand still up.
