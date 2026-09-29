@@ -46,6 +46,14 @@ const REACTION_LABEL_MS = 1500;
 export const SPOTLIGHT_FADE_MS = 500;
 /** How long a pose may drop out (a misread frame) without its hold timer restarting. */
 export const GRACE_MS = 150;
+/**
+ * Once the laser dot is on it keeps following an extended index fingertip that's still in frame even when the rest
+ * of the hand no longer reads as "point" (the lowered hand's other fingers are cut off or foreshortened), and if the
+ * hand drops out of detection entirely with the dot in the lowest part of the frame (fingertip last seen at or
+ * below POINTER_COAST_Y) the dot holds its place this long instead of fading, in case the hand is only just below the edge.
+ */
+export const POINTER_COAST_MS = 600;
+export const POINTER_COAST_Y = 0.75;
 /** The pointer dot fades out over this long after the pointing ends. */
 export const POINTER_FADE_MS = 500;
 /** After a zoom or reset nothing else fires for this long. */
@@ -138,6 +146,17 @@ function isThumbSquare(landmarks: readonly Landmark[], aspect: number, size: num
   const indexLength = Math.hypot(indexX, indexY);
   if (thumbLength < SHAPE_THUMB_OUT_RATIO * size || indexLength === 0) return false;
   return Math.abs((thumbX * indexX + thumbY * indexY) / (thumbLength * indexLength)) <= SHAPE_MAX_COS;
+}
+
+/** True when the index finger is clearly extended and its tip is inside the frame — enough to keep an active laser dot going. */
+export function indexTipTrackable(landmarks: readonly Landmark[], aspect = 1): Landmark | null {
+  if (landmarks.length < 21) return null;
+  const tip = landmarks[INDEX_TIP];
+  if (tip.x < EDGE || tip.x > 1 - EDGE || tip.y < EDGE || tip.y > 1 - EDGE) return null;
+  const dist = (a: Landmark, b: Landmark) => Math.hypot((a.x - b.x) * aspect, a.y - b.y);
+  const wrist = landmarks[WRIST];
+  if (dist(wrist, landmarks[MIDDLE_MCP]) < MIN_HAND_SIZE) return null;
+  return dist(tip, wrist) > dist(landmarks[6], wrist) * EXTENDED_RATIO ? tip : null;
 }
 
 /**
@@ -332,6 +351,7 @@ export class GestureTracker {
   private pointerX = 0;
   private pointerY = 0;
   private pointerAt: number | null = null;
+  private pointerHeldAt = 0;
   private cooldownUntil = 0;
   private pinchFired = false;
   private stampFired = false;
@@ -399,21 +419,28 @@ export class GestureTracker {
 
     // Laser pointer: held for POINTER_HOLD_MS to start; fades out after it ends.
     const pointing = this.held("point", now, POINT_HOLD_MS);
-    if (pointing && reading && raw === "point") {
+    // Sticky: an active dot follows the index tip while the hand reads as nothing in particular (not another pose).
+    const sticky = this.pointerActive && landmarks && raw === "none" ? indexTipTrackable(landmarks, aspect) : null;
+    const tipNow = pointing && reading && raw === "point" ? reading.tip : sticky;
+    if (tipNow) {
       if (!this.pointerActive || this.pointerAt === null) {
-        this.pointerX = reading.tip.x;
-        this.pointerY = reading.tip.y;
+        this.pointerX = tipNow.x;
+        this.pointerY = tipNow.y;
       } else {
         const k = 1 - Math.exp(-Math.max(0, now - this.pointerAt) / SMOOTH_MS);
-        this.pointerX += (reading.tip.x - this.pointerX) * k;
-        this.pointerY += (reading.tip.y - this.pointerY) * k;
+        this.pointerX += (tipNow.x - this.pointerX) * k;
+        this.pointerY += (tipNow.y - this.pointerY) * k;
       }
       this.pointerAt = now;
       this.pointerActive = true;
       this.pointerEverSet = true;
-    } else if (this.pointerActive && now - this.lastSeen.point > GRACE_MS) {
+      this.pointerHeldAt = now;
+    } else if (this.pointerActive && !landmarks && this.pointerY >= POINTER_COAST_Y && now - this.pointerHeldAt <= POINTER_COAST_MS) {
+      // Hand lost just below the frame edge: hold the dot where it was for a moment.
+    } else if (this.pointerActive && now - Math.max(this.lastSeen.point, this.pointerHeldAt) > GRACE_MS) {
       this.pointerActive = false;
-      this.pointerEndedAt = this.lastSeen.point;
+      // A dot that coasted starts its fade now, not back when the hand was last seen.
+      this.pointerEndedAt = !landmarks && this.pointerY >= POINTER_COAST_Y ? now : Math.max(this.lastSeen.point, this.pointerHeldAt);
       this.pointerAt = null;
     }
 

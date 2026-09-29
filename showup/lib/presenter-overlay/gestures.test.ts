@@ -21,6 +21,7 @@ import {
   STAMP_HOLD_MS,
   POINTER_FADE_MS,
   POINT_HOLD_MS,
+  POINTER_COAST_MS,
   V_SIGN_HOLD_MS,
   cameraToOutput,
   classifyPose,
@@ -800,4 +801,24 @@ test("a brief flash of the horns highlights nothing, and the horns do nothing el
   assert.equal(state.shape, null);
   assert.equal(state.eraser, null);
   assert.ok(state.highlight);
+});
+
+test("an active pointer holds its place briefly when the hand drops out of view near the bottom edge", () => {
+  const tracker = new GestureTracker();
+  const low = () => hand(["ext", "curl", "curl", "curl"], { oy: 0.3 });
+  run(tracker, 0, POINT_HOLD_MS + 300, low);
+  const end = POINT_HOLD_MS + 300;
+  const mid = run(tracker, end, end + POINTER_COAST_MS - 100, () => null).state;
+  assert.ok(mid.pointer && mid.pointer.fade === 1, "still shown, at full strength");
+  const gone = run(tracker, end + POINTER_COAST_MS - 100, end + POINTER_COAST_MS + POINTER_FADE_MS + 300, () => null).state;
+  assert.equal(gone.pointer, null);
+});
+
+test("an active pointer keeps following an extended fingertip while the other fingers read as unsure", () => {
+  const tracker = new GestureTracker();
+  run(tracker, 0, POINT_HOLD_MS + 300, POINT);
+  const unsure = () => hand(["ext", "half", "curl", "curl"], { ox: 0.1 });
+  const state = run(tracker, POINT_HOLD_MS + 300, POINT_HOLD_MS + 1500, unsure).state;
+  assert.ok(state.pointer && state.pointer.fade === 1);
+  assert.ok(state.pointer.u > 0.5, "moved with the tip");
 });
