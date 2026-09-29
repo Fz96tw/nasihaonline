@@ -11,6 +11,7 @@ import {
   PEN_HOLD_MS,
   SHAPE_HOLD_MS,
   ERASER_HOLD_MS,
+  HIGHLIGHT_HOLD_MS,
   SHAPE_MAX_COS,
   SHAPE_THUMB_OUT_RATIO,
   GRACE_MS,
@@ -745,4 +746,58 @@ test("the eraser does not trigger the laser, zoom, reset, the pen or a shape", (
   assert.ok(state.eraser);
   const pen = run(new GestureTracker(), 0, 3000, PEN).state;
   assert.equal(pen.eraser, null, "two fingers never erase");
+});
+
+// --- Highlighter: the "horns" (index and pinky out, middle and ring curled) ---
+const HORNS = () => hand(["ext", "curl", "curl", "ext"]);
+
+test("the horns (index and pinky out, middle and ring curled) are the highlighter pose, and the neighbouring poses are unchanged", () => {
+  assert.equal(classifyPose(HORNS()).pose, "horns");
+  assert.equal(classifyPose(POINT()).pose, "point", "index only is still the laser");
+  assert.equal(classifyPose(PEN()).pose, "pen", "index and middle together is still the pen");
+  assert.equal(classifyPose(PEACE()).pose, "v", "a peace sign is still the V");
+  assert.equal(classifyPose(ERASER()).pose, "eraser", "three fingers is still the eraser");
+  assert.equal(classifyPose(SHAPE()).pose, "shape", "the L is unchanged");
+  assert.equal(classifyPose(PALM()).pose, "palm");
+  assert.equal(classifyPose(FIST()).pose, "fist", "a raised fist is not the horns");
+  assert.equal(classifyPose(PINCH()).pose, "pinch");
+  assert.equal(classifyPose(MIDPINCH()).pose, "midpinch");
+});
+
+test("the horns need the middle and ring curled and both outer fingers out", () => {
+  assert.equal(classifyPose(hand(["ext", "curl", "curl", "curl"])).pose, "point", "no pinky is just pointing");
+  assert.equal(classifyPose(hand(["curl", "curl", "curl", "ext"])).pose, "none", "pinky alone is nothing");
+  assert.equal(classifyPose(hand(["ext", "ext", "curl", "ext"])).pose, "none", "middle finger out too is nothing");
+  assert.equal(classifyPose(hand(["ext", "curl", "ext", "ext"])).pose, "none", "ring finger out too is nothing");
+  assert.equal(classifyPose(hand(["ext", "half", "curl", "ext"])).pose, "none", "a half-curled middle finger is nothing");
+});
+
+test("the horns with the thumb tucked over the curled fingers are not read as a stamp pinch", () => {
+  assert.equal(classifyPose(hand(["ext", "curl", "curl", "ext"], { midpinch: true })).pose, "horns");
+});
+
+test("the horns held start highlighting after the hold, at the index fingertip, until the pose ends", () => {
+  const tracker = new GestureTracker();
+  let state = run(tracker, 0, HIGHLIGHT_HOLD_MS - 100, HORNS).state;
+  assert.equal(state.highlight, null, "too early");
+  state = run(tracker, HIGHLIGHT_HOLD_MS - 67, HIGHLIGHT_HOLD_MS + 300, HORNS).state;
+  const h = HORNS();
+  assert.ok(state.highlight && Math.abs(state.highlight.u - h[8].x) < 1e-6 && Math.abs(state.highlight.v - h[8].y) < 1e-6);
+  assert.equal(state.label, "highlighting");
+  const gone = run(tracker, HIGHLIGHT_HOLD_MS + 340, HIGHLIGHT_HOLD_MS + 340 + GRACE_MS + 100, () => null).state;
+  assert.equal(gone.highlight, null);
+  assert.equal(gone.label, null);
+});
+
+test("a brief flash of the horns highlights nothing, and the horns do nothing else", () => {
+  const brief = new GestureTracker();
+  assert.equal(run(brief, 0, HIGHLIGHT_HOLD_MS - 120, HORNS).state.highlight, null);
+  const tracker = new GestureTracker();
+  const { actions, state } = run(tracker, 0, 3000, HORNS);
+  assert.equal(actions.length, 0);
+  assert.equal(state.pointer, null);
+  assert.equal(state.pen, null);
+  assert.equal(state.shape, null);
+  assert.equal(state.eraser, null);
+  assert.ok(state.highlight);
 });

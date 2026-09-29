@@ -32,6 +32,7 @@ import type { HandLandmarker, ImageSegmenter } from "@mediapipe/tasks-vision";
 import { REACTION_EMOJI, ReactionPlayer, reactionPosition } from "./reactions.ts";
 import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement } from "./gestures.ts";
 import { mapGuestPenToScreen, mapGuestPointer, mapGuestZoomPoint, type GuestPointerDot, type GuestZoomAction } from "./guest-pointer.ts";
+import { HIGHLIGHT_HEIGHT, averageLuminance, bandRect, highlightStyle, lockedToStartY, type HighlightBlend } from "./highlight.ts";
 import { ERASER_RADIUS, HOST_OWNER, StrokeBoard, arrowHead, cleanShapeText, isStraightLine, shapeBounds, strokeColor, takesText, type PenColor, type PinnedShape } from "./drawing.ts";
 import { fitText, growToFit, textArea, type FittedText } from "./text-fit.ts";
 import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
@@ -181,6 +182,15 @@ export type PresenterOverlaySettings = {
    * without the (non-standard) Web Speech API.
    */
   voicePin: boolean;
+  /**
+   * The highlighter: hold the "horns" (index and pinky out) to draw a translucent band along the fingertip's travel,
+   * locked to the line it started on. Off by default; needs `gestures` on too.
+   */
+  highlighter: boolean;
+  /** Highlights stay until removed (listed with the pinned shapes) instead of fading like the pen. */
+  pinHighlights: boolean;
+  /** Colour of the highlighter band. */
+  highlightColor: PenColor;
   /** What the "L" gesture draws: a box or the ellipse inscribed in it. */
   shapeKind: "box" | "ellipse";
   /** What a thumb-to-middle-finger pinch stamps: a box, an ellipse, or plain text with no shape at all. */
@@ -230,6 +240,9 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   penColor: "red",
   arrowMode: false,
   voicePin: false,
+  highlighter: false,
+  pinHighlights: false,
+  highlightColor: "yellow",
   shapeKind: "box",
   stampShapeKind: "box",
   stampText: "",
@@ -551,6 +564,11 @@ export async function startPresenterOverlayCompositor({
   const screenCtx = context2d(screenCanvas);
   let hasScreenFrame = false;
 
+  // A few pixels of the shared screen, to tell light content from dark under a finished highlight band.
+  const sampleCanvas = new OffscreenCanvas(32, 4);
+  const sampleCtx = context2d(sampleCanvas);
+  /** How each finished highlight is blended, chosen once from the content under it. Unsampled ones use the light-content default. */
+  const highlightStyles = new Map<number, { blend: HighlightBlend; alpha: number }>();
   const outputCanvas = new OffscreenCanvas(MAX_OUTPUT_WIDTH, MAX_OUTPUT_HEIGHT);
   const outputCtx = context2d(outputCanvas);
 
@@ -1009,8 +1027,10 @@ export async function startPresenterOverlayCompositor({
     outputCtx.lineCap = "round";
     outputCtx.lineJoin = "round";
     outputCtx.lineWidth = Math.max(3, height * 0.006);
+    // Highlighter bands go under everything else drawn here, so a pen stroke across one stays crisp.
+    for (const { stroke, alpha } of shown) if (stroke.kind === "highlight") drawHighlight(stroke, alpha, view, width, height);
     for (const { stroke, alpha } of shown) {
-      if (stroke.points.length === 0) continue;
+      if (stroke.kind === "highlight" || stroke.points.length === 0) continue;
       const points = stroke.points.map((point) => {
         const at = screenToOutput(view, point.x, point.y);
         return { x: at.x * width, y: at.y * height };
@@ -1063,6 +1083,49 @@ export async function startPresenterOverlayCompositor({
       }
     }
     outputCtx.restore();
+  }
+
+  /**
+   * One highlighter band. Composited (multiply over light content, screen over dark) rather than painted over it, so
+   * what's underneath stays readable; a flat, square-ended, glow-free rectangle about one line of text tall. Its height
+   * is in screen-content units, so it grows with zoom like the drawings do.
+   */
+  function drawHighlight(stroke: { id: number; color: string; points: { x: number; y: number }[] }, alpha: number, view: { x: number; y: number; width: number; height: number }, width: number, height: number) {
+    if (stroke.points.length < 2) return;
+    const [a, b] = stroke.points.map((point) => {
+      const at = screenToOutput(view, point.x, point.y);
+      return { x: at.x * width, y: at.y * height };
+    });
+    const rect = bandRect(a, b, (HIGHLIGHT_HEIGHT * height) / view.height);
+    const style = highlightStyles.get(stroke.id) ?? highlightStyle(1);
+    outputCtx.save();
+    outputCtx.globalAlpha = alpha * style.alpha;
+    outputCtx.globalCompositeOperation = style.blend;
+    outputCtx.fillStyle = strokeColor(stroke.color);
+    outputCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
+    outputCtx.restore();
+  }
+
+  /** Decides how a finished band is blended, from the average brightness of the shared screen under it. Any trouble reading pixels keeps the light-content default. */
+  function styleHighlight(id: number, points: readonly { x: number; y: number }[]) {
+    if (!hasScreenFrame || points.length < 2) return;
+    try {
+      const clamp = (value: number) => Math.min(1, Math.max(0, value));
+      const x0 = clamp(Math.min(points[0].x, points[1].x));
+      const x1 = clamp(Math.max(points[0].x, points[1].x));
+      const y0 = clamp(points[0].y - HIGHLIGHT_HEIGHT / 2);
+      const y1 = clamp(points[0].y + HIGHLIGHT_HEIGHT / 2);
+      const sw = Math.max(1, (x1 - x0) * screenCanvas.width);
+      const sh = Math.max(1, (y1 - y0) * screenCanvas.height);
+      sampleCtx.clearRect(0, 0, sampleCanvas.width, sampleCanvas.height);
+      sampleCtx.drawImage(screenCanvas, x0 * screenCanvas.width, y0 * screenCanvas.height, sw, sh, 0, 0, sampleCanvas.width, sampleCanvas.height);
+      const luminance = averageLuminance(sampleCtx.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height).data);
+      highlightStyles.set(id, highlightStyle(luminance));
+      // Old ids never come back, so keep only a bounded tail of them.
+      if (highlightStyles.size > 64) highlightStyles.delete(highlightStyles.keys().next().value as number);
+    } catch {
+      /* unreadable pixels: keep the default */
+    }
   }
 
   /** Voice Pin's pinned sticky note: the same bubble the live caption showed, frozen in place (no tail — that only makes sense while it's still following where the host is speaking). */
@@ -1379,7 +1442,16 @@ export async function startPresenterOverlayCompositor({
     const freeStart = kind === "free" ? board.currentPoints()?.[0] ?? null : null;
     const freeId = kind === "free" ? board.currentId() : null;
     const freePoints = kind === "free" ? [...(board.currentPoints() ?? [])] : [];
+    const highlightId = kind === "highlight" ? board.currentId() : null;
+    const highlightPoints = kind === "highlight" ? [...(board.currentPoints() ?? [])] : [];
     const finished = board.end(now);
+    if (highlightId !== null) {
+      // A highlight neither takes a label nor starts Voice Pin. One too short to keep was already dropped by end();
+      // pin() then just fails for it.
+      styleHighlight(highlightId, highlightPoints);
+      if (settings.pinHighlights) board.pin(highlightId);
+      return;
+    }
     // Only a box or ellipse drawn this way can take a label, so only they open the prompt; an arrow is pinned
     // quietly (the list still updates). A stamp (also `takesText`) never reaches here — commitStamp finishes and
     // labels its own stroke directly, since its text is already known before it's ever drawn.
@@ -1679,16 +1751,18 @@ export async function startPresenterOverlayCompositor({
     if (voiceCaptureOn && now - voiceCaptureStartedAt >= VOICE_MAX_DURATION_MS) stopVoiceCapture(now);
     // Air-draw: the pen tip (two fingers) or the shape corner (the "L") goes through the same ghost mapping as the laser,
     // then to screen coordinates through the current zoom view. Only one of them is ever active.
-    const hostTip = state.pen ?? state.shape;
+    const hostTip = state.pen ?? state.shape ?? (settings.highlighter ? state.highlight : null);
     if (placement && hostTip) {
       const out = cameraToOutput(hostTip.u, hostTip.v, placement);
       const onScreen = outputToScreen(viewport.rect(now), out.x / outputCanvas.width, out.y / outputCanvas.height);
-      const kind = state.pen ? (settings.arrowMode ? "arrow" : "free") : settings.shapeKind;
+      const kind = state.pen ? (settings.arrowMode ? "arrow" : "free") : state.shape ? settings.shapeKind : "highlight";
       if (board.kindOf() !== kind) {
         endHostStroke(now);
-        board.begin(now, settings.penColor, HOST_OWNER, kind);
+        board.begin(now, kind === "highlight" ? settings.highlightColor : settings.penColor, HOST_OWNER, kind);
       }
-      board.add(onScreen.x, onScreen.y);
+      // A highlight stays on the line it started on, so it lines up with a line of text however the hand wobbles.
+      const at = kind === "highlight" ? lockedToStartY(board.currentPoints()?.[0] ?? null, onScreen) : onScreen;
+      board.add(at.x, at.y);
     } else {
       endHostStroke(now);
     }

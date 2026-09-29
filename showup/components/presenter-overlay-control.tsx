@@ -220,12 +220,15 @@ export function PresenterOverlayControl({
   // Host hand gestures (default off) and what's recognized right now — for the host's own indicator, never drawn into the stream.
   const [gestures, setGestures] = useState(false);
   const [gestureLabel, setGestureLabel] = useState<
-    "pointing" | "zooming" | "reset" | "drawing" | "shape" | "erasing" | "spotlight" | "voice" | "thumbsup" | "thumbsdown" | "wave" | "unavailable" | null
+    "pointing" | "zooming" | "reset" | "drawing" | "shape" | "erasing" | "highlighting" | "spotlight" | "voice" | "thumbsup" | "thumbsdown" | "wave" | "unavailable" | null
   >(null);
   const [spotlightOn, setSpotlightOn] = useState(false);
   const [penColor, setPenColor] = useState<PresenterOverlaySettings["penColor"]>("red");
   const [arrowMode, setArrowMode] = useState(false);
   const [voicePin, setVoicePin] = useState(false);
+  const [highlighter, setHighlighter] = useState(false);
+  const [pinHighlights, setPinHighlights] = useState(false);
+  const [highlightColor, setHighlightColor] = useState<PresenterOverlaySettings["highlightColor"]>("yellow");
   const [voicePinSupported, setVoicePinSupported] = useState(false);
   /** Boxes and ellipses pinned to the share, and the one just drawn that is waiting for its optional label. */
   const [shapes, setShapes] = useState<PinnedShape[]>([]);
@@ -343,7 +346,7 @@ export function PresenterOverlayControl({
   }, [panelPos !== null]);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, span, gestures, penColor, arrowMode, voicePin, shapeKind, stampShapeKind, stampText, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
+    return { opacity, scale, position, span, gestures, penColor, arrowMode, voicePin, highlighter, pinHighlights, highlightColor, shapeKind, stampShapeKind, stampText, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -1517,6 +1520,8 @@ export function PresenterOverlayControl({
                       ? "Drawing a shape"
                       : gestureLabel === "erasing"
                         ? "Erasing"
+                        : gestureLabel === "highlighting"
+                          ? "Highlighting"
                     : gestureLabel === "spotlight"
                       ? "Spotlight"
                       : gestureLabel === "thumbsup"
@@ -1548,6 +1553,7 @@ export function PresenterOverlayControl({
             <li>Thumbs up or thumbs down (other fingers curled), held for a moment, or a wave of an open hand: a 👍, 👎 or 👋 floats up beside you. One reaction every few seconds.</li>
             <li>Hold two fingers together (index and middle, others curled) for a moment to draw in the air; lower them to stop. Freehand drawings fade after a few seconds. Switch on &ldquo;Straight arrow&rdquo; and the same gesture draws a straight arrow from where you start to where you lower your fingers, and it stays until you remove it.</li>
             <li>Hold your thumb and index finger out in an &ldquo;L&rdquo; (other fingers curled) for a moment to draw a box or ellipse: the point where you start is one corner and your fingertip is the opposite corner. Choose Box or Ellipse below; drop the L to finish. Boxes, ellipses and straight arrows stay on the screen until you remove them (Clear drawing, Undo last shape, or the list under Shapes) and can carry a short label. They stay put while you zoom or pan, but do not follow the shared content if it scrolls or changes, so clear them when the content changes.</li>
+            <li>Hold the &ldquo;horns&rdquo; (index and pinky out, middle and ring curled) for a moment to highlight, with Highlighter switched on below: a translucent band follows your fingertip sideways along the line where you started, like a highlighter pen, and text underneath stays readable. Lower your hand to finish. Highlights fade after a few seconds unless you turn on Pin highlights, then they stay until you remove them (the list under Shapes, Undo last shape or Clear drawing).</li>
             <li>Hold three fingers together (index, middle and ring, pinky curled) for a moment to erase: a ring around your middle fingertip wipes any drawing it touches as you move your hand. A box or ellipse is erased only when the ring touches its outline, so you can point inside one safely. Erasing can&apos;t be undone.</li>
             <li>With Voice Pin on: point first so there&apos;s somewhere to anchor it, then hold a &ldquo;V&rdquo; (index and middle apart, other fingers curled — wider than the two-finger pen) for a moment to start dictating; what you say appears where you last pointed. Finishing a freehand mark or a straight arrow also starts it automatically, anchored at where you started drawing — no V needed, unless you point somewhere else before saying anything, which cancels it. Either way, hold the V again, lower your hand for about a second and a half, or just stop talking for three seconds, to pin the caption there for good — or keep talking and it pins itself after 15 seconds regardless.</li>
             <li>Keep your hand fully in the camera frame. Only the screen zooms, not you.</li>
@@ -1620,10 +1626,59 @@ export function PresenterOverlayControl({
           >
             Spotlight
           </button>
+          <button
+            type="button"
+            data-testid="overlay-highlighter"
+            aria-pressed={highlighter}
+            disabled={!gestures}
+            title={gestures ? "Hold the horns (index and pinky out) to highlight" : "Turn on Hand gestures first"}
+            onClick={() => {
+              const next = !highlighter;
+              setHighlighter(next);
+              updateSettings({ highlighter: next });
+            }}
+            className={`${segmentClass(highlighter)} ml-1 disabled:opacity-40`}
+          >
+            Highlighter
+          </button>
           <button type="button" data-testid="overlay-clear-drawing" onClick={() => overlayRef.current?.compositor.clearDrawing()} className={`${segmentClass(false)} ml-1`}>
             Clear drawing
           </button>
         </div>
+        {highlighter && (
+          <div className="flex flex-wrap items-center gap-1" data-testid="overlay-highlight-options">
+            <span>Highlight</span>
+            {(["yellow", "green", "red"] as const).map((color) => (
+              <button
+                key={color}
+                type="button"
+                data-testid={`overlay-highlight-${color}`}
+                aria-label={`${color} highlighter`}
+                aria-pressed={highlightColor === color}
+                onClick={() => {
+                  setHighlightColor(color);
+                  updateSettings({ highlightColor: color });
+                }}
+                className={`h-5 w-5 rounded-full border-2 ${highlightColor === color ? "border-white" : "border-white/20"}`}
+                style={{ backgroundColor: color === "red" ? "#ff3030" : color === "yellow" ? "#ffd60a" : "#30d158" }}
+              />
+            ))}
+            <button
+              type="button"
+              data-testid="overlay-pin-highlights"
+              aria-pressed={pinHighlights}
+              title="Keep highlights on the screen until you remove them"
+              onClick={() => {
+                const next = !pinHighlights;
+                setPinHighlights(next);
+                updateSettings({ pinHighlights: next });
+              }}
+              className={`${segmentClass(pinHighlights)} ml-1`}
+            >
+              Pin highlights
+            </button>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-1 border-b border-white/10 pb-3">
           <span className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Stamp</span>
           {(["box", "ellipse", "text"] as const).map((kind) => (

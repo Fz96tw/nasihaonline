@@ -6,7 +6,7 @@
  */
 
 export type Landmark = { x: number; y: number };
-export type Pose = "point" | "pinch" | "midpinch" | "palm" | "pen" | "v" | "shape" | "eraser" | "fist" | "thumbsup" | "thumbsdown" | "none";
+export type Pose = "point" | "pinch" | "midpinch" | "palm" | "pen" | "v" | "shape" | "eraser" | "horns" | "fist" | "thumbsup" | "thumbsdown" | "none";
 export type ReactionKind = "thumbsup" | "thumbsdown" | "wave";
 
 /** Hold times before a gesture takes effect. */
@@ -18,6 +18,8 @@ export const PEN_HOLD_MS = 300;
 export const SHAPE_HOLD_MS = 400;
 /** Hold the eraser pose (three fingers together) this long before it starts erasing. */
 export const ERASER_HOLD_MS = 300;
+/** Holding the "horns" (index and pinky out) this long starts a highlighter band. */
+export const HIGHLIGHT_HOLD_MS = 300;
 /** Hold the "V" (index and middle apart, unlike the pen's together) this long before it toggles Voice Pin capture. */
 export const V_SIGN_HOLD_MS = 400;
 /** How long the transient "voice" label stays up after the V-sign fires, like the reset/reaction labels. */
@@ -176,6 +178,12 @@ export function classifyPose(landmarks: readonly Landmark[], aspect = 1): PoseRe
   if (state.every((s) => s === "curled") && FINGERS.every(([t]) => dist(landmarks[t], wrist) < FIST_TIP_RATIO * size)) {
     return wrist.y <= FIST_RAISED_Y ? { pose: "fist", tip, middleTip, pinchPoint, palm } : none;
   }
+  // The "horns" (index and pinky out, middle and ring curled) before any pinch: with the thumb folded over the
+  // curled fingers its tip can sit near the middle fingertip, which must not read as a stamp pinch. The thumb is
+  // otherwise unconstrained.
+  if (state[0] === "extended" && state[1] === "curled" && state[2] === "curled" && state[3] === "extended") {
+    return { pose: "horns", tip, middleTip, pinchPoint, palm };
+  }
   if (dist(thumb, tip) < PINCH_RATIO * size) return { pose: "pinch", tip, middleTip, pinchPoint, palm };
   // Thumb to the middle fingertip (not the index): a second, distinct pinch that drops a stamp instead of zooming,
   // so the index finger stays free to keep aiming at the same time.
@@ -268,6 +276,8 @@ export type GestureState = {
   shape: { u: number; v: number } | null;
   /** The middle fingertip (camera-frame coordinates, smoothed) while the eraser pose is held; null otherwise. */
   eraser: { u: number; v: number } | null;
+  /** The index fingertip (camera-frame coordinates, smoothed) while the "horns" are held and a highlighter band is being drawn; null otherwise. */
+  highlight: { u: number; v: number } | null;
   /** The middle of the hand (camera-frame coordinates, smoothed) while a hand is in view; null once it has been gone a moment. */
   hand: { u: number; v: number } | null;
   /** The fist spotlight: 1 while the fist is held (after the hold), fading to 0 after it opens; null when off. */
@@ -280,14 +290,14 @@ export type GestureState = {
   voiceAnchor: { u: number; v: number } | null;
   actions: GestureAction[];
   /** What is currently recognized, for the host's (not streamed) indicator. */
-  label: "pointing" | "zooming" | "reset" | "drawing" | "shape" | "erasing" | "spotlight" | "voice" | ReactionKind | null;
+  label: "pointing" | "zooming" | "reset" | "drawing" | "shape" | "erasing" | "highlighting" | "spotlight" | "voice" | ReactionKind | null;
 };
 
-const POSES: readonly Pose[] = ["point", "pinch", "midpinch", "palm", "pen", "v", "shape", "eraser", "fist", "thumbsup", "thumbsdown"];
+const POSES: readonly Pose[] = ["point", "pinch", "midpinch", "palm", "pen", "v", "shape", "eraser", "horns", "fist", "thumbsup", "thumbsdown"];
 
 export class GestureTracker {
-  private since: Record<string, number | null> = { point: null, pinch: null, midpinch: null, palm: null, pen: null, v: null, shape: null, eraser: null, fist: null, thumbsup: null, thumbsdown: null };
-  private lastSeen: Record<string, number> = { point: 0, pinch: 0, midpinch: 0, palm: 0, pen: 0, v: 0, shape: 0, eraser: 0, fist: 0, thumbsup: 0, thumbsdown: 0 };
+  private since: Record<string, number | null> = { point: null, pinch: null, midpinch: null, palm: null, pen: null, v: null, shape: null, eraser: null, horns: null, fist: null, thumbsup: null, thumbsdown: null };
+  private lastSeen: Record<string, number> = { point: 0, pinch: 0, midpinch: 0, palm: 0, pen: 0, v: 0, shape: 0, eraser: 0, horns: 0, fist: 0, thumbsup: 0, thumbsdown: 0 };
   private thumbFired: Record<string, boolean> = { thumbsup: false, thumbsdown: false };
   private waveFired = false;
   private reactionCooldownUntil = 0;
@@ -309,6 +319,10 @@ export class GestureTracker {
   private shapeX = 0;
   private shapeY = 0;
   private shapeAt: number | null = null;
+  private highlightActive = false;
+  private highlightX = 0;
+  private highlightY = 0;
+  private highlightAt: number | null = null;
   private eraserActive = false;
   private eraserX = 0;
   private eraserY = 0;
@@ -462,6 +476,23 @@ export class GestureTracker {
       this.shapeAt = null;
     }
 
+    // Highlighter: the "horns" held to start; the index fingertip is the moving end of the band until the pose ends.
+    if (this.held("horns", now, HIGHLIGHT_HOLD_MS) && reading && raw === "horns") {
+      if (!this.highlightActive || this.highlightAt === null) {
+        this.highlightX = reading.tip.x;
+        this.highlightY = reading.tip.y;
+      } else {
+        const k = 1 - Math.exp(-Math.max(0, now - this.highlightAt) / SMOOTH_MS);
+        this.highlightX += (reading.tip.x - this.highlightX) * k;
+        this.highlightY += (reading.tip.y - this.highlightY) * k;
+      }
+      this.highlightAt = now;
+      this.highlightActive = true;
+    } else if (this.highlightActive && now - this.lastSeen.horns > GRACE_MS) {
+      this.highlightActive = false;
+      this.highlightAt = null;
+    }
+
     // Eraser: three fingers held together to start; the middle fingertip is the centre of the erasing ring until the pose ends.
     if (this.held("eraser", now, ERASER_HOLD_MS) && reading && raw === "eraser") {
       if (!this.eraserActive || this.eraserAt === null) {
@@ -543,6 +574,7 @@ export class GestureTracker {
     const pointer = this.pointerActive || (this.pointerEndedAt > 0 && fade > 0) ? { u: this.pointerX, v: this.pointerY, fade: Math.max(0, Math.min(1, fade)) } : null;
     const pen = this.penActive ? { u: this.penX, v: this.penY } : null;
     const shape = this.shapeActive ? { u: this.shapeX, v: this.shapeY } : null;
+    const highlight = this.highlightActive ? { u: this.highlightX, v: this.highlightY } : null;
     const eraser = this.eraserActive ? { u: this.eraserX, v: this.eraserY } : null;
     const voiceAnchor = this.pointerEverSet ? { u: this.pointerX, v: this.pointerY } : null;
     const label = this.reactionLabel && now < this.reactionLabelUntil
@@ -557,6 +589,8 @@ export class GestureTracker {
           ? "shape"
           : this.eraserActive
             ? "erasing"
+            : this.highlightActive
+            ? "highlighting"
             : this.spotlightActive
           ? "spotlight"
           : this.pinching
@@ -564,7 +598,7 @@ export class GestureTracker {
             : now < this.resetLabelUntil
               ? "reset"
               : null;
-    return { pointer, pen, shape, eraser, hand, spotlight, voiceAnchor, actions, label };
+    return { pointer, pen, shape, eraser, highlight, hand, spotlight, voiceAnchor, actions, label };
   }
 }
 

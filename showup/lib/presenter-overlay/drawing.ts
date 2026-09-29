@@ -36,12 +36,19 @@ export const MIN_SHAPE_SIZE = 0.02;
  * shape as a box, but drawn as plain text with no border — its corners are grown to fit the text, not dragged by hand.
  * "note" is Voice Pin's dictated label: a sticky-note-style bubble, its two corners grown to fit the text the same
  * way as "text", just drawn with a background instead of plain floating letters.
+ * "highlight" is the highlighter band: two points on one horizontal line (start, and where the fingertip is now),
+ * drawn as a translucent band. It fades like freehand unless pinned (`pin()`), and then it is kept like a shape.
  */
-export type StrokeKind = "free" | "arrow" | "box" | "ellipse" | "text" | "note";
+export type StrokeKind = "free" | "arrow" | "box" | "ellipse" | "text" | "note" | "highlight";
 
 /** Arrows, boxes, ellipses, text stamps and notes are deliberate annotations: they never fade and stay until the host removes them. Freehand strokes still fade. */
 export function isPinnedKind(kind: StrokeKind): boolean {
   return kind === "arrow" || kind === "box" || kind === "ellipse" || kind === "text" || kind === "note";
+}
+
+/** A stroke that stays until removed and shows in the pinned list: a pinned kind, or a highlight the host chose to pin. */
+export function isKept(stroke: Pick<Stroke, "kind" | "pinned">): boolean {
+  return isPinnedKind(stroke.kind) || (stroke.kind === "highlight" && !!stroke.pinned);
 }
 
 /** Boxes, ellipses, text stamps and notes carry their text as the whole point of the mark; there is nowhere inside an arrow to put text. */
@@ -63,7 +70,7 @@ export function cleanShapeText(text: string): string {
 
 /** Kinds that are just two points, tail and latest fingertip — hand-dragged, so a twitch shorter than MIN_SHAPE_SIZE/MIN_ARROW_LENGTH is discarded on end(). Text stamps and notes are also just two points, but grown to fit their text rather than dragged, so that twitch filter doesn't apply to them: a short word is still a real mark, not a twitch. */
 export function isRubberBand(kind: StrokeKind): boolean {
-  return kind === "arrow" || kind === "box" || kind === "ellipse";
+  return kind === "arrow" || kind === "box" || kind === "ellipse" || kind === "highlight";
 }
 
 export type Stroke = {
@@ -87,7 +94,7 @@ export type Stroke = {
 };
 
 /** What the host UI needs to list and remove a pinned shape. */
-export type PinnedShape = { id: number; kind: "arrow" | "box" | "ellipse" | "text" | "note"; text: string };
+export type PinnedShape = { id: number; kind: "arrow" | "box" | "ellipse" | "text" | "note" | "highlight"; text: string };
 
 export class StrokeBoard {
   private strokes: Stroke[] = [];
@@ -133,6 +140,11 @@ export class StrokeBoard {
     const stroke = this.strokes.find((other) => other.id === id && other.endedAt !== null && !isPinnedKind(other.kind));
     if (!stroke) return false;
     stroke.pinned = true;
+    if (stroke.kind === "highlight") {
+      // A pinned highlight joins the shapes list, so it counts toward the cap and the UI needs telling.
+      this.enforcePinnedCap();
+      this.pinnedVersion++;
+    }
     return true;
   }
 
@@ -235,7 +247,7 @@ export class StrokeBoard {
   eraseAt(x: number, y: number, radius: number = ERASER_RADIUS, aspect = 1): number {
     const touched = this.strokes.filter((stroke) => !this.isCurrent(stroke) && strokeTouches(stroke, x, y, radius, aspect));
     if (touched.length === 0) return 0;
-    const hadPinned = touched.some((stroke) => isPinnedKind(stroke.kind));
+    const hadPinned = touched.some((stroke) => isKept(stroke));
     this.strokes = this.strokes.filter((stroke) => !touched.includes(stroke));
     if (hadPinned) this.pinnedVersion++;
     return touched.length;
@@ -260,8 +272,8 @@ export class StrokeBoard {
   /** The pinned shapes, oldest first. */
   pinnedShapes(): PinnedShape[] {
     return this.strokes
-      .filter((stroke) => isPinnedKind(stroke.kind) && stroke.endedAt !== null)
-      .map((stroke) => ({ id: stroke.id, kind: stroke.kind as "arrow" | "box" | "ellipse" | "text" | "note", text: stroke.text ?? "" }));
+      .filter((stroke) => isKept(stroke) && stroke.endedAt !== null)
+      .map((stroke) => ({ id: stroke.id, kind: stroke.kind as PinnedShape["kind"], text: stroke.text ?? "" }));
   }
 
   /** Sets (or, with empty text, clears) a pinned shape's label. False when there's no such shape. */
@@ -278,7 +290,7 @@ export class StrokeBoard {
 
   /** Removes one pinned shape. False when there's no such shape. */
   remove(id: number): boolean {
-    const index = this.strokes.findIndex((stroke) => stroke.id === id && isPinnedKind(stroke.kind) && stroke.endedAt !== null);
+    const index = this.strokes.findIndex((stroke) => stroke.id === id && isKept(stroke) && stroke.endedAt !== null);
     if (index < 0) return false;
     this.strokes.splice(index, 1);
     this.pinnedVersion++;
@@ -294,7 +306,7 @@ export class StrokeBoard {
   }
 
   private enforcePinnedCap() {
-    const pinned = this.strokes.filter((stroke) => isPinnedKind(stroke.kind) && stroke.endedAt !== null);
+    const pinned = this.strokes.filter((stroke) => isKept(stroke) && stroke.endedAt !== null);
     for (const stroke of pinned.slice(0, Math.max(0, pinned.length - MAX_PINNED))) {
       this.strokes.splice(this.strokes.indexOf(stroke), 1);
     }
@@ -307,7 +319,7 @@ export class StrokeBoard {
 
   /** Removes everything at once, the presenter's strokes and every guest's. */
   clear() {
-    if (this.strokes.some((stroke) => isPinnedKind(stroke.kind))) this.pinnedVersion++;
+    if (this.strokes.some((stroke) => isKept(stroke))) this.pinnedVersion++;
     this.strokes = [];
     this.current.clear();
   }
@@ -364,6 +376,8 @@ export class StrokeBoard {
 function isBigEnough({ kind, points }: Stroke): boolean {
   if (points.length < 2) return false;
   if (kind === "arrow") return Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y) >= MIN_ARROW_LENGTH;
+  // A highlight is one line of text tall, so only its length counts.
+  if (kind === "highlight") return Math.abs(points[1].x - points[0].x) >= MIN_SHAPE_SIZE;
   return Math.abs(points[1].x - points[0].x) >= MIN_SHAPE_SIZE && Math.abs(points[1].y - points[0].y) >= MIN_SHAPE_SIZE;
 }
 
