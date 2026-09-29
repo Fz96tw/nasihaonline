@@ -240,7 +240,7 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   penColor: "red",
   arrowMode: false,
   voicePin: false,
-  highlighter: false,
+  highlighter: true,
   pinHighlights: true,
   highlightColor: "yellow",
   shapeKind: "box",
