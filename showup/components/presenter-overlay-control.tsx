@@ -217,6 +217,7 @@ export function PresenterOverlayControl({
   const [position, setPosition] = useState<PresenterOverlaySettings["position"]>("center");
   const [span, setSpan] = useState(false);
   const [showGhost, setShowGhost] = useState(true);
+  const [aimWholeScreen, setAimWholeScreen] = useState(false);
   const [normalizeSize, setNormalizeSize] = useState(true);
   // Host hand gestures (default off) and what's recognized right now — for the host's own indicator, never drawn into the stream.
   const [gestures, setGestures] = useState(false);
@@ -346,7 +347,7 @@ export function PresenterOverlayControl({
   }, [panelPos !== null]);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, span, gestures, showGhost, penColor, arrowMode, voicePin, highlighter: true, pinHighlights, highlightColor, shapeKind, stampShapeKind, stampText, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
+    return { opacity, scale, position, span, gestures, showGhost, aimWholeScreen, penColor, arrowMode, voicePin, highlighter: true, pinHighlights, highlightColor, shapeKind, stampShapeKind, stampText, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -1092,7 +1093,24 @@ export function PresenterOverlayControl({
   };
   const currentAnnotationValues: AnnotationPresetFields = { gestures, arrowMode, penColor, voicePin };
 
+  /**
+   * With gestures on, every look except Full-screen Reach has a ghost too small to aim within (Picture-in-Picture,
+   * Talking Head, Minimal Corner), so gestures aim across the whole screen; Full-screen Reach already covers it, so
+   * it's turned off there. Set when the look or a gestures preset is applied; Fine-tune can change it afterwards.
+   */
+  function syncAimWithLook(look: LookPresetFields, gesturesOn: boolean) {
+    if (gesturesOn) changeAimWholeScreen(!look.span);
+  }
+
+  /** Shrinking the ghost below this makes it too small to aim within, so gestures switch to aiming across the screen. */
+  const SMALL_GHOST_SCALE = 0.75;
+  /** Only the moment the size drops below the threshold turns aiming on, so a host who then unticks it isn't overruled while still dragging. */
+  function noteScaleChange(next: number) {
+    if (scale >= SMALL_GHOST_SCALE && next < SMALL_GHOST_SCALE) changeAimWholeScreen(true);
+  }
+
   function applyLookPreset(fields: LookPresetFields) {
+    syncAimWithLook({ ...currentLookValues, ...fields }, gestures);
     if (fields.scale !== undefined) {
       setScale(fields.scale);
       updateSettings({ scale: fields.scale });
@@ -1130,6 +1148,7 @@ export function PresenterOverlayControl({
   }
 
   function applyAnnotationPreset(fields: AnnotationPresetFields) {
+    if (fields.gestures) syncAimWithLook(currentLookValues, true);
     if (fields.gestures !== undefined) {
       setGestures(fields.gestures);
       updateSettings({ gestures: fields.gestures });
@@ -1156,6 +1175,11 @@ export function PresenterOverlayControl({
   function changeShowGhost(next: boolean) {
     setShowGhost(next);
     updateSettings({ showGhost: next });
+  }
+
+  function changeAimWholeScreen(next: boolean) {
+    setAimWholeScreen(next);
+    updateSettings({ aimWholeScreen: next });
   }
 
   function presetsTabBody() {
@@ -1208,6 +1232,7 @@ export function PresenterOverlayControl({
               const value = Number(e.target.value);
               setScale(value);
               updateSettings({ scale: value });
+              noteScaleChange(value);
             }}
           />
         </label>
@@ -1429,6 +1454,11 @@ export function PresenterOverlayControl({
         Show my ghost on the share
       </label>
 
+      <label className={`flex items-center gap-2 text-xs text-white/70 ${showGhost ? "" : "opacity-40"}`} title="Aim gestures across the whole screen even when your ghost is small (e.g. picture-in-picture)">
+        <input type="checkbox" data-testid="overlay-aim-screen" disabled={!showGhost} checked={aimWholeScreen || !showGhost} onChange={(e) => changeAimWholeScreen(e.target.checked)} />
+        Aim gestures across the whole screen
+      </label>
+
       <label className="flex items-center gap-2 text-xs text-white/70">
         <input
           type="checkbox"
@@ -1468,6 +1498,7 @@ export function PresenterOverlayControl({
             const value = Number(e.target.value);
             setScale(value);
             updateSettings({ scale: value });
+            noteScaleChange(value);
           }}
         />
       </label>

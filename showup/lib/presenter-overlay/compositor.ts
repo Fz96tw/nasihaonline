@@ -173,6 +173,11 @@ export type PresenterOverlaySettings = {
    */
   showGhost: boolean;
   /**
+   * Aim gestures across the whole share (the camera frame covers it, like `span`) even though the ghost is drawn
+   * small, e.g. in a picture-in-picture corner. Always the case while the ghost is hidden.
+   */
+  aimWholeScreen: boolean;
+  /**
    * Host hand gestures: point to show a laser dot, pinch to zoom the screen (pan by moving the pinched hand),
    * open palm to reset. Off by default; loads the hand model the first time it is switched on.
    */
@@ -242,6 +247,7 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   position: "center",
   span: false,
   showGhost: true,
+  aimWholeScreen: false,
   gestures: false,
   penColor: "red",
   arrowMode: false,
@@ -941,8 +947,8 @@ export async function startPresenterOverlayCompositor({
 
   /** Where the host's ghost is drawn; null when the host isn't on the share. */
   function hostPlacement(): GhostPlacement | null {
-    if (!settings.showGhost) {
-      // Invisible host: the camera frame covers the whole share, bottom-aligned and centred, whatever the layout.
+    if (!settings.showGhost || settings.aimWholeScreen) {
+      // Invisible host, or aiming across the screen: the camera frame covers the whole share, bottom-aligned and centred, whatever the layout.
       const source = sources.get(LOCAL_ID);
       if (!source || source.target <= 0) return null;
       const height = Math.max(outputCanvas.height, outputCanvas.width / source.aspect);
@@ -958,7 +964,7 @@ export async function startPresenterOverlayCompositor({
     const placement = hostPlacement();
     if (!frame || !placement) return;
     // With no ghost to float up from, the emoji rises from the lower middle of the share.
-    const origin = settings.showGhost ? placement : { x: width * 0.35, y: height * 0.6, width: width * 0.3, height: height * 0.4 };
+    const origin = settings.showGhost ? (placementFor(LOCAL_ID) ?? placement) : { x: width * 0.35, y: height * 0.6, width: width * 0.3, height: height * 0.4 };
     const at = reactionPosition(origin, width, height, frame.progress);
     outputCtx.save();
     outputCtx.globalAlpha = frame.alpha;
