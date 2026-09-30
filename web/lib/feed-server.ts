@@ -466,6 +466,9 @@ export async function getFeedPage(params: {
         // branch below) instead of overwriting this event's own row.
         forumThread: { select: DISCUSSION_THREAD_FEED_SELECT },
         lastActivityAt: true,
+        // Whether the viewer themself RSVP'd going — gates the discussion
+        // reply row below (only attendees get event discussion activity).
+        rsvps: { where: { userId: viewerId ?? "", status: RSVPStatus.going }, select: { id: true }, take: 1 },
       },
       orderBy: { publishedAt: "desc" },
       take: pageSize,
@@ -742,7 +745,8 @@ export async function getFeedPage(params: {
       // a search hit shows the event's own indexed description, not
       // discussion framing that carries no hint of why it matched the
       // query.
-      const reply = query ? null : latestDiscussionReply(event.forumThread, event.lastActivityAt, event.createdAt);
+      const viewerAttends = event.rsvps.length > 0 || event.hostId === viewerId;
+      const reply = query || !viewerAttends ? null : latestDiscussionReply(event.forumThread, event.lastActivityAt, event.createdAt);
       if (!reply) return [ownRow];
 
       // The latest reply, as its own row (id: reply.id, not event.id)
