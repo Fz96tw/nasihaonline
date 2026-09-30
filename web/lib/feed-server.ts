@@ -467,8 +467,9 @@ export async function getFeedPage(params: {
         forumThread: { select: DISCUSSION_THREAD_FEED_SELECT },
         lastActivityAt: true,
         // Whether the viewer themself RSVP'd going — gates the discussion
-        // reply row below (only attendees get event discussion activity).
+        // reply row below (attendees and invitees get event discussion activity).
         rsvps: { where: { userId: viewerId ?? "", status: RSVPStatus.going }, select: { id: true }, take: 1 },
+        invitees: { where: { userId: viewerId ?? "" }, select: { id: true }, take: 1 },
       },
       orderBy: { publishedAt: "desc" },
       take: pageSize,
@@ -745,7 +746,7 @@ export async function getFeedPage(params: {
       // a search hit shows the event's own indexed description, not
       // discussion framing that carries no hint of why it matched the
       // query.
-      const viewerAttends = event.rsvps.length > 0 || event.hostId === viewerId;
+      const viewerAttends = event.rsvps.length > 0 || event.invitees.length > 0 || event.hostId === viewerId;
       const reply = query || !viewerAttends ? null : latestDiscussionReply(event.forumThread, event.lastActivityAt, event.createdAt);
       if (!reply) return [ownRow];
 
