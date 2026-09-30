@@ -545,13 +545,16 @@ export async function deleteForumThread(
   if (thread.removed) throw new ForumError(400, "This thread has already been removed.");
 
   const isEventThread = thread.eventId !== null;
-  const isAuthor = actingUserId === thread.authorId;
+  // An event thread's "author" is just whichever member clicked "Start a
+  // Discussion" — not a meaningful ownership claim, and deleting it destroys
+  // everyone's replies — so only the event's host (or a moderator/admin) may.
+  const isAuthor = !isEventThread && actingUserId === thread.authorId;
   const isEventHost = isEventThread && thread.event?.hostId === actingUserId;
   if (!isPrivileged && !isAuthor && !isEventHost) {
     throw new ForumError(
       403,
       isEventThread
-        ? "Only the thread's author, the event's host, or a moderator/admin can delete it."
+        ? "Only the event's organizer or a moderator/admin can delete this discussion."
         : "Only the thread's author or a moderator/admin can delete it.",
     );
   }
@@ -639,7 +642,7 @@ export async function getMemberForumThreads(
     seenThreadIds.add(post.threadId);
     if (!isThreadVisible(post.thread, viewerId, isPrivileged, member)) continue;
     if (post.thread.event?.cancelledAt) continue;
-    const isViewerAuthor = post.thread.authorId === viewerId;
+    const isViewerAuthor = post.thread.event === null && post.thread.authorId === viewerId;
     const isViewerEventHost = post.thread.event?.hostId === viewerId;
     const isLibraryLinked = post.thread.knowledgeItem !== null;
     threads.push({
