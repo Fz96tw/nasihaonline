@@ -30,7 +30,6 @@ import { DIRECTORY_TIERS } from "@/lib/members";
 import { ensureCommunityMembership, getMemberCommunityContext, type MemberCommunityContext } from "@/lib/profile-server";
 import {
   cancelMeetingCalendarEvent,
-  createLiveKitMeetingCalendarEvent,
   createMeetingCalendarEvent,
   deleteMeetingRecording,
   getMeetingRecordingDownloadUrl,
@@ -42,6 +41,8 @@ import { createLiveKitRoom, getRoomMetadata } from "@/lib/livekit";
 import { createNotification } from "@/lib/notifications-server";
 import { deleteRecordingObject } from "@/lib/recordings-storage";
 import {
+  ICS_ORGANIZER_EMAIL,
+  type IcsAttachment,
   sendEventAnnouncementEmail,
   sendEventInviteEmail,
   sendEventLifecycleEmail,
@@ -73,6 +74,9 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 // ===== Recurring events (§4.6) — shared expansion helpers =====
 
 const RECURRENCE_SELECT = { frequency: true, interval: true, byWeekday: true, until: true } as const;
+
+/** The event fields buildEventIcs needs — shared by every emailed calendar invite/update/cancel. */
+type IcsEventFields = Omit<Parameters<typeof buildEventIcs>[0], "invite">;
 
 type RecurrenceRow = {
   frequency: RecurrenceFrequency;
@@ -1375,7 +1379,15 @@ async function notifyInvitedUsers(
  */
 async function emailInvitedUsers(
   users: { email: string; name: string | null }[],
-  params: { eventId: string; title: string; hostName: string; startsAt: Date; timezone: string | null },
+  params: {
+    eventId: string;
+    title: string;
+    hostName: string;
+    startsAt: Date;
+    timezone: string | null;
+    /** Set for an event with no Google Calendar event behind it, so each invitee's email carries an .ics invite of its own. */
+    icsEvent?: IcsEventFields;
+  },
 ): Promise<void> {
   if (users.length === 0) return;
   const link = `${APP_URL}/calendar/${params.eventId}`;
@@ -1387,6 +1399,12 @@ async function emailInvitedUsers(
         startsAt: params.startsAt,
         timezone: params.timezone,
         link,
+        // An invitee who hasn't RSVP'd yet doesn't get a manual meeting URL
+        // (same gate as the public listing/.ics download) — the in-app
+        // LiveKit page link is always safe, it does its own access check.
+        ics: params.icsEvent
+          ? buildEventInviteAttachment({ ...params.icsEvent, meetingUrl: null }, "REQUEST", user)
+          : undefined,
       }),
     ),
   );
@@ -1539,24 +1557,12 @@ async function provisionEventMeeting(input: {
     meetingUrl = created.meetingUrl;
     googleEventId = created.googleEventId;
   } else if (input.meetLinkSource === "livekit" && input.host && preGeneratedEventId) {
+    // No Google Calendar event for a LiveKit meeting: NASIHA emails its own
+    // invite (with an .ics) instead — see emailInvitedUsers and
+    // notifyEventAudience — so members don't get an "unknown sender" Google
+    // invite. Events created before this change still carry a googleEventId
+    // and keep syncing through Google (see the `googleEventId` checks below).
     livekitRoomName = await createLiveKitRoom(preGeneratedEventId, input.title);
-    const attendees = [
-      { email: input.host.email, name: input.hostName },
-      ...input.invitedUsers.map((user) => ({ email: user.email, name: user.name ?? "Member" })),
-    ];
-    const created = await createLiveKitMeetingCalendarEvent({
-      topic: input.title,
-      startsAt: input.startsAt,
-      durationMinutes: input.endsAt
-        ? Math.round((input.endsAt.getTime() - input.startsAt.getTime()) / 60_000)
-        : undefined,
-      attendees,
-      description: input.description ?? undefined,
-      recurrenceRule: input.recurrenceRuleString ?? undefined,
-      timeZone: input.timezone,
-      meetingPageUrl: `${APP_URL}/meet/event/${preGeneratedEventId}`,
-    });
-    googleEventId = created.googleEventId;
   }
 
   return { meetingUrl, googleEventId, livekitRoomName, resolvedEventId: preGeneratedEventId };
@@ -1619,6 +1625,7 @@ async function sendEventPublishEmails(params: {
   hostName: string;
   startsAt: Date;
   timezone: string | null;
+  icsEvent?: IcsEventFields;
 }): Promise<void> {
   await emailInvitedUsers(params.invitedUsers, {
     eventId: params.eventId,
@@ -1626,6 +1633,7 @@ async function sendEventPublishEmails(params: {
     hostName: params.hostName,
     startsAt: params.startsAt,
     timezone: params.timezone,
+    icsEvent: params.icsEvent,
   });
   await emailEventBroadcast(params.publicEventRecipients, {
     eventId: params.eventId,
@@ -1943,6 +1951,19 @@ export async function createEvent(
       hostName,
       startsAt,
       timezone: input.timezone,
+      icsEvent: googleEventId
+        ? undefined
+        : {
+            id: event.id,
+            title: input.title,
+            description: input.description,
+            startsAt,
+            endsAt,
+            meetingUrl,
+            livekitRoomName,
+            recurrence: recurrenceInput,
+            recurrenceAnchor: startsAt,
+          },
     });
 
     await ensureCommunityMembership(
@@ -2405,18 +2426,8 @@ export async function updateEvent(
       meetingUrl = created.meetingUrl;
       googleEventId = created.googleEventId;
     } else if (input.meetLinkSource === "livekit" && host) {
+      // No Google Calendar event — see provisionEventMeeting.
       livekitRoomName = await createLiveKitRoom(event.id, input.title);
-      const created = await createLiveKitMeetingCalendarEvent({
-        topic: input.title,
-        startsAt,
-        durationMinutes: endsAt ? Math.round((endsAt.getTime() - startsAt.getTime()) / 60_000) : undefined,
-        attendees,
-        description: input.description ?? undefined,
-        recurrenceRule: recurrenceRuleString ?? undefined,
-        timeZone: input.timezone,
-        meetingPageUrl: `${APP_URL}/meet/event/${event.id}`,
-      });
-      googleEventId = created.googleEventId;
     } else {
       meetingUrl = input.meetingUrl;
     }
@@ -2521,11 +2532,31 @@ export async function updateEvent(
   // cancelEvent), not just restricted events.
   if (timeChanged) {
     const when = formatEventDateTime(startsAt, input.timezone);
-    await notifyEventAudience(eventId, event.visibility, {
-      type: NotificationType.event_rescheduled,
-      subject: `Rescheduled: ${input.title}`,
-      message: `"${input.title}" has been rescheduled to ${when}.`,
-    });
+    await notifyEventAudience(
+      eventId,
+      event.visibility,
+      {
+        type: NotificationType.event_rescheduled,
+        subject: `Rescheduled: ${input.title}`,
+        message: `"${input.title}" has been rescheduled to ${when}.`,
+      },
+      googleEventId
+        ? undefined
+        : {
+            method: "REQUEST",
+            event: {
+              id: event.id,
+              title: input.title,
+              description: input.description,
+              startsAt,
+              endsAt,
+              meetingUrl,
+              livekitRoomName,
+              recurrence: recurrenceInput,
+              recurrenceAnchor: startsAt,
+            },
+          },
+    );
   }
 
   return updated;
@@ -2971,6 +3002,19 @@ export async function publishEventDraft(
     hostName,
     startsAt,
     timezone: input.timezone,
+    icsEvent: provisioned.googleEventId
+      ? undefined
+      : {
+          id: updated.id,
+          title: input.title,
+          description: input.description,
+          startsAt,
+          endsAt,
+          meetingUrl: provisioned.meetingUrl,
+          livekitRoomName: provisioned.livekitRoomName,
+          recurrence: recurrenceInput,
+          recurrenceAnchor: startsAt,
+        },
   });
 
   await ensureCommunityMembership(
@@ -3039,10 +3083,14 @@ export async function updateEventInvitees(
       title: true,
       hostId: true,
       visibility: true,
+      description: true,
       googleEventId: true,
       cancelledAt: true,
       startsAt: true,
+      endsAt: true,
       timezone: true,
+      livekitRoomName: true,
+      recurrence: { select: RECURRENCE_SELECT },
       communities: { select: { communityId: true } },
     },
   });
@@ -3122,6 +3170,23 @@ export async function updateEventInvitees(
 
   // Best-effort, same rationale as every other email/Google call in this
   // file — the DB rows already reflect the new invited list by this point.
+  // For an event with no Google Calendar event behind it, our own emails
+  // carry the calendar entry: an invite for a new invitee, a cancellation
+  // that removes it for a removed one. Google-backed events have Google do
+  // this itself (updateMeetingCalendarEventAttendees below).
+  const icsEvent: IcsEventFields | undefined = event.googleEventId
+    ? undefined
+    : {
+        id: eventId,
+        title: event.title,
+        description: event.description,
+        startsAt: event.startsAt,
+        endsAt: event.endsAt,
+        meetingUrl: null,
+        livekitRoomName: event.livekitRoomName,
+        recurrence: event.recurrence,
+        recurrenceAnchor: event.startsAt,
+      };
   await Promise.all([
     emailInvitedUsers(newInvitees, {
       eventId,
@@ -3129,6 +3194,7 @@ export async function updateEventInvitees(
       hostName,
       startsAt: event.startsAt,
       timezone: event.timezone,
+      icsEvent,
     }),
     removeCandidates.length > 0
       ? Promise.allSettled(
@@ -3137,6 +3203,7 @@ export async function updateEventInvitees(
               subject: `Update: ${event.title}`,
               message: `You are no longer needed for "${event.title}".`,
               // No link — same rationale as the in-app notification above.
+              ics: icsEvent ? buildEventInviteAttachment(icsEvent, "CANCEL", row.user) : undefined,
             }),
           ),
         )
@@ -3179,6 +3246,14 @@ async function notifyEventAudience(
   eventId: string,
   visibility: EventVisibility,
   notification: { type: NotificationType; subject: string; message: string },
+  /**
+   * Set for an event with no Google Calendar event behind it: every
+   * recipient's email then carries an .ics that updates (REQUEST) or removes
+   * (CANCEL) the entry their earlier confirmation/invite email created. Left
+   * unset for an event that still syncs through Google, which emails its own
+   * update — sending both would put two entries on their calendar.
+   */
+  ics?: { event: IcsEventFields; method: "REQUEST" | "CANCEL" },
 ): Promise<void> {
   const isRestricted = visibility === EventVisibility.invited;
   const [invitees, goingRsvps, registrations] = await Promise.all([
@@ -3201,6 +3276,18 @@ async function notifyEventAudience(
   for (const invitee of invitees) members.set(invitee.userId, invitee.user);
   for (const rsvp of goingRsvps) members.set(rsvp.userId, rsvp.user);
 
+  // A manual meeting URL only goes to people who've committed to attend —
+  // going RSVPs and registrants — not invitees who haven't responded yet.
+  const goingUserIds = new Set(goingRsvps.map((rsvp) => rsvp.userId));
+  const icsFor = (recipient: { email: string; name: string | null }, includeMeetingUrl: boolean) =>
+    ics
+      ? buildEventInviteAttachment(
+          { ...ics.event, meetingUrl: includeMeetingUrl ? ics.event.meetingUrl : null },
+          ics.method,
+          recipient,
+        )
+      : undefined;
+
   if (members.size > 0) {
     const link = `/calendar/${eventId}`;
     await db.notification.createMany({
@@ -3212,11 +3299,12 @@ async function notifyEventAudience(
       })),
     });
     await Promise.allSettled(
-      Array.from(members.values()).map((member) =>
+      Array.from(members.entries()).map(([userId, member]) =>
         sendEventLifecycleEmail(member.email, member.name ?? "there", {
           subject: notification.subject,
           message: notification.message,
           link: `${APP_URL}${link}`,
+          ics: icsFor(member, goingUserIds.has(userId)),
         }),
       ),
     );
@@ -3229,6 +3317,7 @@ async function notifyEventAudience(
           subject: notification.subject,
           message: notification.message,
           link: `${APP_URL}/events`,
+          ics: icsFor(registration, true),
         }),
       ),
     );
@@ -3252,7 +3341,19 @@ export async function cancelEvent(
 ): Promise<void> {
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { title: true, hostId: true, visibility: true, googleEventId: true, cancelledAt: true },
+    select: {
+      title: true,
+      description: true,
+      startsAt: true,
+      endsAt: true,
+      meetingUrl: true,
+      livekitRoomName: true,
+      hostId: true,
+      visibility: true,
+      googleEventId: true,
+      cancelledAt: true,
+      recurrence: { select: RECURRENCE_SELECT },
+    },
   });
   if (!event) throw new EventError(404, "Event not found.");
   if (event.cancelledAt) throw new EventError(409, "This event has already been cancelled.");
@@ -3269,11 +3370,31 @@ export async function cancelEvent(
     await deleteAllEventRecordings(eventId);
   }
 
-  await notifyEventAudience(eventId, event.visibility, {
-    type: NotificationType.event_cancelled,
-    subject: `Cancelled: ${event.title}`,
-    message: `${actingUser.name ?? "The host"} cancelled "${event.title}".`,
-  });
+  await notifyEventAudience(
+    eventId,
+    event.visibility,
+    {
+      type: NotificationType.event_cancelled,
+      subject: `Cancelled: ${event.title}`,
+      message: `${actingUser.name ?? "The host"} cancelled "${event.title}".`,
+    },
+    event.googleEventId
+      ? undefined
+      : {
+          method: "CANCEL",
+          event: {
+            id: eventId,
+            title: event.title,
+            description: event.description,
+            startsAt: event.startsAt,
+            endsAt: event.endsAt,
+            meetingUrl: event.meetingUrl,
+            livekitRoomName: event.livekitRoomName,
+            recurrence: event.recurrence,
+            recurrenceAnchor: event.startsAt,
+          },
+        },
+  );
 
   if (event.googleEventId) {
     await cancelMeetingCalendarEvent(event.googleEventId);
@@ -3642,6 +3763,14 @@ export function buildEventIcs(event: {
   /** Series' repeat rule, if any — anchored at the master Event's own startsAt, per RFC 5545. */
   recurrence?: RecurrenceInput | null;
   recurrenceAnchor?: Date;
+  /**
+   * Set only for an .ics emailed as a calendar invite/update/cancel (RFC 5546
+   * iTIP) rather than downloaded as a plain "Add to calendar" file — adds
+   * METHOD, ORGANIZER, this recipient as ATTENDEE, and STATUS. Every .ics
+   * carries the same UID and an ever-increasing SEQUENCE, so a later
+   * REQUEST/CANCEL updates or removes the entry an earlier one created.
+   */
+  invite?: { method: "REQUEST" | "CANCEL"; attendee: { email: string; name: string | null } };
 }): string {
   const start = formatIcsDate(event.startsAt);
   const end = formatIcsDate(event.endsAt ?? new Date(event.startsAt.getTime() + 60 * 60 * 1000));
@@ -3655,6 +3784,7 @@ export function buildEventIcs(event: {
     "VERSION:2.0",
     "PRODID:-//Nasiha//Events//EN",
     "CALSCALE:GREGORIAN",
+    ...(event.invite ? [`METHOD:${event.invite.method}`] : []),
     "BEGIN:VEVENT",
     // RFC 5545: all instances of a recurring event share one UID — there's
     // no per-instance RECURRENCE-ID override given the app's no-exceptions
@@ -3662,6 +3792,9 @@ export function buildEventIcs(event: {
     // carries the whole series' RRULE with that occurrence's own DTSTART/DTEND.
     `UID:${event.id}@nasihaonline`,
     `DTSTAMP:${formatIcsDate(new Date())}`,
+    // Seconds since the epoch: monotonic across every send without needing a
+    // stored revision counter, which is all iTIP asks of SEQUENCE.
+    `SEQUENCE:${Math.floor(Date.now() / 1000)}`,
     `DTSTART:${start}`,
     `DTEND:${end}`,
     `SUMMARY:${escapeIcsText(event.title)}`,
@@ -3675,9 +3808,35 @@ export function buildEventIcs(event: {
   if (event.recurrence) {
     lines.push(buildRRuleString(event.recurrence, event.recurrenceAnchor ?? event.startsAt));
   }
+  if (event.invite) {
+    const { attendee } = event.invite;
+    lines.push(
+      `ORGANIZER;CN=NASIHA:mailto:${ICS_ORGANIZER_EMAIL}`,
+      `ATTENDEE;CN=${escapeIcsText(attendee.name ?? attendee.email)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=FALSE:mailto:${attendee.email}`,
+      `STATUS:${event.invite.method === "CANCEL" ? "CANCELLED" : "CONFIRMED"}`,
+    );
+  }
   lines.push("END:VEVENT", "END:VCALENDAR");
 
   return lines.join("\r\n");
+}
+
+/**
+ * The .ics NASIHA emails to one recipient as a calendar invite (or an update
+ * to / cancellation of one) — the replacement for the Google Calendar invite
+ * that Google used to send itself. Only used for events with no Google
+ * Calendar event behind them; see the callers.
+ */
+export function buildEventInviteAttachment(
+  event: Parameters<typeof buildEventIcs>[0],
+  method: "REQUEST" | "CANCEL",
+  attendee: { email: string; name: string | null },
+): IcsAttachment {
+  return {
+    method,
+    filename: `${event.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "event"}.ics`,
+    content: buildEventIcs({ ...event, invite: { method, attendee } }),
+  };
 }
 
 /**

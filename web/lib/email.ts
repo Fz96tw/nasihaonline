@@ -29,6 +29,25 @@ function extractAddress(recipient: string): string {
   return (recipient.match(/<(.+)>/)?.[1] ?? recipient).toLowerCase();
 }
 
+/** The address calendar clients see as an invite's organizer — same one every NASIHA email is sent from. */
+export const ICS_ORGANIZER_EMAIL = extractAddress(FROM_EMAIL);
+
+/**
+ * A calendar invite/update/cancel attached to one of our own emails (in place
+ * of the Google Calendar invite Google itself used to send). `method` is
+ * stamped into the Content-Type so Gmail/Outlook treat it as an invite
+ * update rather than a loose file.
+ */
+export type IcsAttachment = { content: string; filename: string; method: "REQUEST" | "CANCEL" };
+
+function toEmailAttachment(ics: IcsAttachment) {
+  return {
+    filename: ics.filename,
+    content: Buffer.from(ics.content, "utf-8"),
+    contentType: `text/calendar; method=${ics.method}; charset=UTF-8`,
+  };
+}
+
 /**
  * test.nasihaforyou.org is only ever used by admins, but shares its Clerk
  * project/DB shape with real members — a test action (e.g. approving a
@@ -545,7 +564,7 @@ export async function sendInboxMessageEmail(
 export async function sendMeetingRequestEmail(
   to: string,
   name: string,
-  request: { subject: string; message: string; link: string },
+  request: { subject: string; message: string; link: string; ics?: IcsAttachment },
 ) {
   if (!resend) {
     console.warn(`[email] RESEND_API_KEY not set — skipping meeting request email to ${to}`);
@@ -558,6 +577,7 @@ export async function sendMeetingRequestEmail(
       to,
       subject: request.subject,
       text: `Hi ${name},\n\n${request.message}\n\nView it here:\n${request.link}\n\n— The NASIHA Team`,
+      ...(request.ics ? { attachments: [toEmailAttachment(request.ics)] } : {}),
     });
   } catch (error) {
     console.error("[email] Failed to send meeting request email", error);
@@ -578,7 +598,15 @@ export async function sendMeetingRequestEmail(
 export async function sendEventInviteEmail(
   to: string,
   name: string,
-  event: { hostName: string; title: string; startsAt: Date; timezone: string | null; link: string },
+  event: {
+    hostName: string;
+    title: string;
+    startsAt: Date;
+    timezone: string | null;
+    link: string;
+    /** Calendar invite for this recipient — set only for events not backed by a Google Calendar event (Google emails its own invite for those). */
+    ics?: IcsAttachment;
+  },
 ) {
   if (!resend) {
     console.warn(`[email] RESEND_API_KEY not set — skipping event invite email to ${to}`);
@@ -593,6 +621,7 @@ export async function sendEventInviteEmail(
       to,
       subject: `You're invited: ${event.title}`,
       text: `Hi ${name},\n\n${event.hostName} has requested your attendance at "${event.title}" on ${when}. Please RSVP.\n\nView details and RSVP here:\n${event.link}\n\n— The NASIHA Team`,
+      ...(event.ics ? { attachments: [toEmailAttachment(event.ics)] } : {}),
     });
   } catch (error) {
     console.error("[email] Failed to send event invite email", error);
@@ -724,7 +753,7 @@ export async function sendRsvpConfirmationEmail(
 export async function sendEventLifecycleEmail(
   to: string,
   name: string,
-  event: { subject: string; message: string; link?: string },
+  event: { subject: string; message: string; link?: string; ics?: IcsAttachment },
 ) {
   if (!resend) {
     console.warn(`[email] RESEND_API_KEY not set — skipping event lifecycle email to ${to}`);
@@ -738,6 +767,7 @@ export async function sendEventLifecycleEmail(
       to,
       subject: event.subject,
       text: `Hi ${name},\n\n${event.message}${viewLine}\n\n— The NASIHA Team`,
+      ...(event.ics ? { attachments: [toEmailAttachment(event.ics)] } : {}),
     });
   } catch (error) {
     console.error("[email] Failed to send event lifecycle email", error);

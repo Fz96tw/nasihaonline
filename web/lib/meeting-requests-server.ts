@@ -17,15 +17,15 @@ import type { MeetingRequestModel } from "@/lib/generated/prisma/models/MeetingR
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import type { UpcomingMeeting } from "@/lib/meeting-requests";
 import { sendMeetingRequestEmail } from "@/lib/email";
+import { buildEventInviteAttachment } from "@/lib/events-server";
 import {
   cancelMeetingCalendarEvent,
-  createLiveKitMeetingCalendarEvent,
   createMeetingCalendarEvent,
   deleteMeetingRecording,
   getMeetingRecordingDownloadUrl,
   updateMeetingCalendarEventTime,
 } from "@/lib/google-calendar";
-import { formatEventTime } from "@/lib/format-date";
+import { formatEventDateTime, formatEventTime } from "@/lib/format-date";
 import { createLiveKitRoom, getRoomMetadata } from "@/lib/livekit";
 import { INBOX_TIERS } from "@/lib/members";
 import { createNotification } from "@/lib/notifications-server";
@@ -152,6 +152,55 @@ type ResolveAction =
   | { action: "edit"; topic: string; proposedTimes: string[]; message: string | null }
   | { action: "message"; body: string };
 
+// Matches the length google-calendar.ts gave the Calendar events it used to
+// create for a meeting request.
+const MEETING_DURATION_MS = 30 * 60_000;
+
+/**
+ * A LiveKit meeting no longer gets a Google Calendar event (Google's invite
+ * arrived "from an unknown sender") — NASIHA emails both parties a calendar
+ * invite, update or cancellation itself, with an .ics attached. Meet-platform
+ * meetings, and LiveKit ones accepted before this change (they still have a
+ * googleEventId), keep going through Google, which emails its own updates.
+ */
+function usesNasihaCalendarEmails(meetingRequest: MeetingRequestModel): boolean {
+  return meetingRequest.meetingPlatform === MeetingPlatform.livekit && !meetingRequest.googleEventId;
+}
+
+async function emailMeetingCalendarEntry(
+  meetingRequest: MeetingRequestModel,
+  scheduledAt: Date | null,
+  method: "REQUEST" | "CANCEL",
+  copy: { subject: string; message: string },
+): Promise<void> {
+  if (!scheduledAt) return;
+  const parties = await db.user.findMany({
+    where: { id: { in: [meetingRequest.senderId, meetingRequest.recipientId] } },
+    select: { email: true, name: true },
+  });
+  const link = `${APP_URL}/inbox?item=${meetingRequest.id}`;
+  await Promise.allSettled(
+    parties.map((party) =>
+      sendMeetingRequestEmail(party.email, party.name ?? "there", {
+        ...copy,
+        link,
+        ics: buildEventInviteAttachment(
+          {
+            id: meetingRequest.id,
+            title: meetingRequest.topic,
+            description: null,
+            startsAt: scheduledAt,
+            endsAt: new Date(scheduledAt.getTime() + MEETING_DURATION_MS),
+            meetingUrl: `${APP_URL}/meet/request/${meetingRequest.id}`,
+          },
+          method,
+          party,
+        ),
+      }),
+    ),
+  );
+}
+
 /**
  * Cancels a meeting request (§4.7 follow-up), in either of two states with
  * different permission rules:
@@ -211,6 +260,11 @@ async function cancelMeetingRequest(
   // for the `accepted` branch above — a still-negotiating request never had one.
   if (meetingRequest.googleEventId) {
     await cancelMeetingCalendarEvent(meetingRequest.googleEventId);
+  } else if (isAcceptedOrRenegotiating && usesNasihaCalendarEmails(meetingRequest)) {
+    await emailMeetingCalendarEntry(meetingRequest, meetingRequest.scheduledAt, "CANCEL", {
+      subject: `Cancelled: ${meetingRequest.topic}`,
+      message,
+    });
   }
 
   return db.$transaction(async (tx) => {
@@ -475,6 +529,12 @@ async function confirmMeetingReschedule(
   }
 
   const message = `${actorName} confirmed the new time for: "${meetingRequest.topic}"`;
+  if (usesNasihaCalendarEmails(meetingRequest)) {
+    await emailMeetingCalendarEntry(meetingRequest, scheduledAt, "REQUEST", {
+      subject: `Rescheduled: ${meetingRequest.topic}`,
+      message: `${message}\n\nNew time: ${formatEventDateTime(scheduledAt)}\nJoin: ${APP_URL}/meet/request/${meetingRequest.id}`,
+    });
+  }
 
   return db.$transaction(async (tx) => {
     const updated = await tx.meetingRequest.update({
@@ -674,18 +734,9 @@ export async function resolveMeetingRequest(
   let googleEventId: string | null = null;
   let livekitRoomName: string | null = null;
   if (senderUser && recipientUser && meetingRequest.meetingPlatform === MeetingPlatform.livekit) {
+    // No Google Calendar event — the calendar invite is emailed by NASIHA
+    // itself once the acceptance is committed (see usesNasihaCalendarEmails).
     livekitRoomName = await createLiveKitRoom(meetingRequest.id, meetingRequest.topic);
-    const created = await createLiveKitMeetingCalendarEvent({
-      topic: meetingRequest.topic,
-      startsAt: scheduledAt,
-      attendees: [
-        { email: senderUser.email, name: senderUser.name ?? "there" },
-        { email: recipientUser.email, name: recipientUser.name ?? "there" },
-      ],
-      description: createdMessage?.body ?? undefined,
-      meetingPageUrl: `${APP_URL}/meet/request/${meetingRequest.id}`,
-    });
-    googleEventId = created.googleEventId;
   } else if (senderUser && recipientUser) {
     const created = await createMeetingCalendarEvent({
       topic: meetingRequest.topic,
@@ -788,11 +839,17 @@ export async function resolveMeetingRequest(
     return updated;
   });
 
-  // No NASIHA email here (unlike decline/reschedule below) — Google's own
-  // calendar invite (sendUpdates: "all" above) already reaches both the
-  // requester and the recipient with the time and Meet link, so a second
-  // email would just be a duplicate. The in-app Notification created above
-  // still covers the acceptance for anyone not checking that inbox.
+  // A Meet-platform meeting sends no NASIHA email here (unlike decline/
+  // reschedule below) — Google's own calendar invite (sendUpdates: "all"
+  // above) already reaches both parties with the time and Meet link, so a
+  // second email would just be a duplicate. A LiveKit meeting has no Google
+  // event, so its calendar invite comes from NASIHA instead.
+  if (livekitRoomName && !googleEventId) {
+    await emailMeetingCalendarEntry(updated, scheduledAt, "REQUEST", {
+      subject: `Meeting confirmed: ${meetingRequest.topic}`,
+      message: `${acceptedMessage}\n\nWhen: ${formatEventDateTime(scheduledAt)}\nJoin: ${APP_URL}/meet/request/${meetingRequest.id}`,
+    });
+  }
 
   return updated;
 }
