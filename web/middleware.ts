@@ -25,6 +25,7 @@ function isProtectedApiRoute(pathname: string) {
     pathname.startsWith("/api/contributions") ||
     pathname.startsWith("/api/inbox") ||
     pathname.startsWith("/api/notifications") ||
+    pathname.startsWith("/api/session-reminders") ||
     pathname.startsWith("/api/quick-recordings")
   );
 }

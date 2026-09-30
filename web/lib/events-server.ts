@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
+import { REMINDER_LEAD_MS, reminderStateOf, type ReminderSession } from "@/lib/session-reminders";
 import {
   EventType,
   EventVisibility,
@@ -1216,6 +1217,71 @@ export async function getDashboardUpcomingEvents(
         seriesId: event.id,
         isRecurring: event.isRecurring,
       };
+    });
+}
+
+/** Events with no end time are treated as running this long, for the floating session reminder's "in progress" window. */
+const REMINDER_DEFAULT_EVENT_MS = 2 * 60 * 60_000;
+
+/**
+ * Floating session reminder (components/sessions/session-reminder.tsx): the
+ * events this member can join right now — hosted, or RSVP'd going — that are
+ * either inside the "starting soon" lead window or already in progress.
+ * Same join eligibility as the Join buttons (host or going-RSVP, published,
+ * not cancelled, has a meeting link) but time-windowed rather than
+ * start-of-day-cutoff'd, and no-end-time events get a default window
+ * instead of ending at their start. Deliberately returns only a joinHref,
+ * never meetingUrl/livekitRoomName.
+ */
+export async function getReminderEventsForUser(userId: string): Promise<ReminderSession[]> {
+  const now = new Date();
+  // An in-progress event's own startsAt is already in the past, so look back
+  // far enough to still fetch it (and a recurring master's earlier start).
+  const windowStart = new Date(now.getTime() - 12 * 60 * 60_000);
+  const windowEnd = new Date(now.getTime() + REMINDER_LEAD_MS + 60_000);
+
+  const events = await db.event.findMany({
+    where: {
+      cancelledAt: null,
+      publishedAt: { not: null },
+      OR: [{ hostId: userId }, { rsvps: { some: { userId, status: RSVPStatus.going } } }],
+      AND: [
+        { OR: [{ meetingUrl: { not: null } }, { livekitRoomName: { not: null } }] },
+        recurringSeriesStillActiveOrUpcoming(windowStart),
+        { startsAt: { lte: windowEnd } },
+      ],
+    },
+    select: {
+      id: true,
+      title: true,
+      startsAt: true,
+      endsAt: true,
+      recurrence: { select: RECURRENCE_SELECT },
+    },
+    orderBy: { startsAt: "asc" },
+  });
+
+  return events
+    .flatMap((event) => expandEventForListing(event, windowStart, windowEnd))
+    .flatMap((event): ReminderSession[] => {
+      const start = event.occurrenceStart.getTime();
+      const end = event.occurrenceEnd?.getTime() ?? start + REMINDER_DEFAULT_EVENT_MS;
+      const state = reminderStateOf(
+        { key: "", kind: "event", title: "", detail: null, startsAt: new Date(start).toISOString(), endsAt: new Date(end).toISOString(), joinHref: "" },
+        now.getTime(),
+      );
+      if (!state) return [];
+      return [
+        {
+          key: `event-${event.occurrenceId}`,
+          kind: "event",
+          title: event.title,
+          detail: null,
+          startsAt: new Date(start).toISOString(),
+          endsAt: new Date(end).toISOString(),
+          joinHref: `/meet/event/${event.id}`,
+        },
+      ];
     });
 }
 

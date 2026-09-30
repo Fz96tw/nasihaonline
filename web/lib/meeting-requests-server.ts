@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { REMINDER_LEAD_MS, reminderStateOf, type ReminderSession } from "@/lib/session-reminders";
 import {
   ContributionSource,
   LedgerStatus,
@@ -1508,4 +1509,58 @@ export async function deleteMeetingRequestRecordingSegment(
     await deleteRecordingObject(recording.objectKey);
   }
   await db.meetingRequestRecording.delete({ where: { id: recording.id } });
+}
+
+/** MeetingRequest has no stored duration, so the reminder treats a confirmed meeting as running this long. */
+const REMINDER_DEFAULT_MEETING_MS = 60 * 60_000;
+
+/**
+ * Floating session reminder: this member's confirmed 1-on-1 meetings that are
+ * inside the "starting soon" lead window or in progress. Only accepted /
+ * mutually-rescheduled meetings with a join link qualify — pending requests
+ * (no confirmed time yet) never do. Returns a joinHref only, never the raw
+ * meetingUrl/livekitRoomName.
+ */
+export async function getReminderMeetingsForUser(userId: string): Promise<ReminderSession[]> {
+  const now = Date.now();
+  const meetings = await db.meetingRequest.findMany({
+    where: {
+      status: {
+        in: [
+          MeetingRequestStatus.accepted,
+          MeetingRequestStatus.reschedule_by_sender,
+          MeetingRequestStatus.reschedule_by_recipient,
+        ],
+      },
+      scheduledAt: {
+        gte: new Date(now - REMINDER_DEFAULT_MEETING_MS),
+        lte: new Date(now + REMINDER_LEAD_MS + 60_000),
+      },
+      OR: [{ senderId: userId }, { recipientId: userId }],
+      AND: [{ OR: [{ meetingUrl: { not: null } }, { livekitRoomName: { not: null } }] }],
+      origin: MeetingRequestOrigin.directory,
+    },
+    select: {
+      id: true,
+      topic: true,
+      scheduledAt: true,
+      senderId: true,
+      sender: { select: { name: true } },
+      recipient: { select: { name: true } },
+    },
+  });
+
+  return meetings.flatMap((meeting): ReminderSession[] => {
+    const start = (meeting.scheduledAt as Date).getTime();
+    const session: ReminderSession = {
+      key: `meeting-${meeting.id}`,
+      kind: "meeting",
+      title: meeting.topic,
+      detail: `with ${(meeting.senderId === userId ? meeting.recipient.name : meeting.sender.name) ?? "NASIHA Member"}`,
+      startsAt: new Date(start).toISOString(),
+      endsAt: new Date(start + REMINDER_DEFAULT_MEETING_MS).toISOString(),
+      joinHref: `/meet/request/${meeting.id}`,
+    };
+    return reminderStateOf(session, now) ? [session] : [];
+  });
 }

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { MemberSidebar } from "@/components/members/member-sidebar";
 import { ProfileCompletionGate } from "@/components/profile/profile-completion-gate";
+import { SessionReminder } from "@/components/sessions/session-reminder";
 import { SiteHeader, SiteHeaderSkeleton } from "@/components/site-header";
 import { getSessionUser } from "@/lib/auth";
 import { getMissingRequiredProfileFields, getOrCreateProfile, isProfileComplete } from "@/lib/profile-server";
@@ -57,6 +58,7 @@ export default async function MemberLayout({ children }: { children: React.React
           needsCommunitySelection={needsCommunitySelection}
           missingProfileFields={missingProfileFields}
         />
+        <SessionReminder />
         <div className="flex flex-1">
           <MemberSidebar
             isAdmin={user?.role === "admin"}
