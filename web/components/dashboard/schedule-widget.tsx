@@ -36,7 +36,7 @@ export async function ScheduleWidget({ userId }: { userId: string }) {
         : `/calendar/${event.seriesId}`,
       badge: event.rsvped ? ({ label: "Going", variant: "success" } as const) : null,
       joinUrl: event.meetingUrl || event.livekitRoomName ? `/meet/event/${event.seriesId}` : null,
-      joinLabel: "Join the session",
+      joinLabel: "Join session",
     })),
     ...meetings.map((meeting) => ({
       id: `meeting-${meeting.id}`,
@@ -50,7 +50,7 @@ export async function ScheduleWidget({ userId }: { userId: string }) {
         ? ({ label: "Meeting request", variant: "warning" } as const)
         : ({ label: "Meeting", variant: "info" } as const),
       joinUrl: meeting.meetingUrl || meeting.livekitRoomName ? `/meet/request/${meeting.id}` : null,
-      joinLabel: "Join the meeting",
+      joinLabel: "Join meeting",
     })),
   ]
     .sort((a, b) => a.dateTime.localeCompare(b.dateTime))

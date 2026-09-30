@@ -127,7 +127,7 @@ export function EventDetail({
   const showJoinLink = !event.cancelled && !isPast && (event.rsvped || isHost) && (event.meetingUrl || event.livekitRoomName);
   const showRecordingUrl = isRecordingAvailable && event.recordingUrl;
   const hasMeetingSection =
-    showJoinLink || showRecordingUrl || visibleLiveKitSegments.length > 0 || event.chatTranscriptPostId;
+    showRecordingUrl || visibleLiveKitSegments.length > 0 || event.chatTranscriptPostId;
 
   function handleRsvpToggled(result: {
     rsvped: boolean;
@@ -217,15 +217,6 @@ export function EventDetail({
         <div className="flex flex-col gap-3 border-t pt-6">
           <h2 className="text-sm font-semibold">Meeting</h2>
 
-          {showJoinLink ? (
-            <Button size="sm" asChild className="w-fit">
-              <Link href={`/meet/event/${event.seriesId}`}>
-                <Video className="mr-1.5 h-4 w-4" />
-                Join session link
-              </Link>
-            </Button>
-          ) : null}
-
           {showRecordingUrl ? (
             <RecordingRow
               label="Watch recording"
@@ -300,6 +291,14 @@ export function EventDetail({
         {!event.cancelled && !isPast && !isHost && (
           <RsvpButton eventId={event.seriesId} rsvped={event.rsvped} onToggled={handleRsvpToggled} />
         )}
+        {showJoinLink ? (
+          <Button asChild>
+            <Link href={`/meet/event/${event.seriesId}`}>
+              <Video className="mr-1.5 h-4 w-4" />
+              Join session
+            </Link>
+          </Button>
+        ) : null}
         {!event.cancelled && !isPast && (
           <AddToCalendarButton
             eventId={event.seriesId}

@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { Video } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useHasMounted } from "@/lib/use-has-mounted";
 
 export type ScheduleItem = {
@@ -106,15 +107,12 @@ export function ScheduleAgenda({ items }: { items: ScheduleItem[] }) {
                     {item.detail ? ` · ${item.detail}` : ""}
                   </p>
                   {item.joinUrl ? (
-                    <a
-                      href={item.joinUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                    >
-                      {item.joinLabel}
-                      <ArrowRight className="h-3 w-3" />
-                    </a>
+                    <Button size="sm" asChild className="mt-2">
+                      <a href={item.joinUrl} target="_blank" rel="noopener noreferrer">
+                        <Video className="mr-1.5 h-4 w-4" />
+                        {item.joinLabel}
+                      </a>
+                    </Button>
                   ) : null}
                 </div>
                 {item.badge ? (

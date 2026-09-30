@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Lock, Users } from "lucide-react";
+import { Lock, Users, Video } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { RsvpButton } from "@/components/calendar/rsvp-button";
 import { AddToCalendarButton } from "@/components/calendar/add-to-calendar-button";
 import { EVENT_TYPE_LABELS, getEventAudienceBadge, type MemberEvent } from "@/lib/events";
@@ -99,12 +100,12 @@ export function EventListItem({
             {hasMounted ? formatViewerLocalEventDateTime(event.startsAt) : null}
           </p>
           {!isPast && (rsvped || isHost) && (meetingUrl || livekitRoomName) ? (
-            <Link
-              href={`/meet/event/${event.seriesId}`}
-              className="mt-1 inline-block text-sm font-medium text-primary underline-offset-4 hover:underline"
-            >
-              Join session link
-            </Link>
+            <Button size="sm" asChild className="mt-2">
+              <Link href={`/meet/event/${event.seriesId}`}>
+                <Video className="mr-1.5 h-4 w-4" />
+                Join session
+              </Link>
+            </Button>
           ) : null}
         </div>
       </div>
