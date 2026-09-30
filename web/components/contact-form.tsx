@@ -17,16 +17,22 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { ContactService } from "@/lib/generated/prisma/enums";
-import { CONTACT_SERVICE_LABELS, contactSchema, type ContactFormValues } from "@/lib/validation/contact";
+import {
+  CONTACT_SERVICE_LABELS,
+  MEMBER_ONLY_CONTACT_SERVICES,
+  contactSchema, type ContactFormValues,
+} from "@/lib/validation/contact";
 
 export function ContactForm({
   defaultName,
   defaultEmail,
   showHeader = true,
+  isMember = false,
 }: {
   defaultName?: string;
   defaultEmail?: string;
   showHeader?: boolean;
+  isMember?: boolean;
 }) {
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -126,7 +132,9 @@ export function ContactForm({
             <FormItem>
               <FormLabel>Which of our services is this about?</FormLabel>
               <div className="flex flex-col gap-2">
-                {Object.values(ContactService).map((value) => (
+                {Object.values(ContactService)
+                  .filter((value) => isMember || !MEMBER_ONLY_CONTACT_SERVICES.includes(value))
+                  .map((value) => (
                   <label key={value} className="flex items-center gap-2 text-sm">
                     <Checkbox
                       checked={field.value.includes(value)}

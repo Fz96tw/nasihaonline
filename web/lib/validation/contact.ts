@@ -5,7 +5,11 @@ export const CONTACT_SERVICE_LABELS: Record<ContactService, string> = {
   [ContactService.research_curation]: "Research and Curation",
   [ContactService.peer_review_feedback]: "Peer Review and Feedback",
   [ContactService.teaching_sharing]: "Teaching and Sharing",
+  [ContactService.account_support]: "Technical help with my NASIHA account",
 };
+
+/** Options only offered to (and accepted from) signed-in members. */
+export const MEMBER_ONLY_CONTACT_SERVICES: ContactService[] = [ContactService.account_support];
 
 export const contactSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120, "Name is too long"),

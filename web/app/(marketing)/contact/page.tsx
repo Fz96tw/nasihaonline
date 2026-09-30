@@ -41,6 +41,7 @@ export default async function ContactPage() {
         defaultName={user?.name ?? undefined}
         defaultEmail={user?.email ?? undefined}
         showHeader={false}
+        isMember={!!user}
       />
     </main>
   );

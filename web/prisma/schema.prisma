@@ -451,6 +451,9 @@ enum ContactService {
   research_curation
   peer_review_feedback
   teaching_sharing
+  // Member-only option (hidden from signed-out visitors, rejected by
+  // /api/contact without a session).
+  account_support
 }
 
 // Source selected on the /join form's "How did you hear about NASIHA?"

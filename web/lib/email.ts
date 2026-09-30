@@ -942,7 +942,7 @@ export async function sendContactMessageEmail(message: {
   services: ContactService[];
   subject: string;
   message: string;
-}) {
+}, member?: { id: string; email: string }) {
   if (!resend) {
     console.warn(`[email] RESEND_API_KEY not set — skipping contact notification from ${message.email}`);
     return;
@@ -952,13 +952,16 @@ export async function sendContactMessageEmail(message: {
     ? `Services: ${message.services.map((service) => CONTACT_SERVICE_LABELS[service]).join(", ")}\n`
     : "";
 
+  const isAccountSupport = message.services.includes(ContactService.account_support);
+  const memberLine = member ? `Signed-in member: ${member.email} (id ${member.id})\n` : "";
+
   try {
     await sendEmail({
       from: FROM_EMAIL,
       to: CONTACT_EMAIL,
       replyTo: message.email,
-      subject: `[Contact form] ${message.subject}`,
-      text: `From: ${message.name} <${message.email}>\n${servicesLine}\n${message.message}`,
+      subject: `${isAccountSupport ? "[Account support]" : "[Contact form]"} ${message.subject}`,
+      text: `From: ${message.name} <${message.email}>\n${memberLine}${servicesLine}\n${message.message}`,
     });
   } catch (error) {
     console.error("[email] Failed to send contact notification email", error);
