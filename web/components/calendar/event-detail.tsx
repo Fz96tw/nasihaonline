@@ -12,6 +12,7 @@ import { EventViewCounter } from "@/components/calendar/event-view-counter";
 import { ManageInvitees } from "@/components/calendar/manage-invitees";
 import { CancelEventButton } from "@/components/calendar/cancel-event-button";
 import { ResendNotifications } from "@/components/calendar/resend-notifications";
+import { MessageAttendees } from "@/components/calendar/message-attendees";
 import { RecordingRow } from "@/components/calendar/recording-row";
 import { AttendanceChecklist } from "@/components/calendar/attendance-checklist";
 import { HighlightText } from "@/components/highlight-text";
@@ -31,7 +32,7 @@ import { useHasMounted } from "@/lib/use-has-mounted";
 import { formatDurationMinutes, formatTimestamp } from "@/lib/format-date";
 import { FEED_TYPE_LABELS } from "@/lib/feed";
 import { EventVisibility } from "@/lib/generated/prisma/enums";
-import type { EventNotificationBroadcastItem } from "@/lib/events";
+import type { EventNotificationBroadcastItem, EventAttendeeMessageItem } from "@/lib/events";
 
 function formatEventDateRange(startsAt: string, endsAt: string | null) {
   const start = new Date(startsAt);
@@ -79,6 +80,7 @@ export function EventDetail({
   roster,
   attendanceChecklist,
   notificationBroadcasts,
+  attendeeMessages,
   highlightQuery,
 }: {
   event: MemberEvent;
@@ -94,6 +96,7 @@ export function EventDetail({
   attendanceChecklist: AttendanceChecklistMember[] | null;
   /** Resend Notifications' history trail — non-null only for a community event when canEdit (host/admin), matching resendEventNotifications' own gate. */
   notificationBroadcasts: EventNotificationBroadcastItem[] | null;
+  attendeeMessages: { items: EventAttendeeMessageItem[]; memberCount: number; guestCount: number } | null;
   /** Active search query when arriving from a search result (see lib/feed.ts's withFeedRef) — highlights every match in the title/description. */
   highlightQuery?: string;
 }) {
@@ -391,6 +394,15 @@ export function EventDetail({
           eventId={event.seriesId}
           restricted={event.visibility === EventVisibility.invited}
           initialBroadcasts={notificationBroadcasts}
+        />
+      ) : null}
+
+      {canEdit && attendeeMessages ? (
+        <MessageAttendees
+          eventId={event.seriesId}
+          memberCount={attendeeMessages.memberCount}
+          guestCount={attendeeMessages.guestCount}
+          initialMessages={attendeeMessages.items}
         />
       ) : null}
     </div>

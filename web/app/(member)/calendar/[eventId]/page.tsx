@@ -2,7 +2,14 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getEventAttendanceChecklist } from "@/lib/attendance-server";
-import { getEventAttendees, getEventNotificationBroadcasts, getEventRoster, getMemberEventById } from "@/lib/events-server";
+import {
+  getEventAttendees,
+  getEventNotificationBroadcasts,
+  getEventAttendeeMessages,
+  getEventAttendeeMessageRecipientCounts,
+  getEventRoster,
+  getMemberEventById,
+} from "@/lib/events-server";
 import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-server";
 import { getForumThreadDetail } from "@/lib/forums-server";
 import { EVENTS_FORUM_SLUG } from "@/lib/forums";
@@ -94,7 +101,7 @@ export default async function EventDetailPage({
   // can never also be `open`, the only way EventRegistration rows exist).
   // Resend Notifications' history trail (event detail page) — host/admin
   // only (resendEventNotifications' own gate applies to both visibilities).
-  const [attendees, hostProfile, roster, attendanceChecklist, notificationBroadcasts] = await Promise.all([
+  const [attendees, hostProfile, roster, attendanceChecklist, notificationBroadcasts, attendeeMessages] = await Promise.all([
     canEdit && !isRestricted ? getEventAttendees(event.seriesId) : Promise.resolve(null),
     getDirectoryMemberById(event.hostId),
     isRestricted ? getEventRoster(event.seriesId) : Promise.resolve(null),
@@ -102,6 +109,12 @@ export default async function EventDetailPage({
       ? getEventAttendanceChecklist(event.seriesId, new Date(event.startsAt))
       : Promise.resolve(null),
     canEdit ? getEventNotificationBroadcasts(event.seriesId) : Promise.resolve(null),
+    canEdit
+      ? Promise.all([
+          getEventAttendeeMessages(event.seriesId),
+          getEventAttendeeMessageRecipientCounts(event.seriesId, event.hostId),
+        ]).then(([items, counts]) => ({ items, memberCount: counts.members, guestCount: counts.guests }))
+      : Promise.resolve(null),
   ]);
 
   const isInvited = roster?.some((member) => member.userId === user.id) ?? false;
@@ -140,6 +153,7 @@ export default async function EventDetailPage({
         roster={roster}
         attendanceChecklist={attendanceChecklist}
         notificationBroadcasts={notificationBroadcasts}
+        attendeeMessages={attendeeMessages}
         highlightQuery={q}
       />
 

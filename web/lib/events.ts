@@ -205,6 +205,13 @@ export type EventNotificationBroadcastItem = {
   recipientCount: number;
 };
 
+// "Message attendees" history (event detail page) — one entry per host-written
+// message to RSVP'd members + registered guests.
+export type EventAttendeeMessageItem = EventNotificationBroadcastItem & {
+  subject: string;
+  body: string;
+};
+
 // Dashboard's upcoming-events widget (§10 Phase 4 capstone) — a trimmed-down
 // event shape for a small at-a-glance list, not the full calendar. Includes
 // both this member's RSVP'd events and open events they haven't RSVP'd to

@@ -1289,6 +1289,10 @@ model EventNotificationBroadcast {
   sentBy         User     @relation("EventNotificationBroadcastSentBy", fields: [sentById], references: [id])
   recipientCount Int
   sentAt         DateTime @default(now())
+  // Non-null only for a host-written "Message attendees" send; the automatic
+  // and "Resend Notifications" broadcasts leave both null.
+  subject        String?
+  body           String?
 
   @@index([eventId, sentAt])
   @@map("event_notification_broadcasts")

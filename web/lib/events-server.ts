@@ -17,6 +17,7 @@ import type {
   DashboardUpcomingEvent,
   EventCategoryOption,
   EventNotificationBroadcastItem,
+  EventAttendeeMessageItem,
   EventRegistrationAttendee,
   EventRosterMember,
   EventRsvpAttendee,
@@ -47,6 +48,7 @@ import {
   sendEventInviteEmail,
   sendEventLifecycleEmail,
   sendEventRegistrationReminderEmail,
+  sendEventAttendeeMessageEmail,
   sendRsvpConfirmationEmail,
 } from "@/lib/email";
 import { formatEventDateTime, formatEventTime } from "@/lib/format-date";
@@ -2124,7 +2126,8 @@ export async function resendEventNotifications(
  */
 export async function getEventNotificationBroadcasts(eventId: string): Promise<EventNotificationBroadcastItem[]> {
   const broadcasts = await db.eventNotificationBroadcast.findMany({
-    where: { eventId },
+    // subject: null — host-written attendee messages have their own trail.
+    where: { eventId, subject: null },
     select: { id: true, sentAt: true, recipientCount: true, sentBy: { select: { name: true } } },
     orderBy: { sentAt: "desc" },
   });
@@ -2135,6 +2138,143 @@ export async function getEventNotificationBroadcasts(eventId: string): Promise<E
     sentByName: broadcast.sentBy.name ?? "A member",
     recipientCount: broadcast.recipientCount,
   }));
+}
+
+/**
+ * Who a "Message attendees" send reaches: members whose RSVP is still
+ * `going` plus anonymous EventRegistration guests (no User account). The
+ * host is excluded from the member leg — they're the sender.
+ */
+async function getEventAttendeeMessageRecipients(eventId: string, hostId: string) {
+  const [rsvps, registrations] = await Promise.all([
+    db.rSVP.findMany({
+      where: { eventId, status: RSVPStatus.going, userId: { not: hostId } },
+      select: { user: { select: { id: true, email: true, name: true } } },
+    }),
+    db.eventRegistration.findMany({ where: { eventId }, select: { email: true, name: true } }),
+  ]);
+  const members = rsvps.map((rsvp) => rsvp.user);
+  // A member who also registered as a guest with the same email gets one email.
+  const memberEmails = new Set(members.map((member) => member.email.toLowerCase()));
+  const guests = registrations.filter((guest) => !memberEmails.has(guest.email.toLowerCase()));
+  return { members, guests };
+}
+
+export async function getEventAttendeeMessageRecipientCounts(
+  eventId: string,
+  hostId: string,
+): Promise<{ members: number; guests: number }> {
+  const { members, guests } = await getEventAttendeeMessageRecipients(eventId, hostId);
+  return { members: members.length, guests: guests.length };
+}
+
+export async function getEventAttendeeMessages(eventId: string): Promise<EventAttendeeMessageItem[]> {
+  const messages = await db.eventNotificationBroadcast.findMany({
+    where: { eventId, subject: { not: null } },
+    select: {
+      id: true,
+      sentAt: true,
+      recipientCount: true,
+      subject: true,
+      body: true,
+      sentBy: { select: { name: true } },
+    },
+    orderBy: { sentAt: "desc" },
+  });
+  return messages.map((message) => ({
+    id: message.id,
+    sentAt: message.sentAt.toISOString(),
+    sentByName: message.sentBy.name ?? "A member",
+    recipientCount: message.recipientCount,
+    subject: message.subject ?? "",
+    body: message.body ?? "",
+  }));
+}
+
+/**
+ * "Message attendees" (event detail page) — emails the host's own subject and
+ * body to every going-RSVP'd member and registered guest, host/admin only,
+ * live (non-cancelled, non-past) events only. Logs the send with its
+ * subject/body to the event's EventNotificationBroadcast trail.
+ */
+export async function messageEventAttendees(
+  eventId: string,
+  actingUser: UserModel,
+  input: { subject: string; body: string },
+): Promise<EventAttendeeMessageItem> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: {
+      id: true,
+      title: true,
+      startsAt: true,
+      endsAt: true,
+      timezone: true,
+      hostId: true,
+      cancelledAt: true,
+      publishedAt: true,
+    },
+  });
+  if (!event) throw new EventError(404, "Event not found.");
+
+  if (actingUser.role !== Role.admin && event.hostId !== actingUser.id) {
+    throw new EventError(403, "Only the event's host or an admin can message attendees.");
+  }
+  if (event.cancelledAt) throw new EventError(400, "This event has been cancelled.");
+  if (!event.publishedAt) throw new EventError(400, "This event hasn't been published yet.");
+
+  const { members, guests } = await getEventAttendeeMessageRecipients(event.id, event.hostId);
+  const recipientCount = members.length + guests.length;
+  if (recipientCount === 0) throw new EventError(400, "No one has RSVP'd or registered yet.");
+
+  const host = await db.user.findUnique({ where: { id: event.hostId }, select: { name: true } });
+  const senderName = actingUser.name ?? host?.name ?? "The organizer";
+
+  const broadcast = await db.eventNotificationBroadcast.create({
+    data: {
+      eventId: event.id,
+      sentById: actingUser.id,
+      recipientCount,
+      subject: input.subject,
+      body: input.body,
+    },
+    select: { id: true, sentAt: true },
+  });
+
+  const link = `${APP_URL}/calendar/${event.id}`;
+  await Promise.allSettled([
+    ...members.map((member) =>
+      sendEventAttendeeMessageEmail(member.email, member.name ?? "there", {
+        ...input,
+        hostName: senderName,
+        replyTo: actingUser.email,
+        eventTitle: event.title,
+        startsAt: event.startsAt,
+        timezone: event.timezone,
+        link,
+      }),
+    ),
+    ...guests.map((guest) =>
+      sendEventAttendeeMessageEmail(guest.email, guest.name ?? "there", {
+        ...input,
+        hostName: senderName,
+        replyTo: actingUser.email,
+        eventTitle: event.title,
+        startsAt: event.startsAt,
+        timezone: event.timezone,
+        link: `${APP_URL}/events/${event.id}`,
+      }),
+    ),
+  ]);
+
+  return {
+    id: broadcast.id,
+    sentAt: broadcast.sentAt.toISOString(),
+    sentByName: senderName,
+    recipientCount,
+    subject: input.subject,
+    body: input.body,
+  };
 }
 
 /**

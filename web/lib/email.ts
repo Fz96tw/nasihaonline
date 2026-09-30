@@ -426,6 +426,48 @@ export async function sendEventRegistrationReminderEmail(
 }
 
 /**
+ * Host-written "Message attendees" email (event detail page) — the host's own
+ * subject/body wrapped in the event's title/date, with reply-to set to the
+ * sender so replies reach them directly. Best-effort, same as every other
+ * function here.
+ */
+export async function sendEventAttendeeMessageEmail(
+  to: string,
+  name: string,
+  message: {
+    subject: string;
+    body: string;
+    hostName: string;
+    replyTo: string;
+    eventTitle: string;
+    startsAt: Date;
+    timezone: string | null;
+    link: string;
+  },
+) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping event attendee message email to ${to}`);
+    return;
+  }
+
+  const when = formatEventDateTime(message.startsAt, message.timezone);
+  const safeBody = escapeHtml(message.body).replace(/\n/g, "<br>");
+
+  try {
+    await sendEmail({
+      from: FROM_EMAIL,
+      to,
+      replyTo: message.replyTo,
+      subject: message.subject,
+      text: `Hi ${name},\n\n${message.hostName} sent a message about "${message.eventTitle}" (${when}):\n\n${message.body}\n\nEvent details: ${message.link}\n\n— The NASIHA Team`,
+      html: `<div><h1>${escapeHtml(message.eventTitle)}</h1><p>${escapeHtml(when)}</p><p><strong>${escapeHtml(message.hostName)}</strong> sent a message to attendees:</p><p>${safeBody}</p><p><a href="${message.link}">Event details</a></p></div>`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send event attendee message email", error);
+  }
+}
+
+/**
  * Notifies the org's contact inbox of a new /contact form submission.
  * Best-effort, same as above: the ContactMessage row is already persisted
  * by the time this runs, so it's the fallback if this send fails or
