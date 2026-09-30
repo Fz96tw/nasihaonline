@@ -83,8 +83,6 @@ export function PublicEventDetail({ event }: { event: PublicEvent }) {
         </div>
       ) : null}
 
-      {!isPast && event.open ? <RegisterBlurb /> : null}
-
       {event.description ? (
         <p className="whitespace-pre-line text-sm leading-relaxed">{event.description}</p>
       ) : null}
@@ -104,6 +102,7 @@ export function PublicEventDetail({ event }: { event: PublicEvent }) {
           </>
         ) : null}
       </div>
+      {!isPast && event.open ? <RegisterBlurb className="-mt-4 text-xs text-muted-foreground" /> : null}
     </div>
   );
 }

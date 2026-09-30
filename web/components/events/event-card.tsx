@@ -6,7 +6,7 @@ import { Lock } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RsvpButton } from "@/components/calendar/rsvp-button";
+import { RsvpBlurb, RsvpButton } from "@/components/calendar/rsvp-button";
 import { RegisterBlurb, RegisterButton } from "@/components/events/register-button";
 import { EVENT_TYPE_LABELS, getEventAudienceBadge, type EventWithRsvp } from "@/lib/events";
 import { EventVisibility } from "@/lib/generated/prisma/enums";
@@ -97,22 +97,23 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
             <p className="text-sm text-muted-foreground">Hosted by {event.hostName}</p>
           ) : null}
         </CardHeader>
-        {!isSignedIn && event.open ? (
-          <CardContent className="pt-0">
-            <RegisterBlurb />
-          </CardContent>
-        ) : null}
         {event.description ? (
           <CardContent className="pt-0 text-sm leading-relaxed text-muted-foreground">
             {event.description}
           </CardContent>
         ) : null}
       </CardLinkWrapper>
-      <CardFooter className="mt-auto pt-0">
+      <CardFooter className="mt-auto flex-col items-start gap-1.5 pt-0">
         {isSignedIn ? (
-          <RsvpButton eventId={event.seriesId} rsvped={rsvped} onToggled={(result) => setRsvped(result.rsvped)} />
+          <>
+            <RsvpButton eventId={event.seriesId} rsvped={rsvped} onToggled={(result) => setRsvped(result.rsvped)} />
+            {!rsvped ? <RsvpBlurb className="text-xs text-muted-foreground" /> : null}
+          </>
         ) : event.open ? (
-          <RegisterButton eventId={event.seriesId} eventTitle={event.title} />
+          <>
+            <RegisterButton eventId={event.seriesId} eventTitle={event.title} />
+            <RegisterBlurb className="text-xs text-muted-foreground" />
+          </>
         ) : (
           <Button size="sm" asChild>
             <Link href="/join">Join to RSVP</Link>

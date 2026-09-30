@@ -6,7 +6,7 @@ import { Lock, Pencil, Users, Video } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RsvpButton } from "@/components/calendar/rsvp-button";
+import { RsvpBlurb, RsvpButton } from "@/components/calendar/rsvp-button";
 import { AddToCalendarButton } from "@/components/calendar/add-to-calendar-button";
 import { EventViewCounter } from "@/components/calendar/event-view-counter";
 import { ManageInvitees } from "@/components/calendar/manage-invitees";
@@ -321,6 +321,9 @@ export function EventDetail({
           />
         )}
       </div>
+      {!event.cancelled && !isPast && !isHost && !event.rsvped ? (
+        <RsvpBlurb className="-mt-4 text-xs text-muted-foreground" />
+      ) : null}
 
       {roster ? (
         canEdit ? (

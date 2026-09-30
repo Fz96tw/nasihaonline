@@ -67,3 +67,12 @@ export function RsvpButton({
     </div>
   );
 }
+
+/** Shown above an event's description for a member who hasn't RSVP'd yet, so they know what RSVP gets them. */
+export function RsvpBlurb({ className }: { className?: string }) {
+  return (
+    <p className={className ?? "text-sm text-muted-foreground"}>
+      RSVP to receive an email with the link to join the event.
+    </p>
+  );
+}
