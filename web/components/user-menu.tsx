@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useClerk } from "@clerk/nextjs";
-import { UserCircle, KeyRound, Settings, LogOut } from "lucide-react";
+import { UserCircle, KeyRound, LogOut } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -15,12 +15,12 @@ import {
 /**
  * The nav's identity element is our own Avatar (Profile.avatarUrl / brand-color
  * initials — the data the rest of the app, e.g. the Directory, reads from),
- * not Clerk's UserButton avatar. This menu is how the two account surfaces
- * stay reachable without duplicating each other in the nav: "My Profile"
- * goes to our own /profile, "Settings" to our own /settings (account
- * security), "Manage Clerk Account" opens Clerk's hosted account modal on
- * demand (openUserProfile), and Sign out lives here too since UserButton
- * (which used to provide it) is no longer in the nav.
+ * not Clerk's UserButton avatar. "My Profile" goes to our own /profile,
+ * "Settings" to our own /settings (account security), and Sign out lives
+ * here too since UserButton (which used to provide it) is no longer in the
+ * nav. There is deliberately no "Manage Clerk Account" entry: members can't
+ * change their sign-up email, and the rest of that modal duplicates /profile
+ * and /settings.
  */
 export function UserMenu({ name, avatarUrl }: { name: string; avatarUrl: string | null }) {
   const router = useRouter();
@@ -39,10 +39,6 @@ export function UserMenu({ name, avatarUrl }: { name: string; avatarUrl: string 
         <DropdownMenuItem onSelect={() => router.push("/settings")}>
           <KeyRound className="h-4 w-4" />
           Settings
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => clerk.openUserProfile()}>
-          <Settings className="h-4 w-4" />
-          Manage Clerk Account
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => clerk.signOut({ redirectUrl: "/" })}>
