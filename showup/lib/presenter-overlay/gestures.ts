@@ -84,6 +84,14 @@ const RING_TIP = 16;
  * the fingers above them (what's actually being classified) are still fully in view.
  */
 const EDGE = 0.01;
+/**
+ * The drawing poses (pen, "L", horns, eraser) trace the fingertip continuously, so they need a trustworthy read: when
+ * the index and middle knuckles have both sunk past the bottom of the frame the model is guessing where the fingers are
+ * (a hand being dropped), and the tip wanders. Such a read is "none" for those poses only; zoom, pointer and the rest
+ * keep the relaxed bottom rule above.
+ */
+const DRAW_CLIP_Y = 1 - EDGE;
+const DRAWING_POSES: ReadonlySet<string> = new Set(["pen", "shape", "horns", "eraser"]);
 /** Thumb and index tips closer than this fraction of the hand's size are pinching. */
 const PINCH_RATIO = 0.3;
 /**
@@ -165,6 +173,12 @@ export function indexTipTrackable(landmarks: readonly Landmark[], aspect = 1): L
  * clipped on the left, right or top of frame.
  */
 export function classifyPose(landmarks: readonly Landmark[], aspect = 1): PoseReading {
+  const reading = classifyPoseRaw(landmarks, aspect);
+  if (DRAWING_POSES.has(reading.pose) && landmarks[5].y > DRAW_CLIP_Y && landmarks[MIDDLE_MCP].y > DRAW_CLIP_Y) return { ...reading, pose: "none" };
+  return reading;
+}
+
+function classifyPoseRaw(landmarks: readonly Landmark[], aspect = 1): PoseReading {
   const tip = landmarks[INDEX_TIP];
   const thumb = landmarks[THUMB_TIP];
   const middleTip = landmarks[MIDDLE_TIP];

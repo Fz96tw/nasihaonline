@@ -822,3 +822,11 @@ test("an active pointer keeps following an extended fingertip while the other fi
   assert.ok(state.pointer && state.pointer.fade === 1);
   assert.ok(state.pointer.u > 0.5, "moved with the tip");
 });
+
+test("a drawing pose is not read once the index and middle knuckles have sunk below the frame, but other poses still are", () => {
+  const sunk = (fingers: [Finger, Finger, Finger, Finger]) => hand(fingers, { oy: 0.31 });
+  assert.equal(classifyPose(sunk(["ext", "ext", "curl", "curl"])).pose, "none", "a dropped hand's pen read is discarded");
+  assert.equal(classifyPose(sunk(["ext", "curl", "curl", "curl"])).pose, "point", "the laser pointer keeps the relaxed rule");
+  assert.equal(classifyPose(sunk(["ext", "ext", "ext", "ext"])).pose, "palm", "an open palm (reset) is unaffected");
+  assert.equal(classifyPose(hand(["ext", "ext", "curl", "curl"], { oy: 0.1 })).pose, "pen", "a hand low but with knuckles in frame still draws");
+});
