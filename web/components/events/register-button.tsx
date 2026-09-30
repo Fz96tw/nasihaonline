@@ -65,62 +65,66 @@ export function RegisterButton({ eventId, eventTitle }: { eventId: string; event
   }
 
   return (
-    <div className="flex flex-col items-start gap-1.5">
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <Button size="sm">Register to attend</Button>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Register for {eventTitle}</DialogTitle>
-            <DialogDescription>
-              This event is open to the public — no NASIHA account needed. We&apos;ll email you a
-              confirmation right away, including how to join.
-            </DialogDescription>
-          </DialogHeader>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm">Register to attend</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Register for {eventTitle}</DialogTitle>
+          <DialogDescription>
+            This event is open to the public — no NASIHA account needed. We&apos;ll email you a
+            confirmation right away, including how to join.
+          </DialogDescription>
+        </DialogHeader>
 
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Sarah Al-Rashidi" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email address</FormLabel>
-                    <FormControl>
-                      <Input type="email" placeholder="you@example.com" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Sarah Al-Rashidi" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email address</FormLabel>
+                  <FormControl>
+                    <Input type="email" placeholder="you@example.com" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-              {submitError && <p className="text-sm text-destructive">{submitError}</p>}
+            {submitError && <p className="text-sm text-destructive">{submitError}</p>}
 
-              <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? "Registering…" : "Register"}
-              </Button>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
-      <p className="max-w-xs text-xs text-muted-foreground">
-        No NASIHA account needed. After you register, you will receive an email with the link to join the event. If you
-        don&apos;t see it then check your spam folder.
-      </p>
-    </div>
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting ? "Registering…" : "Register"}
+            </Button>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Shown above an open event's description for a signed-out visitor, so they know what Register does before clicking. */
+export function RegisterBlurb({ className }: { className?: string }) {
+  return (
+    <p className={className ?? "text-sm text-muted-foreground"}>
+      No NASIHA account needed. After you register, you will receive an email with the link to join the event. If you
+      don&apos;t see it then check your spam folder.
+    </p>
   );
 }

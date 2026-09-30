@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { RegisterButton } from "@/components/events/register-button";
+import { RegisterBlurb, RegisterButton } from "@/components/events/register-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EVENT_TYPE_LABELS, type PublicEvent } from "@/lib/events";
@@ -82,6 +82,8 @@ export function PublicEventDetail({ event }: { event: PublicEvent }) {
           This event has already taken place.
         </div>
       ) : null}
+
+      {!isPast && event.open ? <RegisterBlurb /> : null}
 
       {event.description ? (
         <p className="whitespace-pre-line text-sm leading-relaxed">{event.description}</p>

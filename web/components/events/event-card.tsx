@@ -7,7 +7,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RsvpButton } from "@/components/calendar/rsvp-button";
-import { RegisterButton } from "@/components/events/register-button";
+import { RegisterBlurb, RegisterButton } from "@/components/events/register-button";
 import { EVENT_TYPE_LABELS, getEventAudienceBadge, type EventWithRsvp } from "@/lib/events";
 import { EventVisibility } from "@/lib/generated/prisma/enums";
 import { useHasMounted } from "@/lib/use-has-mounted";
@@ -97,6 +97,11 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
             <p className="text-sm text-muted-foreground">Hosted by {event.hostName}</p>
           ) : null}
         </CardHeader>
+        {!isSignedIn && event.open ? (
+          <CardContent className="pt-0">
+            <RegisterBlurb />
+          </CardContent>
+        ) : null}
         {event.description ? (
           <CardContent className="pt-0 text-sm leading-relaxed text-muted-foreground">
             {event.description}
