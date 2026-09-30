@@ -443,6 +443,8 @@ export async function sendEventAttendeeMessageEmail(
     startsAt: Date;
     timezone: string | null;
     link: string;
+    /** Set on the organizer's own confirmation copy: how many attendees the message went to. */
+    copyOfRecipientCount?: number;
   },
 ) {
   if (!resend) {
@@ -452,15 +454,19 @@ export async function sendEventAttendeeMessageEmail(
 
   const when = formatEventDateTime(message.startsAt, message.timezone);
   const safeBody = escapeHtml(message.body).replace(/\n/g, "<br>");
+  const copyNote =
+    message.copyOfRecipientCount !== undefined
+      ? `Copy for your records — this message was sent to ${message.copyOfRecipientCount} attendee${message.copyOfRecipientCount === 1 ? "" : "s"}.`
+      : null;
 
   try {
     await sendEmail({
       from: FROM_EMAIL,
       to,
       replyTo: message.replyTo,
-      subject: message.subject,
-      text: `Hi ${name},\n\n${message.hostName} sent a message about "${message.eventTitle}" (${when}):\n\n${message.body}\n\nEvent details: ${message.link}\n\n— The NASIHA Team`,
-      html: `<div><h1>${escapeHtml(message.eventTitle)}</h1><p>${escapeHtml(when)}</p><p><strong>${escapeHtml(message.hostName)}</strong> sent a message to attendees:</p><p>${safeBody}</p><p><a href="${message.link}">Event details</a></p></div>`,
+      subject: copyNote ? `[Copy] ${message.subject}` : message.subject,
+      text: `${copyNote ? `${copyNote}\n\n` : ""}Hi ${name},\n\n${message.hostName} sent a message about "${message.eventTitle}" (${when}):\n\n${message.body}\n\nEvent details: ${message.link}\n\n— The NASIHA Team`,
+      html: `<div>${copyNote ? `<p><em>${escapeHtml(copyNote)}</em></p>` : ""}<h1>${escapeHtml(message.eventTitle)}</h1><p>${escapeHtml(when)}</p><p><strong>${escapeHtml(message.hostName)}</strong> sent a message to attendees:</p><p>${safeBody}</p><p><a href="${message.link}">Event details</a></p></div>`,
     });
   } catch (error) {
     console.error("[email] Failed to send event attendee message email", error);

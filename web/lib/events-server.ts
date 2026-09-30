@@ -2029,7 +2029,7 @@ export async function resendEventNotifications(
     throw new EventError(400, "This event has been cancelled.");
   }
 
-  const host = await db.user.findUnique({ where: { id: event.hostId }, select: { name: true } });
+  const host = await db.user.findUnique({ where: { id: event.hostId }, select: { name: true, email: true } });
   const hostName = host?.name ?? "A member";
   const isRestricted = event.visibility === EventVisibility.invited;
 
@@ -2227,7 +2227,7 @@ export async function messageEventAttendees(
   const recipientCount = members.length + guests.length;
   if (recipientCount === 0) throw new EventError(400, "No one has RSVP'd or registered yet.");
 
-  const host = await db.user.findUnique({ where: { id: event.hostId }, select: { name: true } });
+  const host = await db.user.findUnique({ where: { id: event.hostId }, select: { name: true, email: true } });
   const senderName = actingUser.name ?? host?.name ?? "The organizer";
 
   const broadcast = await db.eventNotificationBroadcast.create({
@@ -2263,6 +2263,24 @@ export async function messageEventAttendees(
         startsAt: event.startsAt,
         timezone: event.timezone,
         link: `${APP_URL}/events/${event.id}`,
+      }),
+    ),
+    // Confirmation copies — one email each, not one per attendee (the sends
+    // above are individual, so a literal Cc would multiply). The host is
+    // copied too when an admin sends on their behalf.
+    ...[
+      { email: actingUser.email, name: actingUser.name },
+      ...(host && event.hostId !== actingUser.id ? [{ email: host.email, name: host.name }] : []),
+    ].map((copyTo) =>
+      sendEventAttendeeMessageEmail(copyTo.email, copyTo.name ?? "there", {
+        ...input,
+        hostName: senderName,
+        replyTo: actingUser.email,
+        eventTitle: event.title,
+        startsAt: event.startsAt,
+        timezone: event.timezone,
+        link,
+        copyOfRecipientCount: recipientCount,
       }),
     ),
   ]);
