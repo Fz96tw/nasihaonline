@@ -221,6 +221,8 @@ export type PresenterOverlaySettings = {
    * Host-controlled; on by default. Off = every camera frame is scaled the same (zoom 1).
    */
   normalizeSize: boolean;
+  /** Tallest the combined share is drawn, in pixels (720 default; 0 = same size as the capture). Larger = sharper text, more CPU. */
+  outputMaxHeight: number;
   /**
    * "remove" cuts the person out (default); "keep" shows the camera with its real background as a shaped
    * panel centred on them. Applies to every ghost, host and guests alike.
@@ -271,6 +273,7 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   stampShapeKind: "box",
   stampText: "",
   normalizeSize: true,
+  outputMaxHeight: MAX_OUTPUT_HEIGHT,
   background: "remove",
   panelShape: "rounded",
   softEdge: false,
@@ -380,8 +383,12 @@ function context2d(canvas: OffscreenCanvas): OffscreenCanvasRenderingContext2D {
   return ctx;
 }
 
-function fitWithin(width: number, height: number): { width: number; height: number } {
-  const ratio = Math.min(1, MAX_OUTPUT_WIDTH / width, MAX_OUTPUT_HEIGHT / height);
+/** Largest output height the host can pick for the combined share (0 = the capture's own size). The width limit is 16:9 of it. */
+export const OUTPUT_HEIGHT_CHOICES = [720, 1080, 1440, 0] as const;
+
+function fitWithin(width: number, height: number, maxHeight: number): { width: number; height: number } {
+  const maxWidth = maxHeight > 0 ? (maxHeight * 16) / 9 : Infinity;
+  const ratio = Math.min(1, maxWidth / width, (maxHeight > 0 ? maxHeight : Infinity) / height);
   // Encoders want even dimensions.
   return { width: Math.max(2, Math.round((width * ratio) / 2) * 2), height: Math.max(2, Math.round((height * ratio) / 2) * 2) };
 }
@@ -667,7 +674,7 @@ export async function startPresenterOverlayCompositor({
       const { value: frame, done } = await screenReader.read();
       if (done || !frame) return;
       try {
-        const size = fitWithin(frame.displayWidth, frame.displayHeight);
+        const size = fitWithin(frame.displayWidth, frame.displayHeight, settings.outputMaxHeight);
         if (screenCanvas.width !== size.width || screenCanvas.height !== size.height) {
           screenCanvas.width = size.width;
           screenCanvas.height = size.height;

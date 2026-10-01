@@ -1,6 +1,7 @@
 import "server-only";
 import { EgressClient, EgressStatus, EncodedFileOutput, EncodedFileType, EncodingOptions, S3Upload } from "livekit-server-sdk";
 import type { EgressInfo } from "livekit-server-sdk";
+import { DEFAULT_RECORDING_QUALITY, RECORDING_QUALITIES, type RecordingQualityId } from "@/lib/recording-quality";
 import { getEgressS3Config } from "@/lib/recordings-storage";
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
@@ -23,9 +24,10 @@ export type StartEgressResult = { egressId: string } | { error: string };
  * bucket. LiveKit has no pause/resume on one egress, so each start is a new
  * file; the host's stop/start cycles become separate parts of one recording.
  */
-export async function startEgress(roomName: string): Promise<StartEgressResult> {
+export async function startEgress(roomName: string, quality: RecordingQualityId = DEFAULT_RECORDING_QUALITY): Promise<StartEgressResult> {
   const client = getEgressClient();
   if (!client) return { error: "Recording isn't configured." };
+  const preset = RECORDING_QUALITIES[quality];
   const s3 = getEgressS3Config();
   if (!s3) return { error: "Recording storage isn't configured." };
 
@@ -50,8 +52,8 @@ export async function startEgress(roomName: string): Promise<StartEgressResult> 
     const info = await client.startRoomCompositeEgress(roomName, output, {
       // Screen share as the large focus tile, participants in a small strip.
       layout: "speaker",
-      // 720p keeps shared text legible; frame rate and bitrate are trimmed because shares are mostly static.
-      encodingOptions: new EncodingOptions({ width: 1280, height: 720, framerate: 20, videoBitrate: 2000 }),
+      // The host picks a preset in Fine-tune (default 720p/20fps/2 Mbps: shares are mostly static, so that stays legible).
+      encodingOptions: new EncodingOptions({ width: preset.width, height: preset.height, framerate: preset.framerate, videoBitrate: preset.videoBitrate }),
     });
     if (info.status === EgressStatus.EGRESS_FAILED) return { error: info.error || "Egress failed to start." };
     return { egressId: info.egressId };

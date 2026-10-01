@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getLiveRoomStatus, getRoomMetadata, updateRoomMetadata } from "@/lib/livekit";
 import { startEgress, stopEgress } from "@/lib/livekit-egress";
+import { parseRecordingQuality } from "@/lib/recording-quality";
 import { codeDigest, normalizeCode, roomNameForCode } from "@/lib/room-code";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { ensureRecording, registerEgress, sha256 } from "@/lib/recordings";
@@ -15,6 +16,8 @@ const schema = z.object({
   code: z.string().transform(normalizeCode),
   hostSecret: z.string().min(1).max(128),
   action: z.enum(["start", "stop"]),
+  // Optional preset id; anything unknown becomes the default (see lib/recording-quality.ts).
+  quality: z.unknown().optional().transform(parseRecordingQuality),
 });
 
 const RECORDING_LIMIT = { limit: 30, windowSeconds: 60 * 60 };
@@ -31,7 +34,7 @@ export async function POST(request: Request) {
   if (!isSameOrigin(request)) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid request." }, { status: 400 });
-  const { code, hostSecret, action } = parsed.data;
+  const { code, hostSecret, action, quality } = parsed.data;
 
   const digest = codeDigest(code);
   const roomName = roomNameForCode(code);
@@ -74,7 +77,7 @@ export async function POST(request: Request) {
       createdAt: state.createdAt,
     });
 
-    const started = await startEgress(roomName);
+    const started = await startEgress(roomName, quality);
     if ("error" in started) {
       console.error("[recording] start failed:", started.error);
       const notConfigured = started.error.includes("isn't configured");

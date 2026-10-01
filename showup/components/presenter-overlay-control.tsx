@@ -34,6 +34,8 @@ import {
 } from "@/lib/presenter-overlay/compositor";
 import { MAX_TEXT_LENGTH, type PinnedShape } from "@/lib/presenter-overlay/drawing";
 import { clampPanelPosition, dragPanelPosition, nudgePanelPosition, parseStoredPanel, serializePanel, type PanelPosition } from "@/lib/presenter-overlay/panel-position";
+import { RecordingQualityPicker } from "@/components/recording-quality-picker";
+import { ShareQualityPanel } from "@/components/share-quality-panel";
 import { ShapePromptField, ShapeTextPanel, useShapePrompt } from "@/components/shape-text-panel";
 import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/components/livekit-control-styles";
 import {
@@ -219,6 +221,7 @@ export function PresenterOverlayControl({
   const [showGhost, setShowGhost] = useState(true);
   const [aimWholeScreen, setAimWholeScreen] = useState(false);
   const [normalizeSize, setNormalizeSize] = useState(true);
+  const [outputMaxHeight, setOutputMaxHeight] = useState(720);
   // Host hand gestures (default off) and what's recognized right now — for the host's own indicator, never drawn into the stream.
   const [gestures, setGestures] = useState(false);
   // Pinch zoom/pan/reset that keeps working with Hand gestures (annotation) off.
@@ -351,7 +354,7 @@ export function PresenterOverlayControl({
   }, [panelPos !== null]);
 
   function currentSettings(): PresenterOverlaySettings {
-    return { opacity, scale, position, span, gestures, pinchZoom, voiceNoteWidth, voiceNoteTextSize, showGhost, aimWholeScreen, penColor, arrowMode, voicePin, highlighter: true, pinHighlights, highlightColor, shapeKind, stampShapeKind, stampText, normalizeSize, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
+    return { opacity, scale, position, span, gestures, pinchZoom, voiceNoteWidth, voiceNoteTextSize, showGhost, aimWholeScreen, penColor, arrowMode, voicePin, highlighter: true, pinHighlights, highlightColor, shapeKind, stampShapeKind, stampText, normalizeSize, outputMaxHeight, background, panelShape, softEdge, mirror, caption, autoCaption: true, image: imageRef.current, imageCorner };
   }
 
   function updateSettings(patch: Partial<PresenterOverlaySettings>) {
@@ -1333,6 +1336,22 @@ export function PresenterOverlayControl({
   function fineTuneTabBody(fileInput: RefObject<HTMLInputElement>) {
     return (
       <>
+      <RecordingQualityPicker />
+      <hr className="border-white/10" />
+      {share && (
+        <>
+          <ShareQualityPanel
+            track={share.track}
+            overlayOn={overlayStatus === "on"}
+            outputMaxHeight={outputMaxHeight}
+            onOutputMaxHeight={(height) => {
+              setOutputMaxHeight(height);
+              updateSettings({ outputMaxHeight: height });
+            }}
+          />
+          <hr className="border-white/10" />
+        </>
+      )}
       <span className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Guest permissions</span>
       <label className="flex items-center justify-between gap-2 text-xs text-white/70">
         Follow the speaker
