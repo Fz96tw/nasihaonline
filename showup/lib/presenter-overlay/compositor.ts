@@ -259,7 +259,7 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   aimWholeScreen: false,
   gestures: false,
   pinchZoom: false,
-  voiceNoteWidth: STAMP_MAX_WIDTH_FRACTION,
+  voiceNoteWidth: 0.15,
   voiceNoteTextSize: 0.6,
   penColor: "red",
   arrowMode: false,

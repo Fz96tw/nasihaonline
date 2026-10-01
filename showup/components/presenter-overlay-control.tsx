@@ -233,7 +233,7 @@ export function PresenterOverlayControl({
   const [penColor, setPenColor] = useState<PresenterOverlaySettings["penColor"]>("red");
   const [arrowMode, setArrowMode] = useState(false);
   const [voicePin, setVoicePin] = useState(false);
-  const [voiceNoteWidth, setVoiceNoteWidth] = useState(0.32);
+  const [voiceNoteWidth, setVoiceNoteWidth] = useState(0.15);
   const [voiceNoteTextSize, setVoiceNoteTextSize] = useState(0.6);
   const [pinHighlights, setPinHighlights] = useState(true);
   const [highlightColor, setHighlightColor] = useState<PresenterOverlaySettings["highlightColor"]>("yellow");
