@@ -16,6 +16,18 @@ export const LINE_HEIGHT = 1.2;
 /** Fraction of the shape's box kept clear around the text. */
 export const TEXT_PADDING = 0.06;
 
+/** Voice Pin sticky note: the fraction of the note's shorter side kept clear around its text (all four sides). */
+export const NOTE_INSET_RATIO = 0.12;
+
+/**
+ * The margin to add around a sticky note's text so that, when the note is drawn later, an inset of NOTE_INSET_RATIO of its
+ * shorter side is exactly that margin. One rule for the live bubble, the pinned bounds and the pinned drawing, so
+ * pinning never changes the text size, and the margin stays slim whatever the note's shape.
+ */
+export function notePadding(textWidth: number, textHeight: number): number {
+  return (NOTE_INSET_RATIO * Math.min(textWidth, textHeight)) / (1 - 2 * NOTE_INSET_RATIO);
+}
+
 /** How much of a shape's own width/height is usable text area: all of a box (less padding), the inscribed rectangle of an ellipse, or — for plain text with no shape at all — the whole thing, no padding. */
 function textAreaFraction(kind: "box" | "ellipse" | "text"): number {
   return kind === "ellipse" ? Math.SQRT1_2 : 1;

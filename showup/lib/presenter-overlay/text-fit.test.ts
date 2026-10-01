@@ -122,3 +122,12 @@ test("a tiny area draws nothing at the default floor, but shrinks the text when 
   assert.ok(fitted);
   assert.ok(fitted.fontPx < MIN_FONT_PX);
 });
+
+test("notePadding leaves exactly NOTE_INSET_RATIO of the note's shorter side clear", async () => {
+  const { notePadding, NOTE_INSET_RATIO } = await import("./text-fit.ts");
+  for (const [w, h] of [[200, 24], [90, 60], [40, 80]]) {
+    const p = notePadding(w, h);
+    const shorter = Math.min(w + 2 * p, h + 2 * p);
+    assert.ok(Math.abs(p - shorter * NOTE_INSET_RATIO) < 1e-9);
+  }
+});

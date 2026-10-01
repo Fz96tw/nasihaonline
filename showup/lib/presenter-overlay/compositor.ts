@@ -34,7 +34,7 @@ import { GestureTracker, cameraToOutput, type GestureState, type GhostPlacement 
 import { mapGuestPenToScreen, mapGuestPointer, mapGuestZoomPoint, type GuestPointerDot, type GuestZoomAction } from "./guest-pointer.ts";
 import { HIGHLIGHT_HEIGHT, averageLuminance, bandRect, highlightStyle, lockedToStartY, type HighlightBlend } from "./highlight.ts";
 import { ERASER_RADIUS, HOST_OWNER, StrokeBoard, arrowHead, MAX_VOICE_TEXT_LENGTH, cleanShapeText, isStraightLine, shapeBounds, strokeColor, takesText, type PenColor, type PinnedShape } from "./drawing.ts";
-import { fitText, growToFit, textArea, type FittedText } from "./text-fit.ts";
+import { NOTE_INSET_RATIO, fitText, growToFit, notePadding, textArea, type FittedText } from "./text-fit.ts";
 import { ScreenViewport, outputToScreen, screenToOutput } from "./screen-zoom.ts";
 import { SizeNormalizer, measureFromRows } from "./size-normalize.ts";
 import { WindowSmoother, clampWindow, panelAspect, personBounds, targetCentre, tracePanelPath, windowSize, type PanelShape, type PersonBounds } from "./panel.ts";
@@ -110,10 +110,8 @@ const LASER_TRAIL_MS = 250;
 const VOICE_HAND_GONE_STOP_MS = 1500;
 /** The sticky-note look: a warm, translucent yellow — deliberately see-through so it never blocks the shared screen underneath, live or pinned. */
 const VOICE_BUBBLE_FILL = "rgba(255, 235, 130, 0.55)";
-const VOICE_BUBBLE_BORDER = "rgba(0, 0, 0, 0.15)";
 /** The Voice Pin sticky note's corner radius (0 = square, like a real sticky note), tail size and content padding, all as fractions of the font size. */
 const VOICE_BUBBLE_RADIUS_FRACTION = 0;
-const VOICE_BUBBLE_PADDING_FRACTION = 0.7;
 const VOICE_BUBBLE_TAIL_HALF_WIDTH_FRACTION = 0.5;
 const VOICE_BUBBLE_TAIL_HEIGHT_FRACTION = 0.6;
 /** The "typing…" dots shown before any word has been recognized yet: diameter, gap and how often each bounces (staggered per dot). */
@@ -262,7 +260,7 @@ export const DEFAULT_PRESENTER_OVERLAY_SETTINGS: PresenterOverlaySettings = {
   gestures: false,
   pinchZoom: false,
   voiceNoteWidth: STAMP_MAX_WIDTH_FRACTION,
-  voiceNoteTextSize: 1,
+  voiceNoteTextSize: 0.6,
   penColor: "red",
   arrowMode: false,
   voicePin: false,
@@ -1178,17 +1176,17 @@ export async function startPresenterOverlayCompositor({
   function drawPinnedNote(corner1: { x: number; y: number }, corner2: { x: number; y: number }, text: string, alpha: number) {
     const bounds = shapeBounds(corner1, corner2);
     outputCtx.save();
+    // drawStrokes leaves its pen-colour glow set while it calls this; under the see-through fill it turned the yellow orange.
+    outputCtx.shadowColor = "transparent";
+    outputCtx.shadowBlur = 0;
     outputCtx.globalAlpha = alpha;
     outputCtx.beginPath();
     outputCtx.roundRect(bounds.x, bounds.y, bounds.width, bounds.height, Math.min(bounds.width, bounds.height) * VOICE_BUBBLE_RADIUS_FRACTION);
     outputCtx.fillStyle = VOICE_BUBBLE_FILL;
     outputCtx.fill();
-    outputCtx.lineWidth = Math.max(1, Math.min(bounds.width, bounds.height) * 0.03);
-    outputCtx.strokeStyle = VOICE_BUBBLE_BORDER;
-    outputCtx.stroke();
     outputCtx.restore();
 
-    const padding = Math.min(bounds.width, bounds.height) * 0.18;
+    const padding = Math.min(bounds.width, bounds.height) * NOTE_INSET_RATIO;
     const area = { x: bounds.x + padding, y: bounds.y + padding, width: bounds.width - padding * 2, height: bounds.height - padding * 2 };
     const fitted = fitText(text, area, (candidate, fontPx) => {
       outputCtx.font = `600 ${fontPx}px sans-serif`;
@@ -1196,6 +1194,8 @@ export async function startPresenterOverlayCompositor({
     }, 1); // A note shrinks with the zoom like its bubble does, so no legibility floor: at the default floor it vanished when zoomed out.
     if (!fitted) return;
     outputCtx.save();
+    outputCtx.shadowColor = "transparent";
+    outputCtx.shadowBlur = 0;
     outputCtx.globalAlpha = alpha;
     outputCtx.font = `600 ${fitted.fontPx}px sans-serif`;
     outputCtx.textAlign = "center";
@@ -1357,7 +1357,6 @@ export async function startPresenterOverlayCompositor({
     const cx = at.x * width;
     const cy = at.y * height;
     const fontPx = height * VOICE_FONT_FRACTION * settings.voiceNoteTextSize;
-    const padding = fontPx * VOICE_BUBBLE_PADDING_FRACTION;
     // Includes the still-in-progress segment's latest guess, not just finalized words — so the live caption
     // shows something as soon as the recognizer has any guess at all, rather than sitting on typing dots until
     // a segment happens to finalize (which, per stopVoiceCapture's comment, isn't even guaranteed to happen
@@ -1389,6 +1388,8 @@ export async function startPresenterOverlayCompositor({
       contentHeight = dot;
     }
 
+    const padding = notePadding(contentWidth, contentHeight);
+
     // A classic chat-bubble shape, its tail pointing straight down at the anchor — the tail itself marks the
     // spot the old pointer dot used to, so there's no need for both.
     const bubbleWidth = contentWidth + padding * 2;
@@ -1409,9 +1410,6 @@ export async function startPresenterOverlayCompositor({
     outputCtx.closePath();
     outputCtx.fillStyle = VOICE_BUBBLE_FILL;
     outputCtx.fill();
-    outputCtx.lineWidth = Math.max(1, fontPx * 0.03);
-    outputCtx.strokeStyle = VOICE_BUBBLE_BORDER;
-    outputCtx.stroke();
     outputCtx.restore();
 
     outputCtx.save();
@@ -1547,9 +1545,11 @@ export async function startPresenterOverlayCompositor({
     if (kind === "note") {
       // Same bubble padding/offset the live caption (drawVoiceCaption) uses, so pinning never visibly jumps —
       // the bubble's own position freezes exactly where it already was; only its tail (drawn live only) goes.
-      const padding = ((fontPx * VOICE_BUBBLE_PADDING_FRACTION) / outputCanvas.height) * view.height;
+      const paddingPx = notePadding(fitted.width, fitted.height);
+      const paddingX = (paddingPx / outputCanvas.width) * view.width;
+      const padding = (paddingPx / outputCanvas.height) * view.height;
       const tailHeight = ((fontPx * VOICE_BUBBLE_TAIL_HEIGHT_FRACTION) / outputCanvas.height) * view.height;
-      const bubbleWidth = width + padding * 2;
+      const bubbleWidth = width + paddingX * 2;
       const bubbleHeight = height + padding * 2;
       const bubbleBottom = center.y - tailHeight;
       board.add(center.x - bubbleWidth / 2, bubbleBottom - bubbleHeight);
