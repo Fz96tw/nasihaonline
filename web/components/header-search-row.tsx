@@ -5,28 +5,12 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { useSearchQuery } from "@/components/header-search-context";
+import { useScrollReveal } from "@/hooks/use-scroll-reveal";
 
 // Sized for two lines (search input + communities line) now that the
 // community-based-categorization initiative (objective 2) adds a second
 // row of content — was 56px (one line) before.
 const ROW_HEIGHT_PX = 88;
-// Accumulated scroll distance (not per-event delta — a single scroll event
-// can fire with a tiny delta many times) needed in one direction before
-// flipping revealed state.
-const REVEAL_DELTA = 32;
-const HIDE_DELTA = 32;
-// Chromium (and real trackpads/momentum scrolling) apply their own
-// deceleration easing to a scroll, independent of any CSS scroll-behavior —
-// a large scroll settles over several more frames, often drifting a couple
-// dozen px in the OPPOSITE direction as it decelerates. Without a cooldown,
-// that settle-wobble alone is enough to immediately re-trigger the opposite
-// flip right after a real one (confirmed: a single 1500px programmatic
-// scroll produced a ~29px reverse drift over the next ~10 events). This
-// blocks another flip for a short window after each one, long enough to
-// absorb that settle tail but short enough that a genuinely new scroll
-// gesture afterward still feels responsive.
-const FLIP_COOLDOWN_MS = 200;
-
 /**
  * The header's second row — full-width search input, sticky directly below
  * the main header row (`top-[var(--header-height)]`, see scroll-header.tsx),
@@ -73,57 +57,19 @@ export function HeaderSearchRow({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setQuery is stable (useState setter via context)
   }, [urlQuery]);
 
+  // Pinned (a query is typed): forced fully open, no scroll listener at all.
+  // Otherwise the shared scroll-direction hook drives it, restarting fresh
+  // (revealed, as at initial load) the moment the field is cleared.
   useEffect(() => {
-    const root = document.documentElement;
-    if (pinned) {
-      root.style.setProperty("--search-row-height", `${ROW_HEIGHT_PX}px`);
-      setSearchRowVisible(true);
-      return;
-    }
-
-    let revealed = true;
-    let lastY = window.scrollY;
-    let accum = 0;
-    let lastFlipAt = 0;
-
-    const apply = () => {
-      root.style.setProperty("--search-row-height", revealed ? `${ROW_HEIGHT_PX}px` : "0px");
-      setSearchRowVisible(revealed);
-    };
-
-    const handleScroll = () => {
-      const y = window.scrollY;
-      const diff = y - lastY;
-      lastY = y;
-
-      if (y <= 0) {
-        revealed = true;
-        accum = 0;
-      } else if (Date.now() - lastFlipAt < FLIP_COOLDOWN_MS) {
-        // Still settling from the last flip — don't accumulate at all, or a
-        // deceleration-tail wobble in the opposite direction immediately
-        // undoes what the user just triggered.
-      } else {
-        // Direction flipped — restart the accumulator toward the new direction.
-        if ((diff < 0 && accum > 0) || (diff > 0 && accum < 0)) accum = 0;
-        accum += diff;
-        if (!revealed && accum <= -REVEAL_DELTA) {
-          revealed = true;
-          accum = 0;
-          lastFlipAt = Date.now();
-        } else if (revealed && accum >= HIDE_DELTA) {
-          revealed = false;
-          accum = 0;
-          lastFlipAt = Date.now();
-        }
-      }
-      apply();
-    };
-
-    apply();
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
+    if (!pinned) return;
+    document.documentElement.style.setProperty("--search-row-height", `${ROW_HEIGHT_PX}px`);
+    setSearchRowVisible(true);
   }, [pinned, setSearchRowVisible]);
+
+  useScrollReveal((revealed) => {
+    document.documentElement.style.setProperty("--search-row-height", revealed ? `${ROW_HEIGHT_PX}px` : "0px");
+    setSearchRowVisible(revealed);
+  }, !pinned);
 
   function navigate() {
     const trimmed = query.trim();

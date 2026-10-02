@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { LiveEventBadge } from "@/components/events/live-event-badge";
 import { RegisterBlurb, RegisterButton } from "@/components/events/register-button";
+import { PUBLIC_DEFAULT_EVENT_MS } from "@/lib/session-reminders";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EVENT_TYPE_LABELS, type PublicEvent } from "@/lib/events";
@@ -54,7 +56,14 @@ function formatEventDateRange(startsAt: string, endsAt: string | null) {
  */
 export function PublicEventDetail({ event }: { event: PublicEvent }) {
   const hasMounted = useHasMounted();
-  const isPast = hasMounted && new Date(event.endsAt ?? event.startsAt) < new Date();
+  // An event with no end time counts as running for PUBLIC_DEFAULT_EVENT_MS
+  // after its start (same default the live-events strip/popup use), so it
+  // doesn't read "already taken place" — and lose its Register/Join CTA — the
+  // moment it starts.
+  const endsAtMs = event.endsAt
+    ? Date.parse(event.endsAt)
+    : Date.parse(event.startsAt) + PUBLIC_DEFAULT_EVENT_MS;
+  const isPast = hasMounted && endsAtMs < Date.now();
 
   return (
     <div className="flex flex-col gap-6">
@@ -67,6 +76,7 @@ export function PublicEventDetail({ event }: { event: PublicEvent }) {
 
       <div>
         <div className="mb-2 flex flex-wrap items-center gap-2">
+          <LiveEventBadge eventId={event.seriesId} />
           <Badge variant={event.open ? "success" : "info"}>{event.open ? "Open" : "Members Only"}</Badge>
           <Badge variant="neutral">{EVENT_TYPE_LABELS[event.type]}</Badge>
         </div>

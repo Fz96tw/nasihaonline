@@ -53,7 +53,7 @@ export function RegisterButton({
   /** The host has started the meeting — the stored-link button then reads "Join now". */
   started?: boolean;
   icon?: ReactNode;
-  size?: "sm" | "default";
+  size?: "xs" | "sm" | "default";
 }) {
   const router = useRouter();
   const storedRid = useStoredRid(eventId);

@@ -7,6 +7,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RsvpBlurb, RsvpButton } from "@/components/calendar/rsvp-button";
+import { LiveEventBadge } from "@/components/events/live-event-badge";
 import { RegisterBlurb, RegisterButton } from "@/components/events/register-button";
 import { EVENT_TYPE_LABELS, getEventAudienceBadge, type EventWithRsvp } from "@/lib/events";
 import { EventVisibility } from "@/lib/generated/prisma/enums";
@@ -66,6 +67,7 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
         ) : null}
         <CardHeader>
           <div className="mb-1 flex flex-wrap items-center gap-2">
+            <LiveEventBadge eventId={event.seriesId} occurrenceId={event.id} />
             <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>
             <Badge variant="neutral">{EVENT_TYPE_LABELS[event.type]}</Badge>
             {event.isRecurring && event.recurrenceSummary ? (
