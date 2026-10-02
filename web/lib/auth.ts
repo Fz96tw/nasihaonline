@@ -7,6 +7,15 @@ import type { Role, Tier } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 
 /**
+ * `touch: false` skips the "Last seen" stamp — for background polling
+ * endpoints (nav bell, admin review icon, session reminders) that fire
+ * from any open tab and would otherwise make an idle tab look active.
+ */
+export interface SessionOptions {
+  touch?: boolean;
+}
+
+/**
  * Resolves the current request's Clerk session to Nasiha's own `User` row.
  * Returns null when there is no Clerk session at all. If a session exists
  * but the local row is missing (the user.created webhook hasn't landed —
@@ -14,21 +23,21 @@ import type { UserModel } from "@/lib/generated/prisma/models/User";
  * fetching the user from Clerk directly and syncing on read, so a webhook
  * hiccup can't strand a real, already-authenticated session.
  */
-export async function getSessionUser(): Promise<UserModel | null> {
+export async function getSessionUser(options: SessionOptions = {}): Promise<UserModel | null> {
   const { userId } = await auth();
   if (!userId) return null;
 
   const user = await db.user.findUnique({ where: { clerkUserId: userId } });
   if (user) {
     await maybeSendWelcomeAnnouncement(user);
-    void touchLastActive(user);
+    if (options.touch !== false) void touchLastActive(user);
     return user;
   }
 
   const synced = await syncUserFromClerk(userId);
   if (synced) {
     await maybeSendWelcomeAnnouncement(synced);
-    void touchLastActive(synced);
+    if (options.touch !== false) void touchLastActive(synced);
   }
   return synced;
 }
@@ -92,8 +101,8 @@ export class AuthError extends Error {
  * local User row. Callers in API routes should catch AuthError and translate
  * it via authErrorResponse(); page/server components can let it propagate.
  */
-export async function requireUser(): Promise<UserModel> {
-  const user = await getSessionUser();
+export async function requireUser(options: SessionOptions = {}): Promise<UserModel> {
+  const user = await getSessionUser(options);
   if (!user) throw new AuthError(401);
   // Suspension (§4.15) is a login/access gate, not a role change — block it
   // here so every caller of requireUser/requireRole/requireTier inherits the
@@ -106,8 +115,8 @@ export async function requireUser(): Promise<UserModel> {
  * Throws AuthError(401) if unauthenticated, AuthError(403) if authenticated
  * but the user's role isn't in `roles`.
  */
-export async function requireRole(roles: Role[]): Promise<UserModel> {
-  const user = await requireUser();
+export async function requireRole(roles: Role[], options: SessionOptions = {}): Promise<UserModel> {
+  const user = await requireUser(options);
   if (!roles.includes(user.role)) throw new AuthError(403);
   return user;
 }

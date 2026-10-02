@@ -6,7 +6,7 @@ import { getNotificationsForUser } from "@/lib/notifications-server";
 export async function GET() {
   let user;
   try {
-    user = await requireUser();
+    user = await requireUser({ touch: false });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
     throw error;
