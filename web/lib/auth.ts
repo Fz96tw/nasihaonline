@@ -34,7 +34,7 @@ export async function getSessionUser(): Promise<UserModel | null> {
 }
 
 /**
- * Stamps lastActiveAt (shown as "Last active" on /admin/users) — throttled
+ * Stamps lastActiveAt (shown as "Last seen" on /admin/users) — throttled
  * to once per LAST_ACTIVE_THROTTLE_MS since getSessionUser runs on every
  * authenticated request and per-request precision isn't needed. Best-effort,
  * same as maybeSendWelcomeAnnouncement: must never break sign-in. Fired

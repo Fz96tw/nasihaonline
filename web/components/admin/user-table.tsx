@@ -179,7 +179,7 @@ export function UserTable({ users }: { users: AdminUser[] }) {
               <SortableHead label="Tier" sortKey="tier" sort={sort} onSort={toggleSort} />
               <SortableHead label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
               <SortableHead label="Joined" sortKey="joined" sort={sort} onSort={toggleSort} />
-              <SortableHead label="Last active" sortKey="lastActive" sort={sort} onSort={toggleSort} />
+              <SortableHead label="Last seen" sortKey="lastActive" sort={sort} onSort={toggleSort} />
             </TableRow>
           </TableHeader>
           <TableBody>
