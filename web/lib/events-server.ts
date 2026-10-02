@@ -1,7 +1,13 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
-import { REMINDER_LEAD_MS, reminderStateOf, type ReminderSession } from "@/lib/session-reminders";
+import {
+  PUBLIC_DEFAULT_EVENT_MS,
+  REMINDER_LEAD_MS,
+  publicReminderStateOf,
+  reminderStateOf,
+  type ReminderSession,
+} from "@/lib/session-reminders";
 import {
   EventType,
   EventVisibility,
@@ -1288,6 +1294,71 @@ export async function getReminderEventsForUser(userId: string): Promise<Reminder
           joinHref: `/meet/event/${event.id}`,
         },
       ];
+    });
+}
+
+/**
+ * Public counterpart of getReminderEventsForUser for the signed-out floating
+ * reminder: the same "starting soon" / started window, but over exactly the
+ * events a signed-out visitor can already see on /events (same filters as
+ * getPublicUpcomingEvents: community visibility, published, not cancelled —
+ * communityVisibilityWhere(null) imposes no tag filter). Each occurrence is
+ * flagged `started` once the host has started the meeting, and an event with
+ * no end time counts as ending PUBLIC_DEFAULT_EVENT_MS after its start.
+ * Returns only a link to the public detail page — never
+ * meetingUrl/livekitRoomName.
+ */
+export async function getPublicReminderEvents(): Promise<ReminderSession[]> {
+  const now = new Date();
+  const windowStart = new Date(now.getTime() - 12 * 60 * 60_000);
+  const windowEnd = new Date(now.getTime() + REMINDER_LEAD_MS + 60_000);
+
+  const events = await db.event.findMany({
+    where: {
+      visibility: EventVisibility.community,
+      cancelledAt: null,
+      publishedAt: { not: null },
+      AND: [
+        communityVisibilityWhere(null),
+        recurringSeriesStillActiveOrUpcoming(windowStart),
+        { startsAt: { lte: windowEnd } },
+      ],
+    },
+    select: {
+      id: true,
+      title: true,
+      startsAt: true,
+      endsAt: true,
+      open: true,
+      meetingStartedAt: true,
+      recurrence: { select: RECURRENCE_SELECT },
+    },
+    orderBy: { startsAt: "asc" },
+  });
+
+  return events
+    .flatMap((event) => expandEventForListing(event, windowStart, windowEnd))
+    .flatMap((event): ReminderSession[] => {
+      const start = event.occurrenceStart.getTime();
+      const end = event.occurrenceEnd?.getTime() ?? start + PUBLIC_DEFAULT_EVENT_MS;
+      // meetingStartedAt lives on the series' single Event row, so for a
+      // recurring event it can be left over from an earlier occurrence — only
+      // count it as "started" when it falls inside this occurrence's window
+      // (allowing a host who starts up to an hour early).
+      const startedAt = event.meetingStartedAt?.getTime();
+      const started = startedAt !== undefined && startedAt >= start - 60 * 60_000 && startedAt < end;
+      const session: ReminderSession = {
+        key: `public-event-${event.occurrenceId}`,
+        kind: "event",
+        title: event.title,
+        detail: null,
+        startsAt: new Date(start).toISOString(),
+        endsAt: new Date(end).toISOString(),
+        joinHref: `/events/${event.id}`,
+        started,
+        open: event.open,
+      };
+      return publicReminderStateOf(session, now.getTime()) ? [session] : [];
     });
 }
 

@@ -3,28 +3,29 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
 import { BellOff, Clock, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useReminderSessions } from "@/hooks/use-reminder-sessions";
 import { cn } from "@/lib/utils";
 import {
   EMPTY_PREFS,
+  pickVisiblePublicReminders,
   pickVisibleReminders,
   prefKey,
   snoozeUntil,
+  type PublicReminderState,
   type ReminderPrefs,
   type ReminderSession,
   type ReminderState,
 } from "@/lib/session-reminders";
 
-const STORAGE_KEY = "nasiha:session-reminder-prefs";
-const REFETCH_MS = 90_000;
+const DEFAULT_STORAGE_KEY = "nasiha:session-reminder-prefs";
 const TICK_MS = 15_000;
 const MAX_STORED = 200;
 
-function loadPrefs(): ReminderPrefs {
+function loadPrefs(storageKey: string): ReminderPrefs {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey);
     if (!raw) return EMPTY_PREFS;
     const parsed = JSON.parse(raw) as Partial<ReminderPrefs>;
     return { dismissed: parsed.dismissed ?? {}, snoozedUntil: parsed.snoozedUntil ?? {} };
@@ -33,21 +34,14 @@ function loadPrefs(): ReminderPrefs {
   }
 }
 
-function savePrefs(prefs: ReminderPrefs) {
+function savePrefs(storageKey: string, prefs: ReminderPrefs) {
   try {
     const dismissed = Object.fromEntries(Object.entries(prefs.dismissed).slice(-MAX_STORED));
     const snoozedUntil = Object.fromEntries(Object.entries(prefs.snoozedUntil).slice(-MAX_STORED));
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ dismissed, snoozedUntil }));
+    window.localStorage.setItem(storageKey, JSON.stringify({ dismissed, snoozedUntil }));
   } catch {
     // Private window / blocked storage — prefs still hold for this page view.
   }
-}
-
-async function fetchSessions(): Promise<ReminderSession[]> {
-  const response = await fetch("/api/session-reminders", { cache: "no-store" });
-  if (!response.ok) return [];
-  const data = (await response.json()) as { sessions: ReminderSession[] };
-  return data.sessions;
 }
 
 function formatStartTime(iso: string) {
@@ -64,54 +58,95 @@ function timingText(session: ReminderSession, state: ReminderState, now: number)
   return minutes < 1 ? "Just started" : `Started ${minutes} min ago`;
 }
 
+function publicTimingText(session: ReminderSession, state: PublicReminderState, now: number) {
+  const start = Date.parse(session.startsAt);
+  if (state === "soon") {
+    const minutes = Math.ceil((start - now) / 60_000);
+    return `Starts at ${formatStartTime(session.startsAt)} · in ${minutes} min`;
+  }
+  if (state === "waiting") return `Scheduled for ${formatStartTime(session.startsAt)} · the host hasn't started yet`;
+  const minutes = Math.floor((now - start) / 60_000);
+  return minutes < 1 ? "Just started" : `Started ${minutes} min ago`;
+}
+
 /**
  * Floating "starting soon" / "in progress" reminder with a Join button for
  * the member's events and 1-on-1 meetings. Mounted once in the (member)
  * layout. The two states are dismissed/snoozed independently, so hiding the
  * "starting soon" card never hides the "in progress" one.
  */
-export function SessionReminder() {
+export function SessionReminder({
+  variant = "member",
+  endpoint = variant === "public" ? "/api/public-session-reminders" : "/api/session-reminders",
+  storageKey = DEFAULT_STORAGE_KEY,
+  moreHref = variant === "public" ? "/events" : "/calendar",
+}: {
+  /** "public" is the signed-out popup: three states (soon / waiting for host / started) and links to the public event page. */
+  variant?: "member" | "public";
+  endpoint?: string;
+  storageKey?: string;
+  moreHref?: string;
+} = {}) {
   const pathname = usePathname();
   const [prefs, setPrefs] = useState<ReminderPrefs>(EMPTY_PREFS);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    setPrefs(loadPrefs());
-  }, []);
+    setPrefs(loadPrefs(storageKey));
+  }, [storageKey]);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), TICK_MS);
     return () => window.clearInterval(id);
   }, []);
 
-  const { data: sessions } = useQuery({
-    queryKey: ["session-reminders"],
-    queryFn: fetchSessions,
-    refetchInterval: REFETCH_MS,
-    refetchOnWindowFocus: true,
-    staleTime: 30_000,
-  });
+  const { data: sessions } = useReminderSessions(endpoint);
 
   const visible = useMemo(
-    () => pickVisibleReminders(sessions ?? [], prefs, now),
-    [sessions, prefs, now],
+    () =>
+      variant === "public"
+        ? pickVisiblePublicReminders(sessions ?? [], prefs, now)
+        : pickVisibleReminders(sessions ?? [], prefs, now),
+    [variant, sessions, prefs, now],
   );
 
   const update = useCallback((change: (prev: ReminderPrefs) => ReminderPrefs) => {
     setPrefs((prev) => {
       const next = change(prev);
-      savePrefs(next);
+      savePrefs(storageKey, next);
       return next;
     });
-  }, []);
+  }, [storageKey]);
 
   const top = visible[0];
   if (!top || pathname.startsWith("/meet")) return null;
 
   const { session, state } = top;
   const key = prefKey(session.key, state);
-  const live = state === "live";
   const moreCount = visible.length - 1;
+
+  // `live` drives the emphasized styling (pulsing dot, primary accent): the
+  // member popup's "In progress", or the public popup's "Started". The
+  // public "waiting for host" state stays calm — nothing to join yet.
+  const live = state === "live" || state === "started";
+  const heading =
+    state === "live" ? "In progress" : state === "started" ? "Started" : state === "waiting" ? "Waiting for host" : "Starting soon";
+  const timing =
+    variant === "public"
+      ? publicTimingText(session, state as PublicReminderState, now)
+      : timingText(session, state as ReminderState, now);
+  // Public popup: registration is only offered for open events, and until the
+  // register-then-join flow ships the button just opens the public event page.
+  const buttonLabel =
+    variant !== "public"
+      ? state === "live"
+        ? "Join now"
+        : "Join session"
+      : !session.open
+        ? "View event"
+        : state === "started"
+          ? "Join now"
+          : "Register to attend";
 
   return (
     <div
@@ -147,11 +182,11 @@ export function SessionReminder() {
               ) : (
                 <Clock className="h-3.5 w-3.5" aria-hidden />
               )}
-              {live ? "In progress" : "Starting soon"}
+              {heading}
             </p>
             <p className="truncate text-sm font-semibold">{session.title}</p>
             <p className="text-xs text-muted-foreground">
-              {timingText(session, state, now)}
+              {timing}
               {session.detail ? ` · ${session.detail}` : ""}
             </p>
           </div>
@@ -172,7 +207,7 @@ export function SessionReminder() {
           <Button size="sm" asChild>
             <Link href={session.joinHref}>
               <Video className="mr-1.5 h-4 w-4" />
-              {live ? "Join now" : "Join session"}
+              {buttonLabel}
             </Link>
           </Button>
           <Button
@@ -191,7 +226,7 @@ export function SessionReminder() {
           </Button>
           {moreCount > 0 ? (
             <Link
-              href="/calendar"
+              href={moreHref}
               className="ml-auto text-xs font-medium text-primary underline-offset-4 hover:underline"
             >
               +{moreCount} more

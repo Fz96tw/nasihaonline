@@ -1,4 +1,5 @@
 import { MarketingHeader } from "@/components/marketing-header";
+import { PublicSessionReminder } from "@/components/sessions/public-session-reminder";
 
 /**
  * The public marketing route group (objective 4) — home, about + sub-pages,
@@ -13,6 +14,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
     <>
       <MarketingHeader />
       {children}
+      <PublicSessionReminder />
     </>
   );
 }

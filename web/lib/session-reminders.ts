@@ -9,6 +9,17 @@ export const SNOOZE_MS = 5 * 60_000;
 
 export type ReminderState = "soon" | "live";
 
+/**
+ * The signed-out (public) popup splits "live" in two: the scheduled start has
+ * passed but the host hasn't started the meeting yet ("waiting"), versus the
+ * host actually having started it ("started"). Each has its own dismiss/snooze
+ * key, so dismissing one never hides the next.
+ */
+export type PublicReminderState = "soon" | "waiting" | "started";
+
+/** Public events with no end time are treated as ending this long after their start. */
+export const PUBLIC_DEFAULT_EVENT_MS = 30 * 60_000;
+
 export type ReminderSession = {
   /** Stable per occurrence (event occurrenceId / meeting id) — dismiss/snooze are keyed on it. */
   key: string;
@@ -20,6 +31,10 @@ export type ReminderSession = {
   /** Effective end — the scheduled end, or start + a default window when none is set. */
   endsAt: string;
   joinHref: string;
+  /** Public popup only: the host has started the meeting (Event.meetingStartedAt inside this occurrence's window). */
+  started?: boolean;
+  /** Public popup only: Event.open — registration is only offered for open events. */
+  open?: boolean;
 };
 
 export type ReminderPrefs = {
@@ -31,7 +46,7 @@ export type ReminderPrefs = {
 
 export const EMPTY_PREFS: ReminderPrefs = { dismissed: {}, snoozedUntil: {} };
 
-export function prefKey(sessionKey: string, state: ReminderState) {
+export function prefKey(sessionKey: string, state: string) {
   return `${sessionKey}|${state}`;
 }
 
@@ -45,18 +60,30 @@ export function reminderStateOf(session: ReminderSession, now: number): Reminder
 }
 
 /**
- * Sessions that should currently be on screen, soonest first. Dismiss and
- * snooze are per (session, state), so dismissing/snoozing "soon" never hides
- * the "live" card for the same session once it starts.
+ * Public-popup counterpart of reminderStateOf: "started" once the host has
+ * started the meeting (even slightly before the scheduled start), otherwise
+ * "waiting" from the scheduled start, otherwise "soon" inside the lead
+ * window. Nothing after the scheduled end.
  */
-export function pickVisibleReminders(
+export function publicReminderStateOf(session: ReminderSession, now: number): PublicReminderState | null {
+  const start = Date.parse(session.startsAt);
+  const end = Date.parse(session.endsAt);
+  if (Number.isNaN(start) || Number.isNaN(end) || now >= end) return null;
+  if (session.started) return "started";
+  if (now >= start) return "waiting";
+  if (now >= start - REMINDER_LEAD_MS) return "soon";
+  return null;
+}
+
+function pickVisible<S extends string>(
   sessions: ReminderSession[],
   prefs: ReminderPrefs,
   now: number,
-): { session: ReminderSession; state: ReminderState }[] {
+  stateOf: (session: ReminderSession, now: number) => S | null,
+): { session: ReminderSession; state: S }[] {
   return sessions
     .flatMap((session) => {
-      const state = reminderStateOf(session, now);
+      const state = stateOf(session, now);
       if (!state) return [];
       const key = prefKey(session.key, state);
       if (prefs.dismissed[key]) return [];
@@ -64,6 +91,20 @@ export function pickVisibleReminders(
       return [{ session, state }];
     })
     .sort((a, b) => Date.parse(a.session.startsAt) - Date.parse(b.session.startsAt));
+}
+
+/**
+ * Sessions that should currently be on screen, soonest first. Dismiss and
+ * snooze are per (session, state), so dismissing/snoozing "soon" never hides
+ * the "live" card for the same session once it starts.
+ */
+export function pickVisibleReminders(sessions: ReminderSession[], prefs: ReminderPrefs, now: number) {
+  return pickVisible(sessions, prefs, now, reminderStateOf);
+}
+
+/** Same as pickVisibleReminders, for the signed-out popup's three states. */
+export function pickVisiblePublicReminders(sessions: ReminderSession[], prefs: ReminderPrefs, now: number) {
+  return pickVisible(sessions, prefs, now, publicReminderStateOf);
 }
 
 /** A snooze never outlives the session itself. */
