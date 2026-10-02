@@ -57,6 +57,16 @@ export function HeaderSearchRow({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setQuery is stable (useState setter via context)
   }, [urlQuery]);
 
+  // Leaving a page that mounts this row (e.g. member page -> marketing page)
+  // must not leave its height behind on <html> for whatever sticks below the
+  // header next (the live-events strip, the member sidebar).
+  useEffect(
+    () => () => {
+      document.documentElement.style.setProperty("--search-row-height", "0px");
+    },
+    [],
+  );
+
   // Pinned (a query is typed): forced fully open, no scroll listener at all.
   // Otherwise the shared scroll-direction hook drives it, restarting fresh
   // (revealed, as at initial load) the moment the field is cleared.

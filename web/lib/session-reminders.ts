@@ -33,6 +33,8 @@ export type ReminderSession = {
   joinHref: string;
   /** Public popup only: the Event.id (the series id for a recurring event), for the register/join flow. */
   eventId?: string;
+  /** Member live-events strip only: the member is the host or has a `going` RSVP, so Join goes straight to the meeting with no RSVP needed. */
+  rsvped?: boolean;
   /** Public popup only: the host has started the meeting (Event.meetingStartedAt inside this occurrence's window). */
   started?: boolean;
   /** Public popup only: Event.open — registration is only offered for open events. */

@@ -39,6 +39,10 @@
        so pages that never mount it (signed-out, or before hydration) get a
        sane default for anything composing it via calc(), e.g. member-sidebar.tsx. */
     --search-row-height: 0px;
+    /* Height of the live-events strip (components/sessions/live-events-strip.tsx)
+       — 0 unless that component is mounted with a live event to show, and
+       composed with the two heights above by anything sticky below the header. */
+    --live-strip-height: 0px;
   }
 }
 

@@ -21,10 +21,12 @@ async function fetchSessions(endpoint: string): Promise<ReminderSession[]> {
  * refetches while the tab is hidden. Shared by the popup and (later) the
  * live-events strip.
  */
-export function useReminderSessions(endpoint: string) {
+export function useReminderSessions(endpoint: string | null) {
   return useQuery({
     queryKey: ["session-reminders", endpoint],
-    queryFn: () => fetchSessions(endpoint),
+    queryFn: () => fetchSessions(endpoint as string),
+    // null = not decided yet (e.g. Clerk hasn't said who's signed in) — don't poll.
+    enabled: endpoint !== null,
     refetchInterval: (query) => {
       const sessions = query.state.data;
       const now = Date.now();

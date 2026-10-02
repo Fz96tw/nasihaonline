@@ -1363,6 +1363,83 @@ export async function getPublicReminderEvents(): Promise<ReminderSession[]> {
     });
 }
 
+/**
+ * Signed-in counterpart of getPublicReminderEvents for the live-events strip:
+ * every event the host has STARTED that this member is allowed to see, so a
+ * member who never RSVP'd (and therefore gets no popup) can still find and
+ * join it. Visibility mirrors the member event listing
+ * (getEventsForViewer): `community` events go through the member's community
+ * gating; a restricted (`invited`) event is listed ONLY to its invitees and
+ * its host — deliberately not to every admin, even though admins may RSVP.
+ * An event stays listed until its scheduled end (PUBLIC_DEFAULT_EVENT_MS
+ * after its start when it has no end time), with no LiveKit room-state
+ * dependency. Returns only a join link — never meetingUrl/livekitRoomName —
+ * plus `rsvped` (going, or the host) so the client knows whether Join needs
+ * the silent RSVP first.
+ */
+export async function getLiveEventsForMember(user: UserModel): Promise<ReminderSession[]> {
+  const now = new Date();
+  const windowStart = new Date(now.getTime() - 12 * 60 * 60_000);
+  // A host can start up to an hour before the scheduled time.
+  const windowEnd = new Date(now.getTime() + 60 * 60_000);
+  const member = await getMemberCommunityContext(user.id);
+
+  const events = await db.event.findMany({
+    where: {
+      cancelledAt: null,
+      publishedAt: { not: null },
+      meetingStartedAt: { not: null },
+      AND: [
+        { OR: [{ meetingUrl: { not: null } }, { livekitRoomName: { not: null } }] },
+        {
+          OR: [
+            { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
+            { hostId: user.id },
+            { visibility: EventVisibility.invited, invitees: { some: { userId: user.id } } },
+          ],
+        },
+        recurringSeriesStillActiveOrUpcoming(windowStart),
+        { startsAt: { lte: windowEnd } },
+      ],
+    },
+    select: {
+      id: true,
+      title: true,
+      startsAt: true,
+      endsAt: true,
+      hostId: true,
+      meetingStartedAt: true,
+      recurrence: { select: RECURRENCE_SELECT },
+      rsvps: { where: { userId: user.id }, select: { status: true } },
+    },
+    orderBy: { startsAt: "asc" },
+  });
+
+  return events
+    .flatMap((event) => expandEventForListing(event, windowStart, windowEnd))
+    .flatMap((event): ReminderSession[] => {
+      const start = event.occurrenceStart.getTime();
+      const end = event.occurrenceEnd?.getTime() ?? start + PUBLIC_DEFAULT_EVENT_MS;
+      // meetingStartedAt lives on the series' single Event row — only count it
+      // when it falls inside THIS occurrence's window (see getPublicReminderEvents).
+      const startedAt = event.meetingStartedAt?.getTime();
+      if (startedAt === undefined || startedAt < start - 60 * 60_000 || startedAt >= end) return [];
+      const session: ReminderSession = {
+        key: `member-live-${event.occurrenceId}`,
+        kind: "event",
+        title: event.title,
+        detail: null,
+        startsAt: new Date(start).toISOString(),
+        endsAt: new Date(end).toISOString(),
+        joinHref: `/meet/event/${event.id}`,
+        eventId: event.id,
+        started: true,
+        rsvped: event.hostId === user.id || event.rsvps.some((r) => r.status === RSVPStatus.going),
+      };
+      return publicReminderStateOf(session, now.getTime()) ? [session] : [];
+    });
+}
+
 // /admin/event-registrations — a merged view of who's engaged with each
 // event: anonymous EventRegistration rows (non-members) plus `going` RSVP
 // rows joined to their User (members, tagged with tier so the admin table
@@ -3884,6 +3961,76 @@ export async function rsvpToEvent(
     livekitRoomName: rsvped || userId === event.hostId ? event.livekitRoomName : null,
     attendeeCount: goingCount + registrationCount,
   };
+}
+
+/**
+ * The silent RSVP behind the live-events strip's "Join now": makes sure the
+ * member has a `going` RSVP (a non-host member needs one for
+ * getEventMeetingStatus to let them into the meeting) and nothing else.
+ * Unlike rsvpToEvent this is idempotent — it never toggles. A host or an
+ * already-`going` member is a no-op, a `cancelled` row is reactivated, and a
+ * missing row is created, so repeat clicks can't cancel anyone's RSVP or
+ * create duplicates. It re-applies rsvpToEvent's access checks (restricted
+ * events: host / invitee / admin else 403; other events: community
+ * visibility else 404; cancelled or someone else's draft: 404) but
+ * deliberately skips its side effects: no calendar-invite email and no host
+ * notification — joining a meeting that's already running shouldn't send
+ * either. The member still shows up on the host's roster via the RSVP row.
+ */
+export async function ensureGoingRsvp(
+  actingUser: UserModel,
+  eventId: string,
+): Promise<{ rsvped: true; created: boolean }> {
+  const userId = actingUser.id;
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: {
+      hostId: true,
+      visibility: true,
+      cancelledAt: true,
+      publishedAt: true,
+      communities: { select: { community: { select: { id: true } } } },
+    },
+  });
+  if (!event || event.cancelledAt || (!event.publishedAt && event.hostId !== userId)) {
+    throw new EventError(404, "Event not found.");
+  }
+
+  const isHost = event.hostId === userId;
+  const isAdmin = actingUser.role === Role.admin;
+
+  if (event.visibility === EventVisibility.invited) {
+    if (!isHost && !isAdmin) {
+      const invited = await db.eventInvitee.findUnique({ where: { eventId_userId: { eventId, userId } } });
+      if (!invited) throw new EventError(403, "You're not invited to this event.");
+    }
+  } else if (!isHost && !isAdmin) {
+    const member = await getMemberCommunityContext(userId);
+    if (!isEventVisibleToMember(event, member)) throw new EventError(404, "Event not found.");
+  }
+
+  // The host reaches the meeting without an RSVP row.
+  if (isHost) return { rsvped: true, created: false };
+
+  const existing = await db.rSVP.findUnique({
+    where: { eventId_userId: { eventId, userId } },
+    select: { status: true },
+  });
+  if (existing?.status === RSVPStatus.going) return { rsvped: true, created: false };
+
+  try {
+    await db.rSVP.upsert({
+      where: { eventId_userId: { eventId, userId } },
+      create: { eventId, userId, status: RSVPStatus.going },
+      update: { status: RSVPStatus.going },
+    });
+  } catch (error) {
+    // A concurrent click created the row first (unique [eventId, userId]) —
+    // that's the state we wanted.
+    if ((error as { code?: string }).code !== "P2002") throw error;
+    return { rsvped: true, created: false };
+  }
+  return { rsvped: true, created: !existing };
 }
 
 /**

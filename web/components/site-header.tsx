@@ -10,6 +10,7 @@ import { ScrollHeader } from "@/components/scroll-header";
 import { DesktopNavLinks } from "@/components/desktop-nav-links";
 import { HeaderSearchRow } from "@/components/header-search-row";
 import { SearchQueryProvider } from "@/components/header-search-context";
+import { MemberLiveEventsStrip } from "@/components/sessions/member-live-events-strip";
 import { getSessionUser } from "@/lib/auth";
 import { getOrCreateProfile, withResolvedAvatarUrl } from "@/lib/profile-server";
 
@@ -88,6 +89,8 @@ export async function SiteHeader() {
           followsAllCommunities={profile.followsAllCommunities}
         />
       )}
+      {/* Events the host has started that this member can see — below the search row. */}
+      {user && <MemberLiveEventsStrip />}
     </SearchQueryProvider>
   );
 }
