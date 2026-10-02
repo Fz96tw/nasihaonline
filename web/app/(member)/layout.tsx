@@ -58,7 +58,12 @@ export default async function MemberLayout({ children }: { children: React.React
           needsCommunitySelection={needsCommunitySelection}
           missingProfileFields={missingProfileFields}
         />
-        <SessionReminder />
+        {/* Signed-in only: this layout also serves anonymous registered guests
+            (an open event's emailed /meet/event/<id>?rid=… join link), and the
+            reminder polls an auth-required endpoint whose 401 SessionExpiryGuard
+            turns into a redirect to /sign-in — bouncing the guest out of the
+            meeting they just registered for. */}
+        {user && <SessionReminder />}
         <div className="flex flex-1">
           <MemberSidebar
             isAdmin={user?.role === "admin"}

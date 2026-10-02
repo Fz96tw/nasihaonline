@@ -1355,6 +1355,7 @@ export async function getPublicReminderEvents(): Promise<ReminderSession[]> {
         startsAt: new Date(start).toISOString(),
         endsAt: new Date(end).toISOString(),
         joinHref: `/events/${event.id}`,
+        eventId: event.id,
         started,
         open: event.open,
       };
@@ -3889,8 +3890,16 @@ export async function rsvpToEvent(
  * Captures a non-member's email/name registering interest in an `open`
  * event from the public /events page — the anonymous counterpart to
  * rsvpToEvent above, but writing to EventRegistration (no userId) instead
- * of RSVP. Upserts on the `(eventId, email)` unique key so a repeat
- * submission from the same visitor is idempotent rather than an error.
+ * of RSVP. A repeat submission for the same email is idempotent rather than
+ * an error: the existing row is reused (matched case-insensitively, so
+ * `Sarah@x.com` and `sarah@x.com` are one registration, and older
+ * mixed-case rows still match without a migration), `created` is false, and
+ * the stored name is NOT overwritten — otherwise anyone could retype
+ * someone else's email and rename their registration. New rows store the
+ * email lowercased. Callers must only hand the registration id back to the
+ * browser when `created` is true: the id is the guest's join credential
+ * (`?rid=`), and a repeat submitter hasn't proven they own the email, so for
+ * them it only goes out by email.
  * Returns meetingUrl (the caller emails it in the confirmation) — the
  * public /events listing itself still never shows it (per Event's schema
  * comment); registering is the visitor's deliberate signal of intent to
@@ -3902,6 +3911,10 @@ export async function registerForEvent(
 ): Promise<{
   id: string;
   registrationId: string;
+  /** False when this email was already registered for the event. */
+  created: boolean;
+  /** The name stored on the registration — the existing one for a repeat submission. */
+  name: string;
   title: string;
   startsAt: Date;
   timezone: string | null;
@@ -3934,15 +3947,35 @@ export async function registerForEvent(
     throw new EventError(400, "This event isn't open for public registration.");
   }
 
-  const registration = await db.eventRegistration.upsert({
-    where: { eventId_email: { eventId, email: input.email } },
-    create: { eventId, email: input.email, name: input.name },
-    update: { name: input.name },
-  });
+  const email = input.email.trim().toLowerCase();
+  const findExisting = () =>
+    db.eventRegistration.findFirst({
+      where: { eventId, email: { equals: email, mode: "insensitive" } },
+      select: { id: true, name: true },
+    });
+  let registration = await findExisting();
+  let created = false;
+  if (!registration) {
+    try {
+      registration = await db.eventRegistration.create({
+        data: { eventId, email, name: input.name },
+        select: { id: true, name: true },
+      });
+      created = true;
+    } catch (error) {
+      // A concurrent first submission for the same email won the unique
+      // (eventId, email) race — treat this one as the repeat.
+      if ((error as { code?: string }).code !== "P2002") throw error;
+      registration = await findExisting();
+      if (!registration) throw error;
+    }
+  }
 
   return {
     id: event.id,
     registrationId: registration.id,
+    created,
+    name: registration.name ?? input.name,
     title: event.title,
     startsAt: event.startsAt,
     timezone: event.timezone,

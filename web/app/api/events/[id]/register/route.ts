@@ -10,6 +10,13 @@ import { sendEventRegistrationConfirmationEmail } from "@/lib/email";
  * public /events page). Deliberately public, unlike the member-gated
  * POST /api/events/:id/rsvp: no requireUser() here, just IP rate limiting
  * (same shape as /api/donations, since the caller has no session to key on).
+ *
+ * The registration id is the guest's join credential (`?rid=` on
+ * /meet/event/:id), so it's returned to the browser ONLY for a first-time
+ * registration of that email. A repeat submission (the email is already
+ * registered) just gets the confirmation email re-sent to that address with
+ * `alreadyRegistered: true` and no id — someone typing another person's
+ * email can't use it to join as them, and can't rename their registration.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { success } = await rateLimit(`event-register:${clientIp(request)}`, {
@@ -38,7 +45,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     throw error;
   }
 
-  await sendEventRegistrationConfirmationEmail(email, name, event);
+  // Emailed in both cases, addressed to the stored name (not whatever a
+  // repeat submitter typed) and carrying the guest's own join link.
+  await sendEventRegistrationConfirmationEmail(email, event.name, event);
 
-  return NextResponse.json({ registered: true });
+  if (!event.created) {
+    return NextResponse.json({ registered: true, alreadyRegistered: true });
+  }
+
+  const hasMeeting = Boolean(event.meetingUrl || event.livekitRoomName);
+  return NextResponse.json({
+    registered: true,
+    alreadyRegistered: false,
+    registrationId: event.registrationId,
+    // Only when the event actually has a meeting to land in.
+    joinPath: hasMeeting ? `/meet/event/${event.id}?rid=${encodeURIComponent(event.registrationId)}` : null,
+  });
 }

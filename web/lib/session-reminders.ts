@@ -31,6 +31,8 @@ export type ReminderSession = {
   /** Effective end — the scheduled end, or start + a default window when none is set. */
   endsAt: string;
   joinHref: string;
+  /** Public popup only: the Event.id (the series id for a recurring event), for the register/join flow. */
+  eventId?: string;
   /** Public popup only: the host has started the meeting (Event.meetingStartedAt inside this occurrence's window). */
   started?: boolean;
   /** Public popup only: Event.open — registration is only offered for open events. */

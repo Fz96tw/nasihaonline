@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BellOff, Clock, Video, X } from "lucide-react";
+import { RegisterButton } from "@/components/events/register-button";
 import { Button } from "@/components/ui/button";
 import { useReminderSessions } from "@/hooks/use-reminder-sessions";
 import { cn } from "@/lib/utils";
@@ -135,8 +136,8 @@ export function SessionReminder({
     variant === "public"
       ? publicTimingText(session, state as PublicReminderState, now)
       : timingText(session, state as ReminderState, now);
-  // Public popup: registration is only offered for open events, and until the
-  // register-then-join flow ships the button just opens the public event page.
+  // Public popup: registration is only offered for open events (members-only
+  // events just link to the public event page).
   const buttonLabel =
     variant !== "public"
       ? state === "live"
@@ -204,12 +205,24 @@ export function SessionReminder({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" asChild>
-            <Link href={session.joinHref}>
-              <Video className="mr-1.5 h-4 w-4" />
-              {buttonLabel}
-            </Link>
-          </Button>
+          {variant === "public" && session.open && session.eventId ? (
+            // Open event: register (or, in a browser that already registered,
+            // go straight to the waiting room / meeting) without leaving the page.
+            <RegisterButton
+              eventId={session.eventId}
+              eventTitle={session.title}
+              label={buttonLabel}
+              started={state === "started"}
+              icon={<Video className="mr-1.5 h-4 w-4" />}
+            />
+          ) : (
+            <Button size="sm" asChild>
+              <Link href={session.joinHref}>
+                <Video className="mr-1.5 h-4 w-4" />
+                {buttonLabel}
+              </Link>
+            </Button>
+          )}
           <Button
             size="sm"
             variant="ghost"
