@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { getPublicReminderEvents } from "@/lib/events-server";
 
+// Queries the DB; without this Next prerenders it at build time (no DB in the Docker build).
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/public-session-reminders — public events (the ones already on
  * /events for a signed-out visitor) inside the "starting soon" window or in
