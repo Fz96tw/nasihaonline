@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import { getCsrfToken } from "@/lib/csrf-client";
 import type { NotificationListItem } from "@/lib/notifications";
 import { cn } from "@/lib/utils";
@@ -84,12 +85,11 @@ export function NotificationBell() {
 
   useEffect(() => {
     refresh();
-    const interval = setInterval(refresh, POLL_INTERVAL_MS);
-    return () => {
-      clearInterval(interval);
-      abortRef.current?.abort();
-    };
+    return () => abortRef.current?.abort();
   }, [refresh]);
+
+  // Only polls while the tab is visible; see useVisibleInterval.
+  useVisibleInterval(refresh, POLL_INTERVAL_MS);
 
   async function handleSelect(notification: NotificationListItem) {
     if (notification.unread) {

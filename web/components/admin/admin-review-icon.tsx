@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import { cn } from "@/lib/utils";
 
 const POLL_INTERVAL_MS = 120_000;
@@ -44,12 +45,11 @@ export function AdminReviewIcon() {
 
   useEffect(() => {
     refresh();
-    const interval = setInterval(refresh, POLL_INTERVAL_MS);
-    return () => {
-      clearInterval(interval);
-      abortRef.current?.abort();
-    };
+    return () => abortRef.current?.abort();
   }, [refresh]);
+
+  // Only polls while the tab is visible; see useVisibleInterval.
+  useVisibleInterval(refresh, POLL_INTERVAL_MS);
 
   return (
     <Button
