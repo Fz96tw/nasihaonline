@@ -275,9 +275,10 @@ export function eventEndMs(startsAt: string, endsAt: string | null): number {
 /**
  * Whether an occurrence is in progress right now: its scheduled start has
  * passed, its scheduled end hasn't, and (when the viewer can see it) the
- * LiveKit meeting hasn't already ended. `meetingEndedAt` lives on a series'
- * single row, so one from before this occurrence's window (an hour of early
- * start allowed) is ignored. The calendar's Upcoming List and event rows use
+ * LiveKit meeting hasn't already ended. Only an end at/after the scheduled
+ * start counts (an early test join that emptied the room doesn't), and
+ * `meetingEndedAt` lives on a series' single row, so one from an earlier
+ * occurrence is ignored by the same rule. The calendar's Upcoming List and event rows use
  * this so a running event isn't filed under "Past".
  */
 export function isEventInProgress(
@@ -287,5 +288,5 @@ export function isEventInProgress(
   const start = Date.parse(event.startsAt);
   if (start > nowMs || eventEndMs(event.startsAt, event.endsAt) <= nowMs) return false;
   const endedAt = event.meetingEndedAt ? Date.parse(event.meetingEndedAt) : null;
-  return !(endedAt !== null && endedAt >= start - 60 * 60_000);
+  return !(endedAt !== null && endedAt >= start);
 }

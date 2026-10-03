@@ -1316,11 +1316,13 @@ export async function getReminderEventsForUser(userId: string): Promise<Reminder
       // "meeting started / in progress" card telling them so — they're in it.
       // (Before they start, the card still works as a reminder to start it.)
       // meetingStartedAt lives on the series' single Event row, so only count
-      // it when it falls inside THIS occurrence's window (an hour of early
-      // start allowed), as everywhere else.
+      // it when it falls inside THIS occurrence's window — and only from the
+      // reminder lead (15 min) before the scheduled start: an earlier "start"
+      // is a test join, and if the room-closed webhook was missed it would
+      // otherwise stay "started" and silence the host's reminder to start.
       if (event.hostId === userId && event.meetingStartedAt) {
         const startedAt = event.meetingStartedAt.getTime();
-        if (startedAt >= start - 60 * 60_000 && startedAt < end) return [];
+        if (startedAt >= start - REMINDER_LEAD_MS && startedAt < end) return [];
       }
       const state = reminderStateOf(
         { key: "", kind: "event", title: "", detail: null, startsAt: new Date(start).toISOString(), endsAt: new Date(end).toISOString(), joinHref: "" },
@@ -1348,13 +1350,16 @@ export async function getReminderEventsForUser(userId: string): Promise<Reminder
  * `meetingEndedAt` means "ended and not restarted". The live-event surfaces
  * (strips and popups) stop listing such an occurrence even though its
  * scheduled end hasn't passed, so nobody is offered "Join now" for an empty,
- * finished room. `meetingEndedAt` lives on the series' single Event row, so a
- * value left over from an earlier occurrence (before this one's window —
- * allowing an hour of early start) is ignored. Google Meet events never get
- * one (no equivalent signal) and keep using the scheduled end.
+ * finished room. Only an end at or AFTER the scheduled start counts: a host who
+ * joins early to test and leaves (the room empties before the scheduled time)
+ * hasn't held the meeting yet, and treating that as "ended" would hide the
+ * event — and the host's reminder to start it. `meetingEndedAt` lives on the
+ * series' single Event row, so a value from an earlier occurrence is ignored by
+ * the same rule. Google Meet events never get one (no equivalent signal) and
+ * keep using the scheduled end.
  */
 function meetingEndedForOccurrence(endedAt: Date | null, occurrenceStartMs: number): boolean {
-  return endedAt !== null && endedAt.getTime() >= occurrenceStartMs - 60 * 60_000;
+  return endedAt !== null && endedAt.getTime() >= occurrenceStartMs;
 }
 
 /**
