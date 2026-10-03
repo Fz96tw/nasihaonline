@@ -1,5 +1,7 @@
 import { Suspense } from "react";
+import { SignedInSessionReminder } from "@/components/sessions/signed-in-session-reminder";
 import { SiteHeader, SiteHeaderSkeleton } from "@/components/site-header";
+import { getSessionUser } from "@/lib/auth";
 
 /**
  * Everything that isn't (member), admin, or (marketing) — accept-invite,
@@ -22,12 +24,15 @@ import { SiteHeader, SiteHeaderSkeleton } from "@/components/site-header";
  */
 export const dynamic = "force-dynamic";
 
-export default function DefaultHeaderLayout({ children }: { children: React.ReactNode }) {
+export default async function DefaultHeaderLayout({ children }: { children: React.ReactNode }) {
+  const user = await getSessionUser();
   return (
     <>
       <Suspense fallback={<SiteHeaderSkeleton />}>
         <SiteHeader />
       </Suspense>
+      {/* The (member) layout mounts its own popup; these groups would otherwise show the strip only. */}
+      {user && !user.suspended && <SignedInSessionReminder />}
       {children}
     </>
   );

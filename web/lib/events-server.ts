@@ -1479,7 +1479,13 @@ export async function getLiveEventsForMember(user: UserModel): Promise<ReminderS
       publishedAt: { not: null },
       AND: [
         { OR: [{ meetingUrl: { not: null } }, { livekitRoomName: { not: null } }] },
-        memberVisibleEventsWhere(user.id, member),
+        {
+          OR: [
+            memberVisibleEventsWhere(user.id, member),
+            // An event the member RSVP'd "going" to stays listed even if its community tag no longer matches them — the phone drawer / popup already offer it, so the strip must too.
+            { rsvps: { some: { userId: user.id, status: RSVPStatus.going } } },
+          ],
+        },
         recurringSeriesStillActiveOrUpcoming(windowStart),
         { startsAt: { lte: windowEnd } },
       ],
