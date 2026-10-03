@@ -94,6 +94,34 @@ export function publicReminderStateOf(session: ReminderSession, now: number): Pu
   return null;
 }
 
+/**
+ * How relevant a notice is right now — lower sorts first. A meeting the host
+ * has STARTED beats everything (it's the one you can actually join); then
+ * anything past its scheduled start that the member/visitor is committed to
+ * (hosted / RSVP'd / not an RSVP-able row); then the same for events they
+ * haven't RSVP'd to; then "starting soon", committed before not. Ties are
+ * broken by start time (see compareReminders). Without this the earliest-
+ * starting event wins, which can be a long-running meeting over one that's
+ * about to begin or the one the member RSVP'd to.
+ */
+export function relevanceRank(session: ReminderSession, state: string): number {
+  if (state === "started" || session.started === true) return 0;
+  const committed = session.rsvped !== false;
+  if (state === "live" || state === "waiting") return committed ? 1 : 2;
+  return committed ? 3 : 4;
+}
+
+/** Sort comparator for `{ session, state }` notices: relevance first, then soonest start. */
+export function compareReminders(
+  a: { session: ReminderSession; state: string },
+  b: { session: ReminderSession; state: string },
+): number {
+  return (
+    relevanceRank(a.session, a.state) - relevanceRank(b.session, b.state) ||
+    Date.parse(a.session.startsAt) - Date.parse(b.session.startsAt)
+  );
+}
+
 function pickVisible<S extends string>(
   sessions: ReminderSession[],
   prefs: ReminderPrefs,
@@ -109,7 +137,7 @@ function pickVisible<S extends string>(
       if ((prefs.snoozedUntil[key] ?? 0) > now) return [];
       return [{ session, state }];
     })
-    .sort((a, b) => Date.parse(a.session.startsAt) - Date.parse(b.session.startsAt));
+    .sort(compareReminders);
 }
 
 /**

@@ -14,7 +14,7 @@ import { useReminderSessions } from "@/hooks/use-reminder-sessions";
 import { useScrollReveal } from "@/hooks/use-scroll-reveal";
 import { isPrimaryActionTarget, trackNotice, trackNoticeShown } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
-import { publicReminderStateOf, reminderPrefKey, type PublicReminderState, type ReminderSession } from "@/lib/session-reminders";
+import { compareReminders, publicReminderStateOf, reminderPrefKey, type PublicReminderState, type ReminderSession } from "@/lib/session-reminders";
 
 const TICK_MS = 15_000;
 const MAX_LINES = 2;
@@ -139,7 +139,7 @@ export function LiveEventsStrip({
       // applied each audience's rules (e.g. a host's own waiting event isn't sent).
       return state === "started" || state === "waiting" ? [{ session, state }] : [];
     })
-    .sort((a, b) => Date.parse(a.session.startsAt) - Date.parse(b.session.startsAt));
+    .sort(compareReminders);
   const hasItems = !isPhone && live.length > 0;
 
   useScrollReveal(setOwnRevealed, hasItems && !followSearchRow);

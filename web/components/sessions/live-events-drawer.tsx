@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { BellOff, Clock } from "lucide-react";
@@ -12,6 +11,7 @@ import { useReminderSessions } from "@/hooks/use-reminder-sessions";
 import { isPrimaryActionTarget, trackNotice, trackNoticeShown } from "@/lib/analytics";
 import { publicTimingText, timingText } from "@/lib/reminder-text";
 import {
+  compareReminders,
   publicReminderStateOf,
   reminderPrefKey,
   reminderStateOf,
@@ -26,7 +26,6 @@ const STORAGE_KEY = "nasiha:live-drawer-prefs";
 const PUBLIC_ENDPOINT = "/api/public-session-reminders";
 const MEMBER_ENDPOINT = "/api/session-reminders";
 const TICK_MS = 15_000;
-const MAX_CARDS = 2;
 const MAX_STORED = 200;
 const SWIPE_PX = 36;
 /** Collapsed height: a 12px handle row + a 36px row (the primary button is 36px tall). */
@@ -83,8 +82,10 @@ function isLiveState(state: string) {
 /**
  * Phone replacement for BOTH the floating popup and the top live-events
  * strip: a translucent (frosted) bottom drawer that collapses to a ~48px peek
- * bar and never fully goes away while something is upcoming or live. It slides
- * up to its expanded card the first time a new state appears (starting soon,
+ * bar and never fully goes away while something is upcoming or live. The peek
+ * bar shows the MOST RELEVANT notice (a started meeting, then ones you're
+ * committed to, then the soonest) with a "+N" count; expanded lists every one
+ * in a scroll area. It slides up to its expanded view the first time a new state appears (starting soon,
  * live) and stays collapsed after that — collapsing is "dismiss without
  * losing it", so the event is always one tap away. Renders only on phones
  * (useIsPhone); on desktop the popup + top strip are used instead.
@@ -147,7 +148,7 @@ export function LiveEventsDrawer({ audience = "auto" }: { audience?: "auto" | "m
         if ((prefs.snoozedUntil[reminderPrefKey(session, state)] ?? 0) > now) return [];
         return [{ session, state }];
       })
-      .sort((a, b) => Date.parse(a.session.startsAt) - Date.parse(b.session.startsAt));
+      .sort(compareReminders);
   }, [isPhone, onMeetingScreen, sessions, isMember, now, prefs.snoozedUntil]);
 
   const top = items[0];
@@ -198,8 +199,6 @@ export function LiveEventsDrawer({ audience = "auto" }: { audience?: "auto" | "m
 
   if (!isPhone || !visible || !top) return null;
 
-  const shown = items.slice(0, MAX_CARDS);
-  const moreCount = items.length - MAX_CARDS;
   const topLive = isLiveState(top.state);
 
   const collapse = () => {
@@ -278,8 +277,10 @@ export function LiveEventsDrawer({ audience = "auto" }: { audience?: "auto" | "m
       </button>
 
       {expanded ? (
-        <div className="flex flex-col gap-3 px-4 pb-3 pt-2">
-          {shown.map(({ session, state }, index) => {
+        // Every notice, in relevance order, in a scroll area capped at 60% of the
+        // viewport (so a short landscape phone can still see the page behind it).
+        <div className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto overscroll-contain px-4 pb-3 pt-2">
+          {items.map(({ session, state }, index) => {
             const key = reminderPrefKey(session, state);
             const live = isLiveState(state);
             const timing = isMember
@@ -329,11 +330,6 @@ export function LiveEventsDrawer({ audience = "auto" }: { audience?: "auto" | "m
               </div>
             );
           })}
-          {moreCount > 0 ? (
-            <Link href="/events" data-live-secondary className="self-start text-sm font-medium text-primary underline-offset-4 hover:underline">
-              +{moreCount} more
-            </Link>
-          ) : null}
         </div>
       ) : (
         // Collapsed peek bar: the whole row is tappable (expands); the primary button inside works on its own.
@@ -359,7 +355,11 @@ export function LiveEventsDrawer({ audience = "auto" }: { audience?: "auto" | "m
             <span>{top.session.title}</span>
           </span>
           {items.length > 1 ? (
-            <span className="flex-shrink-0 text-xs text-muted-foreground" aria-label={`${items.length - 1} more`}>
+            // A visible count of what's behind the bar (tapping the bar expands it).
+            <span
+              className="flex-shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-xs font-semibold text-primary"
+              aria-label={`${items.length - 1} more`}
+            >
               +{items.length - 1}
             </span>
           ) : null}
