@@ -732,7 +732,8 @@ export async function getMemberEventById(
               {
                 publishedAt: { not: null },
                 OR: [
-                  { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
+                  // Not narrowed by community tag: a member may open (and RSVP to) a community event by link even outside its tagged communities; only browse/listing queries filter by tag.
+                  { visibility: EventVisibility.community },
                   { invitees: { some: { userId } } },
                   { rsvps: { some: { userId, status: RSVPStatus.going } } },
                 ],
@@ -4065,12 +4066,6 @@ async function applyRsvp(actingUser: UserModel, eventId: string, mode: "toggle" 
   // member outside a tagged event's communities can't see it via any
   // listing/detail query, but this is the enforcement point against a
   // guessed eventId reaching the RSVP action directly.
-  if (!isRestricted && userId !== event.hostId && actingUser.role !== Role.admin) {
-    const member = await getMemberCommunityContext(userId);
-    if (!isEventVisibleToMember(event, member)) {
-      throw new EventError(404, "Event not found.");
-    }
-  }
 
   const existing = await db.rSVP.findUnique({
     where: { eventId_userId: { eventId, userId } },
@@ -4187,9 +4182,6 @@ export async function ensureGoingRsvp(
       const invited = await db.eventInvitee.findUnique({ where: { eventId_userId: { eventId, userId } } });
       if (!invited) throw new EventError(403, "You're not invited to this event.");
     }
-  } else if (!isHost && !isAdmin) {
-    const member = await getMemberCommunityContext(userId);
-    if (!isEventVisibleToMember(event, member)) throw new EventError(404, "Event not found.");
   }
 
   // The host reaches the meeting without an RSVP row.
@@ -4589,9 +4581,9 @@ export async function getEventMeetingStatus(
     // community the member isn't in (or they left it): the reminder list keeps
     // offering Join for it, so re-checking visibility here would 404 them.
     if (rsvp?.status !== RSVPStatus.going) {
-      const member = await getMemberCommunityContext(userId);
+      // Community events aren't narrowed by tag here (see getMemberEventById); invited ones need an invite.
       const visible =
-        isEventVisibleToMember(event, member) ||
+        event.visibility === EventVisibility.community ||
         (await db.eventInvitee.findUnique({ where: { eventId_userId: { eventId, userId } } })) !== null;
       if (!visible) throw new EventError(404, "Event not found.");
     }
