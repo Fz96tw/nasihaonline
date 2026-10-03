@@ -157,10 +157,10 @@ export function SessionReminder({
       className={cn(
         "group fixed bottom-4 right-4 z-50 w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border shadow-lg",
         "animate-in fade-in slide-in-from-bottom-4 duration-200 motion-reduce:animate-none",
-        "transition-colors bg-card/95 supports-[backdrop-filter]:backdrop-blur-md",
+        "transition-colors bg-card/90 supports-[backdrop-filter]:backdrop-blur-md",
         live
-          ? "border-primary/50 supports-[backdrop-filter]:bg-card/90"
-          : "supports-[backdrop-filter]:bg-card/75",
+          ? "border-primary/50 supports-[backdrop-filter]:bg-card/85"
+          : "supports-[backdrop-filter]:bg-card/65",
         "hover:bg-card hover:supports-[backdrop-filter]:bg-card focus-within:bg-card focus-within:supports-[backdrop-filter]:bg-card",
         "max-sm:left-4 max-sm:w-auto",
       )}
