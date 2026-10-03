@@ -22,7 +22,16 @@ const iconClass = (size: Size) => (size === "xs" ? "mr-1 h-3.5 w-3.5" : "mr-1.5 
  * email or notification) because the meeting page won't admit a non-host
  * member without one.
  */
-export function MemberJoinButton({ session, size = "xs" }: { session: ReminderSession; size?: Size }) {
+export function MemberJoinButton({
+  session,
+  size = "xs",
+  label = "Join now",
+}: {
+  session: ReminderSession;
+  size?: Size;
+  /** Button text (the top strip says "Join Event"; the popup and phone drawer keep "Join now"). */
+  label?: string;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const icon = <Video className={iconClass(size)} aria-hidden />;
@@ -32,7 +41,7 @@ export function MemberJoinButton({ session, size = "xs" }: { session: ReminderSe
       <Button size={size} asChild>
         <Link href={session.joinHref}>
           {icon}
-          Join now
+          {label}
         </Link>
       </Button>
     );
@@ -58,7 +67,7 @@ export function MemberJoinButton({ session, size = "xs" }: { session: ReminderSe
   return (
     <Button size={size} onClick={join} disabled={busy}>
       {icon}
-      Join now
+      {label}
     </Button>
   );
 }

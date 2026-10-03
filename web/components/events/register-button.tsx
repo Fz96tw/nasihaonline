@@ -43,6 +43,7 @@ export function RegisterButton({
   eventId,
   eventTitle,
   label = "Register to attend",
+  joinLabel = "Join now",
   started = false,
   icon,
   size = "sm",
@@ -50,7 +51,9 @@ export function RegisterButton({
   eventId: string;
   eventTitle: string;
   label?: string;
-  /** The host has started the meeting — the stored-link button then reads "Join now". */
+  /** Text of the stored-link button once the host has started the meeting (default "Join now"). */
+  joinLabel?: string;
+  /** The host has started the meeting — the stored-link button then reads `joinLabel`. */
   started?: boolean;
   icon?: ReactNode;
   size?: "xs" | "sm" | "default";
@@ -102,7 +105,7 @@ export function RegisterButton({
       <Button size={size} asChild>
         <Link href={meetingPath(eventId, storedRid)}>
           {icon}
-          {started ? "Join now" : "Open waiting room"}
+          {started ? joinLabel : "Open waiting room"}
         </Link>
       </Button>
     );

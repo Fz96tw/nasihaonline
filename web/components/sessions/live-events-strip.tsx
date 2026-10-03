@@ -18,6 +18,8 @@ import { compareReminders, publicReminderStateOf, reminderPrefKey, type PublicRe
 
 const TICK_MS = 15_000;
 const MAX_LINES = 2;
+/** The strip's join button text (the popup and phone drawer say "Join now"). */
+const STRIP_JOIN_LABEL = "Join Event";
 const LINE_HEIGHT_PX = 36;
 const PUBLIC_ENDPOINT = "/api/public-session-reminders";
 const MEMBER_ENDPOINT = "/api/member-live-events";
@@ -31,12 +33,12 @@ function timingText(session: ReminderSession, state: PublicReminderState, now: n
 const joinIcon = <Video className="mr-1 h-3.5 w-3.5" aria-hidden />;
 
 /**
- * A signed-in member's strip button. Started: "Join now" (silent RSVP when
+ * A signed-in member's strip button. Started: "Join Event" (silent RSVP when
  * needed). Waiting for the host: "RSVP" for a member who hasn't RSVP'd (an
  * explicit RSVP — nothing to join yet), otherwise the waiting room.
  */
 function MemberStripButton({ session, state }: { session: ReminderSession; state: PublicReminderState }) {
-  if (state === "started") return <MemberJoinButton session={session} size="xs" />;
+  if (state === "started") return <MemberJoinButton session={session} size="xs" label={STRIP_JOIN_LABEL} />;
   if (session.rsvped === false && session.eventId) return <MemberRsvpButton session={session} size="xs" />;
   return (
     <Button size="xs" asChild>
@@ -58,7 +60,8 @@ function PublicStripButton({ session, state }: { session: ReminderSession; state
       <RegisterButton
         eventId={session.eventId}
         eventTitle={session.title}
-        label={started ? "Join now" : "Register to attend"}
+        label={started ? STRIP_JOIN_LABEL : "Register to attend"}
+        joinLabel={STRIP_JOIN_LABEL}
         started={started}
         icon={joinIcon}
         size="xs"
@@ -89,7 +92,7 @@ function PublicStripButton({ session, state }: { session: ReminderSession; state
  *    scheduled start has arrived — waiting for the host, or started — with the
  *    register / join buttons the popup uses.
  *  - signed-in members (member endpoint): every event they can see that the
- *    host has started ("Join now", which silently RSVPs when needed) or that is
+ *    host has started ("Join Event", which silently RSVPs when needed) or that is
  *    waiting for the host past its scheduled start ("RSVP", or "Open waiting
  *    room" if already RSVP'd).
  *
