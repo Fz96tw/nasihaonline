@@ -1270,6 +1270,7 @@ export async function getReminderEventsForUser(userId: string): Promise<Reminder
       endsAt: true,
       hostId: true,
       meetingStartedAt: true,
+      meetingEndedAt: true,
       recurrence: { select: RECURRENCE_SELECT },
     },
     orderBy: { startsAt: "asc" },
@@ -1280,6 +1281,8 @@ export async function getReminderEventsForUser(userId: string): Promise<Reminder
     .flatMap((event): ReminderSession[] => {
       const start = event.occurrenceStart.getTime();
       const end = event.occurrenceEnd?.getTime() ?? start + REMINDER_DEFAULT_EVENT_MS;
+      // The LiveKit meeting already ended — nothing left to remind anyone about.
+      if (meetingEndedForOccurrence(event.meetingEndedAt, start)) return [];
       // A host who has already started this occurrence's meeting doesn't need a
       // "meeting started / in progress" card telling them so — they're in it.
       // (Before they start, the card still works as a reminder to start it.)
@@ -1307,6 +1310,22 @@ export async function getReminderEventsForUser(userId: string): Promise<Reminder
         },
       ];
     });
+}
+
+/**
+ * A LiveKit meeting that has genuinely ended: resetMeetingOnRoomEmpty (the
+ * room_finished webhook) stamps `meetingEndedAt` and clears `meetingStartedAt`,
+ * and the next "Start Meeting" clears `meetingEndedAt` again — so a set
+ * `meetingEndedAt` means "ended and not restarted". The live-event surfaces
+ * (strips and popups) stop listing such an occurrence even though its
+ * scheduled end hasn't passed, so nobody is offered "Join now" for an empty,
+ * finished room. `meetingEndedAt` lives on the series' single Event row, so a
+ * value left over from an earlier occurrence (before this one's window —
+ * allowing an hour of early start) is ignored. Google Meet events never get
+ * one (no equivalent signal) and keep using the scheduled end.
+ */
+function meetingEndedForOccurrence(endedAt: Date | null, occurrenceStartMs: number): boolean {
+  return endedAt !== null && endedAt.getTime() >= occurrenceStartMs - 60 * 60_000;
 }
 
 /**
@@ -1343,6 +1362,7 @@ export async function getPublicReminderEvents(): Promise<ReminderSession[]> {
       endsAt: true,
       open: true,
       meetingStartedAt: true,
+      meetingEndedAt: true,
       recurrence: { select: RECURRENCE_SELECT },
     },
     orderBy: { startsAt: "asc" },
@@ -1353,6 +1373,7 @@ export async function getPublicReminderEvents(): Promise<ReminderSession[]> {
     .flatMap((event): ReminderSession[] => {
       const start = event.occurrenceStart.getTime();
       const end = event.occurrenceEnd?.getTime() ?? start + PUBLIC_DEFAULT_EVENT_MS;
+      if (meetingEndedForOccurrence(event.meetingEndedAt, start)) return [];
       // meetingStartedAt lives on the series' single Event row, so for a
       // recurring event it can be left over from an earlier occurrence — only
       // count it as "started" when it falls inside this occurrence's window
@@ -1431,6 +1452,7 @@ export async function getLiveEventsForMember(user: UserModel): Promise<ReminderS
       endsAt: true,
       hostId: true,
       meetingStartedAt: true,
+      meetingEndedAt: true,
       recurrence: { select: RECURRENCE_SELECT },
       rsvps: { where: { userId: user.id }, select: { status: true } },
     },
@@ -1446,6 +1468,7 @@ export async function getLiveEventsForMember(user: UserModel): Promise<ReminderS
       // when it falls inside THIS occurrence's window (see getPublicReminderEvents).
       const startedAt = event.meetingStartedAt?.getTime();
       if (startedAt === undefined || startedAt < start - 60 * 60_000 || startedAt >= end) return [];
+      if (meetingEndedForOccurrence(event.meetingEndedAt, start)) return [];
       const session: ReminderSession = {
         key: `member-live-${event.occurrenceId}`,
         kind: "event",
@@ -1502,6 +1525,7 @@ export async function getUpcomingEventsForMember(user: UserModel): Promise<Remin
       startsAt: true,
       endsAt: true,
       meetingStartedAt: true,
+      meetingEndedAt: true,
       recurrence: { select: RECURRENCE_SELECT },
     },
     orderBy: { startsAt: "asc" },
@@ -1512,6 +1536,7 @@ export async function getUpcomingEventsForMember(user: UserModel): Promise<Remin
     .flatMap((event): ReminderSession[] => {
       const start = event.occurrenceStart.getTime();
       const end = event.occurrenceEnd?.getTime() ?? start + PUBLIC_DEFAULT_EVENT_MS;
+      if (meetingEndedForOccurrence(event.meetingEndedAt, start)) return [];
       // meetingStartedAt lives on the series' single Event row — only count it
       // when it falls inside THIS occurrence's window (see getPublicReminderEvents).
       const startedAt = event.meetingStartedAt?.getTime();
