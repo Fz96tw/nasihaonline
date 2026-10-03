@@ -66,7 +66,8 @@ export function prefKey(sessionKey: string, state: string) {
  * states) keep exactly the keys they always had, so stored prefs still apply.
  */
 export function reminderPrefKey(session: ReminderSession, state: string) {
-  return prefKey(session.key, state === "live" && session.started ? "started" : state);
+  // The scheduled start is part of the key so rescheduling an event makes it a new notice: a dismissal, snooze or "already auto-expanded" recorded for the old time must not silence the new one.
+  return prefKey(`${session.key}@${session.startsAt}`, state === "live" && session.started ? "started" : state);
 }
 
 export function reminderStateOf(session: ReminderSession, now: number): ReminderState | null {
