@@ -82,7 +82,7 @@ function PublicStripButton({ session, state }: { session: ReminderSession; state
  * height is published in `--live-strip-height` (0 when hidden or empty) so
  * anything sticky below the header (e.g. the member sidebar) can offset
  * below it. Shows at most MAX_LINES events, then "+N more" -> /events;
- * phones show one event plus "+N more".
+ * phones show one event plus "+N more" (members: -> /calendar; visitors: -> /events).
  *
  * Two audiences:
  *  - signed-out visitors (public endpoint): every public event whose
@@ -114,6 +114,10 @@ export function LiveEventsStrip({
   const isMember = mode === "member" || (isLoaded && Boolean(isSignedIn));
   const isPublic = mode === "auto" && isLoaded && !isSignedIn;
   const endpoint = isMember ? MEMBER_ENDPOINT : isPublic ? PUBLIC_ENDPOINT : null;
+  // "+N more" opens the page that lists every live event for this audience: the
+  // member's own calendar (same destination as the member popup), or the public
+  // /events page for signed-out visitors.
+  const moreHref = isMember ? "/calendar" : "/events";
   // The meeting screen has its own chrome — the strip would sit over it.
   const onMeetingScreen = pathname.startsWith("/meet");
   // On phones the bottom drawer (live-events-drawer.tsx) replaces this strip.
@@ -224,12 +228,12 @@ export function LiveEventsStrip({
                     )}
                   >
                     {index === 0 && phoneMore > 0 ? (
-                      <Link href="/events" data-live-secondary className="font-medium text-primary underline-offset-4 hover:underline sm:hidden">
+                      <Link href={moreHref} data-live-secondary className="font-medium text-primary underline-offset-4 hover:underline sm:hidden">
                         +{phoneMore} more
                       </Link>
                     ) : null}
                     {isLast && index > 0 && desktopMore > 0 ? (
-                      <Link href="/events" data-live-secondary className="hidden font-medium text-primary underline-offset-4 hover:underline sm:inline">
+                      <Link href={moreHref} data-live-secondary className="hidden font-medium text-primary underline-offset-4 hover:underline sm:inline">
                         +{desktopMore} more
                       </Link>
                     ) : null}

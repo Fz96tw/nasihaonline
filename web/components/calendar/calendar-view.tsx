@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { EventListItem } from "@/components/calendar/event-list-item";
 import { UpcomingMeetingItem } from "@/components/calendar/upcoming-meeting-item";
-import type { MemberEvent } from "@/lib/events";
+import { isEventInProgress, type MemberEvent } from "@/lib/events";
 import type { UpcomingMeeting } from "@/lib/meeting-requests";
 import "@/components/calendar/calendar-theme.css";
 
@@ -138,10 +138,12 @@ export function CalendarView({
   );
   // Month grid shows every event (including past ones, so browsing to an
   // earlier month isn't empty); this tab is explicitly "Upcoming List", so
-  // it filters startsAt back down to future-only itself.
+  // it filters back down to events that haven't started yet — plus the ones
+  // in progress right now (the live-events strip's "+N more" lands here), which
+  // would otherwise fall straight through to "Past Events".
   const upcoming = useMemo<UpcomingItem[]>(() => {
     const upcomingEvents: UpcomingItem[] = resolvedEvents
-      .filter((event) => event.startsAt >= new Date().toISOString())
+      .filter((event) => event.startsAt >= new Date().toISOString() || isEventInProgress(event))
       .map((event) => ({ kind: "event" as const, ...event }));
     const upcomingMeetings: UpcomingItem[] = meetings.map((meeting) => ({ kind: "meeting" as const, ...meeting }));
 
@@ -155,7 +157,7 @@ export function CalendarView({
   // checking back for a recording.
   const pastItems = useMemo<UpcomingItem[]>(() => {
     const pastEvents: UpcomingItem[] = resolvedEvents
-      .filter((event) => event.startsAt < new Date().toISOString())
+      .filter((event) => event.startsAt < new Date().toISOString() && !isEventInProgress(event))
       .map((event) => ({ kind: "event" as const, ...event }));
     const pastMeetingItems: UpcomingItem[] = pastMeetings.map((meeting) => ({ kind: "meeting" as const, ...meeting }));
 

@@ -2,6 +2,7 @@
 // events-server.ts so client components can import them without pulling
 // in the "server-only" query logic.
 import { EventType, EventVisibility, Tier } from "@/lib/generated/prisma/enums";
+import { PUBLIC_DEFAULT_EVENT_MS } from "@/lib/session-reminders";
 
 // §11 open question #2 ("which tiers can submit events — Active only, or
 // Active + Associate? Not specified") — resolved: Active, Associate, and
@@ -265,3 +266,26 @@ export type MemberHostedEvent = {
   /** Save as Draft initiative — null means still-draft. Used by /my-posts to badge Draft ahead of Upcoming/Past/Cancelled. */
   publishedAt: string | null;
 };
+
+/** Scheduled end of an occurrence: its end time, or PUBLIC_DEFAULT_EVENT_MS (30 min) after the start when it has none. */
+export function eventEndMs(startsAt: string, endsAt: string | null): number {
+  return endsAt ? Date.parse(endsAt) : Date.parse(startsAt) + PUBLIC_DEFAULT_EVENT_MS;
+}
+
+/**
+ * Whether an occurrence is in progress right now: its scheduled start has
+ * passed, its scheduled end hasn't, and (when the viewer can see it) the
+ * LiveKit meeting hasn't already ended. `meetingEndedAt` lives on a series'
+ * single row, so one from before this occurrence's window (an hour of early
+ * start allowed) is ignored. The calendar's Upcoming List and event rows use
+ * this so a running event isn't filed under "Past".
+ */
+export function isEventInProgress(
+  event: { startsAt: string; endsAt: string | null; meetingEndedAt?: string | null },
+  nowMs: number = Date.now(),
+): boolean {
+  const start = Date.parse(event.startsAt);
+  if (start > nowMs || eventEndMs(event.startsAt, event.endsAt) <= nowMs) return false;
+  const endedAt = event.meetingEndedAt ? Date.parse(event.meetingEndedAt) : null;
+  return !(endedAt !== null && endedAt >= start - 60 * 60_000);
+}

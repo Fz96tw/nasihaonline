@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RsvpButton } from "@/components/calendar/rsvp-button";
 import { AddToCalendarButton } from "@/components/calendar/add-to-calendar-button";
-import { EVENT_TYPE_LABELS, getEventAudienceBadge, type MemberEvent } from "@/lib/events";
+import { EVENT_TYPE_LABELS, eventEndMs, getEventAudienceBadge, isEventInProgress, type MemberEvent } from "@/lib/events";
 import { EventVisibility } from "@/lib/generated/prisma/enums";
 import { useHasMounted } from "@/lib/use-has-mounted";
 
@@ -54,7 +54,11 @@ export function EventListItem({
 }) {
   const { rsvped, meetingUrl, livekitRoomName, attendeeCount } = event;
   const hasMounted = useHasMounted();
-  const isPast = hasMounted && new Date(event.endsAt ?? event.startsAt) < new Date();
+  // An event with no end time counts as running for 30 minutes after its start
+  // (same default as the live-events strip), so it isn't "past" — with its
+  // Join/RSVP controls hidden — the moment it begins.
+  const isPast = hasMounted && eventEndMs(event.startsAt, event.endsAt) < Date.now();
+  const inProgress = hasMounted && isEventInProgress(event);
   const audienceBadge = getEventAudienceBadge(event);
 
   return (
@@ -71,6 +75,7 @@ export function EventListItem({
         ) : null}
         <div className="min-w-0">
           <div className="mb-1 flex flex-wrap items-center gap-2">
+            {inProgress ? <Badge variant="success">In progress</Badge> : null}
             <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>
             <Badge variant="neutral">{EVENT_TYPE_LABELS[event.type]}</Badge>
             {event.isRecurring && event.recurrenceSummary ? (
