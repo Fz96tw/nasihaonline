@@ -70,8 +70,8 @@ export function SessionAction({
     <Button size="sm" variant="live" asChild>
       <Link href={session.joinHref}>
         {icon}
-        {/* 1-on-1 meetings keep their own wording; events say "Join Event" once live and "Open Event" while still starting soon (nothing is running yet). */}
-        {session.kind === "meeting" ? (state === "live" ? "Join now" : compact ? "Join" : "Join session") : state === "live" ? "Join Event" : compact ? "Open" : "Open Event"}
+        {/* 1-on-1 meetings keep their own wording; events say "Join Event" once live and "Open waiting room" while still starting soon (nothing is running yet). */}
+        {session.kind === "meeting" ? (state === "live" ? "Join now" : compact ? "Join" : "Join session") : state === "live" ? "Join Event" : compact ? "Waiting room" : "Open waiting room"}
       </Link>
     </Button>
   );
