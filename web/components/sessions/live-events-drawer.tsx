@@ -28,8 +28,8 @@ const MEMBER_ENDPOINT = "/api/session-reminders";
 const TICK_MS = 15_000;
 const MAX_STORED = 200;
 const SWIPE_PX = 36;
-/** Collapsed height: a 12px handle row + a 36px row (the primary button is 36px tall). */
-const PEEK_HEIGHT = "calc(48px + env(safe-area-inset-bottom, 0px))";
+/** Collapsed height: a 12px handle row + a 48px row, so the 36px primary button has 6px of air above and below. */
+const PEEK_HEIGHT = "calc(60px + env(safe-area-inset-bottom, 0px))";
 
 type Prefs = {
   /** Notice keys (reminderPrefKey) that have already auto-expanded once — they start collapsed from then on. */
@@ -334,7 +334,7 @@ export function LiveEventsDrawer({ audience = "auto" }: { audience?: "auto" | "m
       ) : (
         // Collapsed peek bar: the whole row is tappable (expands); the primary button inside works on its own.
         <div
-          className="flex h-9 items-center gap-2 px-4 text-sm"
+          className="flex h-12 items-center gap-2 px-4 text-sm"
           onClick={(e) => {
             if (!(e.target as HTMLElement).closest("button, a")) toggle();
           }}
