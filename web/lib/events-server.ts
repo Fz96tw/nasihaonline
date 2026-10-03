@@ -4581,16 +4581,20 @@ export async function getEventMeetingStatus(
     }
     guestName = `${registration.name} (${registration.email})`;
   } else if (!isHost) {
-    const member = await getMemberCommunityContext(userId);
-    const visible =
-      isEventVisibleToMember(event, member) ||
-      (await db.eventInvitee.findUnique({ where: { eventId_userId: { eventId, userId } } })) !== null;
-    if (!visible) throw new EventError(404, "Event not found.");
-
     const rsvp = await db.rSVP.findUnique({
       where: { eventId_userId: { eventId, userId } },
       select: { status: true },
     });
+    // A going RSVP stays valid access even if the event was later re-tagged to a
+    // community the member isn't in (or they left it): the reminder list keeps
+    // offering Join for it, so re-checking visibility here would 404 them.
+    if (rsvp?.status !== RSVPStatus.going) {
+      const member = await getMemberCommunityContext(userId);
+      const visible =
+        isEventVisibleToMember(event, member) ||
+        (await db.eventInvitee.findUnique({ where: { eventId_userId: { eventId, userId } } })) !== null;
+      if (!visible) throw new EventError(404, "Event not found.");
+    }
     if (rsvp?.status !== RSVPStatus.going) {
       throw new EventError(403, "RSVP to this event to see the joining details.");
     }
