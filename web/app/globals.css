@@ -43,6 +43,9 @@
        — 0 unless that component is mounted with a live event to show, and
        composed with the two heights above by anything sticky below the header. */
     --live-strip-height: 0px;
+    /* Collapsed height of the phone live-events drawer (live-events-drawer.tsx) —
+       0 unless it's showing; the drawer also pads <body> by the same amount. */
+    --live-drawer-height: 0px;
   }
 }
 

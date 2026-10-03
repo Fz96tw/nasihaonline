@@ -9,10 +9,12 @@ import { useSearchQuery } from "@/components/header-search-context";
 import { RegisterButton } from "@/components/events/register-button";
 import { MemberJoinButton } from "@/components/sessions/member-join-button";
 import { Button } from "@/components/ui/button";
+import { useIsPhone } from "@/hooks/use-is-phone";
 import { useReminderSessions } from "@/hooks/use-reminder-sessions";
 import { useScrollReveal } from "@/hooks/use-scroll-reveal";
+import { isPrimaryActionTarget, trackNotice, trackNoticeShown } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
-import { publicReminderStateOf, type PublicReminderState, type ReminderSession } from "@/lib/session-reminders";
+import { publicReminderStateOf, reminderPrefKey, type PublicReminderState, type ReminderSession } from "@/lib/session-reminders";
 
 const TICK_MS = 15_000;
 const MAX_LINES = 2;
@@ -94,8 +96,10 @@ export function LiveEventsStrip({
   const endpoint = isMember ? MEMBER_ENDPOINT : isPublic ? PUBLIC_ENDPOINT : null;
   // The meeting screen has its own chrome — the strip would sit over it.
   const onMeetingScreen = pathname.startsWith("/meet");
+  // On phones the bottom drawer (live-events-drawer.tsx) replaces this strip.
+  const isPhone = useIsPhone();
 
-  const { data: sessions } = useReminderSessions(onMeetingScreen ? null : endpoint);
+  const { data: sessions } = useReminderSessions(onMeetingScreen || isPhone ? null : endpoint);
   const [now, setNow] = useState(() => Date.now());
   const [ownRevealed, setOwnRevealed] = useState(true);
   const { searchRowVisible } = useSearchQuery();
@@ -115,7 +119,7 @@ export function LiveEventsStrip({
       return state === "started" || (isPublic && state === "waiting") ? [{ session, state }] : [];
     })
     .sort((a, b) => Date.parse(a.session.startsAt) - Date.parse(b.session.startsAt));
-  const hasItems = live.length > 0;
+  const hasItems = !isPhone && live.length > 0;
 
   useScrollReveal(setOwnRevealed, hasItems && !followSearchRow);
   const revealed = followSearchRow ? searchRowVisible : ownRevealed;
@@ -131,6 +135,11 @@ export function LiveEventsStrip({
     observer.observe(el);
     return () => observer.disconnect();
   }, [hasItems]);
+
+  const topLive = live[0];
+  useEffect(() => {
+    if (hasItems && topLive) trackNoticeShown("strip", reminderPrefKey(topLive.session, topLive.state), topLive.state, "desktop");
+  }, [hasItems, topLive]);
 
   const height = hasItems && revealed ? contentHeight : 0;
   useEffect(() => {
@@ -149,6 +158,9 @@ export function LiveEventsStrip({
       role="region"
       aria-label="Live events"
       style={{ height, top: stickyTop }}
+      onClickCapture={(event) => {
+        if (topLive && isPrimaryActionTarget(event.target)) trackNotice("click", "strip", topLive.state, "desktop");
+      }}
       className={cn(
         "sticky overflow-hidden bg-background shadow-sm transition-[height] duration-300 ease-in-out",
         // Under the member header's search row (z-40) it slides beneath it.
@@ -191,12 +203,12 @@ export function LiveEventsStrip({
                     )}
                   >
                     {index === 0 && phoneMore > 0 ? (
-                      <Link href="/events" className="font-medium text-primary underline-offset-4 hover:underline sm:hidden">
+                      <Link href="/events" data-live-secondary className="font-medium text-primary underline-offset-4 hover:underline sm:hidden">
                         +{phoneMore} more
                       </Link>
                     ) : null}
                     {isLast && index > 0 && desktopMore > 0 ? (
-                      <Link href="/events" className="hidden font-medium text-primary underline-offset-4 hover:underline sm:inline">
+                      <Link href="/events" data-live-secondary className="hidden font-medium text-primary underline-offset-4 hover:underline sm:inline">
                         +{desktopMore} more
                       </Link>
                     ) : null}

@@ -7,7 +7,10 @@ import { BellOff, Clock, Video, X } from "lucide-react";
 import { RegisterButton } from "@/components/events/register-button";
 import { MemberJoinButton, MemberRsvpButton } from "@/components/sessions/member-join-button";
 import { Button } from "@/components/ui/button";
+import { useIsPhone } from "@/hooks/use-is-phone";
 import { useReminderSessions } from "@/hooks/use-reminder-sessions";
+import { isPrimaryActionTarget, trackNotice, trackNoticeShown } from "@/lib/analytics";
+import { publicTimingText, timingText } from "@/lib/reminder-text";
 import { cn } from "@/lib/utils";
 import {
   EMPTY_PREFS,
@@ -46,31 +49,6 @@ function savePrefs(storageKey: string, prefs: ReminderPrefs) {
   }
 }
 
-function formatStartTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
-
-function timingText(session: ReminderSession, state: ReminderState, now: number) {
-  const start = Date.parse(session.startsAt);
-  if (state === "soon") {
-    const minutes = Math.ceil((start - now) / 60_000);
-    return `Starts at ${formatStartTime(session.startsAt)} · in ${minutes} min`;
-  }
-  const minutes = Math.floor((now - start) / 60_000);
-  return minutes < 1 ? "Just started" : `Started ${minutes} min ago`;
-}
-
-function publicTimingText(session: ReminderSession, state: PublicReminderState, now: number) {
-  const start = Date.parse(session.startsAt);
-  if (state === "soon") {
-    const minutes = Math.ceil((start - now) / 60_000);
-    return `Starts at ${formatStartTime(session.startsAt)} · in ${minutes} min`;
-  }
-  if (state === "waiting") return `Scheduled for ${formatStartTime(session.startsAt)} · the host hasn't started yet`;
-  const minutes = Math.floor((now - start) / 60_000);
-  return minutes < 1 ? "Just started" : `Started ${minutes} min ago`;
-}
-
 /**
  * Floating "starting soon" / "in progress" reminder with a Join button for
  * the member's events and 1-on-1 meetings. Mounted once in the (member)
@@ -90,6 +68,8 @@ export function SessionReminder({
   moreHref?: string;
 } = {}) {
   const pathname = usePathname();
+  // On phones the live-events drawer (live-events-drawer.tsx) replaces this card.
+  const isPhone = useIsPhone();
   const [prefs, setPrefs] = useState<ReminderPrefs>(EMPTY_PREFS);
   const [now, setNow] = useState(() => Date.now());
 
@@ -102,15 +82,19 @@ export function SessionReminder({
     return () => window.clearInterval(id);
   }, []);
 
-  const { data: sessions } = useReminderSessions(endpoint);
+  const { data: sessions } = useReminderSessions(isPhone ? null : endpoint);
 
-  const visible = useMemo(
-    () =>
+  const visible = useMemo(() => {
+    const picked: { session: ReminderSession; state: string }[] =
       variant === "public"
         ? pickVisiblePublicReminders(sessions ?? [], prefs, now)
-        : pickVisibleReminders(sessions ?? [], prefs, now),
-    [variant, sessions, prefs, now],
-  );
+        : pickVisibleReminders(sessions ?? [], prefs, now);
+    // The popup interrupts for "starting soon" — and, for the member's own
+    // committed events, when they're in progress. For everyone else (signed-out
+    // visitors; a member's visible-but-not-RSVP'd events) "live now" belongs
+    // to the top strip, so the popup doesn't repeat it.
+    return picked.filter(({ session, state }) => (variant === "public" || session.rsvped === false ? state === "soon" : true));
+  }, [variant, sessions, prefs, now]);
 
   const update = useCallback((change: (prev: ReminderPrefs) => ReminderPrefs) => {
     setPrefs((prev) => {
@@ -121,7 +105,12 @@ export function SessionReminder({
   }, [storageKey]);
 
   const top = visible[0];
-  if (!top || pathname.startsWith("/meet")) return null;
+  const hidden = isPhone || pathname.startsWith("/meet");
+  const topKey = top ? reminderPrefKey(top.session, top.state) : null;
+  useEffect(() => {
+    if (top && topKey && !hidden) trackNoticeShown("popup", topKey, top.state, "desktop");
+  }, [top, topKey, hidden]);
+  if (!top || hidden) return null;
 
   const { session, state } = top;
   const key = reminderPrefKey(session, state);
@@ -155,6 +144,9 @@ export function SessionReminder({
       role="status"
       aria-live="polite"
       aria-atomic="true"
+      onClickCapture={(event) => {
+        if (isPrimaryActionTarget(event.target)) trackNotice("click", "popup", state, "desktop");
+      }}
       className={cn(
         "group fixed bottom-4 right-4 z-50 w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border shadow-lg",
         "animate-in fade-in slide-in-from-bottom-4 duration-200 motion-reduce:animate-none",
@@ -194,9 +186,11 @@ export function SessionReminder({
           </div>
           <button
             type="button"
-            onClick={() =>
-              update((prev) => ({ ...prev, dismissed: { ...prev.dismissed, [key]: true } }))
-            }
+            data-live-secondary
+            onClick={() => {
+              trackNotice("dismiss", "popup", state, "desktop");
+              update((prev) => ({ ...prev, dismissed: { ...prev.dismissed, [key]: true } }));
+            }}
             aria-label={`Dismiss reminder for ${session.title}`}
             title="Dismiss"
             className="-mr-1 -mt-1 flex-shrink-0 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -235,12 +229,14 @@ export function SessionReminder({
           <Button
             size="sm"
             variant="ghost"
-            onClick={() =>
+            data-live-secondary
+            onClick={() => {
+              trackNotice("dismiss", "popup", state, "desktop");
               update((prev) => ({
                 ...prev,
                 snoozedUntil: { ...prev.snoozedUntil, [key]: snoozeUntil(session, Date.now()) },
-              }))
-            }
+              }));
+            }}
             title="Hide this for 5 minutes"
           >
             <BellOff className="mr-1.5 h-4 w-4" />
@@ -249,6 +245,7 @@ export function SessionReminder({
           {moreCount > 0 ? (
             <Link
               href={moreHref}
+              data-live-secondary
               className="ml-auto text-xs font-medium text-primary underline-offset-4 hover:underline"
             >
               +{moreCount} more

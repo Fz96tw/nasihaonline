@@ -1,5 +1,6 @@
 import { MarketingHeader } from "@/components/marketing-header";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { LiveEventsDrawer } from "@/components/sessions/live-events-drawer";
 import { LiveEventsStrip } from "@/components/sessions/live-events-strip";
 import { PublicSessionReminder } from "@/components/sessions/public-session-reminder";
 
@@ -12,8 +13,8 @@ import { PublicSessionReminder } from "@/components/sessions/public-session-remi
  * header. See app/layout.tsx's comment and components/marketing-header.tsx.
  *
  * One QueryProvider wraps everything so the signed-out live-events strip,
- * popup and the /events badges share a single polling query for
- * /api/public-session-reminders instead of each polling on its own.
+ * popup, phone drawer and the /events badges share polling queries instead of
+ * each polling on its own. On phones the drawer replaces the popup and strip.
  */
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -22,6 +23,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       <LiveEventsStrip />
       {children}
       <PublicSessionReminder />
+      <LiveEventsDrawer />
     </QueryProvider>
   );
 }
