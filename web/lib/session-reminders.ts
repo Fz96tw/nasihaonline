@@ -33,9 +33,9 @@ export type ReminderSession = {
   joinHref: string;
   /** Public popup only: the Event.id (the series id for a recurring event), for the register/join flow. */
   eventId?: string;
-  /** Member live-events strip only: the member is the host or has a `going` RSVP, so Join goes straight to the meeting with no RSVP needed. */
+  /** Member surfaces only: true = the member is the host / already `going` (Join goes straight to the meeting); false = they haven't RSVP'd (popup rows for visible events they haven't committed to — Join RSVPs silently, or the explicit RSVP button before the host starts); undefined = the existing RSVP'd/hosted reminder list. */
   rsvped?: boolean;
-  /** Public popup only: the host has started the meeting (Event.meetingStartedAt inside this occurrence's window). */
+  /** The host has started the meeting (Event.meetingStartedAt inside this occurrence's window) — public popup rows and the member popup rows with `rsvped: false`. */
   started?: boolean;
   /** Public popup only: Event.open — registration is only offered for open events. */
   open?: boolean;
@@ -54,11 +54,26 @@ export function prefKey(sessionKey: string, state: string) {
   return `${sessionKey}|${state}`;
 }
 
+/**
+ * The dismiss/snooze key for a card in a given state. A member popup row the
+ * host has started (`started`) gets its own key rather than sharing "live"
+ * with "scheduled start passed, host hasn't started" — otherwise dismissing
+ * the card while waiting would also hide it at the one moment that matters
+ * (the host starting, when "Join now" appears). Rows without `started` (the
+ * existing RSVP'd/hosted list, 1-on-1 meetings, the public popup's own three
+ * states) keep exactly the keys they always had, so stored prefs still apply.
+ */
+export function reminderPrefKey(session: ReminderSession, state: string) {
+  return prefKey(session.key, state === "live" && session.started ? "started" : state);
+}
+
 export function reminderStateOf(session: ReminderSession, now: number): ReminderState | null {
   const start = Date.parse(session.startsAt);
   const end = Date.parse(session.endsAt);
   if (Number.isNaN(start) || Number.isNaN(end) || now >= end) return null;
-  if (now >= start) return "live";
+  // A host-started meeting (member popup rows for events the member hasn't
+  // RSVP'd to carry `started`) is in progress even before its scheduled time.
+  if (session.started || now >= start) return "live";
   if (now >= start - REMINDER_LEAD_MS) return "soon";
   return null;
 }
@@ -89,7 +104,7 @@ function pickVisible<S extends string>(
     .flatMap((session) => {
       const state = stateOf(session, now);
       if (!state) return [];
-      const key = prefKey(session.key, state);
+      const key = reminderPrefKey(session, state);
       if (prefs.dismissed[key]) return [];
       if ((prefs.snoozedUntil[key] ?? 0) > now) return [];
       return [{ session, state }];

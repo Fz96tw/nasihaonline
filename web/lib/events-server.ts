@@ -1364,6 +1364,22 @@ export async function getPublicReminderEvents(): Promise<ReminderSession[]> {
 }
 
 /**
+ * Which events a signed-in member may see in the live-event surfaces (the
+ * live-events strip and the not-RSVP'd popup): `community` events through the
+ * member's community gating, events they host, and a restricted (`invited`)
+ * event ONLY for its invitees and host — deliberately not every admin.
+ */
+function memberVisibleEventsWhere(userId: string, member: MemberCommunityContext | null): Prisma.EventWhereInput {
+  return {
+    OR: [
+      { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
+      { hostId: userId },
+      { visibility: EventVisibility.invited, invitees: { some: { userId } } },
+    ],
+  };
+}
+
+/**
  * Signed-in counterpart of getPublicReminderEvents for the live-events strip:
  * every event the host has STARTED that this member is allowed to see, so a
  * member who never RSVP'd (and therefore gets no popup) can still find and
@@ -1391,13 +1407,7 @@ export async function getLiveEventsForMember(user: UserModel): Promise<ReminderS
       meetingStartedAt: { not: null },
       AND: [
         { OR: [{ meetingUrl: { not: null } }, { livekitRoomName: { not: null } }] },
-        {
-          OR: [
-            { visibility: EventVisibility.community, ...communityVisibilityWhere(member) },
-            { hostId: user.id },
-            { visibility: EventVisibility.invited, invitees: { some: { userId: user.id } } },
-          ],
-        },
+        memberVisibleEventsWhere(user.id, member),
         recurringSeriesStillActiveOrUpcoming(windowStart),
         { startsAt: { lte: windowEnd } },
       ],
@@ -1437,6 +1447,78 @@ export async function getLiveEventsForMember(user: UserModel): Promise<ReminderS
         rsvped: event.hostId === user.id || event.rsvps.some((r) => r.status === RSVPStatus.going),
       };
       return publicReminderStateOf(session, now.getTime()) ? [session] : [];
+    });
+}
+
+/**
+ * Events a signed-in member can see but is NOT committed to — the popup rows
+ * for members who never RSVP'd, so they hear about a public event before it
+ * starts the way signed-out visitors already do. Same visibility as the
+ * live-events strip (memberVisibleEventsWhere), published, not cancelled,
+ * with a meeting, from 15 minutes before the scheduled start until the
+ * scheduled end (PUBLIC_DEFAULT_EVENT_MS after the start when there's no end
+ * time). Events the member hosts or has a `going` RSVP on are excluded — the
+ * existing popup list (getReminderEventsForUser) already covers those, so
+ * nothing shows twice — while a `cancelled` RSVP counts as not-RSVP'd. Rows
+ * are `rsvped: false` and carry `started` (host-started this occurrence);
+ * never meetingUrl/livekitRoomName.
+ */
+export async function getUpcomingEventsForMember(user: UserModel): Promise<ReminderSession[]> {
+  const now = new Date();
+  const windowStart = new Date(now.getTime() - 12 * 60 * 60_000);
+  // Wide enough for a host who starts up to an hour early; each row is then
+  // filtered by its own popup state below.
+  const windowEnd = new Date(now.getTime() + 60 * 60_000);
+  const member = await getMemberCommunityContext(user.id);
+
+  const events = await db.event.findMany({
+    where: {
+      cancelledAt: null,
+      publishedAt: { not: null },
+      AND: [
+        { OR: [{ meetingUrl: { not: null } }, { livekitRoomName: { not: null } }] },
+        memberVisibleEventsWhere(user.id, member),
+        { hostId: { not: user.id } },
+        { rsvps: { none: { userId: user.id, status: RSVPStatus.going } } },
+        recurringSeriesStillActiveOrUpcoming(windowStart),
+        { startsAt: { lte: windowEnd } },
+      ],
+    },
+    select: {
+      id: true,
+      title: true,
+      startsAt: true,
+      endsAt: true,
+      meetingStartedAt: true,
+      recurrence: { select: RECURRENCE_SELECT },
+    },
+    orderBy: { startsAt: "asc" },
+  });
+
+  return events
+    .flatMap((event) => expandEventForListing(event, windowStart, windowEnd))
+    .flatMap((event): ReminderSession[] => {
+      const start = event.occurrenceStart.getTime();
+      const end = event.occurrenceEnd?.getTime() ?? start + PUBLIC_DEFAULT_EVENT_MS;
+      // meetingStartedAt lives on the series' single Event row — only count it
+      // when it falls inside THIS occurrence's window (see getPublicReminderEvents).
+      const startedAt = event.meetingStartedAt?.getTime();
+      const started = startedAt !== undefined && startedAt >= start - 60 * 60_000 && startedAt < end;
+      const session: ReminderSession = {
+        // Same key shape as getReminderEventsForUser, so a dismissed card stays
+        // dismissed after the member RSVPs and the row moves to that list.
+        key: `event-${event.occurrenceId}`,
+        kind: "event",
+        title: event.title,
+        detail: null,
+        startsAt: new Date(start).toISOString(),
+        endsAt: new Date(end).toISOString(),
+        joinHref: `/meet/event/${event.id}`,
+        eventId: event.id,
+        started,
+        rsvped: false,
+      };
+      return reminderStateOf(session, now.getTime()) ? [session] : [];
     });
 }
 
@@ -3851,7 +3933,26 @@ export async function deleteEventRecordingSegment(
 export async function rsvpToEvent(
   actingUser: UserModel,
   eventId: string,
-): Promise<{ rsvped: boolean; meetingUrl: string | null; livekitRoomName: string | null; attendeeCount: number }> {
+): Promise<RsvpResult> {
+  return applyRsvp(actingUser, eventId, "toggle");
+}
+
+/**
+ * The explicit "RSVP" button on the member popup for an event the member
+ * hasn't RSVP'd to: exactly rsvpToEvent's checks and side effects (calendar
+ * invite; host bell on restricted events) but idempotent — it only ever moves
+ * the member TO `going`. Already `going` is a no-op with no side effects, so
+ * a stale popup can never cancel someone's RSVP the way rsvpToEvent's toggle
+ * would. (The silent "Join now" path is ensureGoingRsvp, which also skips the
+ * side effects.)
+ */
+export async function rsvpGoingToEvent(actingUser: UserModel, eventId: string): Promise<RsvpResult> {
+  return applyRsvp(actingUser, eventId, "going");
+}
+
+type RsvpResult = { rsvped: boolean; meetingUrl: string | null; livekitRoomName: string | null; attendeeCount: number };
+
+async function applyRsvp(actingUser: UserModel, eventId: string, mode: "toggle" | "going"): Promise<RsvpResult> {
   const userId = actingUser.id;
   const event = await db.event.findUnique({
     where: { id: eventId },
@@ -3899,18 +4000,23 @@ export async function rsvpToEvent(
     select: { status: true },
   });
 
-  const nextStatus =
-    existing?.status === RSVPStatus.going ? RSVPStatus.cancelled : RSVPStatus.going;
+  const alreadyGoing = existing?.status === RSVPStatus.going;
+  const nextStatus = mode === "going" || !alreadyGoing ? RSVPStatus.going : RSVPStatus.cancelled;
+  // "going" mode on an already-going RSVP changes nothing — and so must send
+  // nothing (no second calendar invite, no second host notification).
+  const changed = !(mode === "going" && alreadyGoing);
 
-  await db.rSVP.upsert({
-    where: { eventId_userId: { eventId, userId } },
-    create: { eventId, userId, status: nextStatus },
-    update: { status: nextStatus },
-  });
+  if (changed) {
+    await db.rSVP.upsert({
+      where: { eventId_userId: { eventId, userId } },
+      create: { eventId, userId, status: nextStatus },
+      update: { status: nextStatus },
+    });
+  }
 
   // Bell-only host notification (Objective 02) — restricted events only;
   // skipped when the host RSVPs to their own event (nothing to tell them).
-  if (isRestricted && userId !== event.hostId) {
+  if (changed && isRestricted && userId !== event.hostId) {
     const responseLabel = nextStatus === RSVPStatus.going ? "going" : "not going";
     await createNotification({
       recipientId: event.hostId,
@@ -3926,7 +4032,7 @@ export async function rsvpToEvent(
   // back out. Best-effort like every sendXEmail call in this file: the RSVP
   // row above already committed, so a failed/unconfigured send must not
   // fail the RSVP action itself.
-  if (rsvped) {
+  if (changed && rsvped) {
     const icsFilename = `${event.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "event"}.ics`;
     await sendRsvpConfirmationEmail(actingUser.email, actingUser.name ?? "there", {
       id: eventId,

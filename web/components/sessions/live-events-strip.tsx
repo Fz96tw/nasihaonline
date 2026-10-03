@@ -2,15 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { Video } from "lucide-react";
 import { useSearchQuery } from "@/components/header-search-context";
 import { RegisterButton } from "@/components/events/register-button";
+import { MemberJoinButton } from "@/components/sessions/member-join-button";
 import { Button } from "@/components/ui/button";
 import { useReminderSessions } from "@/hooks/use-reminder-sessions";
 import { useScrollReveal } from "@/hooks/use-scroll-reveal";
-import { getCsrfToken } from "@/lib/csrf-client";
 import { cn } from "@/lib/utils";
 import { publicReminderStateOf, type PublicReminderState, type ReminderSession } from "@/lib/session-reminders";
 
@@ -27,54 +27,6 @@ function timingText(session: ReminderSession, state: PublicReminderState, now: n
 }
 
 const joinIcon = <Video className="mr-1 h-3.5 w-3.5" aria-hidden />;
-
-/**
- * A signed-in member's "Join now". The label is the same for everyone; what
- * differs is what's behind it. The host / a member who already RSVP'd goes
- * straight to the meeting. Anyone else gets a `going` RSVP recorded silently
- * first (POST /api/events/:id/join -> ensureGoingRsvp, which is idempotent and
- * sends no email or notification) because the meeting page won't admit a
- * non-host member without one.
- */
-function MemberJoinButton({ session }: { session: ReminderSession }) {
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-
-  if (session.rsvped || !session.eventId) {
-    return (
-      <Button size="xs" asChild>
-        <Link href={session.joinHref}>
-          {joinIcon}
-          Join now
-        </Link>
-      </Button>
-    );
-  }
-
-  async function join() {
-    setBusy(true);
-    try {
-      const csrfToken = await getCsrfToken();
-      const res = await fetch(`/api/events/${session.eventId}/join`, {
-        method: "POST",
-        headers: { "x-csrf-token": csrfToken },
-      });
-      if (!res.ok) throw new Error("join failed");
-      const { joinPath } = (await res.json()) as { joinPath: string };
-      router.push(joinPath);
-    } catch {
-      // The meeting page itself explains why this member can't be admitted.
-      router.push(session.joinHref);
-    }
-  }
-
-  return (
-    <Button size="xs" onClick={join} disabled={busy}>
-      {joinIcon}
-      Join now
-    </Button>
-  );
-}
 
 function PublicStripButton({ session, state }: { session: ReminderSession; state: PublicReminderState }) {
   const started = state === "started";
@@ -225,7 +177,7 @@ export function LiveEventsStrip({
               <span className="min-w-0 truncate font-semibold">{session.title}</span>
               <span className="hidden flex-shrink-0 text-muted-foreground sm:inline">· {timingText(session, state, now)}</span>
               <span className="ml-auto flex flex-shrink-0 items-center gap-3">
-                {isMember ? <MemberJoinButton session={session} /> : <PublicStripButton session={session} state={state} />}
+                {isMember ? <MemberJoinButton session={session} size="xs" /> : <PublicStripButton session={session} state={state} />}
                 {/* "+N more" lives in a fixed-width slot on every line (when there is
                     one at this breakpoint) so the buttons stay aligned whichever
                     line carries the link. Phones show it on the single line;

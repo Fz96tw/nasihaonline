@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BellOff, Clock, Video, X } from "lucide-react";
 import { RegisterButton } from "@/components/events/register-button";
+import { MemberJoinButton, MemberRsvpButton } from "@/components/sessions/member-join-button";
 import { Button } from "@/components/ui/button";
 import { useReminderSessions } from "@/hooks/use-reminder-sessions";
 import { cn } from "@/lib/utils";
@@ -12,7 +13,7 @@ import {
   EMPTY_PREFS,
   pickVisiblePublicReminders,
   pickVisibleReminders,
-  prefKey,
+  reminderPrefKey,
   snoozeUntil,
   type PublicReminderState,
   type ReminderPrefs,
@@ -123,7 +124,7 @@ export function SessionReminder({
   if (!top || pathname.startsWith("/meet")) return null;
 
   const { session, state } = top;
-  const key = prefKey(session.key, state);
+  const key = reminderPrefKey(session, state);
   const moreCount = visible.length - 1;
 
   // `live` drives the emphasized styling (pulsing dot, primary accent): the
@@ -205,7 +206,15 @@ export function SessionReminder({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {variant === "public" && session.open && session.eventId ? (
+          {variant === "member" && session.rsvped === false && session.eventId ? (
+            // A visible event this member hasn't RSVP'd to: an explicit RSVP
+            // before the host starts, then the silent-RSVP "Join now".
+            session.started ? (
+              <MemberJoinButton session={session} size="sm" />
+            ) : (
+              <MemberRsvpButton session={session} size="sm" />
+            )
+          ) : variant === "public" && session.open && session.eventId ? (
             // Open event: register (or, in a browser that already registered,
             // go straight to the waiting room / meeting) without leaving the page.
             <RegisterButton
