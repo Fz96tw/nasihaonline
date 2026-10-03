@@ -18,8 +18,6 @@ import { compareReminders, publicReminderStateOf, reminderPrefKey, type PublicRe
 
 const TICK_MS = 15_000;
 const MAX_LINES = 2;
-/** The strip's join button text (the popup and phone drawer say "Join now"). */
-const STRIP_JOIN_LABEL = "Join Event";
 const LINE_HEIGHT_PX = 36;
 const PUBLIC_ENDPOINT = "/api/public-session-reminders";
 const MEMBER_ENDPOINT = "/api/member-live-events";
@@ -38,10 +36,10 @@ const joinIcon = <Video className="mr-1 h-3.5 w-3.5" aria-hidden />;
  * explicit RSVP — nothing to join yet), otherwise the waiting room.
  */
 function MemberStripButton({ session, state }: { session: ReminderSession; state: PublicReminderState }) {
-  if (state === "started") return <MemberJoinButton session={session} size="xs" label={STRIP_JOIN_LABEL} />;
-  if (session.rsvped === false && session.eventId) return <MemberRsvpButton session={session} size="xs" />;
+  if (state === "started") return <MemberJoinButton session={session} size="xs" variant="live" />;
+  if (session.rsvped === false && session.eventId) return <MemberRsvpButton session={session} size="xs" variant="live" />;
   return (
-    <Button size="xs" asChild>
+    <Button size="xs" variant="live" asChild>
       <Link href={session.joinHref}>
         {joinIcon}
         Open waiting room
@@ -60,16 +58,16 @@ function PublicStripButton({ session, state }: { session: ReminderSession; state
       <RegisterButton
         eventId={session.eventId}
         eventTitle={session.title}
-        label={started ? STRIP_JOIN_LABEL : "Register to attend"}
-        joinLabel={STRIP_JOIN_LABEL}
+        label={started ? "Join Event" : "Register to attend"}
         started={started}
         icon={joinIcon}
         size="xs"
+        variant="live"
       />
     );
   }
   return (
-    <Button size="xs" asChild>
+    <Button size="xs" variant="live" asChild>
       <Link href={session.joinHref}>
         {joinIcon}
         View event

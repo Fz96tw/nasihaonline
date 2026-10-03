@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Video } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { getCsrfToken } from "@/lib/csrf-client";
 import type { ReminderSession } from "@/lib/session-reminders";
 
@@ -14,7 +14,7 @@ type Size = "xs" | "sm";
 const iconClass = (size: Size) => (size === "xs" ? "mr-1 h-3.5 w-3.5" : "mr-1.5 h-4 w-4");
 
 /**
- * A signed-in member's "Join now" (live-events strip and the not-RSVP'd
+ * A signed-in member's "Join Event" (live-events strip and the not-RSVP'd
  * popup). The label is the same for everyone; what differs is what's behind
  * it. The host / a member who already RSVP'd goes straight to the meeting.
  * Anyone else gets a `going` RSVP recorded silently first (POST
@@ -25,12 +25,13 @@ const iconClass = (size: Size) => (size === "xs" ? "mr-1 h-3.5 w-3.5" : "mr-1.5 
 export function MemberJoinButton({
   session,
   size = "xs",
-  label = "Join now",
+  label = "Join Event",
+  variant,
 }: {
   session: ReminderSession;
   size?: Size;
-  /** Button text (the top strip says "Join Event"; the popup and phone drawer keep "Join now"). */
   label?: string;
+  variant?: ButtonProps["variant"];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -38,7 +39,7 @@ export function MemberJoinButton({
 
   if (session.rsvped !== false || !session.eventId) {
     return (
-      <Button size={size} asChild>
+      <Button size={size} variant={variant} asChild>
         <Link href={session.joinHref}>
           {icon}
           {label}
@@ -65,7 +66,7 @@ export function MemberJoinButton({
   }
 
   return (
-    <Button size={size} onClick={join} disabled={busy}>
+    <Button size={size} variant={variant} onClick={join} disabled={busy}>
       {icon}
       {label}
     </Button>
@@ -80,7 +81,15 @@ export function MemberJoinButton({
  * success the reminders query is refetched, which moves the event into the
  * member's RSVP'd list so the card flips to its RSVP'd state without a reload.
  */
-export function MemberRsvpButton({ session, size = "sm" }: { session: ReminderSession; size?: Size }) {
+export function MemberRsvpButton({
+  session,
+  size = "sm",
+  variant,
+}: {
+  session: ReminderSession;
+  size?: Size;
+  variant?: ButtonProps["variant"];
+}) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -104,7 +113,7 @@ export function MemberRsvpButton({ session, size = "sm" }: { session: ReminderSe
   }
 
   return (
-    <Button size={size} onClick={rsvp} disabled={busy} title={failed ? "Couldn't RSVP — try again" : undefined}>
+    <Button size={size} variant={variant} onClick={rsvp} disabled={busy} title={failed ? "Couldn't RSVP — try again" : undefined}>
       {busy ? "RSVPing…" : failed ? "Try RSVP again" : "RSVP"}
     </Button>
   );

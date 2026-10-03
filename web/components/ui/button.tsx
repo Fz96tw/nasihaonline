@@ -18,6 +18,9 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         link: "text-primary underline-offset-4 hover:underline",
+        // Live-event actions (join / RSVP / register in the strip, popup and drawer):
+        // green, so they never read as the brand-blue "Apply for Membership" button.
+        live: "bg-success text-white hover:bg-success/90",
       },
       size: {
         default: "h-10 px-4 py-2",

@@ -4,7 +4,7 @@ import { EDUCATIONAL_DISCLAIMER } from "@/lib/legal";
 const COMMUNITY_LINKS = [
   { label: "Our Mission", href: "/about" },
   { label: "Our Team", href: "/our-team" },
-  { label: "Join NASIHA", href: "/join" },
+  { label: "Apply for Membership", href: "/join" },
   { label: "Support Us", href: "/donate" },
   { label: "Contact Us", href: "/contact" },
 ];

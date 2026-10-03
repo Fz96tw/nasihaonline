@@ -228,7 +228,7 @@ export function MobileNav({
               <SheetClose asChild>
                 <Link href="/join" className={`${linkClasses} text-primary`}>
                   <UserPlus className="h-[18px] w-[18px] flex-shrink-0" />
-                  <span className="truncate">Join NASIHA</span>
+                  <span className="truncate">Apply for Membership</span>
                 </Link>
               </SheetClose>
             </>

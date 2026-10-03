@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CheckCircle2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -33,7 +33,7 @@ type RegisterResult =
  *
  * A FIRST registration for an email drops the visitor straight into the
  * meeting's waiting room (/meet/event/:id?rid=…) and remembers the rid in
- * this browser, after which this renders an "Open waiting room" / "Join now"
+ * this browser, after which this renders an "Open waiting room" / "Join Event"
  * link instead of the dialog. If the email was already registered the server
  * withholds the rid (it only goes out by email), so the dialog just says the
  * join link was re-sent. `label`/`started`/`icon`/`size` let the live-event
@@ -43,7 +43,8 @@ export function RegisterButton({
   eventId,
   eventTitle,
   label = "Register to attend",
-  joinLabel = "Join now",
+  joinLabel = "Join Event",
+  variant,
   started = false,
   icon,
   size = "sm",
@@ -51,8 +52,10 @@ export function RegisterButton({
   eventId: string;
   eventTitle: string;
   label?: string;
-  /** Text of the stored-link button once the host has started the meeting (default "Join now"). */
+  /** Text of the stored-link button once the host has started the meeting (default "Join Event"). */
   joinLabel?: string;
+  /** Button style for the trigger / stored link (the live-event notices pass "live"). */
+  variant?: ButtonProps["variant"];
   /** The host has started the meeting — the stored-link button then reads `joinLabel`. */
   started?: boolean;
   icon?: ReactNode;
@@ -102,7 +105,7 @@ export function RegisterButton({
 
   if (storedRid) {
     return (
-      <Button size={size} asChild>
+      <Button size={size} variant={variant} asChild>
         <Link href={meetingPath(eventId, storedRid)}>
           {icon}
           {started ? joinLabel : "Open waiting room"}
@@ -125,7 +128,7 @@ export function RegisterButton({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size={size}>
+        <Button size={size} variant={variant}>
           {icon}
           {label}
         </Button>

@@ -21,7 +21,7 @@ export function CtaBanner() {
           className="shadow-[0_4px_14px_rgba(37,99,235,0.5)]"
           asChild
         >
-          <Link href="/join">Join NASIHA</Link>
+          <Link href="/join">Apply for Membership</Link>
         </Button>
       </Reveal>
     </section>

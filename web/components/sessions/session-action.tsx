@@ -13,12 +13,12 @@ import type { ReminderSession } from "@/lib/session-reminders";
  *
  *  - Visitor (`audience="public"`; states soon / waiting / started): open events
  *    register (or, in a browser that already registered, go to the waiting room
- *    / meeting) — "Register to attend", "Join now" once started; members-only
+ *    / meeting) — "Register to attend", "Join Event" once started; members-only
  *    events just link to the public event page ("View event").
  *  - Member (`audience="member"`; states soon / live): a visible event they
  *    haven't RSVP'd to shows "RSVP" until the host starts, then the silent-RSVP
- *    "Join now"; their own (hosted / RSVP'd / 1-on-1) events link straight to the
- *    meeting ("Join session", "Join now" once in progress).
+ *    "Join Event"; their own (hosted / RSVP'd / 1-on-1) events link straight to the
+ *    meeting ("Join Event"; 1-on-1 meetings keep "Join session" / "Join now").
  */
 export function SessionAction({
   session,
@@ -41,15 +41,16 @@ export function SessionAction({
         <RegisterButton
           eventId={session.eventId}
           eventTitle={session.title}
-          label={started ? "Join now" : compact ? "Register" : "Register to attend"}
+          label={started ? "Join Event" : compact ? "Register" : "Register to attend"}
           started={started}
           icon={icon}
           size="sm"
+          variant="live"
         />
       );
     }
     return (
-      <Button size="sm" asChild>
+      <Button size="sm" variant="live" asChild>
         <Link href={session.joinHref}>
           {icon}
           {compact ? "View" : "View event"}
@@ -59,13 +60,18 @@ export function SessionAction({
   }
 
   if (session.rsvped === false && session.eventId) {
-    return session.started ? <MemberJoinButton session={session} size="sm" /> : <MemberRsvpButton session={session} size="sm" />;
+    return session.started ? (
+      <MemberJoinButton session={session} size="sm" variant="live" />
+    ) : (
+      <MemberRsvpButton session={session} size="sm" variant="live" />
+    );
   }
   return (
-    <Button size="sm" asChild>
+    <Button size="sm" variant="live" asChild>
       <Link href={session.joinHref}>
         {icon}
-        {state === "live" ? "Join now" : compact ? "Join" : "Join session"}
+        {/* 1-on-1 meetings keep their own wording; events always say "Join Event". */}
+        {session.kind === "meeting" ? (state === "live" ? "Join now" : compact ? "Join" : "Join session") : "Join Event"}
       </Link>
     </Button>
   );

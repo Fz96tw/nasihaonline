@@ -136,8 +136,8 @@ export function MarketingHeader() {
             </Button>
             <Button size="sm" className="px-3 text-sm sm:text-base" asChild>
               <Link href="/join">
-                <span className="sm:hidden">Join</span>
-                <span className="hidden sm:inline">Join NASIHA</span>
+                <span className="sm:hidden">Apply</span>
+                <span className="hidden sm:inline">Apply for Membership</span>
               </Link>
             </Button>
           </>

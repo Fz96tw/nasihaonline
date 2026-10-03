@@ -128,15 +128,19 @@ export function SessionReminder({
       : timingText(session, state as ReminderState, now);
   // Public popup: registration is only offered for open events (members-only
   // events just link to the public event page).
+  // Events always say "Join Event" (so "Join" never reads like the membership
+  // button); 1-on-1 meetings keep their own wording.
   const buttonLabel =
     variant !== "public"
-      ? state === "live"
-        ? "Join now"
-        : "Join session"
+      ? session.kind === "meeting"
+        ? state === "live"
+          ? "Join now"
+          : "Join session"
+        : "Join Event"
       : !session.open
         ? "View event"
         : state === "started"
-          ? "Join now"
+          ? "Join Event"
           : "Register to attend";
 
   return (
@@ -202,11 +206,11 @@ export function SessionReminder({
         <div className="flex flex-wrap items-center gap-2">
           {variant === "member" && session.rsvped === false && session.eventId ? (
             // A visible event this member hasn't RSVP'd to: an explicit RSVP
-            // before the host starts, then the silent-RSVP "Join now".
+            // before the host starts, then the silent-RSVP "Join Event".
             session.started ? (
-              <MemberJoinButton session={session} size="sm" />
+              <MemberJoinButton session={session} size="sm" variant="live" />
             ) : (
-              <MemberRsvpButton session={session} size="sm" />
+              <MemberRsvpButton session={session} size="sm" variant="live" />
             )
           ) : variant === "public" && session.open && session.eventId ? (
             // Open event: register (or, in a browser that already registered,
@@ -217,9 +221,10 @@ export function SessionReminder({
               label={buttonLabel}
               started={state === "started"}
               icon={<Video className="mr-1.5 h-4 w-4" />}
+              variant="live"
             />
           ) : (
-            <Button size="sm" asChild>
+            <Button size="sm" variant="live" asChild>
               <Link href={session.joinHref}>
                 <Video className="mr-1.5 h-4 w-4" />
                 {buttonLabel}

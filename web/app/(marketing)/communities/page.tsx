@@ -59,7 +59,7 @@ export default async function CommunitiesPage() {
               <Link href="/sign-in">Sign in</Link>
             </Button>
             <Button asChild>
-              <Link href="/join">Join NASIHA</Link>
+              <Link href="/join">Apply for Membership</Link>
             </Button>
           </div>
         </div>
