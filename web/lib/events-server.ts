@@ -1339,6 +1339,7 @@ export async function getReminderEventsForUser(userId: string): Promise<Reminder
           startsAt: new Date(start).toISOString(),
           endsAt: new Date(end).toISOString(),
           joinHref: `/meet/event/${event.id}`,
+          isHost: event.hostId === userId,
         },
       ];
     });

@@ -71,7 +71,7 @@ export function SessionAction({
       <Link href={session.joinHref}>
         {icon}
         {/* 1-on-1 meetings keep their own wording; events say "Join Event" once live and "Open waiting room" while still starting soon (nothing is running yet). */}
-        {session.kind === "meeting" ? (state === "live" ? "Join now" : compact ? "Join" : "Join session") : state === "live" ? "Join Event" : compact ? "Waiting room" : "Open waiting room"}
+        {session.kind === "meeting" ? (state === "live" ? "Join now" : compact ? "Join" : "Join session") : state === "live" ? "Join Event" : session.isHost ? (compact ? "Start" : "Start meeting") : compact ? "Waiting room" : "Open waiting room"}
       </Link>
     </Button>
   );

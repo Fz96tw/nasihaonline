@@ -35,6 +35,8 @@ export type ReminderSession = {
   eventId?: string;
   /** Member surfaces only: true = the member is the host / already `going` (Join goes straight to the meeting); false = they haven't RSVP'd (popup rows for visible events they haven't committed to — Join RSVPs silently, or the explicit RSVP button before the host starts); undefined = the existing RSVP'd/hosted reminder list. */
   rsvped?: boolean;
+  /** Member surfaces only: the viewer hosts this event — the "starting soon" button says "Start meeting" for them instead of "Open waiting room". */
+  isHost?: boolean;
   /** The host has started the meeting (Event.meetingStartedAt inside this occurrence's window) — public popup rows and the member popup rows with `rsvped: false`. */
   started?: boolean;
   /** Public popup only: Event.open — registration is only offered for open events. */

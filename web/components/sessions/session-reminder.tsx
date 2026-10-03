@@ -138,8 +138,10 @@ export function SessionReminder({
           : "Join session"
         : state === "live"
           ? "Join Event"
-          : // Before the scheduled start nothing is running yet — the link opens the waiting room (or, for the host, where they start it).
-            "Open waiting room"
+          : // Before the scheduled start nothing is running yet — the link opens the waiting room, or for the host the page where they start it.
+            session.isHost
+            ? "Start meeting"
+            : "Open waiting room"
       : !session.open
         ? "View event"
         : state === "started"
