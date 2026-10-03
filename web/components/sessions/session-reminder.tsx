@@ -136,11 +136,11 @@ export function SessionReminder({
         ? state === "live"
           ? "Join now"
           : "Join session"
-        : state === "live"
-          ? "Join Event"
-          : // Before the scheduled start nothing is running yet — the link opens the waiting room, or for the host the page where they start it.
-            session.isHost
-            ? "Start meeting"
+        : session.isHost
+          ? // The reminder list drops a host's event once they've started it, so a host row always means "not started yet": the link opens the page where they start it.
+            "Start meeting"
+          : state === "live"
+            ? "Join Event"
             : "Open waiting room"
       : !session.open
         ? "View event"
