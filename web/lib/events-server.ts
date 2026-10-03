@@ -174,6 +174,29 @@ function expandEventForListing<
 
 const MONTH_MS = 1000 * 60 * 60 * 24 * 30;
 
+/** How far back the public/member /events listings look for events that have started but may still be running. */
+const LISTING_LOOKBACK_MS = 12 * 60 * 60_000;
+
+/**
+ * Whether an occurrence belongs in an "upcoming" listing: it hasn't started
+ * yet, OR it's in progress — its scheduled start has passed, its scheduled end
+ * (PUBLIC_DEFAULT_EVENT_MS after the start when there's no end time) hasn't, and
+ * a LiveKit meeting hasn't actually ended. The live-events strip/drawer link
+ * their "+N more" to /events, so an event that's running right now has to be
+ * findable there (it used to drop off the moment it started).
+ */
+function isUpcomingOrInProgress(
+  occurrenceStart: Date,
+  occurrenceEnd: Date | null,
+  meetingEndedAt: Date | null,
+  now: Date,
+): boolean {
+  const start = occurrenceStart.getTime();
+  if (start >= now.getTime()) return true;
+  const end = occurrenceEnd?.getTime() ?? start + PUBLIC_DEFAULT_EVENT_MS;
+  return end > now.getTime() && !meetingEndedForOccurrence(meetingEndedAt, start);
+}
+
 /**
  * A recurring master's own `startsAt` can be long in the past for a
  * still-ongoing series (e.g. a weekly halaqa that started a year ago) — the
@@ -321,6 +344,7 @@ export async function getEventCategories(): Promise<EventCategoryOption[]> {
 // `{communities:{none:{}}}`.
 export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
   const now = new Date();
+  const lookback = new Date(now.getTime() - LISTING_LOOKBACK_MS);
   const rangeEnd = new Date(now.getTime() + 6 * MONTH_MS);
   const events = await db.event.findMany({
     where: {
@@ -333,7 +357,7 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
       // return their own top-level OR, and spreading two OR-bearing
       // fragments into the same object silently drops the first (the
       // second's key wins).
-      AND: [communityVisibilityWhere(null), recurringSeriesStillActiveOrUpcoming(now)],
+      AND: [communityVisibilityWhere(null), recurringSeriesStillActiveOrUpcoming(lookback)],
     },
     select: {
       id: true,
@@ -342,6 +366,7 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
       type: true,
       startsAt: true,
       endsAt: true,
+      meetingEndedAt: true,
       open: true,
       heroImageUrl: true,
       host: { select: { name: true } },
@@ -352,7 +377,8 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
   });
 
   return events
-    .flatMap((event) => expandEventForListing(event, now, rangeEnd))
+    .flatMap((event) => expandEventForListing(event, lookback, rangeEnd))
+    .filter((event) => isUpcomingOrInProgress(event.occurrenceStart, event.occurrenceEnd, event.meetingEndedAt, now))
     .sort((a, b) => a.occurrenceStart.getTime() - b.occurrenceStart.getTime())
     .map((event) => ({
       id: event.occurrenceId,
@@ -439,6 +465,7 @@ export async function getEventsForViewer(
   filterParams?: { communityIds?: string[]; categorySlug?: string },
 ): Promise<EventWithRsvp[]> {
   const now = new Date();
+  const lookback = new Date(now.getTime() - LISTING_LOOKBACK_MS);
   const rangeEnd = new Date(now.getTime() + 6 * MONTH_MS);
   const member = await getMemberCommunityContext(userId);
   const events = await db.event.findMany({
@@ -471,7 +498,7 @@ export async function getEventsForViewer(
               : []),
           ],
         },
-        recurringSeriesStillActiveOrUpcoming(now),
+        recurringSeriesStillActiveOrUpcoming(lookback),
       ],
     },
     select: {
@@ -481,6 +508,7 @@ export async function getEventsForViewer(
       type: true,
       startsAt: true,
       endsAt: true,
+      meetingEndedAt: true,
       open: true,
       heroImageUrl: true,
       visibility: true,
@@ -493,7 +521,8 @@ export async function getEventsForViewer(
   });
 
   return events
-    .flatMap((event) => expandEventForListing(event, now, rangeEnd))
+    .flatMap((event) => expandEventForListing(event, lookback, rangeEnd))
+    .filter((event) => isUpcomingOrInProgress(event.occurrenceStart, event.occurrenceEnd, event.meetingEndedAt, now))
     .sort((a, b) => a.occurrenceStart.getTime() - b.occurrenceStart.getTime())
     .map((event) => ({
       id: event.occurrenceId,
