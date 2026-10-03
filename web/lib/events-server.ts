@@ -1268,6 +1268,8 @@ export async function getReminderEventsForUser(userId: string): Promise<Reminder
       title: true,
       startsAt: true,
       endsAt: true,
+      hostId: true,
+      meetingStartedAt: true,
       recurrence: { select: RECURRENCE_SELECT },
     },
     orderBy: { startsAt: "asc" },
@@ -1278,6 +1280,16 @@ export async function getReminderEventsForUser(userId: string): Promise<Reminder
     .flatMap((event): ReminderSession[] => {
       const start = event.occurrenceStart.getTime();
       const end = event.occurrenceEnd?.getTime() ?? start + REMINDER_DEFAULT_EVENT_MS;
+      // A host who has already started this occurrence's meeting doesn't need a
+      // "meeting started / in progress" card telling them so — they're in it.
+      // (Before they start, the card still works as a reminder to start it.)
+      // meetingStartedAt lives on the series' single Event row, so only count
+      // it when it falls inside THIS occurrence's window (an hour of early
+      // start allowed), as everywhere else.
+      if (event.hostId === userId && event.meetingStartedAt) {
+        const startedAt = event.meetingStartedAt.getTime();
+        if (startedAt >= start - 60 * 60_000 && startedAt < end) return [];
+      }
       const state = reminderStateOf(
         { key: "", kind: "event", title: "", detail: null, startsAt: new Date(start).toISOString(), endsAt: new Date(end).toISOString(), joinHref: "" },
         now.getTime(),
