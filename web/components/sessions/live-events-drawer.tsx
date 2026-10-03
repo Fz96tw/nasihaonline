@@ -242,132 +242,148 @@ export function LiveEventsDrawer({ audience = "auto" }: { audience?: "auto" | "m
   };
 
   return (
-    <section
-      role="region"
-      aria-label="Live events"
-      aria-hidden={typing || undefined}
-      onClickCapture={(event) => {
-        if (isPrimaryActionTarget(event.target)) trackNotice("click", "drawer", top.state, "phone");
-      }}
-      className={cn(
-        // z-40: above page content, below Radix dialogs (z-50) so the Register dialog opened from here stacks on top.
-        "fixed inset-x-0 bottom-0 z-40 rounded-t-2xl border border-b-0 shadow-[0_-8px_28px_-10px_rgba(0,0,0,0.35)]",
-        // Translucent / frosted: a semi-transparent card colour over a blur of the page behind it.
-        "bg-card/95 supports-[backdrop-filter]:bg-card/70 supports-[backdrop-filter]:backdrop-blur-xl",
-        "pb-[env(safe-area-inset-bottom,0px)] transition-transform duration-300 ease-out motion-reduce:transition-none",
-        topLive && "border-primary/40",
-        typing && "translate-y-full",
-      )}
-    >
-      <span className="sr-only" role="status" aria-live="polite">
-        {announcement}
-      </span>
-
-      <button
-        type="button"
-        data-live-secondary
-        aria-expanded={expanded}
-        aria-label={expanded ? "Collapse live events" : "Expand live events"}
-        onClick={toggle}
-        onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
-        className="flex h-3 w-full touch-none items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    <>
+      {/* While expanded, an invisible layer covers the page (below the drawer, above page
+          content). A tap anywhere on it collapses the drawer and is swallowed — it never
+          reaches the link/button underneath, so collapsing can't also navigate. The sticky
+          header (z-50) stays above it and remains usable; page scrolling is unaffected. */}
+      {expanded && !typing ? <div aria-hidden className="fixed inset-0 z-[39]" onClick={collapse} /> : null}
+      <section
+        role="region"
+        aria-label="Live events"
+        aria-hidden={typing || undefined}
+        onClickCapture={(event) => {
+          if (isPrimaryActionTarget(event.target)) trackNotice("click", "drawer", top.state, "phone");
+        }}
+        className={cn(
+          // z-40: above page content, below Radix dialogs (z-50) so the Register dialog opened from here stacks on top.
+          "fixed inset-x-0 bottom-0 z-40 rounded-t-2xl border border-b-0 shadow-[0_-8px_28px_-10px_rgba(0,0,0,0.35)]",
+          // Translucent / frosted: a semi-transparent card colour over a blur of the page behind it.
+          "bg-card/90 supports-[backdrop-filter]:bg-card/60 supports-[backdrop-filter]:backdrop-blur-xl",
+          "pb-[env(safe-area-inset-bottom,0px)] transition-transform duration-300 ease-out motion-reduce:transition-none",
+          topLive && "border-primary/40",
+          typing && "translate-y-full",
+        )}
       >
-        <span className="h-1 w-10 rounded-full bg-muted-foreground/40" aria-hidden />
-      </button>
+        <span className="sr-only" role="status" aria-live="polite">
+          {announcement}
+        </span>
 
-      {expanded ? (
-        // Every notice, in relevance order, in a scroll area capped at 60% of the
-        // viewport (so a short landscape phone can still see the page behind it).
-        <div className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto overscroll-contain px-4 pb-3 pt-2">
-          {items.map(({ session, state }, index) => {
-            const key = reminderPrefKey(session, state);
-            const live = isLiveState(state);
-            const timing = isMember
-              ? timingText(session, state as ReminderState, now)
-              : publicTimingText(session, state as PublicReminderState, now);
-            return (
-              <div key={session.key} className={cn("flex flex-col gap-2", index > 0 && "border-t pt-3")}>
-                <p
-                  className={cn(
-                    "flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide",
-                    live ? "text-primary" : "text-muted-foreground",
-                  )}
-                >
-                  {live ? (
-                    <span className="relative flex h-2 w-2" aria-hidden>
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75 motion-reduce:animate-none" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-                    </span>
-                  ) : (
-                    <Clock className="h-3.5 w-3.5" aria-hidden />
-                  )}
-                  {HEADINGS[state] ?? "Live event"}
-                </p>
-                <div>
-                  <p className="truncate text-base font-semibold">{session.title}</p>
-                  <p className="text-xs text-muted-foreground">{timing}</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <SessionAction session={session} state={state} audience={kind} />
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    data-live-secondary
-                    title="Hide this for 5 minutes"
-                    onClick={() => {
-                      trackNotice("dismiss", "drawer", state, "phone");
-                      update((prev) => ({
-                        ...prev,
-                        snoozedUntil: { ...prev.snoozedUntil, [key]: snoozeUntil(session, Date.now()) },
-                      }));
-                    }}
-                  >
-                    <BellOff className="mr-1.5 h-4 w-4" aria-hidden />
-                    Snooze 5 min
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        // Collapsed peek bar: the whole row is tappable (expands); the primary button inside works on its own.
-        <div
-          className="flex h-12 items-center gap-2 px-4 text-sm"
-          onClick={(e) => {
-            if (!(e.target as HTMLElement).closest("button, a")) toggle();
-          }}
+        <button
+          type="button"
+          data-live-secondary
+          aria-expanded={expanded}
+          aria-label={expanded ? "Collapse live events" : "Expand live events"}
+          onClick={toggle}
           onPointerDown={onPointerDown}
           onPointerUp={onPointerUp}
-        >
-          {topLive ? (
-            <span className="relative flex h-2 w-2 flex-shrink-0" aria-hidden>
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75 motion-reduce:animate-none" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-            </span>
-          ) : (
-            <Clock className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" aria-hidden />
+          // Collapsed it's a 12px grabber (the whole peek row below is the real target);
+          // expanded it grows to 32px so collapsing is an easy tap, not a thin line.
+          className={cn(
+            "flex w-full touch-none items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            expanded ? "h-8" : "h-3",
           )}
-          <span className="min-w-0 flex-1 truncate">
-            <span className={cn("font-semibold", topLive && "text-primary")}>{SHORT_HEADINGS[top.state] ?? "Live"}</span>
-            <span className="text-muted-foreground"> · </span>
-            <span>{top.session.title}</span>
-          </span>
-          {items.length > 1 ? (
-            // A visible count of what's behind the bar (tapping the bar expands it).
-            <span
-              className="flex-shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-xs font-semibold text-primary"
-              aria-label={`${items.length - 1} more`}
-            >
-              +{items.length - 1}
+        >
+          <span className="h-1 w-10 rounded-full bg-muted-foreground/40" aria-hidden />
+        </button>
+
+        {expanded ? (
+          // Every notice, in relevance order, in a scroll area capped at 60% of the
+          // viewport (so a short landscape phone can still see the page behind it).
+          <div className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto overscroll-contain px-4 pb-3 pt-2">
+            {items.map(({ session, state }, index) => {
+              const key = reminderPrefKey(session, state);
+              const live = isLiveState(state);
+              const timing = isMember
+                ? timingText(session, state as ReminderState, now)
+                : publicTimingText(session, state as PublicReminderState, now);
+              return (
+                <div key={session.key} className={cn("flex flex-col gap-2", index > 0 && "border-t pt-3")}>
+                  <p
+                    // The first card's heading row is part of the card's "title bar": tapping it
+                    // collapses too (the handle button above is the accessible control).
+                    onClick={index === 0 ? collapse : undefined}
+                    className={cn(
+                      "flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide",
+                      live ? "text-primary" : "text-muted-foreground",
+                      index === 0 && "-mt-1 min-h-8 cursor-pointer",
+                    )}
+                  >
+                    {live ? (
+                      <span className="relative flex h-2 w-2" aria-hidden>
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75 motion-reduce:animate-none" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                      </span>
+                    ) : (
+                      <Clock className="h-3.5 w-3.5" aria-hidden />
+                    )}
+                    {HEADINGS[state] ?? "Live event"}
+                  </p>
+                  <div>
+                    <p className="truncate text-base font-semibold">{session.title}</p>
+                    <p className="text-xs text-muted-foreground">{timing}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <SessionAction session={session} state={state} audience={kind} />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      data-live-secondary
+                      title="Hide this for 5 minutes"
+                      onClick={() => {
+                        trackNotice("dismiss", "drawer", state, "phone");
+                        update((prev) => ({
+                          ...prev,
+                          snoozedUntil: { ...prev.snoozedUntil, [key]: snoozeUntil(session, Date.now()) },
+                        }));
+                      }}
+                    >
+                      <BellOff className="mr-1.5 h-4 w-4" aria-hidden />
+                      Snooze 5 min
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          // Collapsed peek bar: the whole row is tappable (expands); the primary button inside works on its own.
+          <div
+            className="flex h-12 items-center gap-2 px-4 text-sm"
+            onClick={(e) => {
+              if (!(e.target as HTMLElement).closest("button, a")) toggle();
+            }}
+            onPointerDown={onPointerDown}
+            onPointerUp={onPointerUp}
+          >
+            {topLive ? (
+              <span className="relative flex h-2 w-2 flex-shrink-0" aria-hidden>
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75 motion-reduce:animate-none" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+              </span>
+            ) : (
+              <Clock className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" aria-hidden />
+            )}
+            <span className="min-w-0 flex-1 truncate">
+              <span className={cn("font-semibold", topLive && "text-primary")}>{SHORT_HEADINGS[top.state] ?? "Live"}</span>
+              <span className="text-muted-foreground"> · </span>
+              <span>{top.session.title}</span>
             </span>
-          ) : null}
-          <span className="flex-shrink-0">
-            <SessionAction session={top.session} state={top.state} audience={kind} compact />
-          </span>
-        </div>
-      )}
-    </section>
+            {items.length > 1 ? (
+              // A visible count of what's behind the bar (tapping the bar expands it).
+              <span
+                className="flex-shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-xs font-semibold text-primary"
+                aria-label={`${items.length - 1} more`}
+              >
+                +{items.length - 1}
+              </span>
+            ) : null}
+            <span className="flex-shrink-0">
+              <SessionAction session={top.session} state={top.state} audience={kind} compact />
+            </span>
+          </div>
+        )}
+      </section>
+    </>
   );
 }
