@@ -1490,13 +1490,27 @@ export async function getLiveEventsForMember(user: UserModel): Promise<ReminderS
       hostId: true,
       meetingStartedAt: true,
       meetingEndedAt: true,
+      visibility: true,
+      communities: { select: { community: { select: { id: true } } } },
       recurrence: { select: RECURRENCE_SELECT },
       rsvps: { where: { userId: user.id }, select: { status: true } },
     },
     orderBy: { startsAt: "asc" },
   });
 
-  return events
+  // memberVisibleEventsWhere treats a member with no profile row as
+  // unrestricted, but the join gates (ensureGoingRsvp / getEventMeetingStatus)
+  // use isEventVisibleToMember, which never matches a community-tagged event
+  // for them — so listing it would just lead to a 404 on "Join Event". Apply
+  // the gates' predicate here so the list only offers what Join can open.
+  const joinable = events.filter(
+    (event) =>
+      event.hostId === user.id ||
+      event.visibility === EventVisibility.invited ||
+      isEventVisibleToMember(event, member),
+  );
+
+  return joinable
     .flatMap((event) => expandEventForListing(event, windowStart, windowEnd))
     .flatMap((event): ReminderSession[] => {
       const start = event.occurrenceStart.getTime();
