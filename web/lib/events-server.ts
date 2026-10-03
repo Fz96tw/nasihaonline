@@ -1414,17 +1414,21 @@ function memberVisibleEventsWhere(userId: string, member: MemberCommunityContext
 
 /**
  * Signed-in counterpart of getPublicReminderEvents for the live-events strip:
- * every event the host has STARTED that this member is allowed to see, so a
- * member who never RSVP'd (and therefore gets no popup) can still find and
- * join it. Visibility mirrors the member event listing
+ * every event this member is allowed to see that is live — the host has
+ * STARTED it, or its scheduled start has passed and the host hasn't started it
+ * yet ("waiting for host", `started: false`, like the signed-out strip) — so
+ * a member who never RSVP'd (and therefore gets no popup) can still find and
+ * join / RSVP to it. A host's own not-yet-started event is left out (their
+ * reminder popup covers that). Visibility mirrors the member event listing
  * (getEventsForViewer): `community` events go through the member's community
  * gating; a restricted (`invited`) event is listed ONLY to its invitees and
  * its host — deliberately not to every admin, even though admins may RSVP.
  * An event stays listed until its scheduled end (PUBLIC_DEFAULT_EVENT_MS
- * after its start when it has no end time), with no LiveKit room-state
- * dependency. Returns only a join link — never meetingUrl/livekitRoomName —
- * plus `rsvped` (going, or the host) so the client knows whether Join needs
- * the silent RSVP first.
+ * after its start when it has no end time) or until the LiveKit meeting has
+ * actually ended (meetingEndedForOccurrence — which also keeps an ended meeting
+ * from coming back as "waiting"). Returns only a join link — never
+ * meetingUrl/livekitRoomName — plus `rsvped` (going, or the host) so the
+ * client knows whether Join needs the silent RSVP first.
  */
 export async function getLiveEventsForMember(user: UserModel): Promise<ReminderSession[]> {
   const now = new Date();
@@ -1437,7 +1441,6 @@ export async function getLiveEventsForMember(user: UserModel): Promise<ReminderS
     where: {
       cancelledAt: null,
       publishedAt: { not: null },
-      meetingStartedAt: { not: null },
       AND: [
         { OR: [{ meetingUrl: { not: null } }, { livekitRoomName: { not: null } }] },
         memberVisibleEventsWhere(user.id, member),
@@ -1467,8 +1470,11 @@ export async function getLiveEventsForMember(user: UserModel): Promise<ReminderS
       // meetingStartedAt lives on the series' single Event row — only count it
       // when it falls inside THIS occurrence's window (see getPublicReminderEvents).
       const startedAt = event.meetingStartedAt?.getTime();
-      if (startedAt === undefined || startedAt < start - 60 * 60_000 || startedAt >= end) return [];
+      const started = startedAt !== undefined && startedAt >= start - 60 * 60_000 && startedAt < end;
       if (meetingEndedForOccurrence(event.meetingEndedAt, start)) return [];
+      // Not started: "waiting for host" — only once the scheduled start has
+      // passed, and never for the host themselves.
+      if (!started && (event.hostId === user.id || now.getTime() < start)) return [];
       const session: ReminderSession = {
         key: `member-live-${event.occurrenceId}`,
         kind: "event",
@@ -1478,7 +1484,7 @@ export async function getLiveEventsForMember(user: UserModel): Promise<ReminderS
         endsAt: new Date(end).toISOString(),
         joinHref: `/meet/event/${event.id}`,
         eventId: event.id,
-        started: true,
+        started,
         rsvped: event.hostId === user.id || event.rsvps.some((r) => r.status === RSVPStatus.going),
       };
       return publicReminderStateOf(session, now.getTime()) ? [session] : [];

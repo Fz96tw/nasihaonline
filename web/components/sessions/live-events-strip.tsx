@@ -7,7 +7,7 @@ import { useAuth } from "@clerk/nextjs";
 import { Video } from "lucide-react";
 import { useSearchQuery } from "@/components/header-search-context";
 import { RegisterButton } from "@/components/events/register-button";
-import { MemberJoinButton } from "@/components/sessions/member-join-button";
+import { MemberJoinButton, MemberRsvpButton } from "@/components/sessions/member-join-button";
 import { Button } from "@/components/ui/button";
 import { useIsPhone } from "@/hooks/use-is-phone";
 import { useReminderSessions } from "@/hooks/use-reminder-sessions";
@@ -29,6 +29,24 @@ function timingText(session: ReminderSession, state: PublicReminderState, now: n
 }
 
 const joinIcon = <Video className="mr-1 h-3.5 w-3.5" aria-hidden />;
+
+/**
+ * A signed-in member's strip button. Started: "Join now" (silent RSVP when
+ * needed). Waiting for the host: "RSVP" for a member who hasn't RSVP'd (an
+ * explicit RSVP — nothing to join yet), otherwise the waiting room.
+ */
+function MemberStripButton({ session, state }: { session: ReminderSession; state: PublicReminderState }) {
+  if (state === "started") return <MemberJoinButton session={session} size="xs" />;
+  if (session.rsvped === false && session.eventId) return <MemberRsvpButton session={session} size="xs" />;
+  return (
+    <Button size="xs" asChild>
+      <Link href={session.joinHref}>
+        {joinIcon}
+        Open waiting room
+      </Link>
+    </Button>
+  );
+}
 
 function PublicStripButton({ session, state }: { session: ReminderSession; state: PublicReminderState }) {
   const started = state === "started";
@@ -71,7 +89,9 @@ function PublicStripButton({ session, state }: { session: ReminderSession; state
  *    scheduled start has arrived — waiting for the host, or started — with the
  *    register / join buttons the popup uses.
  *  - signed-in members (member endpoint): every event they can see that the
- *    host has started, with a "Join now" that silently RSVPs when needed.
+ *    host has started ("Join now", which silently RSVPs when needed) or that is
+ *    waiting for the host past its scheduled start ("RSVP", or "Open waiting
+ *    room" if already RSVP'd).
  *
  * `mode="auto"` (marketing pages) picks the audience from Clerk's client
  * state; `mode="member"` is for the signed-in app header, where the server
@@ -114,9 +134,10 @@ export function LiveEventsStrip({
   const live = (sessions ?? [])
     .flatMap((session) => {
       const state = publicReminderStateOf(session, now);
-      // Members: the server already lists only host-started events. Visitors:
-      // also the "waiting for host" ones (scheduled start reached).
-      return state === "started" || (isPublic && state === "waiting") ? [{ session, state }] : [];
+      // Everyone sees host-started events, and the "waiting for host" ones
+      // (scheduled start reached, host hasn't started) — the server already
+      // applied each audience's rules (e.g. a host's own waiting event isn't sent).
+      return state === "started" || state === "waiting" ? [{ session, state }] : [];
     })
     .sort((a, b) => Date.parse(a.session.startsAt) - Date.parse(b.session.startsAt));
   const hasItems = !isPhone && live.length > 0;
@@ -189,7 +210,7 @@ export function LiveEventsStrip({
               <span className="min-w-0 truncate font-semibold">{session.title}</span>
               <span className="hidden flex-shrink-0 text-muted-foreground sm:inline">· {timingText(session, state, now)}</span>
               <span className="ml-auto flex flex-shrink-0 items-center gap-3">
-                {isMember ? <MemberJoinButton session={session} size="xs" /> : <PublicStripButton session={session} state={state} />}
+                {isMember ? <MemberStripButton session={session} state={state} /> : <PublicStripButton session={session} state={state} />}
                 {/* "+N more" lives in a fixed-width slot on every line (when there is
                     one at this breakpoint) so the buttons stay aligned whichever
                     line carries the link. Phones show it on the single line;
