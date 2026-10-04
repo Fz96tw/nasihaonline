@@ -48,6 +48,14 @@ export type DirectoryRecommendations = {
   sharedInterests: DirectoryMember[];
 };
 
+// What two members have in common, by display name — used to prefill message
+// starter templates. Each list is capped and may be empty.
+export type SharedContext = {
+  communities: string[];
+  skills: string[];
+  interests: string[];
+};
+
 export const NEW_MEMBER_WINDOW_DAYS = 30;
 export const RECOMMENDATION_LIMIT = 8;
 

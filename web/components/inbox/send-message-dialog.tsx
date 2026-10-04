@@ -18,6 +18,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { sendMessageSchema, type SendMessageValues } from "@/lib/validation/inbox";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { usePasteImageUpload } from "@/lib/use-paste-image-upload";
+import type { SharedContext } from "@/lib/members";
+import { buildMessageTemplates, type MessageTemplate } from "@/lib/message-templates";
 
 const DEFAULT_VALUES: SendMessageValues = {
   recipientId: null,
@@ -79,6 +81,69 @@ function MessageBodyField({
 }
 
 /**
+ * "Start from a template" chips. Overlap-based templates (shared community /
+ * skill / interest) only appear once the shared-context lookup returns
+ * something; the generic ones are available immediately. Picking one fills
+ * the subject/body, which stay fully editable — and anything the member has
+ * already written is only replaced after they confirm.
+ */
+function TemplatePicker({
+  recipientId,
+  recipientName,
+  hasCustomText,
+  onApply,
+}: {
+  recipientId: string;
+  recipientName: string;
+  hasCustomText: () => boolean;
+  onApply: (template: MessageTemplate) => void;
+}) {
+  const [context, setContext] = useState<SharedContext | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setContext(null);
+    fetch(`/api/members/${encodeURIComponent(recipientId)}/shared-context`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { context: SharedContext } | null) => {
+        if (!cancelled && data) setContext(data.context);
+      })
+      .catch(() => {
+        // Best-effort: without context the generic templates still work.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [recipientId]);
+
+  const templates = buildMessageTemplates(recipientName, context);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-sm font-medium">Start from a template</span>
+      <div className="flex flex-wrap gap-2">
+        {templates.map((template) => (
+          <Button
+            key={template.id}
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-auto whitespace-normal py-1.5 text-left text-xs"
+            onClick={() => {
+              if (hasCustomText() && !window.confirm("Replace what you've written with this template?")) return;
+              onApply(template);
+            }}
+          >
+            {template.label}
+          </Button>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">You can edit the text before sending.</p>
+    </div>
+  );
+}
+
+/**
  * Compose UI opened from a Directory card's "Send Message" action (§4.7).
  * Always sends a new top-level thread (parentId null) — reply composition
  * lives in the Inbox detail pane, not here.
@@ -98,6 +163,8 @@ export function SendMessageDialog({
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
+  // The last template applied, so re-picking one only asks before replacing text the member wrote themselves.
+  const appliedTemplate = useRef<MessageTemplate | null>(null);
 
   const form = useForm<SendMessageValues>({
     resolver: zodResolver(sendMessageSchema),
@@ -142,6 +209,7 @@ export function SendMessageDialog({
         if (!next) {
           setError(null);
           setSent(false);
+          appliedTemplate.current = null;
           form.reset({ ...DEFAULT_VALUES, recipientId });
         }
       }}
@@ -164,6 +232,23 @@ export function SendMessageDialog({
         ) : (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
+              <TemplatePicker
+                recipientId={recipientId}
+                recipientName={recipientName}
+                hasCustomText={() => {
+                  const { body, subject } = form.getValues();
+                  const applied = appliedTemplate.current;
+                  const bodyIsCustom = body.trim() !== "" && body !== applied?.body;
+                  const subjectIsCustom = (subject ?? "").trim() !== "" && subject !== applied?.subject;
+                  return bodyIsCustom || subjectIsCustom;
+                }}
+                onApply={(template) => {
+                  appliedTemplate.current = template;
+                  form.setValue("subject", template.subject, { shouldDirty: true });
+                  form.setValue("body", template.body, { shouldDirty: true, shouldValidate: true });
+                }}
+              />
+
               <FormField
                 control={form.control}
                 name="subject"

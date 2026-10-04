@@ -944,9 +944,18 @@ model InboxMessage {
   // same "app-enforced, not a DB constraint" pattern as ForumPost.editedAt).
   editedAt  DateTime?
 
+  // Set once the 3-day "unanswered" sweep (lib/inbox-reminders.ts) has made
+  // its one-and-only decision about this message — either a reminder email
+  // was sent, or the recipient had already replied / opted out. Claimed with
+  // an atomic updateMany before sending, so a message is never reminded twice.
+  // The migration backfills existing rows so deploying never emails members
+  // about historical messages.
+  reminderProcessedAt DateTime?
+
   // Images pasted into this message's body — see PastedImage.
   pastedImages PastedImage[]
 
+  @@index([reminderProcessedAt, createdAt])
   @@index([recipientId, readAt])
   @@index([senderId])
   @@index([parentId])

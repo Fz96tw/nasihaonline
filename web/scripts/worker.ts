@@ -26,8 +26,14 @@ import {
   syncSurveyToIndex,
   syncReviewItemToIndex,
 } from "@/lib/search-index-sync";
+import {
+  INBOX_REMINDER_QUEUE_NAME,
+  type InboxReminderJob,
+  enqueueRepeatingInboxReminderSweep,
+} from "@/lib/queues/inbox-reminder-queue";
 import { openSurveyNow, autoCloseSurveyIfDue } from "@/lib/surveys-lifecycle";
 import { syncMeetingRecordings } from "@/lib/meeting-recordings-sync";
+import { sendInboxReminders } from "@/lib/inbox-reminders";
 
 /**
  * Standalone process (`npm run worker`, docker-compose "worker" service) —
@@ -136,6 +142,27 @@ async function main() {
   });
 
   console.log("[meeting-recording-sync-worker] listening for jobs on", MEETING_RECORDING_SYNC_QUEUE_NAME);
+
+  // Unanswered inbox-message reminders — hourly sweep (lib/inbox-reminders.ts),
+  // registered as a repeating job for the same reason as the recordings sweep:
+  // there's no single moment to schedule against at message-send time that
+  // survives a reply, so a periodic sweep re-evaluates what's become overdue.
+  await enqueueRepeatingInboxReminderSweep();
+
+  const inboxReminderWorker = new Worker<InboxReminderJob>(
+    INBOX_REMINDER_QUEUE_NAME,
+    async () => sendInboxReminders(),
+    { connection: queueConnection },
+  );
+
+  inboxReminderWorker.on("completed", (_job, result: { sent: number; skipped: number }) => {
+    console.log(`[inbox-reminder-worker] sweep completed — sent ${result.sent}, skipped ${result.skipped}`);
+  });
+  inboxReminderWorker.on("failed", (job, error) => {
+    console.error(`[inbox-reminder-worker] failed job ${job?.id}:`, error);
+  });
+
+  console.log("[inbox-reminder-worker] listening for jobs on", INBOX_REMINDER_QUEUE_NAME);
 }
 
 main().catch((error) => {

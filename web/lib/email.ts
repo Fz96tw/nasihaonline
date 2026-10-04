@@ -602,6 +602,35 @@ export async function sendInboxMessageEmail(
 }
 
 /**
+ * Gentle once-per-thread nudge (lib/inbox-reminders.ts) to a recipient who
+ * hasn't replied to an inbox message after a few days. Best-effort like every
+ * other function here — the sweep has already marked the message processed.
+ */
+export async function sendInboxReminderEmail(
+  to: string,
+  name: string,
+  message: { senderName: string; subject: string | null; threadUrl: string },
+) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping inbox reminder email to ${to}`);
+    return;
+  }
+
+  try {
+    await sendEmail({
+      from: FROM_EMAIL,
+      to,
+      subject: `${message.senderName} is waiting to hear from you`,
+      text: `Hi ${name},\n\n${message.senderName} sent you a message${
+        message.subject ? ` ("${message.subject}")` : ""
+      } a few days ago and hasn't heard back yet. No pressure — a short reply, even just to say you're busy, goes a long way in a community like ours.\n\nRead and reply here:\n${message.threadUrl}\n\n— The NASIHA Team`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send inbox reminder email", error);
+  }
+}
+
+/**
  * Sent to whichever party a meeting_request_received/accepted/declined/
  * rescheduled Notification targets (§4.7) — one shared shape since all four
  * events are a single line of context plus a link back to the thread, only

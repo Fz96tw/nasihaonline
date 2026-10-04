@@ -3,12 +3,14 @@ import { db } from "@/lib/db";
 import { getCityById } from "@/lib/cities-server";
 import { getProfileAvatarUrl } from "@/lib/storage";
 import { searchProfileDocuments } from "@/lib/meilisearch";
+import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
 import {
   DIRECTORY_TIERS,
   NEW_MEMBER_WINDOW_DAYS,
   RECOMMENDATION_LIMIT,
   type DirectoryMember,
   type DirectoryRecommendations,
+  type SharedContext,
 } from "@/lib/members";
 import type { ProfileModel } from "@/lib/generated/prisma/models/Profile";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
@@ -226,5 +228,57 @@ export async function getDirectoryRecommendations(viewerId: string): Promise<Dir
     newMembers: newMembers.map(toDirectoryMember),
     sharedCommunities: sharedCommunities.map(toDirectoryMember),
     sharedInterests: sharedInterests.map(toDirectoryMember),
+  };
+}
+
+const SHARED_CONTEXT_LIMIT = 3;
+
+/**
+ * What the viewer and a recipient have in common (communities, skills,
+ * interest areas) for prefilling message starters. Only computed for a
+ * recipient who passes the Directory visibility gate — an unlisted member's
+ * profile details never leak through here — and shared communities are
+ * skipped when either side follows "all communities", where every community
+ * would trivially match.
+ */
+export async function getSharedContext(viewerId: string, recipientId: string): Promise<SharedContext> {
+  const empty: SharedContext = { communities: [], skills: [], interests: [] };
+
+  const select = {
+    interestAreas: true,
+    followsAllCommunities: true,
+    communities: { select: { community: { select: { id: true, name: true } } } },
+    skills: { select: { skill: { select: { id: true, name: true } } } },
+  } as const;
+
+  const [viewer, recipient] = await Promise.all([
+    db.profile.findUnique({ where: { userId: viewerId }, select }),
+    db.profile.findFirst({
+      where: { userId: recipientId, listInDirectory: true, user: { tier: { in: DIRECTORY_TIERS }, suspended: false } },
+      select,
+    }),
+  ]);
+  if (!viewer || !recipient) return empty;
+
+  const viewerCommunityIds = new Set(viewer.communities.map(({ community }) => community.id));
+  const communities =
+    viewer.followsAllCommunities || recipient.followsAllCommunities
+      ? []
+      : recipient.communities
+          .filter(({ community }) => viewerCommunityIds.has(community.id))
+          .map(({ community }) => community.name);
+
+  const viewerSkillIds = new Set(viewer.skills.map(({ skill }) => skill.id));
+  const skills = recipient.skills.filter(({ skill }) => viewerSkillIds.has(skill.id)).map(({ skill }) => skill.name);
+
+  const viewerInterests = new Set(viewer.interestAreas);
+  const interests = recipient.interestAreas
+    .filter((area) => viewerInterests.has(area))
+    .map((area) => INTEREST_AREA_LABELS[area]);
+
+  return {
+    communities: communities.slice(0, SHARED_CONTEXT_LIMIT),
+    skills: skills.slice(0, SHARED_CONTEXT_LIMIT),
+    interests: interests.slice(0, SHARED_CONTEXT_LIMIT),
   };
 }
