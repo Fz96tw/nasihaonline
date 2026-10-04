@@ -11,22 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,12 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { EventType, EventVisibility, RecurrenceFrequency } from "@/lib/generated/prisma/enums";
 import { EVENT_TYPE_LABELS, type EventCategoryOption, type EventCommunityOption } from "@/lib/events";
-import {
-  createEventSchema,
-  draftEventSchema,
-  updateEventSchema,
-  type CreateEventValues,
-} from "@/lib/validation/event";
+import { createEventSchema, draftEventSchema, updateEventSchema, type CreateEventValues } from "@/lib/validation/event";
 import { DATETIME_LOCAL_STEP_SECONDS, snapDatetimeLocalValue } from "@/lib/datetime-input";
 import { DEFAULT_EVENT_TIME_ZONE } from "@/lib/format-date";
 import { describeRecurrence } from "@/lib/recurrence";
@@ -72,6 +53,16 @@ const DEFAULT_VALUES: CreateEventValues = {
   meetLinkSource: "livekit",
   recurrence: null,
 };
+
+const LAST_MEET_LINK_SOURCE_KEY = "nasiha:lastMeetLinkSource";
+
+/** "YYYY-MM-DDTHH:mm" + 1 hour, as pure wall-clock arithmetic (UTC maths, so the browser's DST gaps can't shift it). */
+function addOneHour(local: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(local);
+  if (!m) return null;
+  const t = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) + 60 * 60 * 1000;
+  return new Date(t).toISOString().slice(0, 16);
+}
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -119,7 +110,7 @@ const AUDIENCE_DESCRIPTIONS: Record<AudienceChoice, string> = {
   community: "Listed on /events, but only members can RSVP.",
   invited:
     "Visible only to you and the invited members below — invisible to everyone else, including the public /events listing.",
-  open: "Listed on /events with a \"Register\" action for signed-out visitors, in addition to member RSVP.",
+  open: 'Listed on /events with a "Register" action for signed-out visitors, in addition to member RSVP.',
 };
 
 type ExistingEvent = {
@@ -228,6 +219,14 @@ export function SubmitEventForm({
   // in this app uses doesn't fire) — this is the only in-component
   // confirmation for that one case. Cleared on the next submit attempt.
   const [draftSaved, setDraftSaved] = useState(false);
+  // Timezone renders as plain text ("Times are in X. Change") until the host
+  // asks to change it — nearly everyone schedules in their own zone.
+  const [editingTimezone, setEditingTimezone] = useState(false);
+  // True while "Ends" holds a value we filled in (start + 1h) rather than one
+  // the host typed, so moving "Starts" keeps the pair in step but never
+  // overwrites an end time the host chose themselves. An existing event's
+  // stored end is always treated as host-chosen.
+  const endsAutoFilledRef = useRef(false);
 
   // A draft's audience/invitedUserIds/coHostUserIds are genuinely still
   // being decided — this is its real first submission, deferred from
@@ -302,6 +301,20 @@ export function SubmitEventForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // New events start on whichever platform this host picked last time.
+  // localStorage can throw or be empty (private windows etc.) — fall back to
+  // the schema default silently.
+  useEffect(() => {
+    if (existingEvent) return;
+    try {
+      const last = window.localStorage.getItem(LAST_MEET_LINK_SOURCE_KEY);
+      if (last === "livekit" || last === "auto" || last === "manual") form.setValue("meetLinkSource", last);
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const isCaseDiscussion = form.watch("type") === EventType.case_discussion;
   const visibility = form.watch("visibility");
   const isRestricted = visibility === EventVisibility.invited;
@@ -334,7 +347,9 @@ export function SubmitEventForm({
       const result = strictSchema.safeParse(values);
       if (!result.success) {
         for (const issue of result.error.issues) {
-          form.setError(issue.path.join(".") as keyof CreateEventValues, { message: issue.message });
+          form.setError(issue.path.join(".") as keyof CreateEventValues, {
+            message: issue.message,
+          });
         }
         return;
       }
@@ -372,10 +387,7 @@ export function SubmitEventForm({
       // Only relevant (and only enforced) for Case Discussion events — omit
       // for every other type so it can't linger as `true` from switching
       // away from Case Discussion after checking it.
-      formData.append(
-        "deidentificationConfirmed",
-        String(isCaseDiscussion && values.deidentificationConfirmed),
-      );
+      formData.append("deidentificationConfirmed", String(isCaseDiscussion && values.deidentificationConfirmed));
       formData.append("meetLinkSource", values.meetLinkSource);
       if (isFirstSubmission) {
         formData.append("visibility", values.visibility);
@@ -409,6 +421,11 @@ export function SubmitEventForm({
         );
       }
       const { id } = await res.json();
+      try {
+        window.localStorage.setItem(LAST_MEET_LINK_SOURCE_KEY, values.meetLinkSource);
+      } catch {
+        // ignore
+      }
 
       if (action === "draft") {
         if (existingEvent) {
@@ -498,188 +515,16 @@ export function SubmitEventForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
-        {isFirstSubmission && (
-          <FormItem className="rounded-md border p-4">
-            <FormLabel>Audience</FormLabel>
-            <Select value={audience} onValueChange={handleAudienceChange}>
-              <FormControl>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-              </FormControl>
-              <SelectContent>
-                {(Object.keys(AUDIENCE_LABELS) as AudienceChoice[]).map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {AUDIENCE_LABELS[value]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <FormDescription>{AUDIENCE_DESCRIPTIONS[audience]}</FormDescription>
-          </FormItem>
-        )}
-
-        {isFirstSubmission && isRestricted && (
+        <section className="flex flex-col gap-5">
+          <h2 className="text-base font-semibold">Basics</h2>
           <FormField
             control={form.control}
-            name="invitedUserIds"
+            name="title"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Invited members</FormLabel>
+                <FormLabel>Title</FormLabel>
                 <FormControl>
-                  <InviteePicker value={field.value} onChange={field.onChange} excludeUserId={currentUserId} />
-                </FormControl>
-                <FormDescription>
-                  Each invited member gets a notification and email asking them to RSVP.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-
-        <FormField
-          control={form.control}
-          name="title"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Title</FormLabel>
-              <FormControl>
-                <Input placeholder="e.g. Cardiology Update 2026" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="type"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Type</FormLabel>
-              <Select value={field.value} onValueChange={field.onChange}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a type" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {Object.values(EventType).map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {EVENT_TYPE_LABELS[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="communityIds"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Communities</FormLabel>
-              <FormControl>
-                <div className="flex flex-wrap gap-4 rounded-md border p-3">
-                  {canTargetAllCommunities && (
-                    <label className="flex w-full items-center gap-2 border-b pb-3 text-sm font-medium">
-                      <Checkbox
-                        checked={allCommunities}
-                        onCheckedChange={(checked) => {
-                          form.setValue("allCommunities", checked === true, { shouldDirty: true, shouldValidate: true });
-                          if (checked === true) {
-                            field.onChange([]);
-                            form.setValue("categoryIds", []);
-                          }
-                        }}
-                      />
-                      All communities (shows on every member&apos;s feed)
-                    </label>
-                  )}
-                  {communities.map((community) => (
-                    <label key={community.id} className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        disabled={allCommunities}
-                        checked={field.value.includes(community.id)}
-                        onCheckedChange={(checked) =>
-                          field.onChange(
-                            checked
-                              ? [...field.value, community.id]
-                              : field.value.filter((id) => id !== community.id),
-                          )
-                        }
-                      />
-                      {community.name}
-                    </label>
-                  ))}
-                </div>
-              </FormControl>
-              <FormDescription>Select at least one community this event belongs to.</FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {!allCommunities && selectedCommunityIds.length > 0 && (
-          <FormField
-            control={form.control}
-            name="categoryIds"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Categories (optional)</FormLabel>
-                <FormControl>
-                  <CategoryCheckboxField
-                    categories={categories.filter((category) => selectedCommunityIds.includes(category.communityId))}
-                    communities={communities.filter((community) => selectedCommunityIds.includes(community.id))}
-                    value={field.value}
-                    onChange={field.onChange}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Description (optional)</FormLabel>
-              <FormControl>
-                <Textarea
-                  rows={4}
-                  value={field.value ?? ""}
-                  onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <FormField
-            control={form.control}
-            name="startsAt"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Starts</FormLabel>
-                <FormControl>
-                  <Input
-                    type="datetime-local"
-                    step={DATETIME_LOCAL_STEP_SECONDS}
-                    {...field}
-                    onBlur={(event) => {
-                      field.onChange(snapDatetimeLocalValue(event.target.value));
-                      field.onBlur();
-                    }}
-                  />
+                  <Input placeholder="e.g. Cardiology Update 2026" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -688,254 +533,375 @@ export function SubmitEventForm({
 
           <FormField
             control={form.control}
-            name="endsAt"
+            name="type"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Ends (optional)</FormLabel>
+                <FormLabel>Type</FormLabel>
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a type" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {Object.values(EventType).map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {EVENT_TYPE_LABELS[value]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Description (optional)</FormLabel>
                 <FormControl>
-                  <Input
-                    type="datetime-local"
-                    step={DATETIME_LOCAL_STEP_SECONDS}
+                  <Textarea
+                    rows={4}
                     value={field.value ?? ""}
                     onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
-                    onBlur={(e) => {
-                      if (e.target.value) field.onChange(snapDatetimeLocalValue(e.target.value));
-                      field.onBlur();
-                    }}
                   />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-        </div>
 
-        <FormField
-          control={form.control}
-          name="timezone"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Timezone</FormLabel>
-              <Select value={field.value ?? ""} onValueChange={field.onChange}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a timezone" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {IANA_TIMEZONES.map((zone) => (
-                    <SelectItem key={zone} value={zone}>
-                      {zone}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormDescription>
-                What &quot;Starts&quot;/&quot;Ends&quot; above are in — defaults to your own, but pick a different
-                one if you&apos;re scheduling for another timezone.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+          <div className="flex flex-col gap-2">
+            <label htmlFor="hero-image" className="text-sm font-medium">
+              Hero image (optional)
+            </label>
+            {existingEvent?.heroImageUrl && !heroImage && (
+              // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
+              <img
+                src={existingEvent.heroImageUrl}
+                alt="Current hero image"
+                className="h-32 w-full max-w-xs rounded-md object-cover"
+              />
+            )}
+            <input
+              id="hero-image"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => setHeroImage(e.target.files?.[0] ?? null)}
+              className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
+            />
+            {existingEvent?.heroImageUrl && (
+              <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
+            )}
+          </div>
+        </section>
 
-        <FormField
-          control={form.control}
-          name="recurrence"
-          render={({ field }) => {
-            const recurrence = field.value;
-            const repeats = recurrence !== null;
-            return (
-              <FormItem className="rounded-md border p-4">
-                <div className="flex flex-row items-center justify-between gap-4">
-                  <div>
-                    <FormLabel>Repeat</FormLabel>
-                    <FormDescription>
-                      Changing the repeat schedule on an existing series updates all upcoming occurrences —
-                      there&apos;s no way to edit or skip a single date.
-                    </FormDescription>
-                  </div>
+        <section className="flex flex-col gap-5 border-t pt-6">
+          <h2 className="text-base font-semibold">When</h2>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="startsAt"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Starts</FormLabel>
                   <FormControl>
-                    <Switch
-                      checked={repeats}
-                      onCheckedChange={(checked) => {
-                        if (!checked) {
-                          field.onChange(null);
-                          return;
+                    <Input
+                      type="datetime-local"
+                      step={DATETIME_LOCAL_STEP_SECONDS}
+                      {...field}
+                      onBlur={(event) => {
+                        const snapped = snapDatetimeLocalValue(event.target.value);
+                        field.onChange(snapped);
+                        const currentEnd = form.getValues("endsAt");
+                        if (snapped && (!currentEnd || endsAutoFilledRef.current)) {
+                          const end = addOneHour(snapped);
+                          if (end) {
+                            form.setValue("endsAt", end, { shouldDirty: true });
+                            endsAutoFilledRef.current = true;
+                          }
                         }
-                        // Default to the start date's own weekday so a host
-                        // who never touches the day picker doesn't hit the
-                        // "select at least one day" validation trap silently.
-                        const startsAt = new Date(form.getValues("startsAt"));
-                        const defaultWeekday = Number.isNaN(startsAt.getTime()) ? [] : [startsAt.getDay()];
-                        field.onChange({
-                          frequency: RecurrenceFrequency.weekly,
-                          interval: 1,
-                          byWeekday: defaultWeekday,
-                          until: null,
-                        });
+                        field.onBlur();
                       }}
                     />
                   </FormControl>
-                </div>
-                {repeats && recurrence && (
-                  <div className="mt-3 flex flex-col gap-3">
-                    <Select
-                      value={recurrence.frequency}
-                      onValueChange={(value) =>
-                        field.onChange({
-                          ...recurrence,
-                          frequency: value as RecurrenceFrequency,
-                          byWeekday: value === RecurrenceFrequency.weekly ? recurrence.byWeekday : [],
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={RecurrenceFrequency.daily}>Daily</SelectItem>
-                        <SelectItem value={RecurrenceFrequency.weekly}>Weekly</SelectItem>
-                        <SelectItem value={RecurrenceFrequency.monthly}>Monthly</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-                    <div className="flex items-center gap-2 text-sm">
-                      <span>Every</span>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={52}
-                        className="w-16"
-                        value={recurrence.interval}
-                        onChange={(e) =>
-                          field.onChange({ ...recurrence, interval: Math.max(1, Number(e.target.value) || 1) })
-                        }
-                      />
-                      <span>
-                        {recurrence.frequency === RecurrenceFrequency.daily
-                          ? "day(s)"
-                          : recurrence.frequency === RecurrenceFrequency.weekly
-                            ? "week(s)"
-                            : "month(s)"}
-                      </span>
-                    </div>
+            <FormField
+              control={form.control}
+              name="endsAt"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Ends (optional)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="datetime-local"
+                      step={DATETIME_LOCAL_STEP_SECONDS}
+                      value={field.value ?? ""}
+                      onChange={(e) => {
+                        endsAutoFilledRef.current = false;
+                        field.onChange(e.target.value.length > 0 ? e.target.value : null);
+                      }}
+                      onBlur={(e) => {
+                        if (e.target.value) field.onChange(snapDatetimeLocalValue(e.target.value));
+                        field.onBlur();
+                      }}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
-                    {recurrence.frequency === RecurrenceFrequency.weekly && (
-                      <div className="flex flex-col gap-1">
-                        <div className="flex gap-1">
-                          {WEEKDAY_LABELS.map((label, day) => (
-                            <Button
-                              key={label}
-                              type="button"
-                              size="sm"
-                              variant={recurrence.byWeekday.includes(day) ? "default" : "outline"}
-                              onClick={() => field.onChange({ ...recurrence, byWeekday: toggleWeekday(recurrence.byWeekday, day) })}
-                            >
-                              {label}
-                            </Button>
-                          ))}
-                        </div>
-                        {/* FormMessage below only reads the top-level "recurrence"
-                            field's error, which has no .message of its own when
-                            the actual Zod issue is nested at recurrence.byWeekday —
-                            read that path directly so this doesn't fail silently. */}
-                        {form.formState.errors.recurrence?.byWeekday?.message ? (
-                          <p className="text-xs font-medium text-destructive">
-                            {String(form.formState.errors.recurrence.byWeekday.message)}
-                          </p>
-                        ) : null}
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={recurrence.until !== null}
-                        onCheckedChange={(checked) =>
-                          field.onChange({
-                            ...recurrence,
-                            until: checked === true ? defaultUntilIso(form.getValues("startsAt")) : null,
-                          })
-                        }
-                      />
-                      <span>Repeat until</span>
-                      {recurrence.until && (
-                        <Input
-                          type="date"
-                          className="w-auto"
-                          value={recurrence.until.slice(0, 10)}
-                          onChange={(e) => field.onChange({ ...recurrence, until: `${e.target.value}T23:59:59.000Z` })}
-                        />
-                      )}
-                    </div>
-                    {form.formState.errors.recurrence?.until?.message ? (
-                      <p className="text-xs font-medium text-destructive">
-                        {String(form.formState.errors.recurrence.until.message)}
-                      </p>
-                    ) : null}
-
-                    <p className="text-xs text-muted-foreground">
-                      {describeRecurrence({
-                        ...recurrence,
-                        until: recurrence.until ? new Date(recurrence.until) : null,
-                      })}
-                    </p>
-                  </div>
-                )}
-                <FormMessage />
-              </FormItem>
-            );
-          }}
-        />
-
-        <div className="flex flex-col gap-3">
           <FormField
             control={form.control}
-            name="meetLinkSource"
+            name="timezone"
             render={({ field }) => (
-              <FormItem className="rounded-md border p-4">
-                <FormLabel>Meeting link</FormLabel>
-                <FormDescription>
-                  Nasiha Conference and Google Meet both auto-generate their own meeting link — or paste your own
-                  below. Nasiha Conference gives you real in-meeting host controls (admit, mute, or remove
-                  participants), and lets you and any co-hosts you name below start or stop recording. Google Meet
-                  does not record these meetings.
-                  {!isFirstSubmission && (
-                    <span className="mt-1 block">
-                      Switching platforms here replaces the current link with a brand-new one — you&apos;ll get a
-                      chance to notify everyone who already has the old link once you save.
-                    </span>
-                  )}
-                </FormDescription>
-                <FormControl>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="livekit">Nasiha Conference</SelectItem>
-                      <SelectItem value="auto">Google Meet</SelectItem>
-                      <SelectItem value="manual">Paste my own link</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FormControl>
+              <FormItem>
+                {editingTimezone || form.formState.errors.timezone ? (
+                  <>
+                    <FormLabel>Timezone</FormLabel>
+                    <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a timezone" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {IANA_TIMEZONES.map((zone) => (
+                          <SelectItem key={zone} value={zone}>
+                            {zone}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      What &quot;Starts&quot;/&quot;Ends&quot; above are in — defaults to your own, but pick a different
+                      one if you&apos;re scheduling for another timezone.
+                    </FormDescription>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Times are in {field.value ?? "your timezone"}.{" "}
+                    <button
+                      type="button"
+                      className="font-medium text-primary underline-offset-2 hover:underline"
+                      onClick={() => setEditingTimezone(true)}
+                    >
+                      Change
+                    </button>
+                  </p>
+                )}
+                <FormMessage />
               </FormItem>
             )}
           />
 
-          {isFirstSubmission && meetLinkSource === "livekit" && (
+          <FormField
+            control={form.control}
+            name="recurrence"
+            render={({ field }) => {
+              const recurrence = field.value;
+              const repeats = recurrence !== null;
+              return (
+                <FormItem className="rounded-md border p-4">
+                  <div className="flex flex-row items-center justify-between gap-4">
+                    <div>
+                      <FormLabel>Repeat</FormLabel>
+                      <FormDescription>
+                        Changing the repeat schedule on an existing series updates all upcoming occurrences —
+                        there&apos;s no way to edit or skip a single date.
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={repeats}
+                        onCheckedChange={(checked) => {
+                          if (!checked) {
+                            field.onChange(null);
+                            return;
+                          }
+                          // Default to the start date's own weekday so a host
+                          // who never touches the day picker doesn't hit the
+                          // "select at least one day" validation trap silently.
+                          const startsAt = new Date(form.getValues("startsAt"));
+                          const defaultWeekday = Number.isNaN(startsAt.getTime()) ? [] : [startsAt.getDay()];
+                          field.onChange({
+                            frequency: RecurrenceFrequency.weekly,
+                            interval: 1,
+                            byWeekday: defaultWeekday,
+                            until: null,
+                          });
+                        }}
+                      />
+                    </FormControl>
+                  </div>
+                  {repeats && recurrence && (
+                    <div className="mt-3 flex flex-col gap-3">
+                      <Select
+                        value={recurrence.frequency}
+                        onValueChange={(value) =>
+                          field.onChange({
+                            ...recurrence,
+                            frequency: value as RecurrenceFrequency,
+                            byWeekday: value === RecurrenceFrequency.weekly ? recurrence.byWeekday : [],
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={RecurrenceFrequency.daily}>Daily</SelectItem>
+                          <SelectItem value={RecurrenceFrequency.weekly}>Weekly</SelectItem>
+                          <SelectItem value={RecurrenceFrequency.monthly}>Monthly</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      <div className="flex items-center gap-2 text-sm">
+                        <span>Every</span>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={52}
+                          className="w-16"
+                          value={recurrence.interval}
+                          onChange={(e) =>
+                            field.onChange({
+                              ...recurrence,
+                              interval: Math.max(1, Number(e.target.value) || 1),
+                            })
+                          }
+                        />
+                        <span>
+                          {recurrence.frequency === RecurrenceFrequency.daily
+                            ? "day(s)"
+                            : recurrence.frequency === RecurrenceFrequency.weekly
+                              ? "week(s)"
+                              : "month(s)"}
+                        </span>
+                      </div>
+
+                      {recurrence.frequency === RecurrenceFrequency.weekly && (
+                        <div className="flex flex-col gap-1">
+                          <div className="flex gap-1">
+                            {WEEKDAY_LABELS.map((label, day) => (
+                              <Button
+                                key={label}
+                                type="button"
+                                size="sm"
+                                variant={recurrence.byWeekday.includes(day) ? "default" : "outline"}
+                                onClick={() =>
+                                  field.onChange({
+                                    ...recurrence,
+                                    byWeekday: toggleWeekday(recurrence.byWeekday, day),
+                                  })
+                                }
+                              >
+                                {label}
+                              </Button>
+                            ))}
+                          </div>
+                          {/* FormMessage below only reads the top-level "recurrence"
+                            field's error, which has no .message of its own when
+                            the actual Zod issue is nested at recurrence.byWeekday —
+                            read that path directly so this doesn't fail silently. */}
+                          {form.formState.errors.recurrence?.byWeekday?.message ? (
+                            <p className="text-xs font-medium text-destructive">
+                              {String(form.formState.errors.recurrence.byWeekday.message)}
+                            </p>
+                          ) : null}
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={recurrence.until !== null}
+                          onCheckedChange={(checked) =>
+                            field.onChange({
+                              ...recurrence,
+                              until: checked === true ? defaultUntilIso(form.getValues("startsAt")) : null,
+                            })
+                          }
+                        />
+                        <span>Repeat until</span>
+                        {recurrence.until && (
+                          <Input
+                            type="date"
+                            className="w-auto"
+                            value={recurrence.until.slice(0, 10)}
+                            onChange={(e) =>
+                              field.onChange({
+                                ...recurrence,
+                                until: `${e.target.value}T23:59:59.000Z`,
+                              })
+                            }
+                          />
+                        )}
+                      </div>
+                      {form.formState.errors.recurrence?.until?.message ? (
+                        <p className="text-xs font-medium text-destructive">
+                          {String(form.formState.errors.recurrence.until.message)}
+                        </p>
+                      ) : null}
+
+                      <p className="text-xs text-muted-foreground">
+                        {describeRecurrence({
+                          ...recurrence,
+                          until: recurrence.until ? new Date(recurrence.until) : null,
+                        })}
+                      </p>
+                    </div>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
+          />
+        </section>
+
+        <section className="flex flex-col gap-5 border-t pt-6">
+          <h2 className="text-base font-semibold">Who</h2>
+          {isFirstSubmission && (
+            <FormItem className="rounded-md border p-4">
+              <FormLabel>Audience</FormLabel>
+              <Select value={audience} onValueChange={handleAudienceChange}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {(Object.keys(AUDIENCE_LABELS) as AudienceChoice[]).map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {AUDIENCE_LABELS[value]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormDescription>{AUDIENCE_DESCRIPTIONS[audience]}</FormDescription>
+            </FormItem>
+          )}
+
+          {isFirstSubmission && isRestricted && (
             <FormField
               control={form.control}
-              name="coHostUserIds"
+              name="invitedUserIds"
               render={({ field }) => (
-                <FormItem className="rounded-md border p-4">
-                  <FormLabel>Co-hosts</FormLabel>
+                <FormItem>
+                  <FormLabel>Invited members</FormLabel>
                   <FormControl>
                     <InviteePicker value={field.value} onChange={field.onChange} excludeUserId={currentUserId} />
                   </FormControl>
                   <FormDescription>
-                    Co-hosts can start/stop recording and name further co-hosts, the same as you. You can also add
-                    or remove co-hosts from the participant list once the meeting is underway.
+                    Each invited member gets a notification and email asking them to RSVP.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -943,117 +909,221 @@ export function SubmitEventForm({
             />
           )}
 
-          {meetLinkSource === "manual" && (
+          <FormField
+            control={form.control}
+            name="communityIds"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Communities</FormLabel>
+                <FormControl>
+                  <div className="flex flex-wrap gap-4 rounded-md border p-3">
+                    {canTargetAllCommunities && (
+                      <label className="flex w-full items-center gap-2 border-b pb-3 text-sm font-medium">
+                        <Checkbox
+                          checked={allCommunities}
+                          onCheckedChange={(checked) => {
+                            form.setValue("allCommunities", checked === true, {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            });
+                            if (checked === true) {
+                              field.onChange([]);
+                              form.setValue("categoryIds", []);
+                            }
+                          }}
+                        />
+                        All communities (shows on every member&apos;s feed)
+                      </label>
+                    )}
+                    {communities.map((community) => (
+                      <label key={community.id} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          disabled={allCommunities}
+                          checked={field.value.includes(community.id)}
+                          onCheckedChange={(checked) =>
+                            field.onChange(
+                              checked
+                                ? [...field.value, community.id]
+                                : field.value.filter((id) => id !== community.id),
+                            )
+                          }
+                        />
+                        {community.name}
+                      </label>
+                    ))}
+                  </div>
+                </FormControl>
+                <FormDescription>Select at least one community this event belongs to.</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {!allCommunities && selectedCommunityIds.length > 0 && (
             <FormField
               control={form.control}
-              name="meetingUrl"
+              name="categoryIds"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Meeting link{isRestricted ? "" : " (optional)"}</FormLabel>
+                  <FormLabel>Categories (optional)</FormLabel>
                   <FormControl>
-                    <Input
-                      placeholder="https://meet.google.com/…"
-                      value={field.value ?? ""}
-                      onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
+                    <CategoryCheckboxField
+                      categories={categories.filter((category) => selectedCommunityIds.includes(category.communityId))}
+                      communities={communities.filter((community) => selectedCommunityIds.includes(community.id))}
+                      value={field.value}
+                      onChange={field.onChange}
                     />
                   </FormControl>
-                  <FormDescription>
-                    {isRestricted ? "Shared with invited members." : "Only shown to members who RSVP."}
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
           )}
-        </div>
 
-        <div className="flex flex-col gap-2">
-          <label htmlFor="hero-image" className="text-sm font-medium">
-            Hero image (optional)
-          </label>
-          {existingEvent?.heroImageUrl && !heroImage && (
-            // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
-            <img
-              src={existingEvent.heroImageUrl}
-              alt="Current hero image"
-              className="h-32 w-full max-w-xs rounded-md object-cover"
-            />
-          )}
-          <input
-            id="hero-image"
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={(e) => setHeroImage(e.target.files?.[0] ?? null)}
-            className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
-          />
-          {existingEvent?.heroImageUrl && (
-            <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <label htmlFor="waiting-room-message" className="text-sm font-medium">
-            Waiting room message (optional)
-          </label>
-          <p className="text-xs text-muted-foreground">
-            Shown to attendees who join before you start the meeting, on the in-app waiting room page.
-          </p>
-          <Textarea
-            id="waiting-room-message"
-            rows={3}
-            value={meetingOrganizerMessage}
-            onChange={(e) => setMeetingOrganizerMessage(e.target.value)}
-          />
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <label htmlFor="waiting-room-image" className="text-sm font-medium">
-            Waiting room image (optional)
-          </label>
-          {existingEvent?.meetingOrganizerMessageImageUrl && !meetingOrganizerMessageImage && (
-            // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
-            <img
-              src={existingEvent.meetingOrganizerMessageImageUrl}
-              alt="Current waiting room image"
-              className="h-32 w-full max-w-xs rounded-md object-cover"
-            />
-          )}
-          <input
-            id="waiting-room-image"
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-            onChange={(e) => setMeetingOrganizerMessageImage(e.target.files?.[0] ?? null)}
-            className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
-          />
-          {existingEvent?.meetingOrganizerMessageImageUrl && (
-            <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
-          )}
-        </div>
-
-        {/* isFirstSubmission (brand-new, or a still-draft event) sets `open`
+          {/* isFirstSubmission (brand-new, or a still-draft event) sets `open`
             via the Audience selector above. Visibility itself can't change
             past a draft's first publish (see updateEvent), but a community
             event's `open` flag still can — this is that later-edit
             equivalent of the same setting. */}
-        {!isFirstSubmission && !isRestricted && (
-          <FormField
-            control={form.control}
-            name="open"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-between gap-4">
-                <div>
-                  <FormLabel>Open to the public</FormLabel>
+          {!isFirstSubmission && !isRestricted && (
+            <FormField
+              control={form.control}
+              name="open"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between gap-4">
+                  <div>
+                    <FormLabel>Open to the public</FormLabel>
+                    <FormDescription>Off keeps this event members-only; listed on /events either way.</FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+          )}
+        </section>
+
+        <section className="flex flex-col gap-5 border-t pt-6">
+          <h2 className="text-base font-semibold">Where</h2>
+          <div className="flex flex-col gap-3">
+            <FormField
+              control={form.control}
+              name="meetLinkSource"
+              render={({ field }) => (
+                <FormItem className="rounded-md border p-4">
+                  <FormLabel>Meeting link</FormLabel>
                   <FormDescription>
-                    Off keeps this event members-only; listed on /events either way.
+                    Nasiha Conference and Google Meet both auto-generate their own meeting link — or paste your own
+                    below. Nasiha Conference gives you real in-meeting host controls (admit, mute, or remove
+                    participants), and lets you and any co-hosts you name below start or stop recording. Google Meet
+                    does not record these meetings.
+                    {!isFirstSubmission && (
+                      <span className="mt-1 block">
+                        Switching platforms here replaces the current link with a brand-new one — you&apos;ll get a
+                        chance to notify everyone who already has the old link once you save.
+                      </span>
+                    )}
                   </FormDescription>
-                </div>
-                <FormControl>
-                  <Switch checked={field.value} onCheckedChange={field.onChange} />
-                </FormControl>
-              </FormItem>
+                  <FormControl>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="livekit">Nasiha Conference</SelectItem>
+                        <SelectItem value="auto">Google Meet</SelectItem>
+                        <SelectItem value="manual">Paste my own link</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            {isFirstSubmission && meetLinkSource === "livekit" && (
+              <FormField
+                control={form.control}
+                name="coHostUserIds"
+                render={({ field }) => (
+                  <FormItem className="rounded-md border p-4">
+                    <FormLabel>Co-hosts</FormLabel>
+                    <FormControl>
+                      <InviteePicker value={field.value} onChange={field.onChange} excludeUserId={currentUserId} />
+                    </FormControl>
+                    <FormDescription>
+                      Co-hosts can start/stop recording and name further co-hosts, the same as you. You can also add or
+                      remove co-hosts from the participant list once the meeting is underway.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             )}
-          />
-        )}
+
+            {meetLinkSource === "manual" && (
+              <FormField
+                control={form.control}
+                name="meetingUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Meeting link{isRestricted ? "" : " (optional)"}</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="https://meet.google.com/…"
+                        value={field.value ?? ""}
+                        onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {isRestricted ? "Shared with invited members." : "Only shown to members who RSVP."}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label htmlFor="waiting-room-message" className="text-sm font-medium">
+              Waiting room message (optional)
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Shown to attendees who join before you start the meeting, on the in-app waiting room page.
+            </p>
+            <Textarea
+              id="waiting-room-message"
+              rows={3}
+              value={meetingOrganizerMessage}
+              onChange={(e) => setMeetingOrganizerMessage(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label htmlFor="waiting-room-image" className="text-sm font-medium">
+              Waiting room image (optional)
+            </label>
+            {existingEvent?.meetingOrganizerMessageImageUrl && !meetingOrganizerMessageImage && (
+              // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
+              <img
+                src={existingEvent.meetingOrganizerMessageImageUrl}
+                alt="Current waiting room image"
+                className="h-32 w-full max-w-xs rounded-md object-cover"
+              />
+            )}
+            <input
+              id="waiting-room-image"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={(e) => setMeetingOrganizerMessageImage(e.target.files?.[0] ?? null)}
+              className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
+            />
+            {existingEvent?.meetingOrganizerMessageImageUrl && (
+              <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
+            )}
+          </div>
+        </section>
 
         {isCaseDiscussion && (
           <FormField
@@ -1065,9 +1135,7 @@ export function SubmitEventForm({
                   <Checkbox checked={field.value} onCheckedChange={(c) => field.onChange(c === true)} />
                 </FormControl>
                 <div className="space-y-1">
-                  <FormLabel className="!mt-0">
-                    I confirm no identifiable patient information will be shared
-                  </FormLabel>
+                  <FormLabel className="!mt-0">I confirm no identifiable patient information will be shared</FormLabel>
                   <FormMessage />
                 </div>
               </FormItem>
@@ -1125,9 +1193,8 @@ export function SubmitEventForm({
                   : existingEvent.open
                     ? ", registered as a guest, or was already invited"
                     : " or was already invited"}{" "}
-                may still have the old link saved — if they don&apos;t revisit this event before it starts, they
-                could show up to the wrong place, or nowhere at all. Resending sends a fresh bell notification and
-                email (
+                may still have the old link saved — if they don&apos;t revisit this event before it starts, they could
+                show up to the wrong place, or nowhere at all. Resending sends a fresh bell notification and email (
                 {existingEvent.visibility === EventVisibility.invited
                   ? "to this event's current invitee list"
                   : existingEvent.open
