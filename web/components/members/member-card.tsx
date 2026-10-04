@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { memberLocation } from "@/lib/cities";
 import { type DirectoryMember } from "@/lib/members";
+import { OPEN_TO_LABELS } from "@/lib/open-to";
 
 /**
  * Scan-only Directory card: the whole card is one link to the profile, where
@@ -24,6 +25,11 @@ export function MemberCard({ member }: { member: DirectoryMember }) {
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-bold">{name}</div>
           {subtitle && <div className="truncate text-xs text-muted-foreground">{subtitle}</div>}
+          {member.openTo.length > 0 && (
+            <div className="truncate text-xs font-medium text-primary">
+              Open to: {member.openTo.map((tag) => OPEN_TO_LABELS[tag]).join(" · ")}
+            </div>
+          )}
         </div>
       </Card>
     </Link>

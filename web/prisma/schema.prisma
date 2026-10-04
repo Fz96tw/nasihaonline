@@ -203,6 +203,10 @@ model Profile {
   // How the member can participate (§3.1) — collected at application time
   // only until now; also editable here since availability changes over time.
   availability          ApplicationAvailability[] @default([])
+  // What the member is open to being contacted about (see OpenToTag). Empty =
+  // nothing advertised; optional by design, so it is not part of profile
+  // completeness.
+  openTo                OpenToTag[]               @default([])
   skills                ProfileSkill[]
   // Community-based-categorization initiative, objective 2. Separate from
   // interestAreas (which only supplies the one-time onboarding suggestion,
@@ -317,6 +321,17 @@ enum ApplicationAvailability {
   virtual_meeting
   in_person
   online_review
+}
+
+// Why a member is happy to be contacted — shown on the profile/Directory
+// card and filterable in the Directory. Distinct from ApplicationAvailability
+// (the *format* they can participate in: virtual / in-person / review).
+enum OpenToTag {
+  mentoring
+  being_mentored
+  study_partner
+  collaboration
+  just_chatting
 }
 
 // Fixed, admin-curated interest tags shown as a multi-select on both the

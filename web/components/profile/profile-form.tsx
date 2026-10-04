@@ -24,6 +24,7 @@ import { TagPicker, type TagOption } from "@/components/tag-picker";
 import { InterestArea, ApplicationAvailability } from "@/lib/generated/prisma/enums";
 import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
 import { AVAILABILITY_LABELS } from "@/lib/validation/application";
+import { OPEN_TO_LABELS, OPEN_TO_OPTIONS } from "@/lib/open-to";
 import {
   profileFormSchema,
   splitList,
@@ -123,6 +124,7 @@ export function ProfileForm({
           learningTopics: values.learningTopics,
           interestAreas: values.interestAreas,
           availability: values.availability,
+          openTo: values.openTo,
           listInDirectory: values.listInDirectory,
           showSpecialtyLocation: values.showSpecialtyLocation,
         }),
@@ -380,6 +382,38 @@ export function ProfileForm({
                           }
                         />
                         {AVAILABILITY_LABELS[value]}
+                      </label>
+                    ))}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="openTo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Open to</FormLabel>
+                  <FormDescription>
+                    Let other members know why they might reach out to you. Shown on your profile and
+                    searchable in the Member Directory. Optional.
+                  </FormDescription>
+                  <div className="flex flex-col gap-2">
+                    {OPEN_TO_OPTIONS.map((value) => (
+                      <label key={value} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={field.value.includes(value)}
+                          onCheckedChange={(checked) =>
+                            field.onChange(
+                              checked
+                                ? [...field.value, value]
+                                : field.value.filter((v) => v !== value)
+                            )
+                          }
+                        />
+                        {OPEN_TO_LABELS[value]}
                       </label>
                     ))}
                   </div>

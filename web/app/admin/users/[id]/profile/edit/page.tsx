@@ -80,6 +80,7 @@ export default async function AdminEditMemberProfilePage({ params }: { params: {
             learningTopics: profile.learningTopics ?? "",
             interestAreas: profile.interestAreas,
             availability: profile.availability,
+            openTo: profile.openTo,
             listInDirectory: profile.listInDirectory,
             showSpecialtyLocation: profile.showSpecialtyLocation,
           }}

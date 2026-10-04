@@ -38,6 +38,7 @@ export function DirectoryView({
   const tier = useDirectoryFilters((state) => state.tier);
   const skillIds = useDirectoryFilters((state) => state.skillIds);
   const interestAreas = useDirectoryFilters((state) => state.interestAreas);
+  const openTo = useDirectoryFilters((state) => state.openTo);
   const selectedPlace = useDirectoryFilters((state) => state.selectedPlace);
   const setSelectedPlace = useDirectoryFilters((state) => state.setSelectedPlace);
   const debouncedSearch = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
@@ -68,9 +69,10 @@ export function DirectoryView({
           !member.interestAreas.some((area) => interestAreas.includes(area))
         )
           return false;
+        if (openTo.length > 0 && !member.openTo.some((tag) => openTo.includes(tag))) return false;
         return true;
       }),
-    [source, tier, skillIds, interestAreas],
+    [source, tier, skillIds, interestAreas, openTo],
   );
 
   const { buckets, unmappedCount } = useMemo(() => {

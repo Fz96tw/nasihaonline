@@ -101,6 +101,7 @@ export async function updateMemberProfile(userId: string, data: ProfilePatchValu
         learningTopics: data.learningTopics,
         interestAreas: data.interestAreas,
         availability: data.availability,
+        ...(data.openTo !== undefined && { openTo: data.openTo }),
         listInDirectory: data.listInDirectory,
         showSpecialtyLocation: data.showSpecialtyLocation,
         skills: {

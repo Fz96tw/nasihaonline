@@ -75,6 +75,7 @@ export default async function ProfilePage() {
           learningTopics: profile.learningTopics ?? "",
           interestAreas: profile.interestAreas,
           availability: profile.availability,
+          openTo: profile.openTo,
           listInDirectory: profile.listInDirectory,
           showSpecialtyLocation: profile.showSpecialtyLocation,
         }}

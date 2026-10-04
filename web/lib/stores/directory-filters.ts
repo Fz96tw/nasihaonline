@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { InterestArea, Tier } from "@/lib/generated/prisma/enums";
+import type { InterestArea, OpenToTag, Tier } from "@/lib/generated/prisma/enums";
 
 export type DirectoryTierFilter = Tier | "all";
 
@@ -11,6 +11,8 @@ type DirectoryFilterState = {
   skillIds: string[];
   // Selected Interest Areas — same ANY-match semantics as skillIds.
   interestAreas: InterestArea[];
+  // Selected "open to" tags — same ANY-match semantics.
+  openTo: OpenToTag[];
   // Key of the place picked on the directory map ("city:<geonameId>" or
   // "country:<ISO2>", see Place in lib/cities.ts), or null for everywhere.
   // Member countryRegion is free text, so callers derive a member's key via
@@ -20,6 +22,7 @@ type DirectoryFilterState = {
   setTier: (tier: DirectoryTierFilter) => void;
   toggleSkill: (skillId: string) => void;
   toggleInterestArea: (area: InterestArea) => void;
+  toggleOpenTo: (tag: OpenToTag) => void;
   setSelectedPlace: (key: string | null) => void;
 };
 
@@ -28,6 +31,7 @@ export const useDirectoryFilters = create<DirectoryFilterState>((set) => ({
   tier: "all",
   skillIds: [],
   interestAreas: [],
+  openTo: [],
   selectedPlace: null,
   setSearch: (search) => set({ search }),
   setTier: (tier) => set({ tier }),
@@ -42,6 +46,12 @@ export const useDirectoryFilters = create<DirectoryFilterState>((set) => ({
       interestAreas: state.interestAreas.includes(area)
         ? state.interestAreas.filter((value) => value !== area)
         : [...state.interestAreas, area],
+    })),
+  toggleOpenTo: (tag) =>
+    set((state) => ({
+      openTo: state.openTo.includes(tag)
+        ? state.openTo.filter((value) => value !== tag)
+        : [...state.openTo, tag],
     })),
   setSelectedPlace: (selectedPlace) => set({ selectedPlace }),
 }));

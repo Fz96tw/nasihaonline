@@ -6,6 +6,7 @@ import { memberLocation } from "@/lib/cities";
 import { Tier } from "@/lib/generated/prisma/enums";
 import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT, type DirectoryMember } from "@/lib/members";
+import { OPEN_TO_LABELS } from "@/lib/open-to";
 import { MemberCardActions } from "@/components/members/member-card-actions";
 import { AVAILABILITY_LABELS } from "@/lib/validation/application";
 import { getProfileLinkLabel } from "@/lib/profile-link";
@@ -62,6 +63,19 @@ export function MemberProfileView({
         <Badge variant={TIER_BADGE_VARIANT[member.tier]} className="w-fit">
           {DIRECTORY_TIER_LABELS[member.tier]}
         </Badge>
+      )}
+
+      {member.openTo.length > 0 && (
+        <div>
+          <div className="text-xs font-semibold uppercase text-muted-foreground">Open to</div>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {member.openTo.map((tag) => (
+              <Badge key={tag} variant="info">
+                {OPEN_TO_LABELS[tag]}
+              </Badge>
+            ))}
+          </div>
+        </div>
       )}
 
       {member.careerStage && (

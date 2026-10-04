@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { InterestArea, ApplicationAvailability } from "@/lib/generated/prisma/enums";
+import { InterestArea, ApplicationAvailability, OpenToTag } from "@/lib/generated/prisma/enums";
 
 function isHttpUrl(value: string): boolean {
   try {
@@ -40,6 +40,7 @@ export const profileFormSchema = z.object({
   learningTopics: z.string().trim().max(2000),
   interestAreas: z.array(z.nativeEnum(InterestArea)),
   availability: z.array(z.nativeEnum(ApplicationAvailability)),
+  openTo: z.array(z.nativeEnum(OpenToTag)),
   listInDirectory: z.boolean(),
   showSpecialtyLocation: z.boolean(),
 });
@@ -78,6 +79,9 @@ export const profilePatchSchema = z.object({
   learningTopics: z.string().trim().max(2000),
   interestAreas: z.array(z.nativeEnum(InterestArea)),
   availability: z.array(z.nativeEnum(ApplicationAvailability)),
+  // Optional so a stale client (a form loaded before this field shipped) can't
+  // fail validation or wipe the tags by omission — undefined = leave as is.
+  openTo: z.array(z.nativeEnum(OpenToTag)).optional(),
   listInDirectory: z.boolean(),
   showSpecialtyLocation: z.boolean(),
 });

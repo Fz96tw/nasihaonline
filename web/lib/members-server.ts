@@ -42,6 +42,7 @@ function toDirectoryMember(profile: ProfileWithUser): DirectoryMember {
     bio: profile.bio,
     interestAreas: profile.interestAreas,
     availability: profile.availability,
+    openTo: profile.openTo,
   };
 }
 
