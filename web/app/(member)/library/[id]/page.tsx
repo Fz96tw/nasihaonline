@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getKnowledgeItemRoster, getPublishedKnowledgeItemById } from "@/lib/library-server";
+import { MessageMemberButton } from "@/components/members/message-member-button";
 import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-server";
 import { getForumThreadDetail } from "@/lib/forums-server";
 import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
@@ -114,27 +115,32 @@ export default async function LibraryItemDetailPage({
       </h1>
 
       <div className="mb-8 flex items-center justify-between gap-3">
-        {authorProfile ? (
-          <Link
-            href={`/members/${authorProfile.id}`}
-            aria-label={`View ${item.contributor.name ?? "this member"}'s profile`}
-            className="flex items-center gap-3 text-left"
-          >
-            <Avatar name={item.contributor.name ?? "Member"} src={authorProfile.avatarUrl} size="sm" />
-            <div className="text-sm text-muted-foreground">
-              <div className="font-medium text-foreground">{item.contributor.name ?? "Member"}</div>
-              <div>{formatDate(item.createdAt)}</div>
+        <div className="flex flex-wrap items-center gap-3">
+          {authorProfile ? (
+            <Link
+              href={`/members/${authorProfile.id}`}
+              aria-label={`View ${item.contributor.name ?? "this member"}'s profile`}
+              className="flex items-center gap-3 text-left"
+            >
+              <Avatar name={item.contributor.name ?? "Member"} src={authorProfile.avatarUrl} size="sm" />
+              <div className="text-sm text-muted-foreground">
+                <div className="font-medium text-foreground">{item.contributor.name ?? "Member"}</div>
+                <div>{formatDate(item.createdAt)}</div>
+              </div>
+            </Link>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Avatar name={item.contributor.name ?? "Member"} size="sm" />
+              <div className="text-sm text-muted-foreground">
+                <div className="font-medium text-foreground">{item.contributor.name ?? "A member"}</div>
+                <div>{formatDate(item.createdAt)}</div>
+              </div>
             </div>
-          </Link>
-        ) : (
-          <div className="flex items-center gap-3">
-            <Avatar name={item.contributor.name ?? "Member"} size="sm" />
-            <div className="text-sm text-muted-foreground">
-              <div className="font-medium text-foreground">{item.contributor.name ?? "A member"}</div>
-              <div>{formatDate(item.createdAt)}</div>
-            </div>
-          </div>
-        )}
+          )}
+          {authorProfile && item.contributor.id !== user.id && (
+            <MessageMemberButton memberId={authorProfile.id} memberName={item.contributor.name ?? "this member"} />
+          )}
+        </div>
         <LibraryViewCounter itemId={item.id} initialViews={item.viewCount} />
       </div>
 

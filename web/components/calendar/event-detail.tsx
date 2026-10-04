@@ -30,6 +30,7 @@ import {
 import type { DirectoryMember } from "@/lib/members";
 import { useHasMounted } from "@/lib/use-has-mounted";
 import { formatDurationMinutes, formatTimestamp } from "@/lib/format-date";
+import { MessageMemberButton } from "@/components/members/message-member-button";
 import { FEED_TYPE_LABELS } from "@/lib/feed";
 import { EventVisibility } from "@/lib/generated/prisma/enums";
 import type { EventNotificationBroadcastItem, EventAttendeeMessageItem } from "@/lib/events";
@@ -178,31 +179,36 @@ export function EventDetail({
           )}
           <HighlightText text={event.title} query={highlightQuery} />
         </h1>
-        {hostProfile ? (
-          <Link
-            href={`/members/${hostProfile.id}`}
-            aria-label={`View ${hostName}'s profile`}
-            className="flex items-center gap-3 text-left"
-          >
-            <Avatar name={hostName} src={hostProfile.avatarUrl} size="md" />
-            <div>
-              {event.hostName ? <p className="text-sm text-muted-foreground">Hosted by {event.hostName}</p> : null}
-              <p className="text-sm text-muted-foreground">
-                {hasMounted ? formatEventDateRange(event.startsAt, event.endsAt) : null}
-              </p>
+        <div className="flex flex-wrap items-center gap-3">
+          {hostProfile ? (
+            <Link
+              href={`/members/${hostProfile.id}`}
+              aria-label={`View ${hostName}'s profile`}
+              className="flex items-center gap-3 text-left"
+            >
+              <Avatar name={hostName} src={hostProfile.avatarUrl} size="md" />
+              <div>
+                {event.hostName ? <p className="text-sm text-muted-foreground">Hosted by {event.hostName}</p> : null}
+                <p className="text-sm text-muted-foreground">
+                  {hasMounted ? formatEventDateRange(event.startsAt, event.endsAt) : null}
+                </p>
+              </div>
+            </Link>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Avatar name={hostName} size="md" />
+              <div>
+                {event.hostName ? <p className="text-sm text-muted-foreground">Hosted by {event.hostName}</p> : null}
+                <p className="text-sm text-muted-foreground">
+                  {hasMounted ? formatEventDateRange(event.startsAt, event.endsAt) : null}
+                </p>
+              </div>
             </div>
-          </Link>
-        ) : (
-          <div className="flex items-center gap-3">
-            <Avatar name={hostName} size="md" />
-            <div>
-              {event.hostName ? <p className="text-sm text-muted-foreground">Hosted by {event.hostName}</p> : null}
-              <p className="text-sm text-muted-foreground">
-                {hasMounted ? formatEventDateRange(event.startsAt, event.endsAt) : null}
-              </p>
-            </div>
-          </div>
-        )}
+          )}
+          {hostProfile && !isHost && (
+            <MessageMemberButton memberId={hostProfile.id} memberName={hostName} />
+          )}
+        </div>
       </div>
 
       {event.cancelled ? (

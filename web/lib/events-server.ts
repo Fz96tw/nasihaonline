@@ -1,6 +1,8 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
+import { INBOX_TIERS, type DirectoryMember } from "@/lib/members";
+import { getDirectoryMembersByIds } from "@/lib/members-server";
 import {
   PUBLIC_DEFAULT_EVENT_MS,
   REMINDER_LEAD_MS,
@@ -16,6 +18,7 @@ import {
   RecurrenceFrequency,
   Role,
   RSVPStatus,
+  AttendanceRole,
 } from "@/lib/generated/prisma/enums";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
@@ -5022,4 +5025,43 @@ export async function resetEventMeeting(eventId: string, actingUser: UserModel):
   }
 
   await db.event.update({ where: { id: eventId }, data: { meetingStartedAt: null } });
+}
+
+/**
+ * "People you met here" (Contextual Message entry points): the other members
+ * who took part in a *past* event — everyone who RSVP'd going or was checked
+ * in as an attendee, plus the host — so the viewer can say hello after the
+ * fact. LiveKit join data isn't stored, so RSVP/attendance is the only
+ * participation record there is.
+ *
+ * Returns null (render nothing) unless the event is over and the viewer was
+ * themselves part of it (host, going RSVP, or checked-in) and is Inbox-eligible
+ * — a non-participant learns nothing about who attended. Every candidate goes
+ * through the Directory visibility gate (listInDirectory, tier, suspended), so
+ * members who hid themselves never appear, and the viewer is excluded.
+ */
+export async function getPeopleYouMetAtEvent(
+  event: { seriesId: string; hostId: string; startsAt: Date | string },
+  viewer: { id: string; tier: UserModel["tier"] },
+): Promise<DirectoryMember[] | null> {
+  if (new Date(event.startsAt) >= new Date()) return null;
+  if (!viewer.tier || !INBOX_TIERS.includes(viewer.tier)) return null;
+
+  const [rsvps, attendances] = await Promise.all([
+    db.rSVP.findMany({
+      where: { eventId: event.seriesId, status: RSVPStatus.going },
+      select: { userId: true },
+    }),
+    db.attendance.findMany({
+      where: { eventId: event.seriesId, role: AttendanceRole.attendee },
+      select: { userId: true },
+    }),
+  ]);
+
+  const participants = new Set<string>([event.hostId, ...rsvps.map((r) => r.userId), ...attendances.map((a) => a.userId)]);
+  if (!participants.has(viewer.id)) return null;
+
+  participants.delete(viewer.id);
+  const members = await getDirectoryMembersByIds(Array.from(participants));
+  return Array.from(members.values()).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
 }

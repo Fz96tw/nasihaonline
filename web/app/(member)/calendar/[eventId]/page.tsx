@@ -9,6 +9,7 @@ import {
   getEventAttendeeMessageRecipientCounts,
   getEventRoster,
   getMemberEventById,
+  getPeopleYouMetAtEvent,
 } from "@/lib/events-server";
 import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-server";
 import { getForumThreadDetail } from "@/lib/forums-server";
@@ -18,6 +19,7 @@ import { SavedBanner } from "@/components/saved-banner";
 import { EventDiscussionLink } from "@/components/calendar/event-discussion-link";
 import { DeleteEventDiscussionButton } from "@/components/calendar/delete-event-discussion-button";
 import { ForumThreadView } from "@/components/forums/forum-thread-view";
+import { PeopleYouMet } from "@/components/calendar/people-you-met";
 import { BackLink } from "@/components/back-link";
 import { HighlightText } from "@/components/highlight-text";
 import { RestrictedAccessNotice } from "@/components/restricted-access-notice";
@@ -101,7 +103,7 @@ export default async function EventDetailPage({
   // can never also be `open`, the only way EventRegistration rows exist).
   // Resend Notifications' history trail (event detail page) — host/admin
   // only (resendEventNotifications' own gate applies to both visibilities).
-  const [attendees, hostProfile, roster, attendanceChecklist, notificationBroadcasts, attendeeMessages] = await Promise.all([
+  const [attendees, hostProfile, roster, attendanceChecklist, notificationBroadcasts, attendeeMessages, peopleYouMet] = await Promise.all([
     canEdit && !isRestricted ? getEventAttendees(event.seriesId) : Promise.resolve(null),
     getDirectoryMemberById(event.hostId),
     isRestricted ? getEventRoster(event.seriesId) : Promise.resolve(null),
@@ -115,6 +117,7 @@ export default async function EventDetailPage({
           getEventAttendeeMessageRecipientCounts(event.seriesId, event.hostId),
         ]).then(([items, counts]) => ({ items, memberCount: counts.members, guestCount: counts.guests }))
       : Promise.resolve(null),
+    getPeopleYouMetAtEvent(event, user),
   ]);
 
   const isInvited = roster?.some((member) => member.userId === user.id) ?? false;
@@ -156,6 +159,8 @@ export default async function EventDetailPage({
         attendeeMessages={attendeeMessages}
         highlightQuery={q}
       />
+
+      {peopleYouMet && <PeopleYouMet members={peopleYouMet} />}
 
       {!event.forumThreadId && (
         <div className="border-t pt-8">
