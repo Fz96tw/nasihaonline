@@ -20,7 +20,7 @@ export async function InboxWidget({ userId }: { userId: string }) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-lg">Inbox</CardTitle>
+        <CardTitle className="text-lg">Messages</CardTitle>
         {unreadCount > 0 ? <Badge variant="warning">{unreadCount} unread</Badge> : null}
       </CardHeader>
       <CardContent>
@@ -45,7 +45,7 @@ export async function InboxWidget({ userId }: { userId: string }) {
           </ul>
         )}
         <Link href="/inbox" className="mt-4 inline-block text-sm font-medium text-primary hover:underline">
-          Open Inbox
+          Open Messages
         </Link>
       </CardContent>
     </Card>

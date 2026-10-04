@@ -13,12 +13,10 @@ import { type DirectoryMember } from "@/lib/members";
 export function DirectoryGrid({
   members,
   isLoading,
-  currentUserId,
   summaryExtra,
 }: {
   members: DirectoryMember[];
   isLoading: boolean;
-  currentUserId: string;
   summaryExtra?: ReactNode;
 }) {
   if (isLoading) {
@@ -43,11 +41,16 @@ export function DirectoryGrid({
       {members.length === 0 ? (
         <p className="py-16 text-center text-muted-foreground">No members match your search and filter.</p>
       ) : (
-        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {members.map((member) => (
-            <MemberCard key={member.id} member={member} currentUserId={currentUserId} />
-          ))}
-        </div>
+        <>
+          <p className="text-sm text-muted-foreground">
+            Open a profile to message someone or request a 1:1.
+          </p>
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {members.map((member) => (
+              <MemberCard key={member.id} member={member} />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

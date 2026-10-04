@@ -31,10 +31,8 @@ async function fetchDirectoryMembers(query: string): Promise<DirectoryMember[]> 
  */
 export function DirectoryView({
   initialMembers,
-  currentUserId,
 }: {
   initialMembers: DirectoryMember[];
-  currentUserId: string;
 }) {
   const search = useDirectoryFilters((state) => state.search);
   const tier = useDirectoryFilters((state) => state.tier);
@@ -161,7 +159,6 @@ export function DirectoryView({
       <DirectoryGrid
         members={filtered}
         isLoading={isLoading}
-        currentUserId={currentUserId}
         summaryExtra={
           selectedPlace && (
             <button

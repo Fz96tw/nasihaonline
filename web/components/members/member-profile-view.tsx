@@ -54,6 +54,7 @@ export function MemberProfileView({
           memberName={name}
           isSelf={member.id === currentUserId}
           isFriendTier={member.tier === Tier.friend}
+          showHelper
         />
       </div>
 

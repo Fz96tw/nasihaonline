@@ -97,20 +97,18 @@ export function NewConversationActions({ currentUserId }: { currentUserId: strin
   return (
     <div className="flex gap-2">
       <MemberPickerButton
-        label="Message"
+        label="New message"
         icon={MessageSquare}
         variant="default"
         members={options}
         onSelect={setMessageRecipient}
-        hideLabelOnMobile
       />
       <MemberPickerButton
-        label="1-on-1 Meeting"
+        label="Request a 1:1"
         icon={CalendarPlus}
         variant="secondary"
         members={options}
         onSelect={setMeetingRecipient}
-        hideLabelOnMobile
       />
 
       {messageRecipient && (

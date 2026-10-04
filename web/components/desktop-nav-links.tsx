@@ -57,7 +57,7 @@ export function DesktopNavLinks({ signedIn }: { signedIn: boolean }) {
         </DropdownMenuItem>
         <DropdownMenuItem className="text-base" asChild>
           <Link href="/inbox" className={cn("justify-between", !signedIn && "text-muted-foreground")}>
-            Message Inbox
+            Messages
             {!signedIn && <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-label="Sign-in required" />}
           </Link>
         </DropdownMenuItem>

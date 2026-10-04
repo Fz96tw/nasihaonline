@@ -56,7 +56,7 @@ const COMMUNITY_LINKS: NavLink[] = [
   { href: "/forums", label: "Forums", icon: MessageSquare, restricted: true },
   { href: "/review-feedback", label: "Peer Review & Feedback", icon: ClipboardCheck, restricted: true },
   { href: "/members", label: "Member Directory", icon: Users, restricted: true },
-  { href: "/inbox", label: "Message Inbox", icon: Inbox, restricted: true },
+  { href: "/inbox", label: "Messages", icon: Inbox, restricted: true },
 ];
 
 const SUPPORT_LINK: NavLink = { href: "/donate", label: "Support Us", icon: Heart };
@@ -121,7 +121,7 @@ export function MobileNav({
 
   // Signed-in members already get the Community links from
   // MEMBER_NAV_SECTIONS' own "Community" section below (Events Calendar,
-  // Blogs, Knowledge Library, Forums, Member Directory, Message Inbox), so
+  // Blogs, Knowledge Library, Forums, Member Directory, Messages), so
   // COMMUNITY_LINKS only renders at all in the guest (flat-list) branch below.
   const topLevelHrefs = new Set([
     ...OUR_MISSION_LINKS.map((link) => link.href),

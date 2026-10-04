@@ -8,7 +8,7 @@ import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { BackLink } from "@/components/back-link";
 
 export const metadata: Metadata = {
-  title: "Message Inbox",
+  title: "Messages",
 };
 
 export default async function InboxPage() {
@@ -23,7 +23,7 @@ export default async function InboxPage() {
         <ParallaxHeroImage src="/images/inbox.jpg" priority />
         <div className="absolute inset-0 -z-10 bg-[rgba(10,20,70,.4)]" />
         <div className="relative mx-auto max-w-[580px]">
-          <h1 className="mb-3 text-[2.5rem] font-extrabold leading-[1.1] tracking-[-.02em] [text-shadow:0_2px_16px_rgba(0,10,40,.55)] md:text-[3.5rem]">Message Inbox</h1>
+          <h1 className="mb-3 text-[2.5rem] font-extrabold leading-[1.1] tracking-[-.02em] [text-shadow:0_2px_16px_rgba(0,10,40,.55)] md:text-[3.5rem]">Messages</h1>
           <p className="text-xl leading-[1.6] opacity-[.88] [text-shadow:0_1px_10px_rgba(0,10,40,.6)] md:text-2xl">
             Messages and meeting requests from fellow members, to read and reply to at your own pace.
           </p>

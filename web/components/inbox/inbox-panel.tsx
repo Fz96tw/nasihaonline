@@ -212,7 +212,7 @@ export function InboxPanel({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Inbox</h2>
+        <h2 className="text-lg font-semibold">Conversations</h2>
         <NewConversationActions currentUserId={currentUserId} />
       </div>
       <Card className="flex h-[600px] overflow-hidden p-0">
@@ -230,7 +230,7 @@ export function InboxPanel({
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search messages…"
                 className="pl-9"
-                aria-label="Search the inbox"
+                aria-label="Search messages"
               />
             </div>
             <div className="flex flex-wrap items-center gap-1.5">

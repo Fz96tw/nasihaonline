@@ -14,7 +14,7 @@ export const FEED_TYPE_LABELS: Record<FeedItemType, string> = {
   announcement: "Announcement",
   survey: "Survey",
   peer_review: "Peer Review",
-  inbox: "Inbox",
+  inbox: "Messages",
 };
 
 export const FEED_TYPES = Object.keys(FEED_TYPE_LABELS) as FeedItemType[];
