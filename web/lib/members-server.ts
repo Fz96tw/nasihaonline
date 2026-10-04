@@ -176,8 +176,8 @@ export async function getDirectoryRecommendations(viewerId: string): Promise<Dir
     select: {
       interestAreas: true,
       followsAllCommunities: true,
-      communities: { select: { communityId: true } },
-      skills: { select: { skillId: true } },
+      communities: { select: { community: { select: { id: true, name: true } } } },
+      skills: { select: { skill: { select: { id: true, name: true } } } },
     },
   });
 
@@ -187,12 +187,14 @@ export async function getDirectoryRecommendations(viewerId: string): Promise<Dir
   } as const;
   const visibleUser = { tier: { in: DIRECTORY_TIERS }, suspended: false } as const;
 
-  const communityIds = viewer && !viewer.followsAllCommunities ? viewer.communities.map((c) => c.communityId) : [];
-  const skillIds = viewer?.skills.map((s) => s.skillId) ?? [];
+  const viewerCommunities = viewer && !viewer.followsAllCommunities ? viewer.communities.map((c) => c.community) : [];
+  const communityIds = viewerCommunities.map((community) => community.id);
+  const viewerSkills = viewer?.skills.map((s) => s.skill) ?? [];
+  const skillIds = viewerSkills.map((skill) => skill.id);
   const interestAreas = viewer?.interestAreas ?? [];
   const since = new Date(Date.now() - NEW_MEMBER_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
-  const [newMembers, sharedCommunities, sharedInterests] = await Promise.all([
+  const [newMembers, communityMatches, interestMatches] = await Promise.all([
     db.profile.findMany({
       where: { ...visible, user: { ...visibleUser, createdAt: { gte: since } } },
       include: PROFILE_INCLUDE,
@@ -203,9 +205,7 @@ export async function getDirectoryRecommendations(viewerId: string): Promise<Dir
       ? Promise.resolve([])
       : db.profile.findMany({
           where: { ...visible, user: visibleUser, communities: { some: { communityId: { in: communityIds } } } },
-          include: PROFILE_INCLUDE,
-          orderBy: { user: { name: "asc" } },
-          take: RECOMMENDATION_LIMIT,
+          include: { ...PROFILE_INCLUDE, communities: { select: { communityId: true } } },
         }),
     interestAreas.length === 0 && skillIds.length === 0
       ? Promise.resolve([])
@@ -219,15 +219,43 @@ export async function getDirectoryRecommendations(viewerId: string): Promise<Dir
             ],
           },
           include: PROFILE_INCLUDE,
-          orderBy: { user: { name: "asc" } },
-          take: RECOMMENDATION_LIMIT,
         }),
   ]);
 
+  // Rank by how much they overlap with the viewer *before* cutting to the
+  // limit, so the strongest matches are the ones shown; ties fall back to
+  // name order. (The full Directory grid below stays purely alphabetical.)
+  const communityIdSet = new Set(communityIds);
+  const skillIdSet = new Set(skillIds);
+  const interestSet = new Set(interestAreas);
+  const byOverlap = <T extends ProfileWithUser>(matches: T[], score: (profile: T) => number): T[] =>
+    matches
+      .map((profile) => ({ profile, score: score(profile) }))
+      .sort(
+        (a, b) =>
+          b.score - a.score || (a.profile.user.name ?? "").localeCompare(b.profile.user.name ?? ""),
+      )
+      .slice(0, RECOMMENDATION_LIMIT)
+      .map(({ profile }) => profile);
+
   return {
     newMembers: newMembers.map(toDirectoryMember),
-    sharedCommunities: sharedCommunities.map(toDirectoryMember),
-    sharedInterests: sharedInterests.map(toDirectoryMember),
+    sharedCommunities: byOverlap(communityMatches, (profile) =>
+      profile.communities.filter((c) => communityIdSet.has(c.communityId)).length,
+    ).map(toDirectoryMember),
+    sharedInterests: byOverlap(
+      interestMatches,
+      (profile) =>
+        profile.interestAreas.filter((area) => interestSet.has(area)).length +
+        profile.skills.filter(({ skill }) => skillIdSet.has(skill.id)).length,
+    ).map(toDirectoryMember),
+    basis: {
+      communities: viewerCommunities.map((community) => community.name),
+      interests: [
+        ...interestAreas.map((area) => INTEREST_AREA_LABELS[area]),
+        ...viewerSkills.map((skill) => skill.name),
+      ],
+    },
   };
 }
 

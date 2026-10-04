@@ -46,6 +46,10 @@ export type DirectoryRecommendations = {
   newMembers: DirectoryMember[];
   sharedCommunities: DirectoryMember[];
   sharedInterests: DirectoryMember[];
+  // The viewer's own communities / interests+skills that the two shared lists
+  // are matched on, by display name — shown in the section descriptions so a
+  // member can see why these people were suggested.
+  basis: { communities: string[]; interests: string[] };
 };
 
 // What two members have in common, by display name — used to prefill message

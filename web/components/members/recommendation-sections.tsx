@@ -1,14 +1,40 @@
 import { MemberCard } from "@/components/members/member-card";
 import { NEW_MEMBER_WINDOW_DAYS, type DirectoryRecommendations } from "@/lib/members";
 
+const BASIS_PREVIEW_COUNT = 3;
+
+/** "A, B and C" — first few names, then "+N more" so the header stays short. */
+function listBasis(names: string[]): string {
+  const shown = names.slice(0, BASIS_PREVIEW_COUNT);
+  const rest = names.length - shown.length;
+  const head =
+    shown.length <= 1
+      ? (shown[0] ?? "")
+      : `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}`;
+  return rest > 0 ? `${shown.join(", ")} +${rest} more` : head;
+}
+
 const SECTIONS: {
-  key: keyof DirectoryRecommendations;
+  key: "newMembers" | "sharedCommunities" | "sharedInterests";
   title: string;
-  description: string;
+  description: (recommendations: DirectoryRecommendations) => string;
 }[] = [
-  { key: "newMembers", title: "New members", description: `Joined in the last ${NEW_MEMBER_WINDOW_DAYS} days — say hello.` },
-  { key: "sharedCommunities", title: "In your communities", description: "Members who follow the same communities as you." },
-  { key: "sharedInterests", title: "Share your interests", description: "Members with interests or expertise that overlap yours." },
+  {
+    key: "newMembers",
+    title: "New members",
+    description: () => `Joined in the last ${NEW_MEMBER_WINDOW_DAYS} days — say hello.`,
+  },
+  {
+    key: "sharedCommunities",
+    title: "In your communities",
+    description: ({ basis }) => `Because you're in ${listBasis(basis.communities)}. Closest matches first.`,
+  },
+  {
+    key: "sharedInterests",
+    title: "Share your interests or expertise",
+    description: ({ basis }) =>
+      `Based on your interests and expertise: ${listBasis(basis.interests)}. Closest matches first.`,
+  },
 ];
 
 /**
@@ -28,7 +54,7 @@ export function RecommendationSections({ recommendations }: { recommendations: D
             <h2 id={`recs-${key}`} className="text-lg font-bold">
               {title}
             </h2>
-            <p className="text-sm text-muted-foreground">{description}</p>
+            <p className="text-sm text-muted-foreground">{description(recommendations)}</p>
           </div>
           <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {recommendations[key].map((member) => (
