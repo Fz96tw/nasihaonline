@@ -67,6 +67,7 @@ const DEFAULT_VALUES: CreateEventValues = {
   invitedUserIds: [],
   coHostUserIds: [],
   communityIds: [],
+  allCommunities: false,
   categoryIds: [],
   meetLinkSource: "livekit",
   recurrence: null,
@@ -138,6 +139,8 @@ type ExistingEvent = {
   visibility: EventVisibility;
   /** Community-based-categorization initiative, objective 5 — unlike invitedUserIds/coHostUserIds below, genuinely editable here, so this reflects the event's real current tags rather than being hardcoded empty. */
   communityIds: string[];
+  /** Published with zero community tags = "All communities" (a still-draft with none selected is just unfinished, so false). */
+  allCommunities: boolean;
   categoryIds: string[];
   meetingOrganizerMessage: string | null;
   meetingOrganizerMessageImageUrl: string | null;
@@ -188,12 +191,15 @@ type ExistingEvent = {
 export function SubmitEventForm({
   existingEvent,
   currentUserId,
+  canTargetAllCommunities = false,
   communities,
   categories,
 }: {
   existingEvent?: ExistingEvent;
   /** Current user's id — excludes them from the invitee picker's suggestions (create mode only). */
   currentUserId?: string;
+  /** Admins/moderators only — shows the "All communities" option. */
+  canTargetAllCommunities?: boolean;
   communities: EventCommunityOption[];
   categories: EventCategoryOption[];
 }) {
@@ -272,6 +278,7 @@ export function SubmitEventForm({
           // editable from this form — the event's real current tags, not
           // hardcoded empty.
           communityIds: existingEvent.communityIds,
+          allCommunities: existingEvent.allCommunities,
           categoryIds: existingEvent.categoryIds,
           meetLinkSource: existingEvent.meetLinkSource,
           recurrence: existingEvent.recurrence,
@@ -301,6 +308,7 @@ export function SubmitEventForm({
   const isOpen = form.watch("open");
   const meetLinkSource = form.watch("meetLinkSource");
   const selectedCommunityIds = form.watch("communityIds");
+  const allCommunities = form.watch("allCommunities");
 
   const audience: AudienceChoice = isRestricted ? "invited" : isOpen ? "open" : "community";
   function handleAudienceChange(value: AudienceChoice) {
@@ -377,7 +385,8 @@ export function SubmitEventForm({
       // Unlike invitedUserIds/coHostUserIds above, genuinely editable —
       // sent in both create and edit mode, same getAll()-per-value shape as
       // Library's categoryIds field.
-      values.communityIds.forEach((communityId) => formData.append("communityIds", communityId));
+      if (values.allCommunities) formData.append("allCommunities", "true");
+      else values.communityIds.forEach((communityId) => formData.append("communityIds", communityId));
       values.categoryIds.forEach((categoryId) => formData.append("categoryIds", categoryId));
       if (values.recurrence) formData.append("recurrence", JSON.stringify(values.recurrence));
       if (heroImage) formData.append("heroImage", heroImage);
@@ -576,9 +585,25 @@ export function SubmitEventForm({
               <FormLabel>Communities</FormLabel>
               <FormControl>
                 <div className="flex flex-wrap gap-4 rounded-md border p-3">
+                  {canTargetAllCommunities && (
+                    <label className="flex w-full items-center gap-2 border-b pb-3 text-sm font-medium">
+                      <Checkbox
+                        checked={allCommunities}
+                        onCheckedChange={(checked) => {
+                          form.setValue("allCommunities", checked === true, { shouldDirty: true, shouldValidate: true });
+                          if (checked === true) {
+                            field.onChange([]);
+                            form.setValue("categoryIds", []);
+                          }
+                        }}
+                      />
+                      All communities (shows on every member&apos;s feed)
+                    </label>
+                  )}
                   {communities.map((community) => (
                     <label key={community.id} className="flex items-center gap-2 text-sm">
                       <Checkbox
+                        disabled={allCommunities}
                         checked={field.value.includes(community.id)}
                         onCheckedChange={(checked) =>
                           field.onChange(
@@ -599,7 +624,7 @@ export function SubmitEventForm({
           )}
         />
 
-        {selectedCommunityIds.length > 0 && (
+        {!allCommunities && selectedCommunityIds.length > 0 && (
           <FormField
             control={form.control}
             name="categoryIds"

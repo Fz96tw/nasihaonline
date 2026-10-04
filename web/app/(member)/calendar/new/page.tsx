@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { EVENT_SUBMISSION_TIERS } from "@/lib/events";
+import { EVENT_SUBMISSION_TIERS, canTargetAllCommunities } from "@/lib/events";
 import { getEventCategories } from "@/lib/events-server";
 import { getAllCommunities } from "@/lib/profile-server";
 import { SubmitEventForm } from "@/components/calendar/submit-event-form";
@@ -30,7 +30,10 @@ export default async function NewEventPage() {
         </p>
       </div>
 
-      <SubmitEventForm currentUserId={user.id} communities={communities} categories={categories} />
+      <SubmitEventForm
+        currentUserId={user.id}
+        canTargetAllCommunities={canTargetAllCommunities(user.role)}
+        communities={communities} categories={categories} />
     </main>
   );
 }

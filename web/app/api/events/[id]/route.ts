@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
 import { EventError, deleteEventDraft, publishEventDraft, saveEventDraft, updateEvent } from "@/lib/events-server";
+import { canTargetAllCommunities } from "@/lib/events";
 import { createEventSchema, draftEventSchema, updateEventSchema } from "@/lib/validation/event";
 import { enqueueEventIndexSync } from "@/lib/queues/search-index-queue";
 
@@ -81,12 +82,17 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     invitedUserIds,
     coHostUserIds,
     communityIds: formData.getAll("communityIds"),
+    allCommunities: formData.get("allCommunities") === "true",
     categoryIds: formData.getAll("categoryIds"),
     recurrence,
   });
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
+  if (parsed.data.allCommunities && !canTargetAllCommunities(user.role)) {
+    return NextResponse.json({ error: "Only admins and moderators can target all communities." }, { status: 403 });
+  }
+  if (parsed.data.allCommunities) parsed.data.communityIds = [];
 
   const heroImageField = formData.get("heroImage");
   const heroImage = heroImageField instanceof File && heroImageField.size > 0 ? heroImageField : null;

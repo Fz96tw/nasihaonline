@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getEventForEdit, getEventCategories } from "@/lib/events-server";
 import { getAllCommunities } from "@/lib/profile-server";
+import { canTargetAllCommunities } from "@/lib/events";
 import { SubmitEventForm } from "@/components/calendar/submit-event-form";
 import { SavedBanner } from "@/components/saved-banner";
 import { Role } from "@/lib/generated/prisma/enums";
@@ -25,6 +26,7 @@ export default async function EditEventPage({ params }: { params: { eventId: str
   const isHost = event.hostId === user.id;
   if (!isAdmin && !isHost) notFound();
 
+  const canTargetAll = canTargetAllCommunities(user.role);
   const [communities, categories] = await Promise.all([getAllCommunities(), getEventCategories()]);
 
   return (
@@ -42,6 +44,7 @@ export default async function EditEventPage({ params }: { params: { eventId: str
       </div>
 
       <SubmitEventForm
+        canTargetAllCommunities={canTargetAll}
         communities={communities}
         categories={categories}
         existingEvent={{
@@ -59,6 +62,9 @@ export default async function EditEventPage({ params }: { params: { eventId: str
           deidentificationConfirmed: event.deidentificationConfirmed,
           visibility: event.visibility,
           communityIds: event.communityIds,
+          // Non-staff can't keep an untagged (legacy) event "All" — they
+          // pick specific communities on save, same as before this option.
+          allCommunities: canTargetAll && !event.isDraft && event.communityIds.length === 0,
           categoryIds: event.categoryIds,
           meetingOrganizerMessage: event.meetingOrganizerMessage,
           meetingOrganizerMessageImageUrl: event.meetingOrganizerMessageImageUrl,

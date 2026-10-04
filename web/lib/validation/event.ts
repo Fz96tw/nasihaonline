@@ -35,15 +35,20 @@ const eventFieldsSchema = z.object({
   // when actually publishing (see requireCommunityIds below), so a draft
   // can be saved with none selected yet.
   communityIds: z.array(z.string()),
+  // Admin/moderator-only (enforced in the event API routes, not here):
+  // "All communities" saves the event with zero EventCommunity rows — the
+  // existing grandfathered "visible to everyone" state — so it also reaches
+  // communities added later. communityIds is ignored/cleared when true.
+  allCommunities: z.boolean(),
   categoryIds: z.array(z.string()),
 });
 
 // Required, multi-select top-level classification — split out of the base
 // schema (Save as Draft initiative) so a draft can be saved with none
 // selected; every strict (publish) schema still requires it.
-function requireCommunityIds(data: { communityIds: string[] }, ctx: z.RefinementCtx) {
-  if (data.communityIds.length === 0) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["communityIds"], message: "Select at least one community" });
+function requireCommunityIds(data: { communityIds: string[]; allCommunities: boolean }, ctx: z.RefinementCtx) {
+  if (!data.allCommunities && data.communityIds.length === 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["communityIds"], message: "Select at least one community, or All communities" });
   }
 }
 

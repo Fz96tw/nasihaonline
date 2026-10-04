@@ -1,13 +1,18 @@
 // Client-safe Events types/constants (PRD §4.6) — kept separate from
 // events-server.ts so client components can import them without pulling
 // in the "server-only" query logic.
-import { EventType, EventVisibility, Tier } from "@/lib/generated/prisma/enums";
+import { EventType, EventVisibility, Role, Tier } from "@/lib/generated/prisma/enums";
 import { PUBLIC_DEFAULT_EVENT_MS } from "@/lib/session-reminders";
 
 // §11 open question #2 ("which tiers can submit events — Active only, or
 // Active + Associate? Not specified") — resolved: Active, Associate, and
 // Student can all submit events. Friend tier is excluded.
 export const EVENT_SUBMISSION_TIERS: Tier[] = [Tier.active, Tier.associate, Tier.student];
+
+/** Only staff may tag an event "All communities" (e.g. a townhall) — it lands on every member's feed. */
+export function canTargetAllCommunities(role: Role): boolean {
+  return role === Role.admin || role === Role.moderator;
+}
 
 // Community-based-categorization initiative, objective 5 — mirrors
 // KnowledgeCategoryOption/ReviewCategoryOption's shape (id/name/slug for
