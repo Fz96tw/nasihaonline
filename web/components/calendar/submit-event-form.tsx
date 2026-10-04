@@ -791,12 +791,13 @@ export function SubmitEventForm({
 
                       {recurrence.frequency === RecurrenceFrequency.weekly && (
                         <div className="flex flex-col gap-1">
-                          <div className="flex gap-1">
+                          <div className="grid grid-cols-7 gap-1 sm:flex">
                             {WEEKDAY_LABELS.map((label, day) => (
                               <Button
                                 key={label}
                                 type="button"
                                 size="sm"
+                                className="px-0 sm:px-3"
                                 variant={recurrence.byWeekday.includes(day) ? "default" : "outline"}
                                 onClick={() =>
                                   field.onChange({
