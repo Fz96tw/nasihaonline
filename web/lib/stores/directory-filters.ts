@@ -24,6 +24,7 @@ type DirectoryFilterState = {
   toggleInterestArea: (area: InterestArea) => void;
   toggleOpenTo: (tag: OpenToTag) => void;
   setSelectedPlace: (key: string | null) => void;
+  resetFilters: () => void;
 };
 
 export const useDirectoryFilters = create<DirectoryFilterState>((set) => ({
@@ -54,4 +55,6 @@ export const useDirectoryFilters = create<DirectoryFilterState>((set) => ({
         : [...state.openTo, tag],
     })),
   setSelectedPlace: (selectedPlace) => set({ selectedPlace }),
+  resetFilters: () =>
+    set({ search: "", tier: "all", skillIds: [], interestAreas: [], openTo: [], selectedPlace: null }),
 }));

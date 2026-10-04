@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { DirectoryGrid } from "@/components/members/directory-grid";
+import { RecommendationSections } from "@/components/members/recommendation-sections";
 import { DirectoryMap, type MapBucket } from "@/components/members/directory-map-loader";
 import { countryNameFor, memberPlace } from "@/lib/cities";
-import { type DirectoryMember } from "@/lib/members";
+import { type DirectoryMember, type DirectoryRecommendations } from "@/lib/members";
 import { useDirectoryFilters } from "@/lib/stores/directory-filters";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 
@@ -31,8 +32,10 @@ async function fetchDirectoryMembers(query: string): Promise<DirectoryMember[]> 
  */
 export function DirectoryView({
   initialMembers,
+  recommendations,
 }: {
   initialMembers: DirectoryMember[];
+  recommendations: DirectoryRecommendations;
 }) {
   const search = useDirectoryFilters((state) => state.search);
   const tier = useDirectoryFilters((state) => state.tier);
@@ -150,6 +153,16 @@ export function DirectoryView({
     return selectedPlace.startsWith("country:") ? countryNameFor(selectedPlace.slice("country:".length)) : "this place";
   }, [source, selectedPlace]);
 
+  // Curated lists only make sense on the unfiltered landing view: any search,
+  // filter or map pick means the member is already looking for something.
+  const isFiltering =
+    search.trim() !== "" ||
+    tier !== "all" ||
+    skillIds.length > 0 ||
+    interestAreas.length > 0 ||
+    openTo.length > 0 ||
+    selectedPlace !== null;
+
   return (
     <div className="flex flex-col gap-6">
       <DirectoryMap
@@ -158,9 +171,11 @@ export function DirectoryView({
         onSelect={handleSelect}
         unmappedCount={unmappedCount}
       />
+      {!isFiltering && <RecommendationSections recommendations={recommendations} />}
       <DirectoryGrid
         members={filtered}
         isLoading={isLoading}
+        isFiltering={isFiltering}
         summaryExtra={
           selectedPlace && (
             <button

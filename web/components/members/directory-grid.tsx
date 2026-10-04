@@ -1,7 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDirectoryFilters } from "@/lib/stores/directory-filters";
 import { MemberCard } from "@/components/members/member-card";
 import { type DirectoryMember } from "@/lib/members";
 
@@ -13,12 +15,17 @@ import { type DirectoryMember } from "@/lib/members";
 export function DirectoryGrid({
   members,
   isLoading,
+  isFiltering,
   summaryExtra,
 }: {
   members: DirectoryMember[];
   isLoading: boolean;
+  /** True when a search/filter/map pick is active — the no-results state offers to clear it. */
+  isFiltering: boolean;
   summaryExtra?: ReactNode;
 }) {
+  const resetFilters = useDirectoryFilters((state) => state.resetFilters);
+
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -39,7 +46,19 @@ export function DirectoryGrid({
       </div>
 
       {members.length === 0 ? (
-        <p className="py-16 text-center text-muted-foreground">No members match your search and filter.</p>
+        <div className="flex flex-col items-center gap-3 py-16 text-center" role="status">
+          <p className="text-lg font-semibold">No members found</p>
+          <p className="max-w-md text-muted-foreground">
+            {isFiltering
+              ? "No one matches your current search and filters. Try a different name or fewer filters."
+              : "There are no members to show in the Directory yet."}
+          </p>
+          {isFiltering && (
+            <Button variant="outline" onClick={resetFilters}>
+              Clear search and filters
+            </Button>
+          )}
+        </div>
       ) : (
         <>
           <p className="text-sm text-muted-foreground">

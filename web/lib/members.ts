@@ -39,6 +39,18 @@ export type DirectoryMember = {
   openTo: OpenToTag[];
 };
 
+// Curated "who to talk to" lists shown above the Directory grid. Each list is
+// already capped, excludes the viewer, and is gated by the same listInDirectory
+// / tier / suspended rules as the full listing.
+export type DirectoryRecommendations = {
+  newMembers: DirectoryMember[];
+  sharedCommunities: DirectoryMember[];
+  sharedInterests: DirectoryMember[];
+};
+
+export const NEW_MEMBER_WINDOW_DAYS = 30;
+export const RECOMMENDATION_LIMIT = 8;
+
 export const DIRECTORY_TIER_LABELS: Record<Tier, string> = TIER_LABELS;
 
 export const TIER_BADGE_VARIANT: Record<Tier, "success" | "info" | "warning" | "neutral"> = {

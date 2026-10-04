@@ -3,11 +3,17 @@ import { db } from "@/lib/db";
 import { getCityById } from "@/lib/cities-server";
 import { getProfileAvatarUrl } from "@/lib/storage";
 import { searchProfileDocuments } from "@/lib/meilisearch";
-import { DIRECTORY_TIERS, type DirectoryMember } from "@/lib/members";
+import {
+  DIRECTORY_TIERS,
+  NEW_MEMBER_WINDOW_DAYS,
+  RECOMMENDATION_LIMIT,
+  type DirectoryMember,
+  type DirectoryRecommendations,
+} from "@/lib/members";
 import type { ProfileModel } from "@/lib/generated/prisma/models/Profile";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 
-export type { DirectoryMember };
+export type { DirectoryMember, DirectoryRecommendations };
 
 type ProfileWithUser = ProfileModel & {
   user: Pick<UserModel, "name" | "tier">;
@@ -152,4 +158,73 @@ export async function searchDirectoryMembers(query: string): Promise<DirectoryMe
     .map((hit) => byId.get(hit.id))
     .filter((profile): profile is ProfileWithUser => Boolean(profile))
     .map(toDirectoryMember);
+}
+
+/**
+ * Curated lists for the top of the Directory: recently joined members, members
+ * sharing a community with the viewer, and members sharing an interest area or
+ * skill. Same visibility gate as getDirectoryMembers (listInDirectory, tier,
+ * suspended) applied in each query, plus the viewer is always excluded. A list
+ * the viewer has no basis for (e.g. no interests set, or "follows all
+ * communities", where every member would match) is returned empty.
+ */
+export async function getDirectoryRecommendations(viewerId: string): Promise<DirectoryRecommendations> {
+  const viewer = await db.profile.findUnique({
+    where: { userId: viewerId },
+    select: {
+      interestAreas: true,
+      followsAllCommunities: true,
+      communities: { select: { communityId: true } },
+      skills: { select: { skillId: true } },
+    },
+  });
+
+  const visible = {
+    listInDirectory: true,
+    userId: { not: viewerId },
+  } as const;
+  const visibleUser = { tier: { in: DIRECTORY_TIERS }, suspended: false } as const;
+
+  const communityIds = viewer && !viewer.followsAllCommunities ? viewer.communities.map((c) => c.communityId) : [];
+  const skillIds = viewer?.skills.map((s) => s.skillId) ?? [];
+  const interestAreas = viewer?.interestAreas ?? [];
+  const since = new Date(Date.now() - NEW_MEMBER_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
+  const [newMembers, sharedCommunities, sharedInterests] = await Promise.all([
+    db.profile.findMany({
+      where: { ...visible, user: { ...visibleUser, createdAt: { gte: since } } },
+      include: PROFILE_INCLUDE,
+      orderBy: { user: { createdAt: "desc" } },
+      take: RECOMMENDATION_LIMIT,
+    }),
+    communityIds.length === 0
+      ? Promise.resolve([])
+      : db.profile.findMany({
+          where: { ...visible, user: visibleUser, communities: { some: { communityId: { in: communityIds } } } },
+          include: PROFILE_INCLUDE,
+          orderBy: { user: { name: "asc" } },
+          take: RECOMMENDATION_LIMIT,
+        }),
+    interestAreas.length === 0 && skillIds.length === 0
+      ? Promise.resolve([])
+      : db.profile.findMany({
+          where: {
+            ...visible,
+            user: visibleUser,
+            OR: [
+              ...(interestAreas.length > 0 ? [{ interestAreas: { hasSome: interestAreas } }] : []),
+              ...(skillIds.length > 0 ? [{ skills: { some: { skillId: { in: skillIds } } } }] : []),
+            ],
+          },
+          include: PROFILE_INCLUDE,
+          orderBy: { user: { name: "asc" } },
+          take: RECOMMENDATION_LIMIT,
+        }),
+  ]);
+
+  return {
+    newMembers: newMembers.map(toDirectoryMember),
+    sharedCommunities: sharedCommunities.map(toDirectoryMember),
+    sharedInterests: sharedInterests.map(toDirectoryMember),
+  };
 }
