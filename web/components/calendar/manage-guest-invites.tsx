@@ -110,7 +110,7 @@ export function ManageGuestInvites({ eventId }: { eventId: string }) {
   function regenerate() {
     if (
       !window.confirm(
-        "Generate a new link? The old link stops working and anyone who joined through it is removed. Guests you invited by email keep their access.",
+        "Generate a new link? The previous link will no longer work for anyone it was shared with, and anyone who already joined through it is removed. Guests you invited by email keep their access.",
       )
     ) {
       return;
@@ -208,8 +208,8 @@ export function ManageGuestInvites({ eventId }: { eventId: string }) {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Anyone with this link can join under any name once they give an email, so only share it with people you
-              trust. Guests you remove or a new link cut them off immediately.
+              You can share this same link with as many people as you&apos;d like to invite. Each person enters their
+              own name and email to join. Only share it with people you trust, since anyone who has the link can join.
             </p>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" disabled={pending} onClick={regenerate}>
@@ -220,6 +220,12 @@ export function ManageGuestInvites({ eventId }: { eventId: string }) {
                 Turn off
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              <strong className="font-medium">Regenerate link</strong> creates a brand-new link. The previous link will
+              no longer work for anyone it was shared with, and anyone who already joined through it is removed. Guests
+              you invited by email keep their access. You don&apos;t need this to share the link with more people — use
+              it only if the link has been shared more widely than you intended.
+            </p>
           </div>
 
           <div className="flex flex-col gap-2">
