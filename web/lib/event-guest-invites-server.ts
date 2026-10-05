@@ -18,10 +18,13 @@ import { sendEventGuestInviteEmail, sendEventRegistrationConfirmationEmail } fro
  * authorised in the meeting itself.
  */
 
-/** Hard caps — invites go to strangers from the shared mail.nasihaforyou.org sending domain. */
-export const MAX_INVITES_PER_REQUEST = 20;
-export const MAX_INVITES_PER_EVENT = 50;
-export const MAX_INVITES_PER_HOST_PER_DAY = 100;
+import {
+  MAX_INVITES_PER_EVENT,
+  MAX_INVITES_PER_HOST_PER_DAY,
+  MAX_INVITES_PER_REQUEST,
+} from "@/lib/event-guest-invite-limits";
+
+export { MAX_INVITES_PER_EVENT, MAX_INVITES_PER_HOST_PER_DAY, MAX_INVITES_PER_REQUEST };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

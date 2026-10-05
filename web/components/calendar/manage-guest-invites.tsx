@@ -7,6 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { formatTimestamp } from "@/lib/format-date";
+import {
+  MAX_INVITES_PER_EVENT,
+  MAX_INVITES_PER_HOST_PER_DAY,
+  MAX_INVITES_PER_REQUEST,
+} from "@/lib/event-guest-invite-limits";
 
 interface GuestRow {
   id: string;
@@ -235,10 +240,18 @@ export function ManageGuestInvites({ eventId }: { eventId: string }) {
               value={note}
               onChange={(event) => setNote(event.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
-              Each guest gets their own personal join link and a calendar invite. You&apos;ll be BCC&apos;d on every
-              invitation, and their replies come to you.
-            </p>
+            <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+              <p>
+                Separate addresses with commas, spaces or new lines. Each guest gets their own personal join link and a
+                calendar invite, and the note (if you add one) goes to everyone in this send. You&apos;ll be BCC&apos;d
+                on every invitation, and their replies come to you.
+              </p>
+              <p>
+                Limits: up to {MAX_INVITES_PER_REQUEST} addresses at a time, {MAX_INVITES_PER_EVENT} invitations per
+                event, and {MAX_INVITES_PER_HOST_PER_DAY} per day. To re-send an invitation, use Resend next to that
+                guest below; it counts toward the daily limit.
+              </p>
+            </div>
             <div>
               <Button size="sm" disabled={pending} onClick={sendInvites}>
                 <Mail className="mr-1.5 h-4 w-4" />
