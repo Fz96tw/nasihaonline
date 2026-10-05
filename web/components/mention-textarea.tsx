@@ -52,12 +52,21 @@ export function MentionTextarea({
   const [activeIndex, setActiveIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Async inserts (paste-upload completing) must read the latest value, not
+  // the one captured when the paste started — otherwise two overlapping
+  // uploads overwrite each other's tokens.
+  const valueRef = useRef(value);
+  valueRef.current = value;
+
   const insertAtCaret = useCallback(
     (markdown: string) => {
-      const caret = textareaRef.current?.selectionStart ?? value.length;
-      onChange(`${value.slice(0, caret)}${markdown}${value.slice(caret)}`);
+      const current = valueRef.current;
+      const caret = textareaRef.current?.selectionStart ?? current.length;
+      const next = `${current.slice(0, caret)}${markdown}${current.slice(caret)}`;
+      valueRef.current = next;
+      onChange(next);
     },
-    [value, onChange],
+    [onChange],
   );
 
   const pasteImage = usePasteImageUpload({
