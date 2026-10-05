@@ -13,6 +13,8 @@ export function FeedList({
   q,
   myCommunities,
   currentUserId,
+  following,
+  followingMember,
 }: {
   initialItems: FeedItem[];
   initialCursor: FeedCursor | null;
@@ -23,6 +25,10 @@ export function FeedList({
   /** "Search only my communities" toggle, threaded into "Load more" pagination. */
   myCommunities?: boolean;
   currentUserId?: string;
+  /** The "Following" pane: pages through only followed members' items (ignores type/search/communities). */
+  following?: boolean;
+  /** Following pane narrowed to one followed member (chip selection). */
+  followingMember?: string | null;
 }) {
   const [items, setItems] = useState(initialItems);
   const [cursor, setCursor] = useState(initialCursor);
@@ -37,7 +43,9 @@ export function FeedList({
       const qParam = q ? `&q=${encodeURIComponent(q)}` : "";
       const myCommunitiesParam = myCommunities ? `&myCommunities=1` : "";
       const response = await fetch(
-        `/api/whats-new?cursor=${encodeFeedCursor(cursor)}${typeParam}${qParam}${myCommunitiesParam}`,
+        following
+          ? `/api/whats-new?cursor=${encodeFeedCursor(cursor)}&following=1${followingMember ? `&member=${followingMember}` : ""}`
+          : `/api/whats-new?cursor=${encodeFeedCursor(cursor)}${typeParam}${qParam}${myCommunitiesParam}`,
       );
       if (!response.ok) return;
       const data = (await response.json()) as { items: FeedItem[]; nextCursor: FeedCursor | null; hasMore: boolean };
@@ -50,7 +58,11 @@ export function FeedList({
   }
 
   if (items.length === 0) {
-    return <p className="p-6 text-center text-sm text-muted-foreground">Nothing here yet.</p>;
+    return (
+      <p className="p-6 text-center text-sm text-muted-foreground">
+        {following ? "Nothing new from the people you follow yet." : "Nothing here yet."}
+      </p>
+    );
   }
 
   return (

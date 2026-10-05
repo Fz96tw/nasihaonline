@@ -81,6 +81,7 @@ function authorOf(user: {
 // plus the newest post, to credit and quote the latest replier when the
 // parent was bumped by discussion activity.
 const DISCUSSION_THREAD_FEED_SELECT = {
+  id: true,
   _count: { select: { posts: true } },
   posts: {
     select: { id: true, author: { select: AUTHOR_SELECT }, body: true },
@@ -90,6 +91,7 @@ const DISCUSSION_THREAD_FEED_SELECT = {
 } as const;
 
 type DiscussionThreadForFeed = {
+  id: string;
   _count: { posts: number };
   posts: { id: string; author: Parameters<typeof authorOf>[0]; body: string }[];
 } | null;
@@ -180,6 +182,18 @@ export async function getFeedPage(params: {
    * elsewhere. Omit/undefined to leave every domain unfiltered.
    */
   communityIds?: string[];
+  /**
+   * What's New's "Following" pane: restrict the feed to items whose own
+   * author/host/contributor/submitter is one of these members (events by
+   * host, library by contributor, forum threads by starter, peer review by
+   * submitter). Layered on top of — never instead of — each domain's
+   * per-viewer visibility where-clause, so following can't surface anything
+   * the viewer couldn't already see. Announcements/Surveys (anonymous Board
+   * sender) and Inbox are never included, and discussion-reply "bump" rows
+   * are suppressed so every row is genuinely by a followed member. Intended
+   * for browse mode (no `q`); omit/undefined for the ordinary feed.
+   */
+  authorIds?: string[];
 }): Promise<{
   items: FeedItem[];
   nextCursor: FeedCursor | null;
@@ -189,7 +203,11 @@ export async function getFeedPage(params: {
 }> {
   const pageSize = params.pageSize ?? DEFAULT_PAGE_SIZE;
   const before = params.cursor ? new Date(params.cursor.ts) : null;
-  const wants = (type: FeedItem["type"]) => !params.types || params.types.includes(type);
+  const authorIds = params.authorIds;
+  const wants = (type: FeedItem["type"]) =>
+    (!params.types || params.types.includes(type)) &&
+    // Following mode: only domains with a real, followable member author.
+    !(authorIds && (type === "announcement" || type === "survey" || type === "inbox"));
   const viewerId = params.viewerId;
   const query = params.q?.trim() || null;
   // In search mode, center each item's excerpt on the actual match instead
@@ -271,6 +289,9 @@ export async function getFeedPage(params: {
     // clause had been missing.
     publishedAt: before ? { not: null, lt: before } : { not: null },
     ...(eventHitIds ? { id: { in: eventHitIds } } : {}),
+    ...(authorIds
+      ? { AND: [{ OR: [{ hostId: { in: authorIds } }, { forumThread: { posts: { some: { authorId: { in: authorIds } } } } }] }] }
+      : {}),
     cancelledAt: null,
     // A suspended member can't log in at all (lib/auth.ts), so they're never
     // `viewerId` here — this is unconditionally safe, same convention as
@@ -312,6 +333,9 @@ export async function getFeedPage(params: {
     // fallback here.
     ...(before ? { publishedAt: { lt: before } } : {}),
     ...(libraryHitIds ? { id: { in: libraryHitIds } } : {}),
+    ...(authorIds
+      ? { AND: [{ OR: [{ contributorId: { in: authorIds } }, { forumThread: { posts: { some: { authorId: { in: authorIds } } } } }] }] }
+      : {}),
     // Queries the direct KnowledgeItemCommunity relation, same as
     // getLibraryCards' communityFilter (lib/library-server.ts) — deriving
     // the community through `categories` instead made an item tagged with a
@@ -360,6 +384,9 @@ export async function getFeedPage(params: {
     // appearing once at its original creation time.
     ...(before ? { lastActivityAt: { lt: before } } : {}),
     ...(forumHitIds ? { id: { in: forumHitIds } } : {}),
+    ...(authorIds
+      ? { AND: [{ OR: [{ authorId: { in: authorIds } }, { posts: { some: { authorId: { in: authorIds } } } }] }] }
+      : {}),
     // Same suspended-author exclusion as eventWhere above — the thread's
     // own starter, not whoever posted the latest reply (a suspended
     // member's individual replies within an otherwise-live thread are a
@@ -406,6 +433,7 @@ export async function getFeedPage(params: {
     // keying off its own lastActivityAt.
     ...(before ? { lastActivityAt: { lt: before } } : {}),
     ...(reviewHitIds ? { id: { in: reviewHitIds } } : {}),
+    ...(authorIds ? { submitterId: { in: authorIds } } : {}),
     // Same suspended-author exclusion as eventWhere above.
     submitter: { suspended: false },
     // Omitted entirely when isPrivilegedSearchBypass, same as
@@ -650,6 +678,43 @@ export async function getFeedPage(params: {
     [eventCount, libraryCount, forumCount, announcementCount, surveyCount, reviewCount],
   ] = await Promise.all([itemsPromise, countsPromise]);
 
+  // Following mode: the newest non-removed post by a followed member in each
+  // event/library discussion thread and standalone forum thread, flagged as a
+  // real reply (vs. the thread's opening post — auto-created for event/library
+  // discussions, the starter's own post for a standalone thread). One batched
+  // pair of queries rather than reshaping every domain's `posts` select.
+  const followedAuthorSet = new Set(authorIds ?? []);
+  const followedPostByThread = new Map<
+    string,
+    { post: { id: string; body: string; author: Parameters<typeof authorOf>[0] }; isReply: boolean }
+  >();
+  if (authorIds) {
+    const threadIds = [
+      ...events.flatMap((event) => (event.forumThread ? [event.forumThread.id] : [])),
+      ...libraryItems.flatMap((item) => (item.forumThread ? [item.forumThread.id] : [])),
+      ...forumThreads.map((thread) => thread.id),
+    ];
+    if (threadIds.length > 0) {
+      const [followedPosts, openings] = await Promise.all([
+        db.forumPost.findMany({
+          where: { threadId: { in: threadIds }, authorId: { in: authorIds }, removed: false },
+          select: { id: true, threadId: true, body: true, createdAt: true, author: { select: AUTHOR_SELECT } },
+          orderBy: { createdAt: "desc" },
+        }),
+        db.forumPost.groupBy({ by: ["threadId"], where: { threadId: { in: threadIds } }, _min: { createdAt: true } }),
+      ]);
+      const openingAt = new Map(openings.map((row) => [row.threadId, row._min.createdAt]));
+      for (const post of followedPosts) {
+        if (followedPostByThread.has(post.threadId)) continue; // newest first — keep the first seen
+        const opening = openingAt.get(post.threadId);
+        followedPostByThread.set(post.threadId, {
+          post,
+          isReply: !!opening && post.createdAt.getTime() > opening.getTime(),
+        });
+      }
+    }
+  }
+
   // getInboxList has no cursor/take support (it's a full, already-sorted
   // fetch of one member's own mailbox), so search-match, `before`-cursor
   // filtering, and the pageSize bound every other domain gets from Prisma
@@ -752,8 +817,17 @@ export async function getFeedPage(params: {
       // discussion framing that carries no hint of why it matched the
       // query.
       const viewerAttends = event.rsvps.length > 0 || event.invitees.length > 0 || event.hostId === viewerId;
-      const reply = query || !viewerAttends ? null : latestDiscussionReply(event.forumThread, event.lastActivityAt, event.createdAt);
-      if (!reply) return [ownRow];
+      // Following mode: the event's own row only when its host is followed;
+      // the reply row is the newest reply by a followed member (same
+      // attendee/invitee gate on discussion activity as the ordinary feed).
+      const eventRows = !authorIds || followedAuthorSet.has(event.hostId) ? [ownRow] : [];
+      const followedReply = authorIds && event.forumThread ? followedPostByThread.get(event.forumThread.id) : undefined;
+      const reply = query || !viewerAttends
+        ? null
+        : authorIds
+          ? (followedReply?.isReply ? followedReply.post : null)
+          : latestDiscussionReply(event.forumThread, event.lastActivityAt, event.createdAt);
+      if (!reply) return eventRows;
 
       // The latest reply, as its own row (id: reply.id, not event.id)
       // rather than overwriting ownRow above — same fix as the library
@@ -776,7 +850,7 @@ export async function getFeedPage(params: {
         imageUrl: null,
         isRestricted: event.visibility === EventVisibility.invited,
       };
-      return [ownRow, replyRow];
+      return [...eventRows, replyRow];
     }),
     ...libraryItems.flatMap((item): FeedItem[] => {
       const ownRow: FeedItem = {
@@ -822,10 +896,15 @@ export async function getFeedPage(params: {
       // branch above — a search hit shows the item's own indexed
       // description, not discussion framing that carries no hint of why it
       // matched the query.
+      // Following mode: same shape as the events branch above.
+      const libraryRows = !authorIds || followedAuthorSet.has(item.contributorId) ? [ownRow] : [];
+      const followedReply = authorIds && item.forumThread ? followedPostByThread.get(item.forumThread.id) : undefined;
       const reply = query
         ? null
-        : latestDiscussionReply(item.forumThread, item.lastActivityAt, item.publishedAt ?? item.createdAt);
-      if (!reply) return [ownRow];
+        : authorIds
+          ? (followedReply?.isReply ? followedReply.post : null)
+          : latestDiscussionReply(item.forumThread, item.lastActivityAt, item.publishedAt ?? item.createdAt);
+      if (!reply) return libraryRows;
 
       // The latest reply, as its OWN row (id: reply.id, not item.id) rather
       // than overwriting ownRow above — confirmed with user: a reply
@@ -848,20 +927,32 @@ export async function getFeedPage(params: {
         // which always carries the item's own hero/YouTube-thumbnail image.
         imageUrl: null,
       };
-      return [ownRow, replyRow];
+      return [...libraryRows, replyRow];
     }),
-    ...forumThreads.map((thread): FeedItem => {
+    ...forumThreads
+      .filter((thread) => !authorIds || followedPostByThread.has(thread.id))
+      .map((thread): FeedItem => {
       // A thread bumped up by a fresh reply (lastActivityAt > createdAt)
       // reads as "Replied to" rather than "New thread" — it isn't new,
       // it's resurfacing, and the row's author is the replier, not the
       // thread's original creator.
-      const isReply = thread.lastActivityAt.getTime() > thread.createdAt.getTime();
+      // Following mode: credited to the newest post by a followed member
+      // (their opening post reads as "New thread", a later one as "Replied"),
+      // never to a replier who isn't followed.
+      const followedPost = authorIds ? followedPostByThread.get(thread.id) : undefined;
+      const isReply = authorIds
+        ? Boolean(followedPost?.isReply)
+        : thread.lastActivityAt.getTime() > thread.createdAt.getTime();
       const latestPost = thread.posts[0];
       // In search mode, prefer whichever fetched post actually contains the
       // match over always the latest — the latest post might not be why
       // this thread matched at all (see SEARCH_POST_SCAN_LIMIT above).
       const matchingPost = query ? thread.posts.find((post) => textContainsMatch(post.body, query)) : undefined;
-      const excerptPost = query ? (matchingPost ?? latestPost) : latestPost;
+      const excerptPost = query
+        ? (matchingPost ?? latestPost)
+        : authorIds
+          ? followedPost?.post
+          : latestPost;
       return {
         type: "forum_thread",
         id: thread.id,

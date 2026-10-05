@@ -7,6 +7,8 @@ import { getSessionUser } from "@/lib/auth";
 import { getFeedPage } from "@/lib/feed-server";
 import { FEED_TYPES, FEED_TYPE_LABELS, isFeedItemType } from "@/lib/feed";
 import { FeedList } from "@/components/feed/feed-list";
+import { WhatsNewPanes } from "@/components/feed/whats-new-panes";
+import { getFollowingFeedAuthorIds } from "@/lib/member-follows-server";
 import { MyCommunitiesCheckbox } from "@/components/shared/my-communities-checkbox";
 import { cn } from "@/lib/utils";
 import { getAllCommunities, getMemberCommunityIdsForFiltering, getOrCreateProfile } from "@/lib/profile-server";
@@ -46,7 +48,14 @@ export default async function WhatsNewPage({
       : searchParams.myCommunities === "0"
         ? false
         : cookies().get(MY_COMMUNITIES_COOKIE)?.value === "1";
-  const [profile, communities] = await Promise.all([getOrCreateProfile(user.id), getAllCommunities()]);
+  const [profile, communities, followedIds] = await Promise.all([
+    getOrCreateProfile(user.id),
+    getAllCommunities(),
+    getFollowingFeedAuthorIds(user.id),
+  ]);
+  // The All | Following panes only exist for members who follow someone, and
+  // never during a search (search results are one merged list).
+  const showPanes = followedIds.length > 0 && !q;
   const communityIds = getMemberCommunityIdsForFiltering(profile, myCommunities);
   // Same rationale as CommunityFilterPills(Nav): once the member already
   // belongs to every community, "Show only my communities" is a no-op, so
@@ -108,26 +117,31 @@ export default async function WhatsNewPage({
     return (countsByType[type] ?? 0) > 0;
   });
 
-  return (
-    <main className="mx-auto flex max-w-[720px] flex-col gap-6 px-[2px] py-8 sm:px-8">
-      <div className="flex flex-col gap-1.5">
-        <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
-          {q ? (
-            `${totalCount ?? 0} search result${totalCount === 1 ? "" : "s"} for: "${q}"`
-          ) : (
-            <>
-              <Rss className="h-7 w-7" aria-hidden="true" />
-              What&apos;s New
-            </>
-          )}
-        </h1>
-
-        {!joinedAllCommunities && (
-          <MyCommunitiesCheckbox checked={myCommunities} href={myCommunitiesHref} cookieName={MY_COMMUNITIES_COOKIE} />
+  const headerNode = (
+    <>
+      <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
+        {q ? (
+          `${totalCount ?? 0} search result${totalCount === 1 ? "" : "s"} for: "${q}"`
+        ) : (
+          <>
+            <Rss className="h-7 w-7" aria-hidden="true" />
+            What&apos;s New
+          </>
         )}
-      </div>
+      </h1>
+    </>
+  );
 
-      <div className="flex flex-wrap gap-2">
+  // Filters the All pane only (the Following pane ignores communities), so
+  // WhatsNewPanes hides it while Following is showing.
+  const communitiesControl = !joinedAllCommunities ? (
+    <MyCommunitiesCheckbox checked={myCommunities} href={myCommunitiesHref} cookieName={MY_COMMUNITIES_COOKIE} />
+  ) : null;
+
+  const allPane = (
+    <>
+      {/* data-no-swipe: the pill row scrolls sideways on phones, so a touch that starts here never begins a pane swipe. */}
+      <div data-no-swipe className="flex flex-wrap gap-2">
         <Link href={filterHref()} className={filterLinkClasses(activeType === undefined)}>
           All
         </Link>
@@ -150,6 +164,27 @@ export default async function WhatsNewPage({
           currentUserId={user.id}
         />
       </div>
+    </>
+  );
+
+  return (
+    <main className="mx-auto flex max-w-[720px] flex-col gap-6 px-[2px] py-8 sm:px-8">
+      {showPanes ? (
+        <WhatsNewPanes
+          header={headerNode}
+          allPaneControls={communitiesControl}
+          allPane={allPane}
+          currentUserId={user.id}
+        />
+      ) : (
+        <>
+          <div className="flex flex-col gap-1.5">
+            {headerNode}
+            {communitiesControl}
+          </div>
+          {allPane}
+        </>
+      )}
     </main>
   );
 }
