@@ -271,10 +271,10 @@ export function DirectoryView({
           <section aria-labelledby="pane-all" className="flex flex-col gap-3">
             <div>
               <h2 id="pane-all" className="text-lg font-bold">
-                All members
+                Browse the Directory
               </h2>
               <p className="text-sm text-muted-foreground">
-                Everyone in the Directory. Search or filter above to narrow the list.
+                Everyone who is listed. Search or filter above to narrow the list.
               </p>
             </div>
             <DirectoryGrid
@@ -297,7 +297,7 @@ export function DirectoryView({
           <section aria-labelledby="pane-my-people" className="flex flex-col gap-3">
             <div>
               <h2 id="pane-my-people" className="text-lg font-bold">
-                My people
+                People you follow
               </h2>
               <p className="text-sm text-muted-foreground">
                 Members you&apos;ve followed, for one-click access. Only you can see this list.

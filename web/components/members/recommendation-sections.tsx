@@ -39,7 +39,7 @@ export const RECOMMENDATION_SECTIONS: {
   {
     key: "newMembers",
     tabLabel: "New members",
-    title: "New members",
+    title: "Recently joined",
     description: () => `Joined in the last ${NEW_MEMBER_WINDOW_DAYS} days — say hello.`,
   },
   {
