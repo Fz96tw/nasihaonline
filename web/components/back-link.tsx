@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 /**
  * Generic browser-back control, used on pages reachable from more than one
@@ -26,7 +27,8 @@ export function BackLink({ fallbackHref, className }: { fallbackHref: string; cl
           router.push(fallbackHref);
         }
       }}
-      className={className ?? "inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline"}
+      // w-fit: inside a flex-col parent the link would otherwise stretch to the full row width, making empty space beside it clickable.
+      className={cn("w-fit", className ?? "inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline")}
     >
       <ArrowLeft className="h-3.5 w-3.5" />
       Back
