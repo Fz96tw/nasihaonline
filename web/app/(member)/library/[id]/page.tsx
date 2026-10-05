@@ -10,7 +10,7 @@ import { getForumThreadDetail } from "@/lib/forums-server";
 import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS } from "@/lib/library";
 import { FEED_TYPE_LABELS } from "@/lib/feed";
-import { youtubeThumbnailUrl } from "@/lib/youtube";
+import { youtubeEmbedUrl, youtubeThumbnailUrl } from "@/lib/youtube";
 import { KnowledgeContentType, KnowledgeStatus, KnowledgeVisibility, Role } from "@/lib/generated/prisma/enums";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -74,10 +74,13 @@ export default async function LibraryItemDetailPage({
     : null;
   const mentionableMembers = thread ? await getMentionableMembers() : [];
 
-  // A custom hero image always wins; a recorded_lecture with none set falls
-  // back to its video's YouTube thumbnail as the default cover — same
-  // precedence as LibraryItemCard's browse-grid thumbnail.
-  const heroImageUrl = item.heroImageUrl ?? (item.youtubeUrl ? youtubeThumbnailUrl(item.youtubeUrl) : null);
+  // A custom hero image always wins. With none set, the video's YouTube
+  // thumbnail is the browse-card/feed cover, but not here: the embedded
+  // player in ResourcePreview already shows the video, so a thumbnail banner
+  // above it would be redundant. Fall back to the thumbnail only when the
+  // link can't be embedded.
+  const heroImageUrl =
+    item.heroImageUrl ?? (item.youtubeUrl && !youtubeEmbedUrl(item.youtubeUrl) ? youtubeThumbnailUrl(item.youtubeUrl) : null);
 
   return (
     <main className="mx-auto max-w-3xl px-8 py-16">
