@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Flag } from "lucide-react";
-import { MessageMemberButton } from "@/components/members/message-member-button";
 import { FollowMemberButton } from "@/components/members/follow-member-button";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -262,8 +261,8 @@ function PostNode({
       className="flex scroll-mt-[calc(var(--header-height)+var(--search-row-height)+var(--live-strip-height)+16px)] flex-col gap-3"
     >
       <div className="rounded-[10px] border bg-muted/40 p-3">
-        <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-          <span className="flex items-center gap-2">
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             {post.authorProfile ? (
               <Link
                 href={`/members/${post.authorProfile.id}`}
@@ -281,6 +280,9 @@ function PostNode({
             )}
             {post.removed && <Badge variant="neutral">Removed</Badge>}
             {!post.removed && flagged && <Badge variant="danger">Flagged</Badge>}
+            {!post.removed && post.authorProfile && post.authorId !== currentUserId && (
+              <FollowMemberButton memberId={post.authorProfile.id} memberName={authorName} variant="nudge" />
+            )}
           </span>
           <span>
             {formatTimestamp(post.createdAt)}
@@ -319,7 +321,7 @@ function PostNode({
             {renderTextWithMentions(post.body, mentionableMembers, highlightQuery)}
           </p>
         )}
-        <div className="mt-2 flex items-center gap-3">
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
           <button
             type="button"
             className="text-xs font-medium text-primary hover:underline"
@@ -349,12 +351,6 @@ function PostNode({
             >
               {deleting ? "Deleting…" : "Delete"}
             </button>
-          )}
-          {!post.removed && post.authorProfile && post.authorId !== currentUserId && (
-            <>
-              <MessageMemberButton memberId={post.authorProfile.id} memberName={authorName} variant="nudge" />
-              <FollowMemberButton memberId={post.authorProfile.id} memberName={authorName} variant="nudge" />
-            </>
           )}
           {!post.removed && !flagged && (
             <button
