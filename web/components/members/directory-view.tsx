@@ -268,13 +268,23 @@ export function DirectoryView({
         id,
         label: "All members",
         content: (
-          <DirectoryGrid
-            members={filtered}
-            currentUserId={currentUserId}
-            isLoading={isLoading}
-            isFiltering={isFiltering}
-            summaryExtra={placeChip}
-          />
+          <section aria-labelledby="pane-all" className="flex flex-col gap-3">
+            <div>
+              <h2 id="pane-all" className="text-lg font-bold">
+                All members
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Everyone in the Directory. Search or filter above to narrow the list.
+              </p>
+            </div>
+            <DirectoryGrid
+              members={filtered}
+              currentUserId={currentUserId}
+              isLoading={isLoading}
+              isFiltering={isFiltering}
+              summaryExtra={placeChip}
+            />
+          </section>
         ),
       };
     }
