@@ -246,9 +246,9 @@ export function InboxPanel({
           <h3 id="recent-conversations" className="mb-2 text-sm font-semibold text-muted-foreground">
             Recent conversations
           </h3>
-          <ul className="flex gap-2 overflow-x-auto pb-1">
+          <ul className="flex flex-wrap gap-2">
             {recentConversations.map((item) => (
-              <li key={item.otherPartyId} className="shrink-0">
+              <li key={item.otherPartyId} className="min-w-0 max-w-full">
                 <button
                   type="button"
                   onClick={() => {
@@ -259,12 +259,12 @@ export function InboxPanel({
                   }}
                   aria-label={`Open your latest conversation with ${item.otherPartyName}`}
                   className={cn(
-                    "flex items-center gap-2 rounded-full border bg-card py-1 pl-1 pr-3 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    "flex max-w-full items-center gap-2 rounded-full border bg-card py-1 pl-1 pr-3 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     item.unread && "border-primary font-semibold",
                   )}
                 >
                   <Avatar name={item.otherPartyName} src={item.otherPartyAvatarUrl} size="xs" />
-                  {item.otherPartyName}
+                  <span className="truncate">{item.otherPartyName}</span>
                   {item.unread && <span className="h-2 w-2 rounded-full bg-primary" aria-label="unread" />}
                 </button>
               </li>
