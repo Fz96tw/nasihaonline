@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Filter, Search, UserCheck, X } from "lucide-react";
+import { Filter, Search, X } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -231,13 +230,6 @@ export function InboxPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Conversations</h2>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <Link
-            href="/members?pane=my-people"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-          >
-            <UserCheck className="h-4 w-4" aria-hidden />
-            My people
-          </Link>
           <NewConversationActions currentUserId={currentUserId} />
         </div>
       </div>
