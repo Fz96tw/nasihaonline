@@ -344,7 +344,7 @@ export function DirectoryView({
         value={activePane}
         onValueChange={handlePaneChange}
         chevronOffsets={["-left-7", "-right-7"]}
-        tabListClassName="-mt-2 flex gap-1 overflow-x-auto border-b"
+        tabListClassName="-mt-2 flex gap-1 overflow-x-auto overflow-y-hidden border-b"
         tabClassName={(selected) =>
           cn(
             "-mb-px flex-shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
