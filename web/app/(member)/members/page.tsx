@@ -2,25 +2,25 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getDirectoryMembers, getDirectoryRecommendations } from "@/lib/members-server";
+import { getMyPeople } from "@/lib/member-follows-server";
 import { getAllSkills } from "@/lib/skills-server";
 import { DirectoryFiltersBar } from "@/components/members/directory-filters-bar";
 import { DirectoryView } from "@/components/members/directory-view";
-import Link from "next/link";
-import { UserCheck } from "lucide-react";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 
 export const metadata: Metadata = {
   title: "Member Directory",
 };
 
-export default async function MembersPage() {
+export default async function MembersPage({ searchParams }: { searchParams: { pane?: string } }) {
   const user = await getSessionUser();
   if (!user) redirect("/sign-in");
 
-  const [members, skills, recommendations] = await Promise.all([
+  const [members, skills, recommendations, myPeople] = await Promise.all([
     getDirectoryMembers(),
     getAllSkills(),
     getDirectoryRecommendations(user.id),
+    getMyPeople(user.id),
   ]);
 
   return (
@@ -49,17 +49,14 @@ export default async function MembersPage() {
       </section>
 
       <section className="mx-auto flex max-w-[1120px] flex-col gap-8 px-8 py-16">
-        <div className="flex justify-end">
-          <Link
-            href="/members/my-people"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-          >
-            <UserCheck className="h-4 w-4" aria-hidden />
-            My people
-          </Link>
-        </div>
         <DirectoryFiltersBar availableSkills={skills} />
-        <DirectoryView initialMembers={members} recommendations={recommendations} currentUserId={user.id} />
+        <DirectoryView
+          initialMembers={members}
+          recommendations={recommendations}
+          myPeople={myPeople}
+          initialPane={searchParams.pane}
+          currentUserId={user.id}
+        />
       </section>
     </main>
   );

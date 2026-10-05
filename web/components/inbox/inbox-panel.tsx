@@ -232,7 +232,7 @@ export function InboxPanel({
         <h2 className="text-lg font-semibold">Conversations</h2>
         <div className="flex items-center gap-4">
           <Link
-            href="/members/my-people"
+            href="/members?pane=my-people"
             className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
           >
             <UserCheck className="h-4 w-4" aria-hidden />

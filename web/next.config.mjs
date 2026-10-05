@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  async redirects() {
+    // "My people" is a pane of the Member Directory now; keep old bookmarks working.
+    return [{ source: "/members/my-people", destination: "/members?pane=my-people", permanent: true }];
+  },
   images: {
     // AVIF first (smaller than WebP at equivalent quality for photographic
     // content, which is most of what's in public/images/) with WebP as the

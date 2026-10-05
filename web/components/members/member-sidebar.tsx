@@ -21,13 +21,10 @@ export function MemberSidebar({
   canModerate?: boolean;
 }) {
   const pathname = usePathname();
-  // Prefix match, except when a longer nav href also matches (e.g. /members
-  // vs /members/my-people) — then only the most specific item is active.
-  const allHrefs = MEMBER_NAV_SECTIONS.flatMap((section) => section.items.flatMap((item) => (item.href ? [item.href] : [])));
-  const isHrefActive = (href: string | undefined) =>
-    href != null &&
-    pathname.startsWith(href) &&
-    !allHrefs.some((other) => other.length > href.length && other.startsWith(href) && pathname.startsWith(other));
+  // Prefix match. Items that deep-link to a pane (href has a query, e.g.
+  // /members?pane=my-people) are never highlighted, so the Member Directory
+  // item stays the one active on /members.
+  const isHrefActive = (href: string | undefined) => href != null && !href.includes("?") && pathname.startsWith(href);
   const footerItems = memberFooterItems({ isAdmin, canModerate });
 
   const [pinned, setPinned] = useState(true);

@@ -2,7 +2,7 @@
 
 import "leaflet/dist/leaflet.css";
 import "@/components/members/directory-map.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import L from "leaflet";
 import { MapContainer, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { animateNumber, prefersReducedMotion, useCountUp } from "@/lib/count-up";
@@ -28,6 +28,12 @@ export type DirectoryMapProps = {
   onSelect: (key: string | null) => void;
   /** Members in the current result set who have no plottable location. */
   unmappedCount: number;
+  /**
+   * Set (and read-and-cleared) by the parent just before it clears the
+   * selection for a reason other than the user clearing it (e.g. switching
+   * panes): the map then keeps its position and zoom instead of flying back out.
+   */
+  keepViewOnClear?: MutableRefObject<boolean>;
 };
 
 const WORLD_BOUNDS: L.LatLngBoundsLiteral = [
@@ -319,7 +325,15 @@ function ClusterLayer({
 //     reduced-motion users get an instant jump instead.
 //   * Count-up: each marker's number tweens from what it last showed (0 for a
 //     marker that's new to the map) to its current count.
-function MapEffects({ buckets, selected }: { buckets: MapBucket[]; selected: string | null }) {
+function MapEffects({
+  buckets,
+  selected,
+  keepViewOnClear,
+}: {
+  buckets: MapBucket[];
+  selected: string | null;
+  keepViewOnClear?: MutableRefObject<boolean>;
+}) {
   const map = useMap();
 
   const bucketsRef = useRef(buckets);
@@ -330,6 +344,11 @@ function MapEffects({ buckets, selected }: { buckets: MapBucket[]; selected: str
     const first = lastSelected.current === undefined;
     if (!first && lastSelected.current === selected) return;
     lastSelected.current = selected;
+
+    if (!selected && keepViewOnClear?.current) {
+      keepViewOnClear.current = false;
+      return;
+    }
 
     const target = selected ? bucketsRef.current.find((bucket) => bucket.key === selected) : null;
     if (selected && !target) return; // selected place has no marker under the current filters
@@ -343,7 +362,7 @@ function MapEffects({ buckets, selected }: { buckets: MapBucket[]; selected: str
       : worldFitZoom(map);
     if (instant) map.setView(center, zoom, { animate: false });
     else map.flyTo(center, zoom, { duration: FLY_DURATION_S });
-  }, [selected, map]);
+  }, [selected, map, keepViewOnClear]);
 
   const shown = useRef(new Map<string, number>());
   const running = useRef(new Map<string, () => void>());
@@ -400,7 +419,7 @@ function MapSummary({ buckets }: { buckets: MapBucket[] }) {
   );
 }
 
-export function DirectoryMap({ buckets, selected, onSelect, unmappedCount }: DirectoryMapProps) {
+export function DirectoryMap({ buckets, selected, onSelect, unmappedCount, keepViewOnClear }: DirectoryMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Icons are keyed on the buckets only, NOT on `selected`: rebuilding an icon
@@ -488,7 +507,7 @@ export function DirectoryMap({ buckets, selected, onSelect, unmappedCount }: Dir
             onSelect={onSelect}
             onRebuilt={() => setLayoutVersion((version) => version + 1)}
           />
-          <MapEffects buckets={buckets} selected={selected} />
+          <MapEffects buckets={buckets} selected={selected} keepViewOnClear={keepViewOnClear} />
         </MapContainer>
       </div>
 
