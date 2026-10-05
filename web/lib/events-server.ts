@@ -1,5 +1,5 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import { INBOX_TIERS, type DirectoryMember } from "@/lib/members";
 import { getDirectoryMembersByIds } from "@/lib/members-server";
@@ -1154,7 +1154,7 @@ export async function getEventAttendees(
       orderBy: { createdAt: "asc" },
     }),
     db.eventRegistration.findMany({
-      where: { eventId },
+      where: { eventId, revokedAt: null },
       select: { id: true, name: true, email: true },
       orderBy: { createdAt: "asc" },
     }),
@@ -1659,6 +1659,35 @@ export async function getEventEngagementForAdmin() {
   return [...guestRows, ...memberRows].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
+/** Fresh unguessable token for an event's private guest-invite link (24 random bytes, URL-safe). */
+function newGuestLinkToken(): string {
+  return randomBytes(24).toString("base64url");
+}
+
+/**
+ * Token to store for the host's "Allow guests with a private link" setting.
+ * `wanted` already folds in the event being public/non-restricted. Turning it
+ * off on a published event also revokes every guest the link admitted, so
+ * the event page's guest list and the meeting both reflect that. Keeps the
+ * current token when it stays on, so saving other edits doesn't invalidate a
+ * link the host already sent.
+ */
+async function resolveGuestLinkToken(
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  wanted: boolean,
+  current: string | null,
+): Promise<string | null> {
+  if (wanted) return current ?? newGuestLinkToken();
+  if (current) {
+    await tx.eventRegistration.updateMany({
+      where: { eventId, source: "link", revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+  return null;
+}
+
 export class EventError extends Error {
   constructor(
     public readonly status: 400 | 403 | 404 | 409 | 502,
@@ -2004,6 +2033,8 @@ export async function createEvent(
     startsAt: string;
     endsAt: string | null;
     open: boolean;
+    /** Private guest-invite link on/off (see Event.guestLinkToken) — only honoured for a public (`open`, non-restricted) event. */
+    guestLinkEnabled: boolean;
     meetingUrl: string | null;
     deidentificationConfirmed: boolean;
     timezone: string | null;
@@ -2204,6 +2235,10 @@ export async function createEvent(
         endsAt,
         timezone: input.timezone,
         open: input.open,
+        guestLinkToken:
+          input.guestLinkEnabled && input.open && input.visibility !== EventVisibility.invited
+            ? newGuestLinkToken()
+            : null,
         heroImageUrl,
         meetingUrl,
         googleEventId,
@@ -2372,7 +2407,7 @@ export async function resendEventNotifications(
   // naturally empty on the isRestricted branch.
   const registrations = !isRestricted && event.open
     ? await db.eventRegistration.findMany({
-        where: { eventId: event.id },
+        where: { eventId: event.id, revokedAt: null },
         select: { id: true, email: true, name: true },
       })
     : [];
@@ -2470,7 +2505,7 @@ async function getEventAttendeeMessageRecipients(eventId: string, hostId: string
       where: { eventId, status: RSVPStatus.going, userId: { not: hostId } },
       select: { user: { select: { id: true, email: true, name: true } } },
     }),
-    db.eventRegistration.findMany({ where: { eventId }, select: { email: true, name: true } }),
+    db.eventRegistration.findMany({ where: { eventId, revokedAt: null }, select: { email: true, name: true } }),
   ]);
   const members = rsvps.map((rsvp) => rsvp.user);
   // A member who also registered as a guest with the same email gets one email.
@@ -2634,6 +2669,7 @@ export async function getEventForEdit(eventId: string) {
       endsAt: true,
       timezone: true,
       open: true,
+      guestLinkToken: true,
       meetingUrl: true,
       googleEventId: true,
       livekitRoomName: true,
@@ -2669,6 +2705,7 @@ export async function getEventForEdit(eventId: string) {
     endsAt: event.endsAt?.toISOString() ?? null,
     timezone: event.timezone,
     open: event.open,
+    guestLinkEnabled: event.guestLinkToken !== null,
     meetingUrl: event.meetingUrl,
     meetLinkSource,
     heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
@@ -2713,6 +2750,8 @@ export async function updateEvent(
     startsAt: string;
     endsAt: string | null;
     open: boolean;
+    /** Private guest-invite link on/off (see Event.guestLinkToken) — only honoured for a public (`open`, non-restricted) event. */
+    guestLinkEnabled: boolean;
     meetingUrl: string | null;
     /** Only meaningful when it differs from the event's current platform (derived from meetingUrl/googleEventId/livekitRoomName below) — otherwise this is just "manual" carried along unchanged, same value every edit re-submits. */
     meetLinkSource: "auto" | "manual" | "livekit";
@@ -2747,6 +2786,7 @@ export async function updateEvent(
       meetingUrl: true,
       livekitRoomName: true,
       publishedAt: true,
+      guestLinkToken: true,
       recurrence: { select: RECURRENCE_SELECT },
       // Only ever non-empty for a restricted event — the attendee list a
       // regenerated Meet/LiveKit calendar event needs when switching
@@ -2925,6 +2965,12 @@ export async function updateEvent(
         endsAt,
         timezone: input.timezone,
         open: input.open,
+        guestLinkToken: await resolveGuestLinkToken(
+          tx,
+          event.id,
+          input.guestLinkEnabled && input.open && event.visibility !== EventVisibility.invited,
+          event.guestLinkToken,
+        ),
         heroImageUrl,
         meetingUrl,
         googleEventId,
@@ -3059,6 +3105,8 @@ export async function saveEventDraft(
     startsAt: string;
     endsAt: string | null;
     open: boolean;
+    /** Private guest-invite link on/off (see Event.guestLinkToken) — only honoured for a public (`open`, non-restricted) event. */
+    guestLinkEnabled: boolean;
     meetingUrl: string | null;
     deidentificationConfirmed: boolean;
     timezone: string | null;
@@ -3189,6 +3237,10 @@ export async function saveEventDraft(
         endsAt,
         timezone: input.timezone,
         open: input.open,
+        guestLinkToken:
+          input.guestLinkEnabled && input.open && input.visibility !== EventVisibility.invited
+            ? newGuestLinkToken()
+            : null,
         heroImageUrl,
         meetingUrl: input.meetingUrl,
         visibility: input.visibility,
@@ -3252,6 +3304,8 @@ export async function publishEventDraft(
     startsAt: string;
     endsAt: string | null;
     open: boolean;
+    /** Private guest-invite link on/off (see Event.guestLinkToken) — only honoured for a public (`open`, non-restricted) event. */
+    guestLinkEnabled: boolean;
     meetingUrl: string | null;
     deidentificationConfirmed: boolean;
     timezone: string | null;
@@ -3416,6 +3470,10 @@ export async function publishEventDraft(
         endsAt,
         timezone: input.timezone,
         open: input.open,
+        guestLinkToken:
+          input.guestLinkEnabled && input.open && input.visibility !== EventVisibility.invited
+            ? newGuestLinkToken()
+            : null,
         heroImageUrl,
         meetingUrl: provisioned.meetingUrl,
         googleEventId: provisioned.googleEventId,
@@ -3744,7 +3802,7 @@ async function notifyEventAudience(
       where: { eventId, status: RSVPStatus.going },
       select: { userId: true, user: { select: { email: true, name: true } } },
     }),
-    db.eventRegistration.findMany({ where: { eventId }, select: { email: true, name: true } }),
+    db.eventRegistration.findMany({ where: { eventId, revokedAt: null }, select: { email: true, name: true } }),
   ]);
 
   // Invitees ∪ RSVP'd members, deduped by userId — a restricted-event
@@ -4139,7 +4197,7 @@ async function applyRsvp(actingUser: UserModel, eventId: string, mode: "toggle" 
 
   const [goingCount, registrationCount] = await Promise.all([
     db.rSVP.count({ where: { eventId, status: RSVPStatus.going } }),
-    db.eventRegistration.count({ where: { eventId } }),
+    db.eventRegistration.count({ where: { eventId, revokedAt: null } }),
   ]);
 
   return {
@@ -4575,13 +4633,29 @@ export async function getEventMeetingStatus(
     const registration = registrationId
       ? await db.eventRegistration.findUnique({
           where: { id: registrationId },
-          select: { eventId: true, name: true, email: true },
+          select: { eventId: true, name: true, email: true, revokedAt: true, joinedAt: true },
         })
       : null;
     if (!registration || registration.eventId !== eventId) {
       throw new EventError(403, "Register for this event to view the meeting.");
     }
-    guestName = `${registration.name} (${registration.email})`;
+    // Host revoked this guest (or rotated the private link that admitted
+    // them) — checked here, the single place every anonymous status/token/
+    // chat call funnels through, so a revoke takes effect on the next poll.
+    if (registration.revokedAt) {
+      throw new EventError(403, "Your access to this event has been removed by the host.");
+    }
+    // First time this guest reaches the meeting — drives the host's "joined"
+    // column. Only written once (the status route is polled every ~5s).
+    if (!registration.joinedAt) {
+      await db.eventRegistration.updateMany({
+        where: { id: registrationId!, joinedAt: null },
+        data: { joinedAt: new Date() },
+      });
+    }
+    // An emailed invitee has no name until they give one, so fall back to
+    // just the address rather than rendering "null (email)".
+    guestName = registration.name ? `${registration.name} (${registration.email})` : registration.email;
   } else if (!isHost) {
     const rsvp = await db.rSVP.findUnique({
       where: { eventId_userId: { eventId, userId } },

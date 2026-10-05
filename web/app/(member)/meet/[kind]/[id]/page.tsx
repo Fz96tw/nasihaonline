@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { EventError, getEventMeetingStatus } from "@/lib/events-server";
+import { getGuestLinkPreview } from "@/lib/event-guest-invites-server";
+import { GuestLinkJoin } from "@/components/events/guest-link-join";
 import { getMeetingRequestMeetingStatus, MeetingRequestError } from "@/lib/meeting-requests-server";
 import { getQuickRecordingMaxDuration } from "@/lib/settings";
 import { MeetingWaitingRoom, type MeetingWaitingRoomStatus } from "@/components/calendar/meeting-waiting-room";
@@ -30,7 +32,7 @@ export default async function MeetPage({
   searchParams,
 }: {
   params: Promise<{ kind: string; id: string }>;
-  searchParams: Promise<{ rid?: string }>;
+  searchParams: Promise<{ rid?: string; gt?: string }>;
 }) {
   const { kind, id } = await params;
   // `rid` (EventRegistration.id) rides only on an event's emailed join link
@@ -41,7 +43,7 @@ export default async function MeetPage({
   // endpoint an anonymous browser calls (statusEndpoint/tokenEndpoint/
   // chatEndpoint below), which each independently re-validate it. Meaningless
   // for kind "request" (no anonymous-guest concept there).
-  const { rid } = await searchParams;
+  const { rid, gt } = await searchParams;
   if (kind !== "event" && kind !== "request" && kind !== "quick") notFound();
 
   const user = await getSessionUser();
@@ -57,6 +59,27 @@ export default async function MeetPage({
   // getInboxList's `origin: directory` filter), and its own creation entry
   // points are Dashboard/Forums, so it goes back to the Dashboard.
   const backHref = kind === "event" ? `/calendar/${id}` : kind === "quick" ? "/dashboard" : `/inbox?item=${id}`;
+
+  // A host's private guest link (?gt=) — a signed-out visitor with no
+  // registration yet gives name + email first (GuestLinkJoin), which mints
+  // the same `rid` every other anonymous path uses. Never reached by a
+  // signed-in member, who goes through the normal RSVP path below.
+  if (kind === "event" && !user && !rid && gt) {
+    try {
+      const preview = await getGuestLinkPreview(id, gt);
+      return <GuestLinkJoin eventId={id} token={gt} {...preview} />;
+    } catch (error) {
+      if (!(error instanceof EventError)) throw error;
+      return (
+        <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center gap-4 p-8 text-center">
+          <h1 className="text-2xl font-bold tracking-tight">This invitation link isn&apos;t valid</h1>
+          <p className="text-muted-foreground">
+            It may have been replaced or turned off by the host. Ask them to send you the latest link.
+          </p>
+        </main>
+      );
+    }
+  }
 
   let status: MeetingWaitingRoomStatus | null = null;
   let deniedMessage: string | null = null;

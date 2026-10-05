@@ -358,6 +358,100 @@ export async function sendEventRegistrationConfirmationEmail(
 }
 
 /**
+ * A host's in-app invitation of a non-member to an `open` event
+ * (lib/event-guest-invites-server.ts). Unlike the best-effort emails above
+ * it reports success, because the host's invite list needs to say which
+ * addresses actually went out.
+ *
+ * The host is BCC'd (so they keep a copy without the guest seeing their
+ * address in a CC line) and set as `replyTo` so a guest's reply reaches the
+ * person who invited them rather than the no-reply sender. The BCC'd copy
+ * carries the guest's personal `?rid=` join link — a working credential in
+ * the host's own mailbox, which is the accepted trade-off for the copy.
+ * `note` is the host's free text and is escaped; the host's address is only
+ * ever used in the BCC/replyTo headers, never in the body.
+ */
+export async function sendEventGuestInviteEmail(params: {
+  to: string;
+  hostName: string;
+  hostEmail: string;
+  note: string | null;
+  event: {
+    id: string;
+    registrationId: string;
+    title: string;
+    startsAt: Date;
+    timezone: string | null;
+    meetingUrl: string | null;
+    livekitRoomName: string | null;
+    icsContent: string;
+    icsFilename: string;
+  };
+}): Promise<SendResult> {
+  const { to, hostName, hostEmail, note, event } = params;
+  if (!resend) {
+    const error = "RESEND_API_KEY not set";
+    console.warn(`[email] ${error} — skipping guest invite email to ${to}`);
+    return { ok: false, error };
+  }
+
+  const when = formatEventDateTime(event.startsAt, event.timezone);
+  const joinUrl = event.meetingUrl || event.livekitRoomName
+    ? `${APP_URL}/meet/event/${event.id}?rid=${encodeURIComponent(event.registrationId)}`
+    : null;
+  const joinLine = joinUrl
+    ? `Use this link to join the meeting at the scheduled time:\n${joinUrl}`
+    : "We'll share the joining details closer to the event.";
+
+  const safeHost = escapeHtml(hostName);
+  const safeTitle = escapeHtml(event.title);
+  const safeWhen = escapeHtml(when);
+  const noteText = note ? `\n\n${hostName} says:\n"${note}"` : "";
+  const noteHtml = note
+    ? `<blockquote style="margin:16px 0;padding:8px 16px;border-left:3px solid #d4d4d8;color:#3f3f46;white-space:pre-wrap">${escapeHtml(note)}</blockquote>`
+    : "";
+
+  try {
+    const { error } = await sendEmail({
+      from: FROM_EMAIL,
+      to,
+      bcc: hostEmail,
+      replyTo: hostEmail,
+      subject: `${hostName} invited you: ${event.title}`,
+      text: `${hostName} has invited you to "${event.title}" on ${when}, a NASIHA community event.${noteText}\n\nWe've attached a calendar invite so it's on your calendar.\n\n${joinLine}\n\nThis link is personal to you — please don't forward it. You can reply to this email to reach ${hostName}.\n\n— The NASIHA Team`,
+      html: `<div>
+        <p>${safeHost} has invited you to <strong>${safeTitle}</strong> on ${safeWhen}, a NASIHA community event.</p>
+        ${noteHtml}
+        <p>We've attached a calendar invite so it's on your calendar.</p>
+        ${
+          joinUrl
+            ? `<p><a href="${joinUrl}" style="display:inline-block;padding:12px 24px;background-color:#1d4ed8;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600">Join the meeting</a></p>
+        <p>If the button doesn't work, copy and paste this link into your browser:<br><a href="${joinUrl}">${joinUrl}</a></p>`
+            : "<p>We'll share the joining details closer to the event.</p>"
+        }
+        <p>This link is personal to you — please don't forward it. You can reply to this email to reach ${safeHost}.</p>
+        <p>— The NASIHA Team</p>
+      </div>`,
+      attachments: [
+        {
+          filename: event.icsFilename,
+          content: Buffer.from(event.icsContent, "utf-8"),
+          contentType: "text/calendar",
+        },
+      ],
+    });
+    if (error) {
+      console.error("[email] Resend rejected guest invite email", error);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
+  } catch (error) {
+    console.error("[email] Failed to send guest invite email", error);
+    return { ok: false, error: error instanceof Error ? error.message : "Send failed" };
+  }
+}
+
+/**
  * Sent to every anonymous (non-member) EventRegistration guest when the
  * host/admin resends notifications for an `open`, community-visibility
  * event (lib/events-server.ts's resendEventNotifications) — the guest

@@ -64,7 +64,11 @@ export async function resolveSurveyAudience(survey: {
   }
 
   if (survey.audienceEventRegistrants) {
-    const registrants = await db.eventRegistration.findMany({ select: { email: true, name: true } });
+    const registrants = await db.eventRegistration.findMany({
+      // A host-typed invite address isn't an opt-in, and a revoked guest was removed.
+      where: { revokedAt: null, source: { not: "invited" } },
+      select: { email: true, name: true },
+    });
     for (const registrant of registrants) {
       const key = registrant.email.toLowerCase();
       if (!byEmail.has(key)) {

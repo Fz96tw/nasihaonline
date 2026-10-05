@@ -82,6 +82,7 @@ model User {
   // convention as ContributionEvent.actorId, since a host's past events
   // are historical record even if their account is later removed.
   hostedEvents                    Event[]                      @relation("EventHost")
+  invitedEventGuests              EventRegistration[]          @relation("EventGuestInviter")
   eventRsvps                      RSVP[]                       @relation("EventRsvp")
   eventAttendances                Attendance[]                 @relation("EventAttendance")
   eventInvitations                EventInvitee[]               @relation("EventInvitee")
@@ -1161,6 +1162,12 @@ model Event {
   // time rather than needing a backfill.
   timezone                        String?
   open                            Boolean         @default(false)
+  // Private guest-invite link: null = feature off for this event, set =
+  // an unguessable token that /meet/event/[id]?gt=<token> accepts in place
+  // of a registration (the visitor gives name + email and gets a `link`
+  // EventRegistration). Only meaningful on an `open` event; regenerating
+  // overwrites it (and revokes the `link` registrations the old token made).
+  guestLinkToken                  String?         @unique
   heroImageUrl                    String?
   meetingUrl                      String?
   // Set only when meetingUrl was auto-generated via createMeetingCalendarEvent
@@ -1619,16 +1626,37 @@ model EventCoHost {
 // lead-capture record for later membership-campaign outreach (no userId —
 // same nullable-account-capture precedent as Donation/MembershipApplication).
 model EventRegistration {
-  id        String   @id @default(cuid())
-  eventId   String
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  email     String
-  name      String?
-  createdAt DateTime @default(now())
+  id          String                  @id @default(cuid())
+  eventId     String
+  event       Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  email       String
+  name        String?
+  // How this registration came to exist — `public` is the original
+  // /events sign-up form (every pre-existing row), `invited` is a host's
+  // in-app email invitation, `link` is someone who joined through the
+  // event's private guest link.
+  source      EventRegistrationSource @default(public)
+  // Set for `invited` rows: who sent the invite and when (resending bumps it).
+  invitedById String?
+  invitedBy   User?                   @relation("EventGuestInviter", fields: [invitedById], references: [id], onDelete: SetNull)
+  invitedAt   DateTime?
+  // First time this guest opened the meeting (status/token) — drives the
+  // sent-invites list's "joined" column.
+  joinedAt    DateTime?
+  // Host revoked this guest (or regenerated the link that admitted them) —
+  // getEventMeetingStatus rejects the registration's rid from then on.
+  revokedAt   DateTime?
+  createdAt   DateTime                @default(now())
 
   @@unique([eventId, email])
   @@index([email])
   @@map("event_registrations")
+}
+
+enum EventRegistrationSource {
+  public
+  invited
+  link
 }
 
 // Records that a user actually attended (vs. merely RSVP'd). A `host`-role

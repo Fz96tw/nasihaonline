@@ -74,6 +74,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     startsAt: formData.get("startsAt"),
     endsAt: formData.get("endsAt") || null,
     open: formData.get("open") === "true",
+    guestLinkEnabled: formData.get("guestLinkEnabled") === "true",
     meetingUrl: formData.get("meetingUrl") || null,
     meetLinkSource: formData.get("meetLinkSource") || "manual",
     deidentificationConfirmed: formData.get("deidentificationConfirmed") === "true",

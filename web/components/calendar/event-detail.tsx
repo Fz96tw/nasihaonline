@@ -11,6 +11,7 @@ import { AddToCalendarButton } from "@/components/calendar/add-to-calendar-butto
 import { EventViewCounter } from "@/components/calendar/event-view-counter";
 import { ManageInvitees } from "@/components/calendar/manage-invitees";
 import { CancelEventButton } from "@/components/calendar/cancel-event-button";
+import { ManageGuestInvites } from "@/components/calendar/manage-guest-invites";
 import { ResendNotifications } from "@/components/calendar/resend-notifications";
 import { MessageAttendees } from "@/components/calendar/message-attendees";
 import { RecordingRow } from "@/components/calendar/recording-row";
@@ -405,6 +406,10 @@ export function EventDetail({
           restricted={event.visibility === EventVisibility.invited}
           initialBroadcasts={notificationBroadcasts}
         />
+      ) : null}
+
+      {canEdit && event.open && event.visibility !== EventVisibility.invited && !event.cancelled && !isPast ? (
+        <ManageGuestInvites eventId={event.seriesId} />
       ) : null}
 
       {canEdit && attendeeMessages ? (

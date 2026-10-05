@@ -12,6 +12,8 @@ const eventFieldsSchema = z.object({
   startsAt: z.string().trim().min(1, "Start date and time are required"),
   endsAt: z.string().trim().min(1).nullable(),
   open: z.boolean(),
+  // Private guest-invite link (Event.guestLinkToken) — only honoured for a public, non-restricted event.
+  guestLinkEnabled: z.boolean(),
   meetingUrl: z
     .string()
     .trim()

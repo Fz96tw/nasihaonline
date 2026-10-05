@@ -88,6 +88,7 @@ export async function POST(request: Request) {
     startsAt: formData.get("startsAt"),
     endsAt: formData.get("endsAt") || null,
     open: formData.get("open") === "true",
+    guestLinkEnabled: formData.get("guestLinkEnabled") === "true",
     meetingUrl: formData.get("meetingUrl") || null,
     deidentificationConfirmed: formData.get("deidentificationConfirmed") === "true",
     timezone: formData.get("timezone") || null,

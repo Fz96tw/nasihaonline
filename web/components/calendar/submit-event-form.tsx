@@ -41,6 +41,7 @@ const DEFAULT_VALUES: CreateEventValues = {
   startsAt: "",
   endsAt: null,
   open: false,
+  guestLinkEnabled: false,
   meetingUrl: null,
   deidentificationConfirmed: false,
   timezone: null,
@@ -123,6 +124,8 @@ type ExistingEvent = {
   /** IANA zone the event was created/last saved in (see Event.timezone's schema comment) — null for legacy rows saved before this field existed. */
   timezone: string | null;
   open: boolean;
+  /** Private guest-invite link is on (Event.guestLinkToken is set). */
+  guestLinkEnabled: boolean;
   meetingUrl: string | null;
   meetLinkSource: "auto" | "manual" | "livekit";
   heroImageUrl: string | null;
@@ -257,6 +260,7 @@ export function SubmitEventForm({
           startsAt: toDatetimeLocalValue(existingEvent.startsAt, existingEvent.timezone ?? DEFAULT_EVENT_TIME_ZONE),
           endsAt: toDatetimeLocalValue(existingEvent.endsAt, existingEvent.timezone ?? DEFAULT_EVENT_TIME_ZONE) || null,
           open: existingEvent.open,
+          guestLinkEnabled: existingEvent.guestLinkEnabled,
           meetingUrl: existingEvent.meetingUrl,
           deidentificationConfirmed: existingEvent.deidentificationConfirmed,
           timezone: existingEvent.timezone,
@@ -383,6 +387,8 @@ export function SubmitEventForm({
       // same "can't linger as true after switching away" rationale as
       // deidentificationConfirmed below.
       formData.append("open", String(!isRestricted && values.open));
+      // Only meaningful for a public event — can't linger as true after switching the audience away from "Open to the public".
+      formData.append("guestLinkEnabled", String(!isRestricted && values.open && values.guestLinkEnabled));
       if (values.meetingUrl) formData.append("meetingUrl", values.meetingUrl);
       // Only relevant (and only enforced) for Case Discussion events — omit
       // for every other type so it can't linger as `true` from switching
@@ -995,6 +1001,30 @@ export function SubmitEventForm({
                   <div>
                     <FormLabel>Open to the public</FormLabel>
                     <FormDescription>Off keeps this event members-only; listed on /events either way.</FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+          )}
+
+          {/* Private guest-invite link — only for a public event. Off by default;
+            the link itself, "Regenerate" and email invitations live on the
+            event's detail page once it's saved and published. */}
+          {isOpen && !isRestricted && (
+            <FormField
+              control={form.control}
+              name="guestLinkEnabled"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between gap-4">
+                  <div>
+                    <FormLabel>Allow guests with a private link</FormLabel>
+                    <FormDescription>
+                      Lets you share a private link, or email invitations, so non-members can join without registering
+                      first. Manage it from the event page after you save.
+                    </FormDescription>
                   </div>
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />
