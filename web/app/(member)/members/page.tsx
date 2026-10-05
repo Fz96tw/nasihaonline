@@ -5,6 +5,8 @@ import { getDirectoryMembers, getDirectoryRecommendations } from "@/lib/members-
 import { getAllSkills } from "@/lib/skills-server";
 import { DirectoryFiltersBar } from "@/components/members/directory-filters-bar";
 import { DirectoryView } from "@/components/members/directory-view";
+import Link from "next/link";
+import { UserCheck } from "lucide-react";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 
 export const metadata: Metadata = {
@@ -47,8 +49,17 @@ export default async function MembersPage() {
       </section>
 
       <section className="mx-auto flex max-w-[1120px] flex-col gap-8 px-8 py-16">
+        <div className="flex justify-end">
+          <Link
+            href="/members/my-people"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+          >
+            <UserCheck className="h-4 w-4" aria-hidden />
+            My people
+          </Link>
+        </div>
         <DirectoryFiltersBar availableSkills={skills} />
-        <DirectoryView initialMembers={members} recommendations={recommendations} />
+        <DirectoryView initialMembers={members} recommendations={recommendations} currentUserId={user.id} />
       </section>
     </main>
   );

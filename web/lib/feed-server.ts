@@ -50,6 +50,7 @@ const EXCERPT_LENGTH = 180;
 const SEARCH_POST_SCAN_LIMIT = 30;
 
 const AUTHOR_SELECT = {
+  id: true,
   name: true,
   profile: { select: { avatarUrl: true, titleSpecialty: true, countryRegion: true, showSpecialtyLocation: true } },
 } as const;
@@ -61,10 +62,12 @@ function truncate(text: string, maxLength = EXCERPT_LENGTH): string {
 }
 
 function authorOf(user: {
+  id: string;
   name: string | null;
   profile: { avatarUrl: string | null; titleSpecialty: string | null; countryRegion: string | null; showSpecialtyLocation: boolean } | null;
 }) {
   return {
+    id: user.id,
     name: user.name,
     avatarUrl: getProfileAvatarUrl(user.profile?.avatarUrl ?? null),
     // Same showSpecialtyLocation enforcement as the Directory (lib/members-server.ts).
@@ -108,6 +111,7 @@ function latestDiscussionReply(thread: DiscussionThreadForFeed, lastActivityAt: 
 // shown unmasked in the admin history list (lib/announcements-server.ts,
 // lib/surveys-server.ts).
 const BOARD_SENDER = {
+  id: null,
   name: "NASIHA Board",
   avatarUrl: "/images/nasihalogo-cropped.png",
   titleSpecialty: null,
@@ -668,6 +672,7 @@ export async function getFeedPage(params: {
             href: `/inbox?item=${item.id}`,
             timestamp: item.lastActivityAt,
             author: {
+              id: item.otherPartyId,
               name: item.otherPartyName,
               avatarUrl: item.otherPartyAvatarUrl,
               titleSpecialty: null,

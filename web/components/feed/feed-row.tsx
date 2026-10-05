@@ -6,6 +6,7 @@ import { type FeedItem, FEED_TYPE_LABELS } from "@/lib/feed";
 import { formatRelativeTime } from "@/lib/format-date";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
 import { Avatar } from "@/components/ui/avatar";
+import { FollowMemberButton } from "@/components/members/follow-member-button";
 import { Badge } from "@/components/ui/badge";
 import { ReviewOfferButton } from "@/components/review/review-offer-button";
 import { HighlightText } from "@/components/highlight-text";
@@ -27,7 +28,7 @@ function formatFeedEventDate(iso: string) {
   return `${datePart}, ${timePart}`;
 }
 
-export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
+export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string; currentUserId?: string }) {
   // Guards the one viewer-zone-dependent value below (formatFeedEventDate)
   // so the server-rendered HTML (server's own zone) and the client's first
   // hydration pass render the same "nothing yet", same rationale as
@@ -77,6 +78,23 @@ export function FeedRow({ item, q }: { item: FeedItem; q?: string }) {
                 <Badge variant="neutral" className="flex-shrink-0">
                   {FEED_TYPE_LABELS[item.type]}
                 </Badge>
+                {item.author.id && item.author.id !== currentUserId && (
+                  // Sits inside the card's <Link>: swallow the click so
+                  // following doesn't also navigate to the item.
+                  <span
+                    className="flex-shrink-0"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                  >
+                    <FollowMemberButton
+                      memberId={item.author.id}
+                      memberName={item.author.name ?? "this member"}
+                      variant="nudge"
+                    />
+                  </span>
+                )}
                 <span className="ml-auto flex-shrink-0 text-xs text-muted-foreground">
                   {formatRelativeTime(item.timestamp)}
                 </span>

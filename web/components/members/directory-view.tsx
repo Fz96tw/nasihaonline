@@ -33,9 +33,11 @@ async function fetchDirectoryMembers(query: string): Promise<DirectoryMember[]> 
 export function DirectoryView({
   initialMembers,
   recommendations,
+  currentUserId,
 }: {
   initialMembers: DirectoryMember[];
   recommendations: DirectoryRecommendations;
+  currentUserId: string;
 }) {
   const search = useDirectoryFilters((state) => state.search);
   const tier = useDirectoryFilters((state) => state.tier);
@@ -171,9 +173,10 @@ export function DirectoryView({
         onSelect={handleSelect}
         unmappedCount={unmappedCount}
       />
-      {!isFiltering && <RecommendationSections recommendations={recommendations} />}
+      {!isFiltering && <RecommendationSections recommendations={recommendations} currentUserId={currentUserId} />}
       <DirectoryGrid
         members={filtered}
+        currentUserId={currentUserId}
         isLoading={isLoading}
         isFiltering={isFiltering}
         summaryExtra={

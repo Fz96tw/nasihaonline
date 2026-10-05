@@ -31,7 +31,8 @@ export type FeedItem = {
   href: string;
   /** ISO timestamp this item was published/created — or, for a forum thread, event, or library item, its latest discussion activity — the feed's sort key. */
   timestamp: string;
-  author: { name: string | null; avatarUrl: string | null; titleSpecialty: string | null; countryRegion: string | null };
+  /** `id` is null for the anonymous NASIHA Board sender (announcements/surveys) — never followable. */
+  author: { id: string | null; name: string | null; avatarUrl: string | null; titleSpecialty: string | null; countryRegion: string | null };
   /** Events, blog posts, announcements, and surveys carry a hero image; library items get one only for recorded lectures (YouTube thumbnail) — null otherwise. Forum threads always carry the same static default (/images/forum-thread.jpg), rendered by FeedRow as a small left-side thumbnail rather than the full-width image used by other types. */
   imageUrl: string | null;
   /** Only "library" items carry this — when true, FeedRow overlays the title in white on a dark gradient directly on imageUrl instead of rendering the full-width image below the title block. Undefined for every other type; always false/undefined when imageUrl is null. */

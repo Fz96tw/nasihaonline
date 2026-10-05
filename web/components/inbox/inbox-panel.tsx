@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Filter, Search, X } from "lucide-react";
+import { Filter, Search, UserCheck, X } from "lucide-react";
+import { Avatar } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -32,6 +34,8 @@ const FILTER_OPTIONS: { value: InboxFilter; label: string }[] = [
 ];
 
 type Person = { id: string; name: string };
+
+const RECENT_CONVERSATIONS_SHOWN = 6;
 
 /**
  * Dropdown of members who have at least one item in the current inbox —
@@ -160,6 +164,19 @@ export function InboxPanel({
     return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [items]);
 
+  // One entry per counterparty, most recently active first — the item is
+  // that person's latest thread/request, so one click opens it.
+  const recentConversations = useMemo(() => {
+    const byPerson = new Map<string, InboxListItem>();
+    for (const item of items) {
+      const existing = byPerson.get(item.otherPartyId);
+      if (!existing || item.lastActivityAt > existing.lastActivityAt) byPerson.set(item.otherPartyId, item);
+    }
+    return Array.from(byPerson.values())
+      .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt))
+      .slice(0, RECENT_CONVERSATIONS_SHOWN);
+  }, [items]);
+
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
     return items.filter((item) => {
@@ -213,8 +230,48 @@ export function InboxPanel({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Conversations</h2>
-        <NewConversationActions currentUserId={currentUserId} />
+        <div className="flex items-center gap-4">
+          <Link
+            href="/members/my-people"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+          >
+            <UserCheck className="h-4 w-4" aria-hidden />
+            My people
+          </Link>
+          <NewConversationActions currentUserId={currentUserId} />
+        </div>
       </div>
+      {recentConversations.length > 0 && (
+        <section aria-labelledby="recent-conversations">
+          <h3 id="recent-conversations" className="mb-2 text-sm font-semibold text-muted-foreground">
+            Recent conversations
+          </h3>
+          <ul className="flex gap-2 overflow-x-auto pb-1">
+            {recentConversations.map((item) => (
+              <li key={item.otherPartyId} className="shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setFilter("all");
+                    setPersonFilter(null);
+                    setSelectedId(item.id);
+                  }}
+                  aria-label={`Open your latest conversation with ${item.otherPartyName}`}
+                  className={cn(
+                    "flex items-center gap-2 rounded-full border bg-card py-1 pl-1 pr-3 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    item.unread && "border-primary font-semibold",
+                  )}
+                >
+                  <Avatar name={item.otherPartyName} src={item.otherPartyAvatarUrl} size="xs" />
+                  {item.otherPartyName}
+                  {item.unread && <span className="h-2 w-2 rounded-full bg-primary" aria-label="unread" />}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <Card className="flex h-[600px] overflow-hidden p-0">
         <div
           className={cn(

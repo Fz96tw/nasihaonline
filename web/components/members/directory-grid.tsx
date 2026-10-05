@@ -14,11 +14,13 @@ import { type DirectoryMember } from "@/lib/members";
  */
 export function DirectoryGrid({
   members,
+  currentUserId,
   isLoading,
   isFiltering,
   summaryExtra,
 }: {
   members: DirectoryMember[];
+  currentUserId: string;
   isLoading: boolean;
   /** True when a search/filter/map pick is active — the no-results state offers to clear it. */
   isFiltering: boolean;
@@ -66,7 +68,7 @@ export function DirectoryGrid({
           </p>
           <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {members.map((member) => (
-              <MemberCard key={member.id} member={member} />
+              <MemberCard key={member.id} member={member} currentUserId={currentUserId} />
             ))}
           </div>
         </>

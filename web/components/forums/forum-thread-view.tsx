@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Flag } from "lucide-react";
 import { MessageMemberButton } from "@/components/members/message-member-button";
+import { FollowMemberButton } from "@/components/members/follow-member-button";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -350,7 +351,10 @@ function PostNode({
             </button>
           )}
           {!post.removed && post.authorProfile && post.authorId !== currentUserId && (
-            <MessageMemberButton memberId={post.authorProfile.id} memberName={authorName} variant="nudge" />
+            <>
+              <MessageMemberButton memberId={post.authorProfile.id} memberName={authorName} variant="nudge" />
+              <FollowMemberButton memberId={post.authorProfile.id} memberName={authorName} variant="nudge" />
+            </>
           )}
           {!post.removed && !flagged && (
             <button

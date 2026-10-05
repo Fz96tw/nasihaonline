@@ -101,6 +101,8 @@ model User {
   forumThreadInvitations    ForumThreadInvitee[]   @relation("ForumThreadInvitee")
   forumPosts                ForumPost[]            @relation("ForumPostAuthor")
   forumFollows              ForumFollow[]
+  membersFollowing          MemberFollow[]         @relation("MemberFollowFollower")
+  followedByMembers         MemberFollow[]         @relation("MemberFollowFollowed")
   threadViews               ThreadView[]
   eventViews                EventView[]
   knowledgeItemViews        KnowledgeItemView[]
@@ -2249,6 +2251,22 @@ model ForumFollow {
   @@unique([forumId, userId])
   @@index([userId])
   @@map("forum_follows")
+}
+
+// "My people" — a private, one-way, no-approval save of another member
+// (modeled on ForumFollow). Only the follower ever sees their own list; the
+// followed member is never notified and there is no follower count.
+model MemberFollow {
+  id         String   @id @default(cuid())
+  followerId String
+  follower   User     @relation("MemberFollowFollower", fields: [followerId], references: [id], onDelete: Cascade)
+  followedId String
+  followed   User     @relation("MemberFollowFollowed", fields: [followedId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([followerId, followedId])
+  @@index([followedId])
+  @@map("member_follows")
 }
 
 // Member-Initiated Restricted Forum Threads (§4.13, §11.16). `community`

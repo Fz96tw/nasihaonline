@@ -147,6 +147,7 @@ export default async function WhatsNewPage({
           activeType={activeType}
           q={q}
           myCommunities={myCommunities}
+          currentUserId={user.id}
         />
       </div>
     </main>

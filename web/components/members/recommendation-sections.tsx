@@ -42,7 +42,13 @@ const SECTIONS: {
  * rendered at all (no empty headings), and the whole block renders nothing
  * when every list is empty.
  */
-export function RecommendationSections({ recommendations }: { recommendations: DirectoryRecommendations }) {
+export function RecommendationSections({
+  recommendations,
+  currentUserId,
+}: {
+  recommendations: DirectoryRecommendations;
+  currentUserId: string;
+}) {
   const visible = SECTIONS.filter(({ key }) => recommendations[key].length > 0);
   if (visible.length === 0) return null;
 
@@ -58,7 +64,7 @@ export function RecommendationSections({ recommendations }: { recommendations: D
           </div>
           <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {recommendations[key].map((member) => (
-              <MemberCard key={member.id} member={member} />
+              <MemberCard key={member.id} member={member} currentUserId={currentUserId} />
             ))}
           </div>
         </section>

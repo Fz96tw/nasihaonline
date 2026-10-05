@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { SendMessageDialog } from "@/components/inbox/send-message-dialog";
 import { RequestMeetingDialog } from "@/components/members/request-meeting-dialog";
 import { ReportConductDialog } from "@/components/members/report-conduct-dialog";
+import { FollowMemberButton } from "@/components/members/follow-member-button";
 
 /**
  * "Send Message" and "Request Meeting" both open into the Inbox domain
@@ -67,6 +68,7 @@ export function MemberCardActions({
               </Button>
             </>
           )}
+          {!isSelf && <FollowMemberButton memberId={memberId} memberName={memberName} />}
           {showReport && (
             <Button
               variant="outline"

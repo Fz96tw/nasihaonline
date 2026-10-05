@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Avatar } from "@/components/ui/avatar";
 import { MessageMemberButton } from "@/components/members/message-member-button";
+import { FollowMemberButton } from "@/components/members/follow-member-button";
 import { memberLocation } from "@/lib/cities";
 import type { DirectoryMember } from "@/lib/members";
 
@@ -42,7 +43,10 @@ export function PeopleYouMet({ members }: { members: DirectoryMember[] }) {
                   {subtitle && <div className="truncate text-xs text-muted-foreground">{subtitle}</div>}
                 </div>
               </Link>
-              <MessageMemberButton memberId={member.id} memberName={name} />
+              <div className="flex flex-shrink-0 items-center gap-2">
+                <FollowMemberButton memberId={member.id} memberName={name} />
+                <MessageMemberButton memberId={member.id} memberName={name} />
+              </div>
             </li>
           );
         })}

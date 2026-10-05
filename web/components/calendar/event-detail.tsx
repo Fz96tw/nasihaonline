@@ -31,6 +31,7 @@ import type { DirectoryMember } from "@/lib/members";
 import { useHasMounted } from "@/lib/use-has-mounted";
 import { formatDurationMinutes, formatTimestamp } from "@/lib/format-date";
 import { MessageMemberButton } from "@/components/members/message-member-button";
+import { FollowMemberButton } from "@/components/members/follow-member-button";
 import { FEED_TYPE_LABELS } from "@/lib/feed";
 import { EventVisibility } from "@/lib/generated/prisma/enums";
 import type { EventNotificationBroadcastItem, EventAttendeeMessageItem } from "@/lib/events";
@@ -206,7 +207,10 @@ export function EventDetail({
             </div>
           )}
           {hostProfile && !isHost && (
-            <MessageMemberButton memberId={hostProfile.id} memberName={hostName} />
+            <>
+              <MessageMemberButton memberId={hostProfile.id} memberName={hostName} />
+              <FollowMemberButton memberId={hostProfile.id} memberName={hostName} />
+            </>
           )}
         </div>
       </div>

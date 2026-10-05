@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getKnowledgeItemRoster, getPublishedKnowledgeItemById } from "@/lib/library-server";
 import { MessageMemberButton } from "@/components/members/message-member-button";
+import { FollowMemberButton } from "@/components/members/follow-member-button";
 import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-server";
 import { getForumThreadDetail } from "@/lib/forums-server";
 import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
@@ -138,7 +139,10 @@ export default async function LibraryItemDetailPage({
             </div>
           )}
           {authorProfile && item.contributor.id !== user.id && (
-            <MessageMemberButton memberId={authorProfile.id} memberName={item.contributor.name ?? "this member"} />
+            <>
+              <MessageMemberButton memberId={authorProfile.id} memberName={item.contributor.name ?? "this member"} />
+              <FollowMemberButton memberId={authorProfile.id} memberName={item.contributor.name ?? "this member"} />
+            </>
           )}
         </div>
         <LibraryViewCounter itemId={item.id} initialViews={item.viewCount} />

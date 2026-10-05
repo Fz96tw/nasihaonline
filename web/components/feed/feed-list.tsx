@@ -12,6 +12,7 @@ export function FeedList({
   activeType,
   q,
   myCommunities,
+  currentUserId,
 }: {
   initialItems: FeedItem[];
   initialCursor: FeedCursor | null;
@@ -21,6 +22,7 @@ export function FeedList({
   q?: string;
   /** "Search only my communities" toggle, threaded into "Load more" pagination. */
   myCommunities?: boolean;
+  currentUserId?: string;
 }) {
   const [items, setItems] = useState(initialItems);
   const [cursor, setCursor] = useState(initialCursor);
@@ -55,7 +57,7 @@ export function FeedList({
     <div className="flex flex-col">
       <ul className="flex flex-col divide-y">
         {items.map((item) => (
-          <FeedRow key={`${item.type}-${item.id}`} item={item} q={q} />
+          <FeedRow key={`${item.type}-${item.id}`} item={item} q={q} currentUserId={currentUserId} />
         ))}
       </ul>
       {hasMore && (

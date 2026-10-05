@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Flag } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
+import { FollowMemberButton } from "@/components/members/follow-member-button";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FlagContentDialog } from "@/components/flag-content-dialog";
@@ -173,6 +174,9 @@ function CommentNode({
               <Avatar name={authorName} src={comment.avatarUrl} size="xs" />
               <span className="font-medium text-foreground hover:underline">{authorName}</span>
             </Link>
+            {!comment.removed && comment.authorId !== currentUserId && (
+              <FollowMemberButton memberId={comment.authorId} memberName={authorName} variant="nudge" />
+            )}
             {comment.removed && <Badge variant="neutral">Removed</Badge>}
             {!comment.removed && flagged && <Badge variant="danger">Flagged</Badge>}
           </span>
