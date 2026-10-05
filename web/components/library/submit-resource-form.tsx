@@ -218,7 +218,7 @@ export function SubmitResourceForm({
       values.communityIds.forEach((communityId) => formData.append("communityIds", communityId));
       values.categoryIds.forEach((categoryId) => formData.append("categoryIds", categoryId));
       values.tagIds.forEach((tagId) => formData.append("tagIds", tagId));
-      if (isRecordedLecture && values.youtubeUrl) formData.append("youtubeUrl", values.youtubeUrl);
+      if (values.youtubeUrl) formData.append("youtubeUrl", values.youtubeUrl);
       const requiresAttachmentOrLink = !isRecordedLecture && !isBlogPost;
       if (requiresAttachmentOrLink && sourceMode === "link" && values.externalUrl) {
         formData.append("externalUrl", values.externalUrl);
@@ -609,6 +609,29 @@ export function SubmitResourceForm({
           </div>
         ))}
 
+        {!isRecordedLecture && (
+          <FormField
+            control={form.control}
+            name="youtubeUrl"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>YouTube video (optional)</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="https://youtube.com/watch?v=…"
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Embedded on the page{isBlogPost ? " above your post" : " alongside the document or link"}. Also used as the cover image if you don&apos;t add a hero image below.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
         <div className="flex flex-col gap-2">
           <label htmlFor="hero-image" className="text-sm font-medium">
             Hero image (optional)
@@ -631,7 +654,7 @@ export function SubmitResourceForm({
           {existingItem?.heroImageUrl && (
             <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
           )}
-          {isRecordedLecture && (
+          {(isRecordedLecture || form.watch("youtubeUrl")) && (
             <p className="text-xs text-muted-foreground">
               Leave blank to use the video&apos;s YouTube thumbnail (default).
             </p>
@@ -672,7 +695,7 @@ export function SubmitResourceForm({
                   <Checkbox checked={field.value} onCheckedChange={(c) => field.onChange(c === true)} />
                 </FormControl>
                 <div className="space-y-1">
-                  <FormLabel className="!mt-0">I confirm all patient information has been de-identified</FormLabel>
+                  <FormLabel className="!mt-0">I confirm all patient information has been de-identified, including in any linked video</FormLabel>
                   <FormMessage />
                 </div>
               </FormItem>

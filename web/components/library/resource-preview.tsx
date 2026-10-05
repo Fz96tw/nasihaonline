@@ -407,6 +407,32 @@ function BlogPostBody({ body, highlightQuery }: { body?: string | null; highligh
   );
 }
 
+function YoutubeEmbed({ title, embedUrl, youtubeUrl }: { title: string; embedUrl: string; youtubeUrl: string | null }) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="aspect-video w-full overflow-hidden rounded-md">
+        <iframe
+          src={embedUrl}
+          title={title}
+          className="h-full w-full"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      </div>
+      {youtubeUrl && (
+        <a
+          href={youtubeUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="break-all text-center text-xs text-primary hover:underline"
+        >
+          {youtubeUrl}
+        </a>
+      )}
+    </div>
+  );
+}
+
 /**
  * Inline (non-modal) resource preview — PDF.js pager for document
  * attachments, YouTube embed for recorded lectures, or a link-out card for
@@ -434,7 +460,26 @@ export function ResourcePreview({
   highlightQuery?: string;
 }) {
   const isRecordedLecture = contentType === KnowledgeContentType.recorded_lecture;
-  const embedUrl = isRecordedLecture && youtubeUrl ? youtubeEmbedUrl(youtubeUrl) : null;
+  const embedUrl = youtubeUrl ? youtubeEmbedUrl(youtubeUrl) : null;
+
+  // Optional companion video on every non-lecture type — rendered above the
+  // type's own preview, additive to any attachment/externalUrl/body.
+  if (!isRecordedLecture && embedUrl) {
+    return (
+      <div className="flex flex-col gap-6">
+        <YoutubeEmbed title={title} embedUrl={embedUrl} youtubeUrl={youtubeUrl} />
+        <ResourcePreview
+          title={title}
+          contentType={contentType}
+          youtubeUrl={null}
+          externalUrl={externalUrl}
+          attachment={attachment}
+          body={body}
+          highlightQuery={highlightQuery}
+        />
+      </div>
+    );
+  }
 
   if (contentType === KnowledgeContentType.blog_post) {
     return <BlogPostBody body={body} highlightQuery={highlightQuery} />;
@@ -442,29 +487,7 @@ export function ResourcePreview({
 
   if (isRecordedLecture) {
     if (embedUrl) {
-      return (
-        <div className="flex flex-col gap-3">
-          <div className="aspect-video w-full overflow-hidden rounded-md">
-            <iframe
-              src={embedUrl}
-              title={title}
-              className="h-full w-full"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          </div>
-          {youtubeUrl && (
-            <a
-              href={youtubeUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="break-all text-center text-xs text-primary hover:underline"
-            >
-              {youtubeUrl}
-            </a>
-          )}
-        </div>
-      );
+      return <YoutubeEmbed title={title} embedUrl={embedUrl} youtubeUrl={youtubeUrl} />;
     }
     return (
       <p className="py-6 text-center text-sm text-muted-foreground">

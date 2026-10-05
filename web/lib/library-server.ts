@@ -13,6 +13,7 @@ import {
 } from "@/lib/storage";
 import { searchLibraryDocuments } from "@/lib/meilisearch";
 import { ensureCommunityMembership } from "@/lib/profile-server";
+import { extractYoutubeVideoId } from "@/lib/youtube";
 import {
   NotificationType,
   KnowledgeContentType,
@@ -364,6 +365,13 @@ export async function createKnowledgeItem(
   if (!isDraft && isRecordedLecture && !input.youtubeUrl) {
     throw new KnowledgeItemError(400, "A YouTube URL is required for a recorded lecture.");
   }
+  // Optional companion video on every other content type (article,
+  // case_study, guideline, blog_post) — additive to any attachment/
+  // externalUrl, and must actually be embeddable since there's no
+  // "couldn't be embedded" fallback copy outside recorded_lecture.
+  if (!isRecordedLecture && input.youtubeUrl && !extractYoutubeVideoId(input.youtubeUrl)) {
+    throw new KnowledgeItemError(400, "Enter a valid YouTube video URL.");
+  }
   const requiresAttachmentOrLink = !isRecordedLecture && !isBlogPost;
   if (requiresAttachmentOrLink && input.file && input.externalUrl) {
     throw new KnowledgeItemError(400, "Choose either a file upload or an external link, not both.");
@@ -409,7 +417,7 @@ export async function createKnowledgeItem(
       contentType: input.contentType,
       level: input.level,
       contributorId,
-      youtubeUrl: isRecordedLecture ? input.youtubeUrl : null,
+      youtubeUrl: input.youtubeUrl,
       heroImageUrl,
       // Belt-and-suspenders against a client that submits the checkbox
       // checked with no image actually attached — never trust the
@@ -593,6 +601,13 @@ export async function updateKnowledgeItem(
   if (!isDraft && isRecordedLecture && !input.youtubeUrl) {
     throw new KnowledgeItemError(400, "A YouTube URL is required for a recorded lecture.");
   }
+  // Optional companion video on every other content type (article,
+  // case_study, guideline, blog_post) — additive to any attachment/
+  // externalUrl, and must actually be embeddable since there's no
+  // "couldn't be embedded" fallback copy outside recorded_lecture.
+  if (!isRecordedLecture && input.youtubeUrl && !extractYoutubeVideoId(input.youtubeUrl)) {
+    throw new KnowledgeItemError(400, "Enter a valid YouTube video URL.");
+  }
   const requiresAttachmentOrLink = !isRecordedLecture && !isBlogPost;
   if (requiresAttachmentOrLink && input.file && input.externalUrl) {
     throw new KnowledgeItemError(400, "Choose either a file upload or an external link, not both.");
@@ -692,7 +707,7 @@ export async function updateKnowledgeItem(
         body: sanitizedBody,
         contentType: input.contentType,
         level: input.level,
-        youtubeUrl: isRecordedLecture ? input.youtubeUrl : null,
+        youtubeUrl: input.youtubeUrl,
         heroImageUrl,
         // Same belt-and-suspenders as createKnowledgeItem — never trust the
         // disabled-checkbox UI alone.
