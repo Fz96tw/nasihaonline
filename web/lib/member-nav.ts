@@ -8,7 +8,6 @@ import {
   MessageSquare,
   Rss,
   Shield,
-  UserCheck,
   Users,
   UsersRound,
   type LucideIcon,
@@ -43,7 +42,6 @@ export const MEMBER_NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "My Communities", href: "/my-communities", icon: UsersRound },
       { label: "Member Directory", href: "/members", icon: Users },
-      { label: "My People", href: "/members?pane=my-people", icon: UserCheck },
       { label: "Messages", href: "/inbox", icon: Inbox },
       { label: "Events Calendar", href: "/calendar", icon: CalendarDays },
       { label: "Forums", href: "/forums", icon: MessageSquare },
