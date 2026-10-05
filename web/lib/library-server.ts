@@ -1302,16 +1302,20 @@ export async function startKnowledgeItemDiscussion(
  * /members/[memberId]'s Library section (§4.5/§4.9) — this member's
  * published/flagged submissions, newest first. Same visible-statuses gate
  * as getPublishedKnowledgeItems; a still-pending_review or rejected
- * submission stays private to /library/mine.
+ * submission stays private to /library/mine. `excludeId`/`limit` serve the
+ * detail page's "More by this author" tab (skip the item being viewed, cap
+ * the list); omitted, the profile page gets the full list as before.
  */
 export async function getPublishedKnowledgeItemsByContributor(
   contributorId: string,
   viewerId: string,
   isPrivileged: boolean,
+  options: { excludeId?: string; limit?: number } = {},
 ): Promise<LibraryCard[]> {
   const items = await db.knowledgeItem.findMany({
     where: {
       contributorId,
+      ...(options.excludeId ? { id: { not: options.excludeId } } : {}),
       status: { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] },
       ...(isPrivileged
         ? {}
@@ -1325,6 +1329,7 @@ export async function getPublishedKnowledgeItemsByContributor(
     },
     select: LIBRARY_CARD_SELECT,
     orderBy: { createdAt: "desc" },
+    ...(options.limit ? { take: options.limit } : {}),
   });
   return items.map(toLibraryCard);
 }

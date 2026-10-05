@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { getKnowledgeItemRoster, getPublishedKnowledgeItemById } from "@/lib/library-server";
+import {
+  getKnowledgeItemRoster,
+  getPublishedKnowledgeItemById,
+  getPublishedKnowledgeItemsByContributor,
+} from "@/lib/library-server";
 import { MessageMemberButton } from "@/components/members/message-member-button";
 import { FollowMemberButton } from "@/components/members/follow-member-button";
 import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-server";
@@ -22,10 +26,14 @@ import { DeleteLibraryItemButton } from "@/components/library/delete-library-ite
 import { LibraryDiscussionLink } from "@/components/library/library-discussion-link";
 import { LibraryViewCounter } from "@/components/library/library-view-counter";
 import { ManageLibraryInvitees } from "@/components/library/manage-invitees";
+import { LibraryDetailTabs } from "@/components/library/library-detail-tabs";
+import { LibraryItemCard } from "@/components/library/library-item-card";
 import { ForumThreadView } from "@/components/forums/forum-thread-view";
 import { SavedBanner } from "@/components/saved-banner";
 import { HighlightText } from "@/components/highlight-text";
 import { RestrictedAccessNotice } from "@/components/restricted-access-notice";
+
+const MORE_BY_LIMIT = 4;
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
@@ -74,6 +82,21 @@ export default async function LibraryItemDetailPage({
     : null;
   const mentionableMembers = thread ? await getMentionableMembers() : [];
 
+  // "More by this author" — same visibility gate as the author's profile
+  // Library tab (published/flagged only; restricted only if the viewer is
+  // invited, the contributor, or privileged). Skipped when the author has no
+  // directory profile: that's the same signal the byline uses to stay
+  // unlinked, and "View all" would have nowhere to go. Fetches one past the
+  // cap to know whether a "View all" link is warranted.
+  const moreByFetched = authorProfile
+    ? await getPublishedKnowledgeItemsByContributor(item.contributor.id, user.id, isPrivileged, {
+        excludeId: item.id,
+        limit: MORE_BY_LIMIT + 1,
+      })
+    : [];
+  const moreBy = moreByFetched.slice(0, MORE_BY_LIMIT);
+  const authorName = item.contributor.name ?? "this author";
+
   // A custom hero image always wins. With none set, the video's YouTube
   // thumbnail is the browse-card/feed cover, but not here: the embedded
   // player in ResourcePreview already shows the video, so a thumbnail banner
@@ -81,6 +104,39 @@ export default async function LibraryItemDetailPage({
   // link can't be embedded.
   const heroImageUrl =
     item.heroImageUrl ?? (item.youtubeUrl && !youtubeEmbedUrl(item.youtubeUrl) ? youtubeThumbnailUrl(item.youtubeUrl) : null);
+
+  const discussionPanel = thread ? (
+    <ForumThreadView
+      threadId={thread.id}
+      // Drop the auto-authored opening post (always posts[0] — created
+      // atomically with the thread in startKnowledgeItemDiscussion)
+      // linking back to this resource: redundant here since we're
+      // already on the resource page. The standalone
+      // /forums/[category]/[threadId] view keeps it.
+      posts={thread.posts.slice(1)}
+      requireDeidentification={false}
+      mentionableMembers={mentionableMembers}
+      currentUserId={user.id}
+      isPrivileged={isPrivileged}
+      highlightQuery={q}
+    />
+  ) : null;
+
+  const moreByPanel =
+    moreBy.length > 0 && authorProfile ? (
+      <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {moreBy.map((other) => (
+            <LibraryItemCard key={other.id} item={other} canEdit={canEdit} />
+          ))}
+        </div>
+        {moreByFetched.length > MORE_BY_LIMIT && (
+          <Link href={`/members/${authorProfile.id}`} className="text-sm font-medium text-primary hover:underline">
+            View all by {authorName}
+          </Link>
+        )}
+      </div>
+    ) : null;
 
   return (
     <main className="mx-auto max-w-3xl px-8 py-16">
@@ -215,25 +271,24 @@ export default async function LibraryItemDetailPage({
         </div>
       )}
 
-      {thread && (
+      {thread && moreBy.length > 0 ? (
+        <LibraryDetailTabs
+          replyCount={thread.replyCount}
+          authorName={authorName}
+          discussionContent={discussionPanel}
+          moreContent={moreByPanel}
+        />
+      ) : thread ? (
         <div className="mt-10 border-t pt-8">
           <h2 className="mb-4 text-lg font-semibold">Discussion</h2>
-          <ForumThreadView
-            threadId={thread.id}
-            // Drop the auto-authored opening post (always posts[0] — created
-            // atomically with the thread in startKnowledgeItemDiscussion)
-            // linking back to this resource: redundant here since we're
-            // already on the resource page. The standalone
-            // /forums/[category]/[threadId] view keeps it.
-            posts={thread.posts.slice(1)}
-            requireDeidentification={false}
-            mentionableMembers={mentionableMembers}
-            currentUserId={user.id}
-            isPrivileged={isPrivileged}
-            highlightQuery={q}
-          />
+          {discussionPanel}
         </div>
-      )}
+      ) : moreBy.length > 0 ? (
+        <div className="mt-10 border-t pt-8">
+          <h2 className="mb-4 text-lg font-semibold">More by {authorName}</h2>
+          {moreByPanel}
+        </div>
+      ) : null}
     </main>
   );
 }
