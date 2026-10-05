@@ -476,7 +476,7 @@ export function DirectoryMap({ buckets, selected, onSelect, unmappedCount, keepV
           would otherwise paint over the sticky header while scrolling. */}
       <div
         ref={containerRef}
-        className="dm-map isolate h-[320px] w-full overflow-hidden rounded-[10px] border bg-muted md:h-[420px]"
+        className="dm-map relative isolate h-[320px] w-full overflow-hidden rounded-[10px] border bg-muted md:h-[420px]"
       >
         <MapContainer
           center={DEFAULT_CENTER}
@@ -509,14 +509,22 @@ export function DirectoryMap({ buckets, selected, onSelect, unmappedCount, keepV
           />
           <MapEffects buckets={buckets} selected={selected} keepViewOnClear={keepViewOnClear} />
         </MapContainer>
+        {/* Overlaid on the map (not a line under it) so showing/hiding it as the
+            pane changes can't shift the tabs below. Leaflet's panes go up to
+            z-index 1000, hence z-[1000]. */}
+        {unmappedCount > 0 && (
+          <p
+            className="pointer-events-none absolute bottom-2 left-2 z-[1000] max-w-[calc(100%-5rem)] rounded-md bg-background/90 px-2 py-1 text-xs text-muted-foreground shadow-sm"
+            title="Location not shared or not recognized — still listed below."
+          >
+            {unmappedCount} not on the map
+            <span className="sr-only">
+              : location not shared or not recognized, but still listed below
+            </span>
+          </p>
+        )}
       </div>
 
-      {unmappedCount > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {unmappedCount} {unmappedCount === 1 ? "member isn't" : "members aren't"} shown on the map
-          (location not shared or not recognized) but {unmappedCount === 1 ? "is" : "are"} still listed below.
-        </p>
-      )}
     </div>
   );
 }
