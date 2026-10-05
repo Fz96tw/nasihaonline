@@ -4661,17 +4661,40 @@ export async function getEventMeetingStatus(
       where: { eventId_userId: { eventId, userId } },
       select: { status: true },
     });
+    // A signed-in person can also be holding a guest invitation (a host
+    // emailed a member's address, or the invitee happens to be logged in
+    // when they click). A valid, un-revoked `rid` for this open event is the
+    // same credential an anonymous guest uses, so honour it here instead of
+    // bouncing them to "RSVP to see the joining details". Ignored when
+    // invalid/revoked — they simply fall through to the normal member rules.
+    // They still join under their own member identity, not the guest's.
+    let hasGuestAccess = false;
+    if (rsvp?.status !== RSVPStatus.going && registrationId && event.open) {
+      const guest = await db.eventRegistration.findUnique({
+        where: { id: registrationId },
+        select: { eventId: true, revokedAt: true, joinedAt: true },
+      });
+      if (guest && guest.eventId === eventId && !guest.revokedAt) {
+        hasGuestAccess = true;
+        if (!guest.joinedAt) {
+          await db.eventRegistration.updateMany({
+            where: { id: registrationId, joinedAt: null },
+            data: { joinedAt: new Date() },
+          });
+        }
+      }
+    }
     // A going RSVP stays valid access even if the event was later re-tagged to a
     // community the member isn't in (or they left it): the reminder list keeps
     // offering Join for it, so re-checking visibility here would 404 them.
-    if (rsvp?.status !== RSVPStatus.going) {
+    if (rsvp?.status !== RSVPStatus.going && !hasGuestAccess) {
       // Community events aren't narrowed by tag here (see getMemberEventById); invited ones need an invite.
       const visible =
         event.visibility === EventVisibility.community ||
         (await db.eventInvitee.findUnique({ where: { eventId_userId: { eventId, userId } } })) !== null;
       if (!visible) throw new EventError(404, "Event not found.");
     }
-    if (rsvp?.status !== RSVPStatus.going) {
+    if (rsvp?.status !== RSVPStatus.going && !hasGuestAccess) {
       throw new EventError(403, "RSVP to this event to see the joining details.");
     }
   }
