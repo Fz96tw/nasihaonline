@@ -239,9 +239,9 @@ export function PaneSlider({
     <>
       {renderTabs ? renderTabs({ tabs, active }) : tabs}
 
-      {/* Phones/tablets have no edge chevrons — the dots hint that more panes exist. */}
+      {/* The dots show how many panes there are and which is active — on every screen size (desktop also has the edge chevrons, phones rely on swipe + the dots). */}
       {showDots && count > 1 && (
-        <div className="-my-3 flex justify-center gap-1.5 lg:hidden" aria-hidden>
+        <div className="-my-3 flex justify-center gap-1.5" aria-hidden>
           {panes.map((pane) => (
             <span
               key={pane.id}
