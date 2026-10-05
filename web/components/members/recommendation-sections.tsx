@@ -1,5 +1,18 @@
+import type { ReactNode } from "react";
 import { MemberCard } from "@/components/members/member-card";
 import { NEW_MEMBER_WINDOW_DAYS, type DirectoryMember, type DirectoryRecommendations } from "@/lib/members";
+
+/** The "N members found" line shown at the top of every Directory pane. */
+export function MemberCount({ count, extra }: { count: number; extra?: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <p className="text-sm text-muted-foreground">
+        {count} {count === 1 ? "member" : "members"} found
+      </p>
+      {extra}
+    </div>
+  );
+}
 
 const BASIS_PREVIEW_COUNT = 3;
 
@@ -54,12 +67,15 @@ export function RecommendationPane({
   members,
   currentUserId,
   emptyHint,
+  summaryExtra,
 }: {
   sectionKey: RecommendationKey;
   recommendations: DirectoryRecommendations;
   members: DirectoryMember[];
   currentUserId: string;
   emptyHint: string;
+  /** Sits next to the count (the active-country chip). */
+  summaryExtra?: ReactNode;
 }) {
   const section = RECOMMENDATION_SECTIONS.find(({ key }) => key === sectionKey)!;
   return (
@@ -70,6 +86,7 @@ export function RecommendationPane({
         </h2>
         <p className="text-sm text-muted-foreground">{section.description(recommendations)}</p>
       </div>
+      <MemberCount count={members.length} extra={summaryExtra} />
       {members.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground" role="status">
           {emptyHint}

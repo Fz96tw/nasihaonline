@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { DirectoryGrid } from "@/components/members/directory-grid";
 import { MemberCard } from "@/components/members/member-card";
-import { RECOMMENDATION_SECTIONS, RecommendationPane } from "@/components/members/recommendation-sections";
+import { MemberCount, RECOMMENDATION_SECTIONS, RecommendationPane } from "@/components/members/recommendation-sections";
 import { PaneSlider, type Pane } from "@/components/shared/pane-slider";
 import { cn } from "@/lib/utils";
 import { DirectoryMap, type MapBucket } from "@/components/members/directory-map-loader";
@@ -303,7 +303,7 @@ export function DirectoryView({
                 Members you&apos;ve followed, for one-click access. Only you can see this list.
               </p>
             </div>
-            {placeChip && <div>{placeChip}</div>}
+            <MemberCount count={list.length} extra={placeChip} />
             {list.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground" role="status">
                 {emptyHint}
@@ -324,16 +324,14 @@ export function DirectoryView({
       id,
       label: section.tabLabel,
       content: (
-        <>
-          <RecommendationPane
-            sectionKey={section.key}
-            recommendations={recommendations}
-            members={placeFilter(baseByPane[id])}
-            currentUserId={currentUserId}
-            emptyHint={emptyHint}
-          />
-          {placeChip && <div>{placeChip}</div>}
-        </>
+        <RecommendationPane
+          sectionKey={section.key}
+          recommendations={recommendations}
+          members={placeFilter(baseByPane[id])}
+          currentUserId={currentUserId}
+          emptyHint={emptyHint}
+          summaryExtra={placeChip}
+        />
       ),
     };
   });
