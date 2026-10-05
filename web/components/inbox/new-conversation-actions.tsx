@@ -95,7 +95,7 @@ export function NewConversationActions({ currentUserId }: { currentUserId: strin
   const [meetingRecipient, setMeetingRecipient] = useState<Recipient | null>(null);
 
   return (
-    <div className="flex gap-2">
+    <div className="flex flex-wrap gap-2">
       <MemberPickerButton
         label="New message"
         icon={MessageSquare}

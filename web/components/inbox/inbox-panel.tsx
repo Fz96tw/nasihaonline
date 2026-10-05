@@ -228,9 +228,9 @@ export function InboxPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Conversations</h2>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <Link
             href="/members?pane=my-people"
             className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
