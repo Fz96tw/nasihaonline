@@ -93,7 +93,7 @@ export function HeaderSearchRow({
       : "None selected";
 
   return (
-    <div className="sticky top-[var(--header-height)] z-40 h-[var(--search-row-height)] overflow-hidden border-b bg-background shadow-sm transition-[height] duration-300 ease-in-out">
+    <div className="sticky top-[var(--header-height)] z-40 h-[var(--search-row-height)] overflow-hidden border-b frosted-nav shadow-sm transition-[height] duration-300 ease-in-out">
       <div className="flex h-full flex-col justify-center gap-1.5 px-4 py-2 lg:px-8">
         <form
           onSubmit={(event) => {

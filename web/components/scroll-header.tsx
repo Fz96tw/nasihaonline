@@ -22,7 +22,7 @@ export function ScrollHeader({
   return (
     <header
       className={cn(
-        "sticky top-0 z-50 flex h-[var(--header-height)] gap-3 bg-background px-4 transition-[height] duration-300 ease-in-out lg:gap-6 lg:px-8",
+        "sticky top-0 z-50 flex h-[var(--header-height)] gap-3 frosted-nav px-4 transition-[height] duration-300 ease-in-out lg:gap-6 lg:px-8",
         // items-center normally — but while the search row below is actually
         // showing, that centering is exactly what was reading as "too much
         // space between the menu labels and the search box": items-center

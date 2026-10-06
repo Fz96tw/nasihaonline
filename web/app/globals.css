@@ -46,6 +46,34 @@
     /* Collapsed height of the phone live-events drawer (live-events-drawer.tsx) —
        0 unless it's showing; the drawer also pads <body> by the same amount. */
     --live-drawer-height: 0px;
+    /* Frosted top navigation (.frosted-nav below) — the single place to tune
+       how see-through and how blurred the header, search row and live-events
+       strip are. They share these so the stacked rows never look mismatched. */
+    --nav-frost-opacity: 0.8;
+    --nav-frost-blur: 12px;
+  }
+}
+
+@layer components {
+  /* Translucent, blurred sticky navigation row. Falls back to the plain
+     opaque background where backdrop-filter is unsupported, or when the
+     user asks the OS for reduced transparency. */
+  .frosted-nav {
+    background-color: hsl(var(--background));
+  }
+  @supports ((-webkit-backdrop-filter: none) or (backdrop-filter: none)) {
+    .frosted-nav {
+      background-color: hsl(var(--background) / var(--nav-frost-opacity));
+      -webkit-backdrop-filter: blur(var(--nav-frost-blur)) saturate(1.5);
+      backdrop-filter: blur(var(--nav-frost-blur)) saturate(1.5);
+    }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .frosted-nav {
+      background-color: hsl(var(--background));
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
   }
 }
 

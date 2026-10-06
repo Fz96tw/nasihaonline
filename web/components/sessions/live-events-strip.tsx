@@ -184,7 +184,7 @@ export function LiveEventsStrip({
       className={cn(
         // `top` transitions too: it's derived from --search-row-height, which changes
         // instantly while the search row's own height animates over the same 300ms.
-        "sticky overflow-hidden bg-background shadow-sm transition-[height,top] duration-300 ease-in-out",
+        "sticky overflow-hidden frosted-nav shadow-sm transition-[height,top] duration-300 ease-in-out",
         // Under the member header's search row (z-40) it slides beneath it.
         belowSearchRow ? "z-30" : "z-40",
         height > 0 && "border-b",
