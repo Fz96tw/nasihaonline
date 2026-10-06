@@ -31,7 +31,20 @@ export type ProfileWithAvatarUrl = Omit<ProfileWithSkills, "avatarUrl"> & { avat
  */
 export async function getOrCreateProfile(userId: string): Promise<ProfileWithSkills> {
   const existing = await db.profile.findUnique({ where: { userId }, include: PROFILE_INCLUDE });
-  if (existing) return existing;
+  if (existing) {
+    // PATCH /api/profile/communities rejects "not all and none selected", so
+    // that state only ever means "never chose" (a profile created before the
+    // follows-all default, or by a path that skipped it). Heal it to the
+    // default here rather than forcing the member through /welcome/communities.
+    if (!existing.followsAllCommunities && existing.communities.length === 0) {
+      return db.profile.update({
+        where: { id: existing.id },
+        data: { followsAllCommunities: true },
+        include: PROFILE_INCLUDE,
+      });
+    }
+    return existing;
+  }
   // Same default as upsertUserFromClerkData's nested create.
   return db.profile.create({ data: { userId, followsAllCommunities: true }, include: PROFILE_INCLUDE });
 }

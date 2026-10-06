@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 
 /**
@@ -16,31 +15,15 @@ import { AlertTriangle } from "lucide-react";
  * per nav — see its comment), so the banner's field list stays accurate as
  * fields get saved, without a page reload. There is no first-sign-in
  * splash: a new member lands straight on /whats-new and only sees the banner.
- *
- * `needsCommunitySelection` (community-based-categorization initiative,
- * objective 2) is a second, independent gate — still a hard redirect,
- * unaffected by the profile banner above (the two never compete: the banner
- * renders in place, this one navigates away). New members start out
- * following all communities, so in practice it only catches a profile with
- * no selection at all.
  */
 export function ProfileCompletionGate({
   needsOnboarding,
-  needsCommunitySelection,
   missingProfileFields,
 }: {
   needsOnboarding: boolean;
-  needsCommunitySelection: boolean;
   missingProfileFields: string[];
 }) {
   const pathname = usePathname();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (needsCommunitySelection && pathname !== "/welcome/communities") {
-      router.replace("/welcome/communities");
-    }
-  }, [needsCommunitySelection, pathname, router]);
 
   // The Profile page itself already surfaces the missing-fields list inline
   // (app/(member)/profile/page.tsx) — showing this banner there too would

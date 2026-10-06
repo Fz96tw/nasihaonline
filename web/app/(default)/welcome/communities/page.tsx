@@ -9,13 +9,12 @@ export const metadata: Metadata = {
 };
 
 /**
- * One-time community-confirmation step (community-based-categorization
- * initiative, objective 2) — reached either via the (member) layout's
- * onboarding gate (see needsCommunitySelection there) on a member's next
- * visit after launch, or later via the header search row's "edit"
- * affordance. Deliberately outside the (member) route group, same
- * un-sidebared style as /welcome, since the gate itself lives inside that
- * layout and redirects *away* from it rather than needing to render there.
+ * Community-selection page (community-based-categorization initiative,
+ * objective 2) — reached via the header search row's "edit" affordance.
+ * No longer a forced step: members default to following every community
+ * (getOrCreateProfile heals a never-chosen profile to "all").
+ * Deliberately outside the (member) route group, same un-sidebared style
+ * as /welcome.
  */
 export default async function ChooseCommunitiesPage({
   searchParams,

@@ -31,8 +31,7 @@ export default async function MemberLayout({ children }: { children: React.React
   // (§4.15) is blocked from all of them, without needing each page to check.
   if (user?.suspended) redirect("/account-suspended");
 
-  // Fetched once and reused for both checks below — needsCommunitySelection
-  // applies to every member, including ones grandfathered past needsOnboarding.
+  // getOrCreateProfile also defaults a never-chosen community selection to "all".
   const profile = user ? await getOrCreateProfile(user.id) : null;
   // requiresProfileOnboarding is false for every member grandfathered in
   // from before the /join field-reduction (§3.1) — skip the completeness
@@ -40,13 +39,6 @@ export default async function MemberLayout({ children }: { children: React.React
   // asked to backfill.
   const needsOnboarding = !!user && user.requiresProfileOnboarding && !!profile && !isProfileComplete(profile);
   const missingProfileFields = needsOnboarding && profile ? getMissingRequiredProfileFields(profile) : [];
-  // The flag (not just an empty row count) distinguishes "explicitly chose
-  // ALL" from "hasn't chosen yet" — without it this would re-prompt an ALL
-  // member forever. Independent of needsOnboarding, so pre-launch members
-  // grandfathered past that gate are still naturally caught by this one.
-  const needsCommunitySelection =
-    !!user && !!profile && !profile.followsAllCommunities && profile.communities.length === 0;
-
   return (
     <>
       <Suspense fallback={<SiteHeaderSkeleton />}>
@@ -55,7 +47,6 @@ export default async function MemberLayout({ children }: { children: React.React
       <QueryProvider>
         <ProfileCompletionGate
           needsOnboarding={needsOnboarding}
-          needsCommunitySelection={needsCommunitySelection}
           missingProfileFields={missingProfileFields}
         />
         {/* Signed-in only: this layout also serves anonymous registered guests
