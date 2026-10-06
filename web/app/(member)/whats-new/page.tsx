@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getFeedPage } from "@/lib/feed-server";
 import { FEED_TYPES, FEED_TYPE_LABELS, isFeedItemType } from "@/lib/feed";
 import { FeedList } from "@/components/feed/feed-list";
+import { ComposeFab } from "@/components/feed/compose-fab";
 import { WhatsNewPanes } from "@/components/feed/whats-new-panes";
 import { getFollowingFeedAuthorIds } from "@/lib/member-follows-server";
 import { MyCommunitiesCheckbox } from "@/components/shared/my-communities-checkbox";
@@ -185,6 +186,7 @@ export default async function WhatsNewPage({
           {allPane}
         </>
       )}
+      {!q && <ComposeFab />}
     </main>
   );
 }
