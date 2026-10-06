@@ -75,7 +75,7 @@ export function MemberSidebar({
       >
         <aside
           className={cn(
-            "absolute left-0 top-0 z-30 flex h-full flex-col gap-1 overflow-y-auto border-r frosted-nav py-6 transition-[width,box-shadow] duration-200 ease-in-out",
+            "absolute left-0 top-0 z-30 flex h-full flex-col gap-1 overflow-y-auto border-r bg-background py-6 transition-[width,box-shadow] duration-200 ease-in-out",
             expanded ? "w-[240px] px-3" : "w-16 px-2",
             !pinned && expanded && "shadow-lg",
           )}
