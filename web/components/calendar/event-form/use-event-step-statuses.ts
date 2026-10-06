@@ -1,7 +1,7 @@
 import type { UseFormReturn } from "react-hook-form";
 import { EventVisibility } from "@/lib/generated/prisma/enums";
 import { createEventSchema, updateEventSchema, type CreateEventValues } from "@/lib/validation/event";
-import { EVENT_STEPS, stepForField, type EventStepId, type EventStepStatuses } from "./steps";
+import { EVENT_STEPS, stepForField, type EventStepId, type EventStepIssues, type EventStepStatuses } from "./steps";
 
 /**
  * Per-step status for the wizard's map, derived from the live form values
@@ -20,12 +20,12 @@ export function useEventStepStatuses({
   isFirstSubmission: boolean;
   isExisting: boolean;
   visited: ReadonlySet<EventStepId>;
-}): { statuses: EventStepStatuses; issuesByStep: Record<EventStepId, { path: string; message: string }[]> } {
+}): { statuses: EventStepStatuses; issuesByStep: EventStepIssues } {
   const values = form.watch();
   const { dirtyFields } = form.formState;
 
   const result = (isFirstSubmission ? createEventSchema : updateEventSchema).safeParse(values);
-  const issuesByStep: Record<EventStepId, { path: string; message: string }[]> = {
+  const issuesByStep: EventStepIssues = {
     basics: [],
     when: [],
     who: [],
@@ -51,5 +51,13 @@ export function useEventStepStatuses({
     else if (!started && id === "where" && whereIsOptional) statuses[id] = "optional";
     else statuses[id] = "complete";
   }
+
+  // Review is "ready" only once the host has actually looked at it (or is
+  // editing an existing event) and nothing is blocking; any blocker shows once
+  // they've reached it.
+  const totalIssues = EVENT_STEPS.reduce((sum, { id }) => sum + issuesByStep[id].length, 0);
+  const reviewStarted = isExisting || visited.has("review");
+  statuses.review = totalIssues > 0 ? (reviewStarted ? "incomplete" : "not_started") : reviewStarted ? "complete" : "not_started";
+
   return { statuses, issuesByStep };
 }

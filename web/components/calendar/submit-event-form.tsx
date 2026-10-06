@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, type Resolver } from "react-hook-form";
+import { useForm, type FieldErrors, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { fromZonedTime } from "date-fns-tz";
 import { Loader2 } from "lucide-react";
@@ -28,7 +28,14 @@ import { BasicsStep } from "@/components/calendar/event-form/basics-step";
 import { WhenStep } from "@/components/calendar/event-form/when-step";
 import { WhoStep } from "@/components/calendar/event-form/who-step";
 import { WhereStep } from "@/components/calendar/event-form/where-step";
-import { EVENT_STEPS, type EventStepId } from "@/components/calendar/event-form/steps";
+import {
+  EVENT_STEPS,
+  EVENT_WIZARD_STEPS,
+  stepForField,
+  type EventFieldStepId,
+  type EventStepId,
+} from "@/components/calendar/event-form/steps";
+import { ReviewStep } from "@/components/calendar/event-form/review-step";
 import { useEventStepStatuses } from "@/components/calendar/event-form/use-event-step-statuses";
 import { WizardPanel, WizardShell, type WizardNavSource } from "@/components/shared/wizard/wizard-shell";
 import {
@@ -244,11 +251,28 @@ export function SubmitEventForm({
     const leaving = activeStep;
     setVisitedSteps((prev) => new Set(prev).add(leaving).add(id as EventStepId));
     if (source === "next") {
-      for (const issue of issuesByStep[leaving]) {
+      for (const issue of issuesByStep[leaving as EventFieldStepId] ?? []) {
         form.setError(issue.path as keyof CreateEventValues, { message: issue.message });
       }
     }
     setActiveStep(id as EventStepId);
+  }
+
+  /**
+   * A save was rejected for fields the host may not be looking at (every step
+   * but the active one is hidden) — bring them to the first step that has a
+   * problem. A failed Publish from Review stays put: Review already lists the
+   * blocking steps with links.
+   */
+  function jumpToFirstProblemStep(fieldPaths: string[], { stayOnReview }: { stayOnReview: boolean }) {
+    if (stayOnReview && activeStep === "review") return;
+    const failing = new Set(fieldPaths.map((path) => stepForField(path.split(".")[0])));
+    const target = EVENT_STEPS.find((step) => failing.has(step.id));
+    if (target) setActiveStep(target.id);
+  }
+
+  function onInvalid(errors: FieldErrors<CreateEventValues>) {
+    jumpToFirstProblemStep(Object.keys(errors), { stayOnReview: false });
   }
   const visibility = form.watch("visibility");
   const isRestricted = visibility === EventVisibility.invited;
@@ -273,6 +297,10 @@ export function SubmitEventForm({
             message: issue.message,
           });
         }
+        jumpToFirstProblemStep(
+          result.error.issues.map((issue) => issue.path.join(".")),
+          { stayOnReview: true },
+        );
         return;
       }
     }
@@ -438,9 +466,9 @@ export function SubmitEventForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
+      <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="flex flex-col gap-5" noValidate>
         <WizardShell
-          steps={EVENT_STEPS.map((step) => ({ ...step, status: stepStatuses[step.id] }))}
+          steps={EVENT_WIZARD_STEPS.map((step) => ({ ...step, status: stepStatuses[step.id] }))}
           activeId={activeStep}
           onSelect={handleStepSelect}
         >
@@ -480,6 +508,21 @@ export function SubmitEventForm({
               setMeetingOrganizerMessageImage={setMeetingOrganizerMessageImage}
             />
           </WizardPanel>
+
+          <WizardPanel id="review">
+            <ReviewStep
+              form={form}
+              existingEvent={existingEvent}
+              isFirstSubmission={isFirstSubmission}
+              communities={communities}
+              categories={categories}
+              issuesByStep={issuesByStep}
+              statuses={stepStatuses}
+              heroImage={heroImage}
+              meetingOrganizerMessage={meetingOrganizerMessage}
+              onEdit={(id) => handleStepSelect(id, "map")}
+            />
+          </WizardPanel>
         </WizardShell>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
@@ -498,19 +541,24 @@ export function SubmitEventForm({
               {submitting && pendingActionRef.current === "draft" ? "Saving…" : "Save Draft"}
             </Button>
           )}
-          <Button
-            type="submit"
-            disabled={submitting}
-            onClick={() => {
-              pendingActionRef.current = "primary";
-            }}
-          >
-            {submitting && pendingActionRef.current === "primary"
-              ? "Saving…"
-              : isFirstSubmission
-                ? "Publish Event"
-                : "Save Changes"}
-          </Button>
+          {/* A brand-new event (or draft) publishes from the Review step only; an
+            already-published event's edit can be saved from any step, since every
+            step starts out complete there. */}
+          {(activeStep === "review" || !isFirstSubmission) && (
+            <Button
+              type="submit"
+              disabled={submitting}
+              onClick={() => {
+                pendingActionRef.current = "primary";
+              }}
+            >
+              {submitting && pendingActionRef.current === "primary"
+                ? "Saving…"
+                : isFirstSubmission
+                  ? "Publish Event"
+                  : "Save Changes"}
+            </Button>
+          )}
           {existingEvent?.isDraft && <DiscardEventDraftButton eventId={existingEvent.id} title={existingEvent.title} />}
         </div>
       </form>
