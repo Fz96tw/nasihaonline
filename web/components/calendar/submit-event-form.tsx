@@ -468,14 +468,12 @@ export function SubmitEventForm({
         return;
       }
 
-      if (existingEvent) {
-        // Replace (not push) so this edit page's history entry doesn't
-        // linger for BackLink's router.back() on the details page to land
-        // on — same rationale as WritePostForm/EditThreadForm.
-        router.replace(`/calendar/${id}?saved=1`);
-      } else {
-        router.push("/calendar");
-      }
+      // Replace (not push) so this form page's history entry doesn't linger for
+      // BackLink's router.back() on the details page to land on (a stale or
+      // blank form) — same rationale as WritePostForm/EditThreadForm. A
+      // brand-new event lands on its own detail page too, rather than the
+      // /calendar listing, so the host sees the event they just published.
+      router.replace(`/calendar/${id}?saved=1`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
