@@ -8,8 +8,8 @@ import { cn } from "@/lib/utils";
 
 const ACTIONS: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Create a post", href: "/post/new", icon: MessageSquarePlus },
-  { label: "Write a blog post", href: "/library/new?type=blog_post", icon: PenLine },
-  { label: "Create library item", href: "/library/new", icon: BookPlus },
+  { label: "Write a blog", href: "/library/new?type=blog_post", icon: PenLine },
+  { label: "Add to library", href: "/library/new", icon: BookPlus },
   { label: "Request peer review", href: "/review-feedback/new", icon: ClipboardCheck },
   { label: "Schedule an event", href: "/calendar/new", icon: CalendarPlus },
   { label: "Message a member", href: "/inbox/new", icon: Send },
