@@ -480,7 +480,10 @@ export function SubmitEventForm({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
-      setSubmitting(false);
+      // Once a save has succeeded and the page is navigating away, stay
+      // disabled (showing "Saving…") until it actually leaves — otherwise the
+      // button re-enables during the navigation and invites a second submit.
+      if (!leavingRef.current) setSubmitting(false);
     }
   }
 
