@@ -3,6 +3,7 @@
 import type { UseFormReturn } from "react-hook-form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EventType } from "@/lib/generated/prisma/enums";
@@ -22,6 +23,8 @@ export function BasicsStep({
   heroImage: File | null;
   setHeroImage: (file: File | null) => void;
 }) {
+  const isCaseDiscussion = form.watch("type") === EventType.case_discussion;
+
   return (
     <section className="flex flex-col gap-5">
       <h2 className="text-base font-semibold">Basics</h2>
@@ -105,6 +108,24 @@ export function BasicsStep({
           <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
         )}
       </div>
+
+      {isCaseDiscussion && (
+        <FormField
+          control={form.control}
+          name="deidentificationConfirmed"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-start gap-2 space-y-0 rounded-md border border-destructive/30 bg-destructive/5 p-4">
+              <FormControl>
+                <Checkbox checked={field.value} onCheckedChange={(c) => field.onChange(c === true)} />
+              </FormControl>
+              <div className="space-y-1">
+                <FormLabel className="!mt-0">I confirm no identifiable patient information will be shared</FormLabel>
+                <FormMessage />
+              </div>
+            </FormItem>
+          )}
+        />
+      )}
     </section>
   );
 }

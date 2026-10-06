@@ -7,8 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { fromZonedTime } from "date-fns-tz";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form } from "@/components/ui/form";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +28,9 @@ import { BasicsStep } from "@/components/calendar/event-form/basics-step";
 import { WhenStep } from "@/components/calendar/event-form/when-step";
 import { WhoStep } from "@/components/calendar/event-form/who-step";
 import { WhereStep } from "@/components/calendar/event-form/where-step";
+import { EVENT_STEPS, type EventStepId } from "@/components/calendar/event-form/steps";
+import { useEventStepStatuses } from "@/components/calendar/event-form/use-event-step-statuses";
+import { WizardPanel, WizardShell, type WizardNavSource } from "@/components/shared/wizard/wizard-shell";
 import {
   LAST_MEET_LINK_SOURCE_KEY,
   toDatetimeLocalValue,
@@ -225,6 +227,29 @@ export function SubmitEventForm({
   }, []);
 
   const isCaseDiscussion = form.watch("type") === EventType.case_discussion;
+
+  // Wizard navigation. The step map shows every step and lets the host jump to
+  // any of them at any time; "Next" only warns (it never blocks) about the
+  // step being left, using the same strict schema Publish runs.
+  const [activeStep, setActiveStep] = useState<EventStepId>("basics");
+  const [visitedSteps, setVisitedSteps] = useState<ReadonlySet<EventStepId>>(() => new Set());
+  const { statuses: stepStatuses, issuesByStep } = useEventStepStatuses({
+    form,
+    isFirstSubmission,
+    isExisting: existingEvent !== undefined,
+    visited: visitedSteps,
+  });
+
+  function handleStepSelect(id: string, source: WizardNavSource) {
+    const leaving = activeStep;
+    setVisitedSteps((prev) => new Set(prev).add(leaving).add(id as EventStepId));
+    if (source === "next") {
+      for (const issue of issuesByStep[leaving]) {
+        form.setError(issue.path as keyof CreateEventValues, { message: issue.message });
+      }
+    }
+    setActiveStep(id as EventStepId);
+  }
   const visibility = form.watch("visibility");
   const isRestricted = visibility === EventVisibility.invited;
 
@@ -414,52 +439,48 @@ export function SubmitEventForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
-        <BasicsStep form={form} existingEvent={existingEvent} heroImage={heroImage} setHeroImage={setHeroImage} />
+        <WizardShell
+          steps={EVENT_STEPS.map((step) => ({ ...step, status: stepStatuses[step.id] }))}
+          activeId={activeStep}
+          onSelect={handleStepSelect}
+        >
+          <WizardPanel id="basics">
+            <BasicsStep form={form} existingEvent={existingEvent} heroImage={heroImage} setHeroImage={setHeroImage} />
+          </WizardPanel>
 
-        <WhenStep
-          form={form}
-          editingTimezone={editingTimezone}
-          setEditingTimezone={setEditingTimezone}
-          endsAutoFilledRef={endsAutoFilledRef}
-        />
+          <WizardPanel id="when">
+            <WhenStep
+              form={form}
+              editingTimezone={editingTimezone}
+              setEditingTimezone={setEditingTimezone}
+              endsAutoFilledRef={endsAutoFilledRef}
+            />
+          </WizardPanel>
 
-        <WhoStep
-          form={form}
-          isFirstSubmission={isFirstSubmission}
-          currentUserId={currentUserId}
-          canTargetAllCommunities={canTargetAllCommunities}
-          communities={communities}
-          categories={categories}
-        />
+          <WizardPanel id="who">
+            <WhoStep
+              form={form}
+              isFirstSubmission={isFirstSubmission}
+              currentUserId={currentUserId}
+              canTargetAllCommunities={canTargetAllCommunities}
+              communities={communities}
+              categories={categories}
+            />
+          </WizardPanel>
 
-        <WhereStep
-          form={form}
-          existingEvent={existingEvent}
-          isFirstSubmission={isFirstSubmission}
-          currentUserId={currentUserId}
-          meetingOrganizerMessage={meetingOrganizerMessage}
-          setMeetingOrganizerMessage={setMeetingOrganizerMessage}
-          meetingOrganizerMessageImage={meetingOrganizerMessageImage}
-          setMeetingOrganizerMessageImage={setMeetingOrganizerMessageImage}
-        />
-
-        {isCaseDiscussion && (
-          <FormField
-            control={form.control}
-            name="deidentificationConfirmed"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-start gap-2 space-y-0 rounded-md border border-destructive/30 bg-destructive/5 p-4">
-                <FormControl>
-                  <Checkbox checked={field.value} onCheckedChange={(c) => field.onChange(c === true)} />
-                </FormControl>
-                <div className="space-y-1">
-                  <FormLabel className="!mt-0">I confirm no identifiable patient information will be shared</FormLabel>
-                  <FormMessage />
-                </div>
-              </FormItem>
-            )}
-          />
-        )}
+          <WizardPanel id="where">
+            <WhereStep
+              form={form}
+              existingEvent={existingEvent}
+              isFirstSubmission={isFirstSubmission}
+              currentUserId={currentUserId}
+              meetingOrganizerMessage={meetingOrganizerMessage}
+              setMeetingOrganizerMessage={setMeetingOrganizerMessage}
+              meetingOrganizerMessageImage={meetingOrganizerMessageImage}
+              setMeetingOrganizerMessageImage={setMeetingOrganizerMessageImage}
+            />
+          </WizardPanel>
+        </WizardShell>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
         {draftSaved && <p className="text-sm text-success">Draft saved.</p>}
