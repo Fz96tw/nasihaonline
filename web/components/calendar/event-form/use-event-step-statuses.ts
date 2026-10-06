@@ -1,7 +1,45 @@
 import type { UseFormReturn } from "react-hook-form";
-import { EventVisibility } from "@/lib/generated/prisma/enums";
+import { EventType, EventVisibility } from "@/lib/generated/prisma/enums";
 import { createEventSchema, updateEventSchema, type CreateEventValues } from "@/lib/validation/event";
 import { EVENT_STEPS, stepForField, type EventStepId, type EventStepIssues, type EventStepStatuses } from "./steps";
+
+type Issue = { path: string; message: string };
+
+// Zod skips every superRefine (community required, invitees required for a
+// restricted event, case-discussion confirmation, ...) while a base field such
+// as the title is still invalid, so a bare safeParse on a half-empty form hides
+// most of what's left to do. Run it a second time with placeholders in the
+// empty base fields so the cross-field rules also report, then keep the real
+// base-field issues from the first pass and everything else from the second.
+export function collectIssues(schema: typeof createEventSchema | typeof updateEventSchema, values: CreateEventValues): Issue[] {
+  const toIssues = (r: ReturnType<typeof schema.safeParse>): Issue[] =>
+    r.success ? [] : r.error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message }));
+
+  const real = toIssues(schema.safeParse(values));
+  const placeholdered = { ...values };
+  const filled = new Set<string>();
+  if (!values.title.trim()) {
+    placeholdered.title = "placeholder";
+    filled.add("title");
+  }
+  if (!values.type) {
+    placeholdered.type = Object.values(EventType)[0];
+    filled.add("type");
+  }
+  if (!values.startsAt.trim()) {
+    placeholdered.startsAt = "2000-01-01T00:00";
+    filled.add("startsAt");
+  }
+  if (filled.size === 0) return real;
+
+  const merged = [...real];
+  for (const issue of toIssues(schema.safeParse(placeholdered))) {
+    const field = issue.path.split(".")[0];
+    const seen = merged.some((m) => m.path === issue.path && m.message === issue.message);
+    if (!filled.has(field) && !seen) merged.push(issue);
+  }
+  return merged;
+}
 
 /**
  * Per-step status for the wizard's map, derived from the live form values
@@ -24,18 +62,12 @@ export function useEventStepStatuses({
   const values = form.watch();
   const { dirtyFields } = form.formState;
 
-  const result = (isFirstSubmission ? createEventSchema : updateEventSchema).safeParse(values);
-  const issuesByStep: EventStepIssues = {
-    basics: [],
-    when: [],
-    who: [],
-    where: [],
-  };
-  if (!result.success) {
-    for (const issue of result.error.issues) {
-      const step = stepForField(String(issue.path[0]));
-      if (step) issuesByStep[step].push({ path: issue.path.join("."), message: issue.message });
-    }
+  const schema = isFirstSubmission ? createEventSchema : updateEventSchema;
+  const allIssues = collectIssues(schema, values);
+  const issuesByStep: EventStepIssues = { basics: [], when: [], who: [], where: [] };
+  for (const issue of allIssues) {
+    const step = stepForField(issue.path.split(".")[0]);
+    if (step) issuesByStep[step].push(issue);
   }
 
   const dirtyStep = new Set(Object.keys(dirtyFields).map(stepForField));
