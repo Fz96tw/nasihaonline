@@ -439,6 +439,36 @@ Not scoped for MVP — tracked here so it isn't lost, and to flag the infrastruc
 
 ---
 
+### 4.17 Clubs
+
+A **club** is a small, opt-in discussion space any member can create around an interest (e.g. a chess club, a journal club, a study group). Clubs may sit inside a community (§4.9, `communityId` set) or stand alone (`communityId` null). Messages posted in a club reach **only the club's members** — this is what distinguishes a club from a forum category (§4.13), where everything is visible to the whole membership.
+
+**Implementation: a club is a restricted `ForumThread`.** No separate discussion system is built. A club is a standalone `ForumThread` (§4.13: no `eventId`/`knowledgeItemId`) with `visibility: invited` plus an `isClub` flag. Its title is the club name; its top-level `ForumPost` rows (`parentPostId` null) are the club's *messages*; nested posts are *replies* to a message (and count as messages for feed and activity purposes). Flagging, editing, removal, pasted images, `@` mentions (§4.13) and the shared moderation queue (§4.15) all apply unchanged. The club's members are its `ForumThreadInvitee` rows plus its author (the owner).
+
+**Membership**
+- **Self-join:** any member eligible to see the club can join; joining adds the member's own invitee row. There is no approval step in v1. Join runs through a dedicated `joinClub` action that only operates on `isClub` threads — it must never be possible to self-add to an ordinary `invited` thread (§4.13).
+- **Leave:** a member can leave at any time, deleting their own invitee row. Their past messages and replies remain, attributed to them. The owner cannot leave without first transferring ownership (see §11.19).
+- **Block / unblock:** the club owner (and moderators/admins) can block a member, which stores a `ForumThreadBlock` row and removes any existing invitee row, so access ends immediately. A blocked member cannot join and the club is hidden from them everywhere, browse included. Unblocking only deletes the block row — it does not re-add the member; they must rejoin. The owner cannot block themselves.
+- **Discoverability:** a club's name, description and member count are visible to eligible non-members (so they can find and join it); its messages are visible to members only.
+
+**Club page:** a dedicated club page replaces the thread view. It shows the club header (name, description, member count, Join/Leave), then a message list in which each top-level post is a "message" with its replies nested beneath it and a composer for new messages, instead of "Reply" framing. The standard thread URL (`/forums/[category]/[threadId]`) redirects a club thread to the club page rather than rendering the thread UI.
+
+**What's New feed (§4.13 / `/whats-new`):** a club appears as **one item per club, with a preview of its latest message**, resurfacing by `lastActivityAt` when new messages arrive — the same shape as existing `forum_thread` feed items, not one row per message. A reply is a message too: any new post in the club, top-level or nested, bumps the item and can be the previewed message. The item is shown only to current members; because membership is the invitee row, leaving or being blocked removes it from the feed on the next load. Participants in a thread of replies (and `@`-tagged members) still get the usual reply and mention notifications (§4.10) in addition.
+
+**Visibility rules (enforced in every member-facing query, never the DB layer, same convention as §4.13):**
+- Club content never appears in the `/forums` index or category thread lists, and is excluded from Meilisearch (§7.2) and any future global search (§4.16) unless a membership filter is guaranteed.
+- Notifications and digests (§4.10) for club activity reach only current members.
+- A club thread is always standalone and never linked to an Event or Knowledge item.
+- Moderators/admins can open a club through the moderation queue regardless of membership, as with restricted threads (§4.13).
+
+**Entities:** `ForumThread` (adds `isClub Boolean`, `description String?`, `communityId String?`), `ForumThreadInvitee` (doubles as the club member list), `ForumThreadBlock` (new: `threadId`, `userId`, `createdAt`). Clubs live in a seeded **Clubs** forum that, like Events Discussion and Library Discussions (§4.13), is excluded from the `/forums` index.
+
+**Routes:** `GET /api/clubs`, `POST /api/clubs`, `GET /api/clubs/:threadId`, `POST /api/clubs/:threadId/join`, `DELETE /api/clubs/:threadId/membership` (leave), `POST /api/clubs/:threadId/blocks` and `DELETE /api/clubs/:threadId/blocks/:userId` (owner/moderator/admin only), plus the existing post and flag routes (§4.13) for messages and replies.
+
+**IA:** `/clubs` (browse and My clubs), `/clubs/[threadId]` (club page).
+
+---
+
 ## 5. Information Architecture / Routing
 
 ### Public
@@ -470,6 +500,8 @@ Not scoped for MVP — tracked here so it isn't lost, and to flag the infrastruc
 /forums              Forum category list (§4.13)
 /forums/[category]   Thread list for a forum category
 /forums/[category]/[threadId]  Thread detail + replies
+/clubs               Browse clubs and My clubs (§4.17)
+/clubs/[threadId]    Club page: members-only message board (§4.17)
 /settings            Notification/digest preferences, password change, data export/deletion request (§4.15)
 ```
 
@@ -541,7 +573,7 @@ inbox_messages, meeting_requests,
 knowledge_items, knowledge_categories, knowledge_tags, knowledge_attachments,
 notifications, notification_preferences,
 team_members,
-forums, forum_threads, forum_posts,
+forums, forum_threads, forum_posts, forum_thread_blocks,
 donations,
 code_of_conduct_violations, privacy_data_requests,
 announcements
@@ -658,6 +690,8 @@ The plan below regroups work so each phase ships a coherent, demonstrable slice 
 17. **Recurring events have no single-occurrence exceptions:** §4.6's recurring events let a host set a repeat schedule (daily/weekly/monthly, interval, weekday selection, optional end date), but there is no way in v1 to edit, cancel, or reschedule just one occurrence of a series — every edit or cancel action applies to the whole series (a "skip this week" or "move just the Dec 25th session" workflow doesn't exist). This mirrors item 11's multi-host limitation in kind: a real, known gap accepted for v1 rather than an oversight. Needs a decision, if member feedback surfaces a need for it: add a per-occurrence exception/override concept (e.g. a table keyed on `(event_id, occurrence_date)` recording a skip or a one-off time change), or keep whole-series-only as the permanent v1+ behavior.
 18. ~~**Blog consolidated into Knowledge Library — public readability tradeoff:** Blog originally shipped as its own public-readable domain (§4.8) with `/blog`/`/blog/[slug]` reachable by signed-out visitors, distinct from the entirely member-gated Library. Consolidating Blog into the Library as the `blog_post` content type (§4.8/§4.9) raised a real product tradeoff: keep blog content publicly readable (bigger scope — would need an anonymous-visitor view path grafted onto `KnowledgeItem`, which has none today) or accept it becoming member-only, matching the rest of the Library. Needs a decision.~~ **Resolved:** accepted the loss of public readability — blog content is now member-only like every other Library content type, one access model instead of two. Old public `/blog`/`/blog/[slug]` URLs 308-redirect to a sign-in-gated `/library`/`/library/[id]` via a `LegacyBlogSlug` lookup table rather than 404ing outright.
 
+19. **Clubs (§4.17) — open decisions.** (a) *Owner departure:* the author is the owner and is not an invitee row; if they leave, are removed or are suspended, ownership must transfer (to a moderator-picked member, or the longest-standing member) or the club is archived. (b) *Community exit:* when a club's `communityId` is set, does a member leaving that community lose club membership, or does membership stay independent? (c) *Admin visibility and liability:* private member-created spaces limit what moderators can see before a flag is raised (Risk and Liability doc); decide whether clubs need extra reporting or retention rules. (d) *Search:* club content is excluded from Meilisearch in v1 rather than membership-filtered; revisit if members need to search within their own clubs. (e) *Join policy:* v1 is open self-join only; request-to-join or invite-only clubs are deferred. (f) *Club caps:* no limit on clubs per member or members per club in v1; add rate limiting on club creation if abused.
+
 ---
 
 ## 12. Acceptance Criteria Summary (v1 / MVP definition)
@@ -689,6 +723,9 @@ MVP is considered feature-complete when:
 - [ ] Any member who can see a restricted (invited-only) event — its host or an invitee — can start its on-demand discussion thread exactly as for a community event; the thread is visible only to the host and invited members everywhere it could surface (browse/search, direct link, reply, view count, author's profile), and every invitee gets notified of new replies whether or not they've posted (§4.6, §4.13).
 - [x] A member can start a standalone forum thread (no linked event/library item) restricted to a named invite list instead of the whole community; the thread is visible only to its author and invitees everywhere it could surface (browse/search, direct link 404 for non-invitees, reply, view count, author's profile, What's New feed), every invitee is notified of new replies whether or not they've posted, `@`-tagging a non-invitee is rejected by the composer, and moderators/admins can still open it via the shared moderation queue regardless of its visibility (§4.13).
 - [x] The author or an admin can add or remove invitees on a restricted thread after creation; a removed invitee loses access immediately, an added invitee is notified and gains access immediately, and removing the last invitee is rejected (§4.13, §11.16).
+- [ ] A member can create a club (a restricted forum thread flagged `isClub`, with name, description and optional community) and other eligible members can self-join and leave it from `/clubs/[threadId]`; messages and replies are visible only to current members everywhere they could surface (browse, search, feed, notifications, direct link returning 404 to non-members) (§4.17).
+- [ ] A club owner can block and unblock members; a blocked member loses access immediately, cannot rejoin, and no longer sees the club; unblocking does not re-add them (§4.17).
+- [ ] A club appears on a member's What's New feed as a single item with a preview of its latest message, only while they are a member, and any new message in the club, a reply included, bumps it and can be its preview (§4.17).
 - [ ] A visitor or member can make a donation from `/donate`; the donation record has no relationship to Knowledge Hours balance or membership tier anywhere in the system.
 - [ ] Checking the "Also apply to become a Friend of NASIHA member" checkbox on `/donate` auto-submits a Friend-tier `MembershipApplication` into the same `/admin/applications` review queue as `/join`, without granting tier automatically; a duplicate is never created for a donor with an existing pending/approved application or member account.
 - [ ] The Code of Conduct disclaimer and acceptance checkbox appear at application/first-login; a member can report a Code of Conduct concern; an admin can log a warning or suspension from `/admin/conduct`, and a suspended user cannot log in while their historical content/ledger entries remain intact.
