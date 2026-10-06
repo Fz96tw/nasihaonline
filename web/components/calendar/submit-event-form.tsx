@@ -275,6 +275,21 @@ export function SubmitEventForm({
     visited: visitedSteps,
   });
 
+  // Errors set by hand ("Next", or a rejected Publish) are never re-checked by
+  // RHF on a plain change — mode "onTouched" only re-validates after a blur,
+  // which selects, checkboxes and the pickers never fire. issuesByStep is
+  // recomputed from the live values on every render, so drop any error whose
+  // field no longer fails the strict schema.
+  const formErrors = form.formState.errors;
+  const failingFields = new Set(
+    EVENT_STEPS.flatMap((step) => issuesByStep[step.id].map((issue) => issue.path.split(".")[0])),
+  );
+  useEffect(() => {
+    for (const field of Object.keys(formErrors)) {
+      if (!failingFields.has(field)) form.clearErrors(field as keyof CreateEventValues);
+    }
+  });
+
   function handleStepSelect(id: string, source: WizardNavSource) {
     const leaving = activeStep;
     setVisitedSteps((prev) => new Set(prev).add(leaving).add(id as EventStepId));
