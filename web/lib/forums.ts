@@ -35,6 +35,26 @@ export type ForumCategory = {
   communityId: string | null;
 };
 
+/**
+ * Splits accessible forums into the "General Topics" group (no community)
+ * plus one group per community, communities ordered by name and empty ones
+ * dropped — the same sectioning /forums uses, shared with the new-thread
+ * destination picker and forum selector.
+ */
+export function groupForumsByCommunity<F extends { communityId: string | null }>(
+  forums: F[],
+  communities: { id: string; name: string }[],
+): { general: F[]; groups: { community: { id: string; name: string }; forums: F[] }[] } {
+  return {
+    general: forums.filter((forum) => forum.communityId === null),
+    groups: communities
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((community) => ({ community, forums: forums.filter((forum) => forum.communityId === community.id) }))
+      .filter((group) => group.forums.length > 0),
+  };
+}
+
 export type ForumThreadListItem = {
   id: string;
   title: string;

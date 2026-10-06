@@ -20,6 +20,7 @@ import type { KnowledgeCategoryOption } from "@/lib/library";
 import { hasVideoToken } from "@/lib/linkify";
 import { QuickRecordingPicker, type QuickRecordingListItem } from "@/components/quick-recording-picker";
 import { clearLocalDraft, readLocalDraft, writeLocalDraft } from "@/lib/local-draft";
+import { CLINICAL_DISCUSSIONS_SLUG, groupForumsByCommunity, type ForumCategory } from "@/lib/forums";
 
 const DEFAULT_VALUES: CreateForumThreadValues = {
   title: "",
@@ -104,24 +105,30 @@ function ThreadBodyField({
  * SubmitEventForm's restricted-audience toggle.
  */
 export function NewThreadForm({
-  forumId,
-  forumSlug,
-  requireDeidentification,
+  forumId: initialForumId,
+  forums,
   currentUserId,
   categories,
   communities,
-  communityId,
   myCommunityIds,
 }: {
   forumId: string;
-  forumSlug: string;
-  requireDeidentification: boolean;
+  /** Every forum the member may post to — drives the destination selector. */
+  forums: ForumCategory[];
   currentUserId: string;
   categories: KnowledgeCategoryOption[];
   communities: { id: string; name: string }[];
-  communityId: string | null;
   myCommunityIds: string[];
 }) {
+  // The destination can be changed in-form, so forum-derived values are
+  // state-driven rather than props. The draft key below stays pinned to the
+  // initial forum so a mid-draft switch doesn't orphan what's been typed.
+  const [forumId, setForumId] = useState(initialForumId);
+  const selectedForum = forums.find((forum) => forum.id === forumId) ?? forums[0];
+  const forumSlug = selectedForum.slug;
+  const communityId = selectedForum.communityId;
+  const requireDeidentification = forumSlug === CLINICAL_DISCUSSIONS_SLUG;
+  const { general: generalForums, groups: communityForumGroups } = groupForumsByCommunity(forums, communities);
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -147,7 +154,7 @@ export function NewThreadForm({
   // Draft feature Library/Events have. Only title+body (the free-text
   // fields actually worth recovering); structured selections like
   // categoryIds aren't restored. See lib/local-draft.ts.
-  const draftKey = `forum-new-thread-draft:${forumId}`;
+  const draftKey = `forum-new-thread-draft:${initialForumId}`;
   const [draftRestored, setDraftRestored] = useState(false);
 
   useEffect(() => {
@@ -231,6 +238,41 @@ export function NewThreadForm({
             </button>
           </div>
         )}
+
+        <FormItem className="rounded-md border p-4">
+          <FormLabel htmlFor="new-thread-forum">Post in</FormLabel>
+          <select
+            id="new-thread-forum"
+            value={forumId}
+            onChange={(event) => {
+              setForumId(event.target.value);
+              // Topics belong to a community, so a prior selection may not
+              // apply to the new destination.
+              form.setValue("categoryIds", [], { shouldDirty: true });
+            }}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {generalForums.length > 0 && (
+              <optgroup label="General Topics">
+                {generalForums.map((forum) => (
+                  <option key={forum.id} value={forum.id}>
+                    {forum.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {communityForumGroups.map((group) => (
+              <optgroup key={group.community.id} label={group.community.name}>
+                {group.forums.map((forum) => (
+                  <option key={forum.id} value={forum.id}>
+                    {forum.name}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          {selectedForum.description && <FormDescription>{selectedForum.description}</FormDescription>}
+        </FormItem>
 
         <FormField
           control={form.control}

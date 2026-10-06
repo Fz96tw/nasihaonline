@@ -7,7 +7,7 @@ import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ACTIONS: { label: string; href: string; icon: LucideIcon }[] = [
-  { label: "Post message to everyone", href: "/forums/general/new", icon: MessageSquarePlus },
+  { label: "Start a discussion", href: "/forums/new", icon: MessageSquarePlus },
   { label: "Write a blog post", href: "/library/new?type=blog_post", icon: PenLine },
   { label: "Create library item", href: "/library/new", icon: BookPlus },
   { label: "Request peer review", href: "/review-feedback/new", icon: ClipboardCheck },
@@ -20,8 +20,8 @@ const FROSTED =
 
 /**
  * Floating frosted "compose" button on What's New. Fans out into the main
- * post/create actions so a member who wants to say something to the whole
- * community doesn't have to discover Forums → General → New Thread.
+ * post/create actions so a member who wants to start a discussion can pick
+ * the right forum (General Topics or one of their communities) up front.
  */
 export function ComposeFab() {
   const [open, setOpen] = useState(false);
@@ -78,7 +78,7 @@ export function ComposeFab() {
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
-        aria-label={open ? "Close compose menu" : "Post message to everyone"}
+        aria-label={open ? "Close compose menu" : "Compose"}
         className={cn(
           FROSTED,
           "relative flex h-14 w-14 items-center justify-center rounded-full text-primary transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",

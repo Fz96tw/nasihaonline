@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { getForumBySlug } from "@/lib/forums-server";
+import { getForumBySlug, getForumCategories } from "@/lib/forums-server";
 import { getKnowledgeCategories } from "@/lib/library-server";
 import { getAllCommunities, getOrCreateProfile } from "@/lib/profile-server";
 import { NewThreadForm } from "@/components/forums/new-thread-form";
-import { CLINICAL_DISCUSSIONS_SLUG } from "@/lib/forums";
+import type { ForumCategory } from "@/lib/forums";
 import { Role } from "@/lib/generated/prisma/enums";
 
 export const metadata: Metadata = {
@@ -22,11 +22,17 @@ export default async function NewForumThreadPage({ params }: { params: { categor
   if (!result) notFound();
   const { forum } = result;
 
-  const [categories, communities, profile] = await Promise.all([
+  const [categories, communities, profile, accessibleForums] = await Promise.all([
     getKnowledgeCategories(),
     getAllCommunities(),
     getOrCreateProfile(user.id),
+    getForumCategories(user.id, isPrivileged),
   ]);
+  // The forum in the URL may be one the picker never lists (e.g. a system
+  // forum reached by direct link) — keep it selectable so the form renders.
+  const forums: ForumCategory[] = accessibleForums.some((f) => f.id === forum.id)
+    ? accessibleForums
+    : [...accessibleForums, { id: forum.id, name: forum.name, slug: forum.slug, description: forum.description, threadCount: 0, communityId: forum.communityId }];
   const myCommunityIds = profile.communities.map((c) => c.community.id);
 
   return (
@@ -36,12 +42,10 @@ export default async function NewForumThreadPage({ params }: { params: { categor
       </div>
       <NewThreadForm
         forumId={forum.id}
-        forumSlug={forum.slug}
-        requireDeidentification={forum.slug === CLINICAL_DISCUSSIONS_SLUG}
+        forums={forums}
         currentUserId={user.id}
         categories={categories}
         communities={communities}
-        communityId={forum.communityId}
         myCommunityIds={myCommunityIds}
       />
     </main>
