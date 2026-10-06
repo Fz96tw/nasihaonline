@@ -20,7 +20,7 @@ export function AudienceStep({
   const isRestricted = form.watch("visibility") === KnowledgeVisibility.restricted;
 
   return (
-    <section className="flex flex-col gap-5 border-t pt-6">
+    <section className="flex flex-col gap-5">
       <h2 className="text-base font-semibold">Audience &amp; visibility</h2>
       <FormField
         control={form.control}

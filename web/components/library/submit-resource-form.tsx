@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
@@ -19,6 +19,13 @@ import { DeleteLibraryItemButton } from "@/components/library/delete-library-ite
 import { BasicsStep } from "@/components/library/resource-form/basics-step";
 import { ContentStep } from "@/components/library/resource-form/content-step";
 import { AudienceStep } from "@/components/library/resource-form/audience-step";
+import {
+  RESOURCE_STEPS,
+  stepForField,
+  type ResourceStepId,
+} from "@/components/library/resource-form/steps";
+import { useResourceStepStatuses } from "@/components/library/resource-form/use-resource-step-statuses";
+import { WizardPanel, WizardShell, type WizardNavSource } from "@/components/shared/wizard/wizard-shell";
 
 const DEFAULT_VALUES: CreateKnowledgeItemValues = {
   title: "",
@@ -150,6 +157,62 @@ export function SubmitResourceForm({
   const isCaseStudy = contentType === KnowledgeContentType.case_study;
   const isBlogPost = contentType === KnowledgeContentType.blog_post;
 
+  // Wizard navigation. The step map shows every step and lets the contributor
+  // jump to any of them at any time; "Next" only warns (it never blocks) about
+  // the step being left, using the same strict schema Submit runs. A
+  // submitted item has no Audience step — visibility/invitees/license consent
+  // are only editable while the item is still a first submission.
+  const [activeStep, setActiveStep] = useState<ResourceStepId>("basics");
+  const [visitedSteps, setVisitedSteps] = useState<ReadonlySet<ResourceStepId>>(() => new Set());
+  const { statuses: stepStatuses, issuesByStep } = useResourceStepStatuses({
+    form,
+    isFirstSubmission,
+    isExisting: existingItem !== undefined,
+    visited: visitedSteps,
+  });
+  const wizardSteps = RESOURCE_STEPS.filter((step) => step.id !== "audience" || isFirstSubmission);
+
+  // Errors set by hand ("Next", or a rejected Submit) are never re-checked by
+  // RHF on a plain change — mode "onTouched" only re-validates after a blur,
+  // which selects, checkboxes and the pickers never fire. issuesByStep is
+  // recomputed from the live values on every render, so drop any error whose
+  // field no longer fails the strict schema.
+  const formErrors = form.formState.errors;
+  const failingFields = new Set(
+    RESOURCE_STEPS.flatMap((step) => issuesByStep[step.id].map((issue) => issue.path.split(".")[0])),
+  );
+  useEffect(() => {
+    for (const field of Object.keys(formErrors)) {
+      if (!failingFields.has(field)) form.clearErrors(field as keyof CreateKnowledgeItemValues);
+    }
+  });
+
+  function handleStepSelect(id: string, source: WizardNavSource) {
+    const leaving = activeStep;
+    setVisitedSteps((prev) => new Set(prev).add(leaving).add(id as ResourceStepId));
+    if (source === "next") {
+      for (const issue of issuesByStep[leaving]) {
+        form.setError(issue.path as keyof CreateKnowledgeItemValues, { message: issue.message });
+      }
+    }
+    setActiveStep(id as ResourceStepId);
+  }
+
+  /**
+   * A save was rejected for fields the contributor may not be looking at
+   * (every step but the active one is hidden) — bring them to the first step
+   * that has a problem.
+   */
+  function jumpToFirstProblemStep(fieldPaths: string[]) {
+    const failing = new Set(fieldPaths.map((path) => stepForField(path.split(".")[0])));
+    const target = wizardSteps.find((step) => failing.has(step.id));
+    if (target) setActiveStep(target.id);
+  }
+
+  function onInvalid(errors: FieldErrors<CreateKnowledgeItemValues>) {
+    jumpToFirstProblemStep(Object.keys(errors));
+  }
+
   async function onSubmit(values: CreateKnowledgeItemValues) {
     const action = pendingActionRef.current;
 
@@ -164,6 +227,7 @@ export function SubmitResourceForm({
         for (const issue of result.error.issues) {
           form.setError(issue.path.join(".") as keyof CreateKnowledgeItemValues, { message: issue.message });
         }
+        jumpToFirstProblemStep(result.error.issues.map((issue) => issue.path.join(".")));
         return;
       }
     }
@@ -264,22 +328,36 @@ export function SubmitResourceForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
-        <BasicsStep form={form} communities={communities} categories={categories} tags={tags} />
+      <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="flex flex-col gap-5" noValidate>
+        <WizardShell
+          steps={wizardSteps.map((step) => ({ ...step, status: stepStatuses[step.id] }))}
+          activeId={activeStep}
+          onSelect={handleStepSelect}
+        >
+          <WizardPanel id="basics">
+            <BasicsStep form={form} communities={communities} categories={categories} tags={tags} />
+          </WizardPanel>
 
-        <ContentStep
-          form={form}
-          existingItem={existingItem}
-          setImageUploading={setImageUploading}
-          file={file}
-          setFile={setFile}
-          sourceMode={sourceMode}
-          setSourceMode={setSourceMode}
-          heroImage={heroImage}
-          setHeroImage={setHeroImage}
-        />
+          <WizardPanel id="content">
+            <ContentStep
+              form={form}
+              existingItem={existingItem}
+              setImageUploading={setImageUploading}
+              file={file}
+              setFile={setFile}
+              sourceMode={sourceMode}
+              setSourceMode={setSourceMode}
+              heroImage={heroImage}
+              setHeroImage={setHeroImage}
+            />
+          </WizardPanel>
 
-        {isFirstSubmission && <AudienceStep form={form} currentUserId={currentUserId} />}
+          {isFirstSubmission && (
+            <WizardPanel id="audience">
+              <AudienceStep form={form} currentUserId={currentUserId} />
+            </WizardPanel>
+          )}
+        </WizardShell>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
         {draftSaved && <p className="text-sm text-success">Draft saved.</p>}
