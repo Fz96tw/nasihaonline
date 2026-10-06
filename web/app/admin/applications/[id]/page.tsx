@@ -6,6 +6,7 @@ import { STATUS_LABELS, STATUS_BADGE_VARIANT } from "@/lib/applications";
 import { TIER_LABELS } from "@/lib/validation/application-review";
 import { HOW_HEARD_LABELS } from "@/lib/validation/application";
 import { getProfileLinkLabel } from "@/lib/profile-link";
+import { LocalDateTime } from "@/components/local-date-time";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminApplicationReviewForm } from "@/components/admin-application-review-form";
@@ -107,7 +108,7 @@ export default async function AdminApplicationDetailPage({
                   : null
               }
             />
-            <Field label="Submitted" value={application.createdAt.toLocaleString()} />
+            <Field label="Submitted" value={<LocalDateTime iso={application.createdAt.toISOString()} />} />
             <Field label="Email updates opt-in" value={application.emailUpdatesOptIn ? "Yes" : "No"} />
           </dl>
         </CardContent>
@@ -138,7 +139,7 @@ export default async function AdminApplicationDetailPage({
             <Field label="Reviewed by" value={application.reviewedByEmail} />
             <Field
               label="Reviewed at"
-              value={application.reviewedAt ? application.reviewedAt.toLocaleString() : null}
+              value={application.reviewedAt ? <LocalDateTime iso={application.reviewedAt.toISOString()} /> : null}
             />
             <div className="sm:col-span-2">
               <Field

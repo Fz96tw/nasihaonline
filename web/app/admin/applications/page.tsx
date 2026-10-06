@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { buildApplicationFilterWhere, STATUS_LABELS, STATUS_BADGE_VARIANT } from "@/lib/applications";
 import { ApplicationStatus } from "@/lib/generated/prisma/enums";
 import { HOW_HEARD_LABELS } from "@/lib/validation/application";
+import { LocalDateTime } from "@/components/local-date-time";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -147,7 +148,7 @@ export default async function AdminApplicationsPage({
                     : "—"}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {application.createdAt.toLocaleDateString()}
+                  <LocalDateTime iso={application.createdAt.toISOString()} dateOnly />
                 </TableCell>
               </TableRow>
             ))}
