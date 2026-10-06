@@ -2952,6 +2952,13 @@ export async function updateEvent(
     }
   }
 
+  // Compares against the pre-update values fetched above, not the input
+  // strings, so e.g. re-submitting the form with the same time never fires
+  // any of the below (feed row, calendar sync, notifications).
+  const timeChanged =
+    event.startsAt.getTime() !== startsAt.getTime() ||
+    (event.endsAt?.getTime() ?? null) !== (endsAt?.getTime() ?? null);
+
   const updated = await db.$transaction(async (tx) => {
     // Delete-then-recreate, same pattern as updateKnowledgeItem
     // (library-server.ts) — simpler than diffing the old/new tag sets.
@@ -2965,6 +2972,7 @@ export async function updateEvent(
         type: input.type,
         startsAt,
         endsAt,
+        ...(timeChanged ? { rescheduledAt: new Date() } : {}),
         timezone: input.timezone,
         open: input.open,
         guestLinkToken: await resolveGuestLinkToken(
@@ -3023,13 +3031,6 @@ export async function updateEvent(
   if (input.meetingOrganizerMessageImage && event.meetingOrganizerMessageImageKey) {
     await deleteMeetingMessageImage(event.meetingOrganizerMessageImageKey);
   }
-
-  // Compares against the pre-update values fetched above, not the input
-  // strings, so e.g. re-submitting the form with the same time never fires
-  // any of the below.
-  const timeChanged =
-    event.startsAt.getTime() !== startsAt.getTime() ||
-    (event.endsAt?.getTime() ?? null) !== (endsAt?.getTime() ?? null);
 
   // Keep the underlying Google Calendar event's time in sync so Meet-linked
   // attendees' own calendars move too and Google emails them an updated

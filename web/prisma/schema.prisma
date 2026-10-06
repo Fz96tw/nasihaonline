@@ -1228,6 +1228,11 @@ model Event {
   // discussion resurfaces the event instead of it only ever appearing once
   // at its creation time. Same convention as ForumThread.lastActivityAt.
   lastActivityAt                  DateTime        @default(now())
+  // When the host last changed the start/end time of an already-published
+  // event (updateEvent). Drives a separate "Rescheduled" What's New feed row,
+  // like a discussion reply's row — the event's own row stays at publishedAt.
+  // Null until the first reschedule.
+  rescheduledAt                   DateTime?
 
   recurrence             EventRecurrence?
   rsvps                  RSVP[]

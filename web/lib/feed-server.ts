@@ -35,6 +35,7 @@ import {
   EVENT_THREAD_ACCESS_SELECT,
   KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
 } from "@/lib/forums-server";
+import { formatEventDateTime } from "@/lib/format-date";
 import { communityVisibilityWhere, getMemberCommunityContext } from "@/lib/events-server";
 import { getInboxList } from "@/lib/inbox-server";
 import { matchesInboxSearch } from "@/lib/inbox";
@@ -477,6 +478,8 @@ export async function getFeedPage(params: {
         createdAt: true,
         publishedAt: true,
         startsAt: true,
+        timezone: true,
+        rescheduledAt: true,
         heroImageUrl: true,
         visibility: true,
         hostId: true,
@@ -820,13 +823,34 @@ export async function getFeedPage(params: {
       // Following mode: the event's own row only when its host is followed;
       // the reply row is the newest reply by a followed member (same
       // attendee/invitee gate on discussion activity as the ordinary feed).
-      const eventRows = !authorIds || followedAuthorSet.has(event.hostId) ? [ownRow] : [];
+      const eventRows: FeedItem[] = !authorIds || followedAuthorSet.has(event.hostId) ? [ownRow] : [];
       const followedReply = authorIds && event.forumThread ? followedPostByThread.get(event.forumThread.id) : undefined;
       const reply = query || !viewerAttends
         ? null
         : authorIds
           ? (followedReply?.isReply ? followedReply.post : null)
           : latestDiscussionReply(event.forumThread, event.lastActivityAt, event.createdAt);
+      // A reschedule of a still-upcoming event, as its own row (id prefixed
+      // so it can't collide with the event's or a reply's) — same approach as
+      // the reply row below: the event's own row keeps its publishedAt
+      // position. Never in search mode; in following mode only when the host
+      // is followed (same as the event's own row).
+      const rescheduledRow: FeedItem | null =
+        !query && event.rescheduledAt && event.startsAt.getTime() > Date.now() && (!authorIds || followedAuthorSet.has(event.hostId))
+          ? {
+              type: "event",
+              id: `rescheduled-${event.id}`,
+              title: event.title,
+              excerpt: `Rescheduled to ${formatEventDateTime(event.startsAt, event.timezone)}`,
+              href: withFeedRef(`/calendar/${event.id}`, query),
+              timestamp: event.rescheduledAt.toISOString(),
+              author: authorOf(event.host),
+              imageUrl: null,
+              eventStartsAt: event.startsAt.toISOString(),
+              isRestricted: event.visibility === EventVisibility.invited,
+            }
+          : null;
+      if (rescheduledRow) eventRows.push(rescheduledRow);
       if (!reply) return eventRows;
 
       // The latest reply, as its own row (id: reply.id, not event.id)
