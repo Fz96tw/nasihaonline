@@ -21,9 +21,12 @@ import { ContentStep } from "@/components/library/resource-form/content-step";
 import { AudienceStep } from "@/components/library/resource-form/audience-step";
 import {
   RESOURCE_STEPS,
+  REVIEW_STEP,
   stepForField,
+  type ResourceFieldStepId,
   type ResourceStepId,
 } from "@/components/library/resource-form/steps";
+import { ReviewStep } from "@/components/library/resource-form/review-step";
 import { useResourceStepStatuses } from "@/components/library/resource-form/use-resource-step-statuses";
 import { WizardPanel, WizardShell, type WizardNavSource } from "@/components/shared/wizard/wizard-shell";
 
@@ -170,7 +173,8 @@ export function SubmitResourceForm({
     isExisting: existingItem !== undefined,
     visited: visitedSteps,
   });
-  const wizardSteps = RESOURCE_STEPS.filter((step) => step.id !== "audience" || isFirstSubmission);
+  const fieldSteps = RESOURCE_STEPS.filter((step) => step.id !== "audience" || isFirstSubmission);
+  const wizardSteps = [...fieldSteps, REVIEW_STEP];
 
   // Errors set by hand ("Next", or a rejected Submit) are never re-checked by
   // RHF on a plain change — mode "onTouched" only re-validates after a blur,
@@ -191,7 +195,7 @@ export function SubmitResourceForm({
     const leaving = activeStep;
     setVisitedSteps((prev) => new Set(prev).add(leaving).add(id as ResourceStepId));
     if (source === "next") {
-      for (const issue of issuesByStep[leaving]) {
+      for (const issue of issuesByStep[leaving as ResourceFieldStepId] ?? []) {
         form.setError(issue.path as keyof CreateKnowledgeItemValues, { message: issue.message });
       }
     }
@@ -201,16 +205,18 @@ export function SubmitResourceForm({
   /**
    * A save was rejected for fields the contributor may not be looking at
    * (every step but the active one is hidden) — bring them to the first step
-   * that has a problem.
+   * that has a problem. A failed Submit from Review stays put: Review already
+   * lists the blocking steps with links.
    */
-  function jumpToFirstProblemStep(fieldPaths: string[]) {
+  function jumpToFirstProblemStep(fieldPaths: string[], { stayOnReview }: { stayOnReview: boolean }) {
+    if (stayOnReview && activeStep === "review") return;
     const failing = new Set(fieldPaths.map((path) => stepForField(path.split(".")[0])));
-    const target = wizardSteps.find((step) => failing.has(step.id));
+    const target = fieldSteps.find((step) => failing.has(step.id));
     if (target) setActiveStep(target.id);
   }
 
   function onInvalid(errors: FieldErrors<CreateKnowledgeItemValues>) {
-    jumpToFirstProblemStep(Object.keys(errors));
+    jumpToFirstProblemStep(Object.keys(errors), { stayOnReview: false });
   }
 
   async function onSubmit(values: CreateKnowledgeItemValues) {
@@ -227,7 +233,10 @@ export function SubmitResourceForm({
         for (const issue of result.error.issues) {
           form.setError(issue.path.join(".") as keyof CreateKnowledgeItemValues, { message: issue.message });
         }
-        jumpToFirstProblemStep(result.error.issues.map((issue) => issue.path.join(".")));
+        jumpToFirstProblemStep(
+          result.error.issues.map((issue) => issue.path.join(".")),
+          { stayOnReview: true },
+        );
         return;
       }
     }
@@ -357,6 +366,23 @@ export function SubmitResourceForm({
               <AudienceStep form={form} currentUserId={currentUserId} />
             </WizardPanel>
           )}
+
+          <WizardPanel id="review">
+            <ReviewStep
+              form={form}
+              existingItem={existingItem}
+              isFirstSubmission={isFirstSubmission}
+              communities={communities}
+              categories={categories}
+              tags={tags}
+              issuesByStep={issuesByStep}
+              statuses={stepStatuses}
+              file={file}
+              sourceMode={sourceMode}
+              heroImage={heroImage}
+              onEdit={(id) => handleStepSelect(id, "map")}
+            />
+          </WizardPanel>
         </WizardShell>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
@@ -375,19 +401,24 @@ export function SubmitResourceForm({
               {submitting && pendingActionRef.current === "draft" ? "Saving…" : "Save Draft"}
             </Button>
           )}
-          <Button
-            type="submit"
-            disabled={submitting || imageUploading}
-            onClick={() => {
-              pendingActionRef.current = "submit";
-            }}
-          >
-            {submitting && pendingActionRef.current === "submit"
-              ? "Saving…"
-              : isFirstSubmission
-                ? "Submit for Review"
-                : "Save Changes"}
-          </Button>
+          {/* A new item (or a draft) is submitted for review from the Review step
+            only; an already-submitted item's edit can be saved from any step,
+            since every step starts out complete there. */}
+          {(activeStep === "review" || !isFirstSubmission) && (
+            <Button
+              type="submit"
+              disabled={submitting || imageUploading}
+              onClick={() => {
+                pendingActionRef.current = "submit";
+              }}
+            >
+              {submitting && pendingActionRef.current === "submit"
+                ? "Saving…"
+                : isFirstSubmission
+                  ? "Submit for Review"
+                  : "Save Changes"}
+            </Button>
+          )}
           {existingItem?.status === KnowledgeStatus.draft && (
             <DeleteLibraryItemButton
               itemId={existingItem.id}

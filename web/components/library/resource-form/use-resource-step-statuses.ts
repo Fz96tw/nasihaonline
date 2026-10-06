@@ -59,5 +59,14 @@ export function useResourceStepStatuses({
     else if (stepIssues.length > 0) statuses[id] = started ? "incomplete" : "not_started";
     else statuses[id] = "complete";
   }
+
+  // Review is "ready" only once the contributor has actually looked at it (or
+  // is editing an existing item) and nothing is blocking; any blocker shows
+  // once they've reached it.
+  const totalIssues = RESOURCE_STEPS.reduce((sum, { id }) => sum + issuesByStep[id].length, 0);
+  const reviewStarted = isExisting || visited.has("review");
+  statuses.review =
+    totalIssues > 0 ? (reviewStarted ? "incomplete" : "not_started") : reviewStarted ? "complete" : "not_started";
+
   return { statuses, issuesByStep };
 }
