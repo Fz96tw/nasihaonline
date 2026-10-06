@@ -302,6 +302,7 @@ model SiteSettings {
 
 enum BodyFont {
   inter
+  inter_tight
   ibm_plex_sans
   montserrat
   mulish
@@ -309,6 +310,7 @@ enum BodyFont {
 
 enum HeadingFont {
   inter
+  inter_tight
   lora
   source_serif_4
   mulish

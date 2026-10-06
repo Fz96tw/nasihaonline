@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, IBM_Plex_Sans, Montserrat, Mulish, Lora, Source_Serif_4 } from "next/font/google";
+import { Inter, Inter_Tight, IBM_Plex_Sans, Montserrat, Mulish, Lora, Source_Serif_4 } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,11 @@ import { Analytics } from "@/components/analytics";
 // already bundled, not load an arbitrary Google Font at runtime. See
 // lib/fonts.ts for the option list and CSS variable names.
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const interTight = Inter_Tight({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-inter-tight",
+});
 const ibmPlexSans = IBM_Plex_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
@@ -102,6 +107,7 @@ export default async function RootLayout({
         className={cn(
           "font-sans",
           inter.variable,
+          interTight.variable,
           ibmPlexSans.variable,
           montserrat.variable,
           mulish.variable,
