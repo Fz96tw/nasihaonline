@@ -1,10 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Form } from "@/components/ui/form";
 import { KnowledgeContentType, KnowledgeLevel } from "@/lib/generated/prisma/enums";
 import type { ReviewCategoryOption, ReviewItemForEdit, ReviewTagOption } from "@/lib/review";
@@ -69,6 +79,8 @@ export function SubmitReviewItemForm({
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+  // "Discard your changes?" prompt, shown only when Cancel is pressed with unsaved edits.
+  const [discardPromptOpen, setDiscardPromptOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [sourceMode, setSourceMode] = useState<"file" | "link">(existingItem?.externalUrl ? "link" : "file");
@@ -107,6 +119,43 @@ export function SubmitReviewItemForm({
   // is fixed (this form doesn't expose changing it), so edit mode keys off
   // the existing item's own value instead.
   const showVolunteerNote = existingItem ? existingItem.seekingReviewers : !isInviteMode;
+
+  // Warn before the tab is closed/reloaded with edits that haven't been saved.
+  // RHF only tracks the form fields; the document and hero-image pickers are
+  // plain state, so they're compared against "nothing chosen" separately.
+  // leavingRef is set once a save succeeds and the page is about to navigate
+  // away, so that navigation isn't second-guessed. In-app link clicks aren't
+  // covered — the browser only exposes beforeunload. (No drafts here, so a
+  // save always leaves the page — there's no "saved, stay" baseline to reset.)
+  const leavingRef = useRef(false);
+  const hasUnsavedChanges = form.formState.isDirty || file !== null || heroImage !== null;
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      if (leavingRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsavedChanges]);
+
+  // Cancel leaves without saving: back through history when there is any (the
+  // member may have arrived from the list, search or a notification), else to
+  // the item's own page when editing, or the list when creating.
+  function leaveWithoutSaving() {
+    leavingRef.current = true;
+    if (window.history.length > 1) {
+      router.back();
+    } else {
+      router.push(existingItem ? `/review-feedback/${existingItem.id}` : "/review-feedback");
+    }
+  }
+
+  function handleCancel() {
+    if (hasUnsavedChanges) setDiscardPromptOpen(true);
+    else leaveWithoutSaving();
+  }
 
   // Wizard navigation. The step map shows every step and lets the member jump
   // to any of them at any time; "Next" only warns (it never blocks) about the
@@ -204,6 +253,8 @@ export function SubmitReviewItemForm({
               : "Something went wrong. Please try again.",
         );
       }
+      // The save succeeded and the page is about to navigate away.
+      leavingRef.current = true;
       if (existingItem) {
         // Replace (not push) so this edit page's history entry doesn't
         // linger for BackLink's router.back() on the details page to land
@@ -216,7 +267,10 @@ export function SubmitReviewItemForm({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
-      setSubmitting(false);
+      // Once a save has succeeded and the page is navigating away, stay
+      // disabled (showing "Saving…") until it actually leaves — otherwise the
+      // button re-enables during the navigation and invites a second submit.
+      if (!leavingRef.current) setSubmitting(false);
     }
   }
 
@@ -274,14 +328,32 @@ export function SubmitReviewItemForm({
 
         {/* A new item is submitted from the Review step only; an existing item's edit
           can be saved from any step, since every step starts out complete there. */}
-        {(activeStep === "review" || existingItem) && (
-          <div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="ghost" disabled={submitting} onClick={handleCancel}>
+            Cancel
+          </Button>
+          {(activeStep === "review" || existingItem) && (
             <Button type="submit" disabled={submitting}>
               {submitting ? "Saving…" : existingItem ? "Save Changes" : "Submit for Review"}
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </form>
+
+      <AlertDialog open={discardPromptOpen} onOpenChange={setDiscardPromptOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard your changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes to this item. If you leave now they&apos;ll be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction onClick={leaveWithoutSaving}>Discard changes</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Form>
   );
 }

@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { KnowledgeContentType } from "@/lib/generated/prisma/enums";
 import type { ReviewItemForEdit } from "@/lib/review";
 import type { CreateReviewItemValues } from "@/lib/validation/review";
+import { AdvancedOptions } from "@/components/shared/wizard/advanced-options";
 import { DOCUMENT_ACCEPT } from "./shared";
 
 /** "Material" section of the peer-review item form: the document/link or YouTube source, hero image, and the case-study de-identification confirm. */
@@ -141,28 +142,30 @@ export function MaterialStep({
 
       {sourceError && !isRecordedLecture && <p className="text-sm font-medium text-destructive">{sourceError}</p>}
 
-      <div className="flex flex-col gap-2">
-        <label htmlFor="review-hero-image" className="text-sm font-medium">
-          Hero image (optional)
-        </label>
-        {existingItem?.heroImageUrl && !heroImage && (
-          // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Library's same rationale
-          <img src={existingItem.heroImageUrl} alt="Current hero image" className="h-32 w-full max-w-xs rounded-md object-cover" />
-        )}
-        <input
-          id="review-hero-image"
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          onChange={(e) => setHeroImage(e.target.files?.[0] ?? null)}
-          className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
-        />
-        {existingItem?.heroImageUrl && (
-          <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
-        )}
-        {isRecordedLecture && (
-          <p className="text-xs text-muted-foreground">Leave blank to use the video&apos;s YouTube thumbnail (default).</p>
-        )}
-      </div>
+      <AdvancedOptions summary="Hero image" defaultOpen={Boolean(existingItem?.heroImageUrl)}>
+        <div className="flex flex-col gap-2">
+          <label htmlFor="review-hero-image" className="text-sm font-medium">
+            Hero image (optional)
+          </label>
+          {existingItem?.heroImageUrl && !heroImage && (
+            // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Library's same rationale
+            <img src={existingItem.heroImageUrl} alt="Current hero image" className="h-32 w-full max-w-xs rounded-md object-cover" />
+          )}
+          <input
+            id="review-hero-image"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(e) => setHeroImage(e.target.files?.[0] ?? null)}
+            className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
+          />
+          {existingItem?.heroImageUrl && (
+            <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
+          )}
+          {isRecordedLecture && (
+            <p className="text-xs text-muted-foreground">Leave blank to use the video&apos;s YouTube thumbnail (default).</p>
+          )}
+        </div>
+      </AdvancedOptions>
 
       {isCaseStudy && (
         <FormField
