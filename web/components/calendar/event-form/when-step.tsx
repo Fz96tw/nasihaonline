@@ -1,6 +1,6 @@
 "use client";
 
-import type { MutableRefObject } from "react";
+import { useRef, type MutableRefObject } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import type { CreateEventValues } from "@/lib/validation/event";
 import { DATETIME_LOCAL_STEP_SECONDS, snapDatetimeLocalValue } from "@/lib/datetime-input";
 import { AdvancedOptions } from "@/components/shared/wizard/advanced-options";
 import { describeRecurrence } from "@/lib/recurrence";
-import { IANA_TIMEZONES, WEEKDAY_LABELS, addOneHour, defaultUntilIso, toggleWeekday } from "./shared";
+import { IANA_TIMEZONES, WEEKDAY_LABELS, defaultUntilIso, endFollowingStart, isCompleteLocalValue, toggleWeekday } from "./shared";
 
 /** "When" section of the event form: start/end, timezone, recurrence. */
 export function WhenStep({
@@ -28,6 +28,24 @@ export function WhenStep({
   /** True while "Ends" holds a value auto-filled from "Starts" rather than one the host typed. */
   endsAutoFilledRef: MutableRefObject<boolean>;
 }) {
+  // The last complete "Starts" value, so "Ends" can follow a change by the same distance.
+  const previousStartRef = useRef(form.getValues("startsAt"));
+
+  function moveEndWithStart(newStart: string) {
+    if (!isCompleteLocalValue(newStart)) return;
+    const change = endFollowingStart(
+      previousStartRef.current,
+      newStart,
+      form.getValues("endsAt"),
+      endsAutoFilledRef.current,
+    );
+    previousStartRef.current = newStart;
+    if (change) {
+      form.setValue("endsAt", change.end, { shouldDirty: true });
+      endsAutoFilledRef.current = change.autoFilled;
+    }
+  }
+
   return (
     <section className="flex flex-col gap-5">
       <h2 className="text-base font-semibold">When</h2>
@@ -43,17 +61,14 @@ export function WhenStep({
                   type="datetime-local"
                   step={DATETIME_LOCAL_STEP_SECONDS}
                   {...field}
+                  onChange={(event) => {
+                    field.onChange(event);
+                    moveEndWithStart(event.target.value);
+                  }}
                   onBlur={(event) => {
                     const snapped = snapDatetimeLocalValue(event.target.value);
                     field.onChange(snapped);
-                    const currentEnd = form.getValues("endsAt");
-                    if (snapped && (!currentEnd || endsAutoFilledRef.current)) {
-                      const end = addOneHour(snapped);
-                      if (end) {
-                        form.setValue("endsAt", end, { shouldDirty: true });
-                        endsAutoFilledRef.current = true;
-                      }
-                    }
+                    moveEndWithStart(snapped);
                     field.onBlur();
                   }}
                 />

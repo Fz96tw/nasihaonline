@@ -3,12 +3,55 @@ import { EventType, EventVisibility, RecurrenceFrequency } from "@/lib/generated
 
 export const LAST_MEET_LINK_SOURCE_KEY = "nasiha:lastMeetLinkSource";
 
-/** "YYYY-MM-DDTHH:mm" + 1 hour, as pure wall-clock arithmetic (UTC maths, so the browser's DST gaps can't shift it). */
+const LOCAL_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * "YYYY-MM-DDTHH:mm" wall-clock value → ms, as pure UTC maths (so the browser's
+ * DST gaps can't shift it). Null for anything incomplete — and for years before
+ * 1900, which is what a datetime-local reports mid-way through typing the year.
+ */
+function parseLocalMs(local: string): number | null {
+  const m = LOCAL_RE.exec(local);
+  if (!m || +m[1] < 1900) return null;
+  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+}
+
+function formatLocalMs(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 16);
+}
+
+export function isCompleteLocalValue(local: string): boolean {
+  return parseLocalMs(local) !== null;
+}
+
+/** "YYYY-MM-DDTHH:mm" + 1 hour, as pure wall-clock arithmetic. */
 export function addOneHour(local: string): string | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(local);
-  if (!m) return null;
-  const t = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) + 60 * 60 * 1000;
-  return new Date(t).toISOString().slice(0, 16);
+  const ms = parseLocalMs(local);
+  return ms === null ? null : formatLocalMs(ms + HOUR_MS);
+}
+
+/**
+ * How "Ends" should follow a change of "Starts": an end that was already set
+ * keeps its distance from the start (move the start two hours later and the end
+ * moves two hours too); a blank, or auto-filled, end becomes start + 1 hour.
+ * Null means leave "Ends" alone.
+ */
+export function endFollowingStart(
+  previousStart: string,
+  newStart: string,
+  end: string | null,
+  endAutoFilled: boolean,
+): { end: string; autoFilled: boolean } | null {
+  const newMs = parseLocalMs(newStart);
+  if (newMs === null) return null;
+  const endMs = end ? parseLocalMs(end) : null;
+  const previousMs = parseLocalMs(previousStart);
+  if (endMs !== null && previousMs !== null && endMs >= previousMs) {
+    return { end: formatLocalMs(endMs + (newMs - previousMs)), autoFilled: endAutoFilled };
+  }
+  if (!end || endAutoFilled) return { end: formatLocalMs(newMs + HOUR_MS), autoFilled: true };
+  return null;
 }
 
 export const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
