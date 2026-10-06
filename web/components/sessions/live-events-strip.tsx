@@ -5,13 +5,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { Video } from "lucide-react";
-import { useSearchQuery } from "@/components/header-search-context";
 import { RegisterButton } from "@/components/events/register-button";
 import { MemberJoinButton, MemberRsvpButton } from "@/components/sessions/member-join-button";
 import { Button } from "@/components/ui/button";
 import { useIsPhone } from "@/hooks/use-is-phone";
 import { useReminderSessions } from "@/hooks/use-reminder-sessions";
-import { useScrollReveal } from "@/hooks/use-scroll-reveal";
 import { isPrimaryActionTarget, trackNotice, trackNoticeShown } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import { compareReminders, publicReminderStateOf, reminderPrefKey, type PublicReminderState, type ReminderSession } from "@/lib/session-reminders";
@@ -79,10 +77,10 @@ function PublicStripButton({ session, state }: { session: ReminderSession; state
 /**
  * Persistent live-events strip, sticky under the page header. It has no
  * dismiss control — it's the way back to an event after the popup has been
- * dismissed — and hides on scroll down / reappears on scroll up. Its current
- * height is published in `--live-strip-height` (0 when hidden or empty) so
- * anything sticky below the header (e.g. the member sidebar) can offset
- * below it. Shows at most MAX_LINES events, then "+N more" -> /events;
+ * dismissed — so it stays visible while an event is live and never hides on
+ * scroll (unlike the search row above it). Its current height is published
+ * in `--live-strip-height` (0 when empty) so anything sticky below the
+ * header (e.g. the member sidebar) can offset below it. Shows at most MAX_LINES events, then "+N more" -> /events;
  * phones show one event plus "+N more" (members: -> /calendar; visitors: -> /events).
  *
  * Two audiences:
@@ -96,19 +94,20 @@ function PublicStripButton({ session, state }: { session: ReminderSession; state
  *
  * `mode="auto"` (marketing pages) picks the audience from Clerk's client
  * state; `mode="member"` is for the signed-in app header, where the server
- * already knows. With `followSearchRow` the strip slides in lockstep with
- * HeaderSearchRow (it reads that row's revealed state instead of running its
- * own scroll listener).
+ * already knows. With `belowSearchRow` the strip sits under HeaderSearchRow
+ * and its `top` follows that row's scroll-driven height, so it glides up
+ * under the header when the row hides rather than hiding itself.
  */
 export function LiveEventsStrip({
   mode = "auto",
   stickyTop = "var(--header-height)",
-  followSearchRow = false,
+  belowSearchRow = false,
 }: {
   mode?: "auto" | "member";
   /** CSS `top` for the sticky strip — directly under whatever header rows are above it. */
   stickyTop?: string;
-  followSearchRow?: boolean;
+  /** The strip sits under HeaderSearchRow (member header) rather than directly under the header. */
+  belowSearchRow?: boolean;
 }) {
   const { isLoaded, isSignedIn } = useAuth();
   const pathname = usePathname();
@@ -126,8 +125,6 @@ export function LiveEventsStrip({
 
   const { data: sessions } = useReminderSessions(onMeetingScreen || isPhone ? null : endpoint);
   const [now, setNow] = useState(() => Date.now());
-  const [ownRevealed, setOwnRevealed] = useState(true);
-  const { searchRowVisible } = useSearchQuery();
   const innerRef = useRef<HTMLDivElement>(null);
   const [contentHeight, setContentHeight] = useState(0);
 
@@ -147,9 +144,6 @@ export function LiveEventsStrip({
     .sort(compareReminders);
   const hasItems = !isPhone && live.length > 0;
 
-  useScrollReveal(setOwnRevealed, hasItems && !followSearchRow);
-  const revealed = followSearchRow ? searchRowVisible : ownRevealed;
-
   // Measured rather than hard-coded: the number of lines differs between
   // phone (1) and desktop (up to MAX_LINES).
   useEffect(() => {
@@ -167,7 +161,7 @@ export function LiveEventsStrip({
     if (hasItems && topLive) trackNoticeShown("strip", reminderPrefKey(topLive.session, topLive.state), topLive.state, "desktop");
   }, [hasItems, topLive]);
 
-  const height = hasItems && revealed ? contentHeight : 0;
+  const height = hasItems ? contentHeight : 0;
   useEffect(() => {
     document.documentElement.style.setProperty("--live-strip-height", `${height}px`);
     return () => document.documentElement.style.setProperty("--live-strip-height", "0px");
@@ -188,9 +182,11 @@ export function LiveEventsStrip({
         if (topLive && isPrimaryActionTarget(event.target)) trackNotice("click", "strip", topLive.state, "desktop");
       }}
       className={cn(
-        "sticky overflow-hidden bg-background shadow-sm transition-[height] duration-300 ease-in-out",
+        // `top` transitions too: it's derived from --search-row-height, which changes
+        // instantly while the search row's own height animates over the same 300ms.
+        "sticky overflow-hidden bg-background shadow-sm transition-[height,top] duration-300 ease-in-out",
         // Under the member header's search row (z-40) it slides beneath it.
-        followSearchRow ? "z-30" : "z-40",
+        belowSearchRow ? "z-30" : "z-40",
         height > 0 && "border-b",
       )}
     >
