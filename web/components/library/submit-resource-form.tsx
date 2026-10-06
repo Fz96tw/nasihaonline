@@ -5,27 +5,9 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CategoryCheckboxField } from "@/components/shared/category-checkbox-field";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { KnowledgeContentType, KnowledgeLevel, KnowledgeStatus, KnowledgeVisibility } from "@/lib/generated/prisma/enums";
-import {
-  CONTENT_TYPE_LABELS,
-  LEVEL_LABELS,
-  type KnowledgeCategoryOption,
-  type KnowledgeItemForEdit,
-  type KnowledgeTagOption,
-} from "@/lib/library";
+import { Form } from "@/components/ui/form";
+import { KnowledgeContentType, KnowledgeStatus, KnowledgeVisibility } from "@/lib/generated/prisma/enums";
+import { type KnowledgeCategoryOption, type KnowledgeItemForEdit, type KnowledgeTagOption } from "@/lib/library";
 import {
   createKnowledgeItemSchema,
   draftKnowledgeItemSchema,
@@ -33,16 +15,10 @@ import {
   type CreateKnowledgeItemValues,
 } from "@/lib/validation/knowledge";
 import { getCsrfToken } from "@/lib/csrf-client";
-import { InviteePicker } from "@/components/members/invitee-picker";
-import { TiptapEditor } from "@/components/library/tiptap-editor";
 import { DeleteLibraryItemButton } from "@/components/library/delete-library-item-button";
-
-// Mirrors ALLOWED_DOCUMENT_MIME_TYPES in lib/storage.ts (uploadKnowledgeDocument,
-// shared by Library and Peer Review) — a browser accept hint only, the
-// server re-validates regardless. Video (mp4/webm/mov) has a higher size cap
-// than documents (see MAX_VIDEO_UPLOAD_BYTES there).
-const DOCUMENT_ACCEPT =
-  "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,image/jpeg,image/png,image/webp,image/gif,image/bmp,video/mp4,video/webm,video/quicktime";
+import { BasicsStep } from "@/components/library/resource-form/basics-step";
+import { ContentStep } from "@/components/library/resource-form/content-step";
+import { AudienceStep } from "@/components/library/resource-form/audience-step";
 
 const DEFAULT_VALUES: CreateKnowledgeItemValues = {
   title: "",
@@ -59,11 +35,6 @@ const DEFAULT_VALUES: CreateKnowledgeItemValues = {
   licenseConsented: false,
   visibility: KnowledgeVisibility.public,
   invitedUserIds: [],
-};
-
-const VISIBILITY_LABELS: Record<KnowledgeVisibility, string> = {
-  [KnowledgeVisibility.public]: "Public — visible to every member",
-  [KnowledgeVisibility.restricted]: "Restricted — invited members only",
 };
 
 /**
@@ -178,10 +149,6 @@ export function SubmitResourceForm({
   const isRecordedLecture = contentType === KnowledgeContentType.recorded_lecture;
   const isCaseStudy = contentType === KnowledgeContentType.case_study;
   const isBlogPost = contentType === KnowledgeContentType.blog_post;
-  const visibility = form.watch("visibility");
-  const isRestricted = visibility === KnowledgeVisibility.restricted;
-  const selectedCommunityIds = form.watch("communityIds");
-  const hasHeroImage = Boolean(heroImage || existingItem?.heroImageUrl);
 
   async function onSubmit(values: CreateKnowledgeItemValues) {
     const action = pendingActionRef.current;
@@ -298,431 +265,21 @@ export function SubmitResourceForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
-        {isFirstSubmission && (
-          <FormField
-            control={form.control}
-            name="visibility"
-            render={({ field }) => (
-              <FormItem className="rounded-md border p-4">
-                <FormLabel>Access</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {Object.values(KnowledgeVisibility).map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {VISIBILITY_LABELS[value]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormDescription>
-                  {isRestricted
-                    ? "Once published, only you and the invited members below can view this resource."
-                    : "Once published, visible to every member in the Library."}
-                </FormDescription>
-              </FormItem>
-            )}
-          />
-        )}
+        <BasicsStep form={form} communities={communities} categories={categories} tags={tags} />
 
-        {isFirstSubmission && isRestricted && (
-          <FormField
-            control={form.control}
-            name="invitedUserIds"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Invited members</FormLabel>
-                <FormControl>
-                  <InviteePicker value={field.value} onChange={field.onChange} excludeUserId={currentUserId} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <FormField
-            control={form.control}
-            name="contentType"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Content type</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a type" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {Object.values(KnowledgeContentType).map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {CONTENT_TYPE_LABELS[value]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="level"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Career-stage level</FormLabel>
-                <Select value={field.value ?? ""} onValueChange={field.onChange}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a level" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {Object.values(KnowledgeLevel).map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {LEVEL_LABELS[value]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        <FormField
-          control={form.control}
-          name="title"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Title</FormLabel>
-              <FormControl>
-                <Input placeholder="e.g. Managing Diabetic Ketoacidosis in the ED" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+        <ContentStep
+          form={form}
+          existingItem={existingItem}
+          setImageUploading={setImageUploading}
+          file={file}
+          setFile={setFile}
+          sourceMode={sourceMode}
+          setSourceMode={setSourceMode}
+          heroImage={heroImage}
+          setHeroImage={setHeroImage}
         />
 
-        <FormField
-          control={form.control}
-          name="body"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Content</FormLabel>
-              <FormControl>
-                <TiptapEditor
-                  content={field.value ?? ""}
-                  onChange={field.onChange}
-                  onImageUploadStateChange={setImageUploading}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="communityIds"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Communities</FormLabel>
-              <FormControl>
-                <div className="flex flex-wrap gap-4 rounded-md border p-3">
-                  {communities.map((community) => (
-                    <label key={community.id} className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={field.value.includes(community.id)}
-                        onCheckedChange={(checked) =>
-                          field.onChange(
-                            checked
-                              ? [...field.value, community.id]
-                              : field.value.filter((id) => id !== community.id),
-                          )
-                        }
-                      />
-                      {community.name}
-                    </label>
-                  ))}
-                </div>
-              </FormControl>
-              <FormDescription>Select at least one community this resource belongs to.</FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {selectedCommunityIds.length > 0 && (
-          <FormField
-            control={form.control}
-            name="categoryIds"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Categories (optional)</FormLabel>
-                <CategoryCheckboxField
-                  categories={categories.filter((category) => selectedCommunityIds.includes(category.communityId))}
-                  communities={communities.filter((community) => selectedCommunityIds.includes(community.id))}
-                  value={field.value}
-                  onChange={field.onChange}
-                />
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-
-        {tags.length > 0 && (
-          <FormField
-            control={form.control}
-            name="tagIds"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Tags (optional)</FormLabel>
-                <div className="flex flex-wrap gap-4">
-                  {tags.map((tag) => {
-                    const checked = field.value.includes(tag.id);
-                    return (
-                      <label key={tag.id} className="flex items-center gap-2 text-sm">
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(c) =>
-                            field.onChange(
-                              c === true ? [...field.value, tag.id] : field.value.filter((id) => id !== tag.id),
-                            )
-                          }
-                        />
-                        {tag.name}
-                      </label>
-                    );
-                  })}
-                </div>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-
-        {!isBlogPost && (isRecordedLecture ? (
-          <FormField
-            control={form.control}
-            name="youtubeUrl"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>YouTube URL</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="https://youtube.com/watch?v=…"
-                    value={field.value ?? ""}
-                    onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        ) : (
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-2">
-              <label htmlFor="resource-source-mode" className="text-sm font-medium">
-                How do you want to provide your document?
-              </label>
-              <Select
-                value={sourceMode}
-                onValueChange={(value) => {
-                  const mode = value as "file" | "link";
-                  setSourceMode(mode);
-                  if (mode === "file") {
-                    form.setValue("externalUrl", null);
-                  } else {
-                    setFile(null);
-                  }
-                }}
-              >
-                <SelectTrigger id="resource-source-mode">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="file">Upload a file</SelectItem>
-                  <SelectItem value="link">Web link to external source</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {sourceMode === "file" ? (
-              <div className="flex flex-col gap-2">
-                <label htmlFor="resource-file" className="text-sm font-medium">
-                  File
-                </label>
-                {existingItem?.attachment && !file && (
-                  <a
-                    href={existingItem.attachment.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-sm text-primary hover:underline"
-                  >
-                    {existingItem.attachment.fileName}
-                  </a>
-                )}
-                <input
-                  id="resource-file"
-                  type="file"
-                  accept={DOCUMENT_ACCEPT}
-                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                  className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
-                />
-                <p className="text-xs text-muted-foreground">
-                  {file?.type.startsWith("video/")
-                    ? "Video (MP4/WebM/MOV) — up to 500MB."
-                    : "PDF, Word, PowerPoint, plain text, or image (JPEG/PNG/WebP/GIF/BMP) up to 20MB, or video (MP4/WebM/MOV) up to 500MB."}
-                </p>
-                {existingItem?.attachment && (
-                  <p className="text-xs text-muted-foreground">Choose a new file to replace the current one.</p>
-                )}
-              </div>
-            ) : (
-              <FormField
-                control={form.control}
-                name="externalUrl"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>External URL</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="https://docs.google.com/document/d/…"
-                        value={field.value ?? ""}
-                        onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-          </div>
-        ))}
-
-        {!isRecordedLecture && (
-          <FormField
-            control={form.control}
-            name="youtubeUrl"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>YouTube video (optional)</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="https://youtube.com/watch?v=…"
-                    value={field.value ?? ""}
-                    onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
-                  />
-                </FormControl>
-                <FormDescription>
-                  Embedded on the page{isBlogPost ? " above your post" : " alongside the document or link"}. Also used as the cover image if you don&apos;t add a hero image below.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-
-        <div className="flex flex-col gap-2">
-          <label htmlFor="hero-image" className="text-sm font-medium">
-            Hero image (optional)
-          </label>
-          {existingItem?.heroImageUrl && !heroImage && (
-            // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
-            <img
-              src={existingItem.heroImageUrl}
-              alt="Current hero image"
-              className="h-32 w-full max-w-xs rounded-md object-cover"
-            />
-          )}
-          <input
-            id="hero-image"
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={(e) => setHeroImage(e.target.files?.[0] ?? null)}
-            className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
-          />
-          {existingItem?.heroImageUrl && (
-            <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
-          )}
-          {(isRecordedLecture || form.watch("youtubeUrl")) && (
-            <p className="text-xs text-muted-foreground">
-              Leave blank to use the video&apos;s YouTube thumbnail (default).
-            </p>
-          )}
-        </div>
-
-        <FormField
-          control={form.control}
-          name="showTitleOverlay"
-          render={({ field }) => (
-            <FormItem className="flex flex-row items-start gap-2 space-y-0">
-              <FormControl>
-                <Checkbox
-                  checked={field.value}
-                  disabled={!hasHeroImage}
-                  onCheckedChange={(c) => field.onChange(c === true)}
-                />
-              </FormControl>
-              <div className="space-y-1">
-                <FormLabel className="!mt-0">Show title on banner</FormLabel>
-                <FormDescription>
-                  {hasHeroImage
-                    ? "Overlay the title in white text on a dark gradient at the bottom of the hero image, instead of showing it separately below."
-                    : "Add a hero image above to enable this."}
-                </FormDescription>
-              </div>
-            </FormItem>
-          )}
-        />
-
-        {isCaseStudy && (
-          <FormField
-            control={form.control}
-            name="deidentificationConfirmed"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-start gap-2 space-y-0 rounded-md border border-destructive/30 bg-destructive/5 p-4">
-                <FormControl>
-                  <Checkbox checked={field.value} onCheckedChange={(c) => field.onChange(c === true)} />
-                </FormControl>
-                <div className="space-y-1">
-                  <FormLabel className="!mt-0">I confirm all patient information has been de-identified, including in any linked video</FormLabel>
-                  <FormMessage />
-                </div>
-              </FormItem>
-            )}
-          />
-        )}
-
-        {isFirstSubmission && (
-          <FormField
-            control={form.control}
-            name="licenseConsented"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-start gap-2 space-y-0 rounded-md border p-4">
-                <FormControl>
-                  <Checkbox checked={field.value} onCheckedChange={(c) => field.onChange(c === true)} />
-                </FormControl>
-                <div className="space-y-1">
-                  <FormLabel className="!mt-0">
-                    I retain ownership of what I submit, and grant NASIHA a non-exclusive right to display it to the
-                    membership.
-                  </FormLabel>
-                  <FormMessage />
-                </div>
-              </FormItem>
-            )}
-          />
-        )}
+        {isFirstSubmission && <AudienceStep form={form} currentUserId={currentUserId} />}
 
         {error && <p className="text-sm text-destructive">{error}</p>}
         {draftSaved && <p className="text-sm text-success">Draft saved.</p>}
