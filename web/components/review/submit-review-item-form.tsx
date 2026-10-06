@@ -13,11 +13,14 @@ import { getCsrfToken } from "@/lib/csrf-client";
 import { BasicsStep } from "@/components/review/item-form/basics-step";
 import { MaterialStep } from "@/components/review/item-form/material-step";
 import { ReviewersStep } from "@/components/review/item-form/reviewers-step";
+import { ReviewStep } from "@/components/review/item-form/review-step";
 import {
   REVIEW_ITEM_STEPS,
+  REVIEW_STEP,
   SOURCE_REQUIRED_MESSAGE,
   stepForField,
   type ReviewFieldStepId,
+  type ReviewStepId,
 } from "@/components/review/item-form/steps";
 import { useReviewStepStatuses } from "@/components/review/item-form/use-review-step-statuses";
 import { WizardPanel, WizardShell, type WizardNavSource } from "@/components/shared/wizard/wizard-shell";
@@ -113,15 +116,16 @@ export function SubmitReviewItemForm({
   const hasSource =
     isRecordedLecture ||
     (sourceMode === "file" ? Boolean(file || existingItem?.attachment) : Boolean(form.watch("externalUrl")));
-  const [activeStep, setActiveStep] = useState<ReviewFieldStepId>("basics");
-  const [visitedSteps, setVisitedSteps] = useState<ReadonlySet<ReviewFieldStepId>>(() => new Set());
+  const [activeStep, setActiveStep] = useState<ReviewStepId>("basics");
+  const [visitedSteps, setVisitedSteps] = useState<ReadonlySet<ReviewStepId>>(() => new Set());
   const { statuses: stepStatuses, issuesByStep } = useReviewStepStatuses({
     form,
     isEditing: existingItem !== undefined,
     hasSource,
     visited: visitedSteps,
   });
-  const wizardSteps = REVIEW_ITEM_STEPS.filter((step) => step.id !== "reviewers" || showReviewersStep);
+  const fieldSteps = REVIEW_ITEM_STEPS.filter((step) => step.id !== "reviewers" || showReviewersStep);
+  const wizardSteps = [...fieldSteps, REVIEW_STEP];
 
   // Errors set by hand ("Next") are never re-checked by RHF on a plain change —
   // mode "onTouched" only re-validates after a blur, which selects, checkboxes
@@ -139,21 +143,24 @@ export function SubmitReviewItemForm({
 
   function handleStepSelect(id: string, source: WizardNavSource) {
     const leaving = activeStep;
-    setVisitedSteps((prev) => new Set(prev).add(leaving).add(id as ReviewFieldStepId));
+    setVisitedSteps((prev) => new Set(prev).add(leaving).add(id as ReviewStepId));
     if (source === "next") {
-      for (const issue of issuesByStep[leaving]) {
+      for (const issue of issuesByStep[leaving as ReviewFieldStepId] ?? []) {
         // "source" isn't a form field — it's shown by the Material step itself.
         if (issue.path !== "source") form.setError(issue.path as keyof CreateReviewItemValues, { message: issue.message });
       }
     }
-    setActiveStep(id as ReviewFieldStepId);
+    setActiveStep(id as ReviewStepId);
   }
 
   // A submit was rejected for fields the member may not be looking at (every
-  // step but the active one is hidden) — bring them to the first step with a problem.
+  // step but the active one is hidden) — bring them to the first step with a
+  // problem. A rejected submit from Review stays put: Review already lists the
+  // blocking steps with links.
   function onInvalid(errors: FieldErrors<CreateReviewItemValues>) {
+    if (activeStep === "review") return;
     const failing = new Set(Object.keys(errors).map((field) => stepForField(field)));
-    const target = wizardSteps.find((step) => failing.has(step.id));
+    const target = fieldSteps.find((step) => failing.has(step.id));
     if (target) setActiveStep(target.id);
   }
 
@@ -244,15 +251,36 @@ export function SubmitReviewItemForm({
               <ReviewersStep form={form} existingItem={existingItem} currentUserId={currentUserId} />
             </WizardPanel>
           )}
+
+          <WizardPanel id="review">
+            <ReviewStep
+              form={form}
+              existingItem={existingItem}
+              showReviewersStep={showReviewersStep}
+              communities={communities}
+              categories={categories}
+              tags={tags}
+              issuesByStep={issuesByStep}
+              statuses={stepStatuses}
+              file={file}
+              sourceMode={sourceMode}
+              heroImage={heroImage}
+              onEdit={(id) => handleStepSelect(id, "map")}
+            />
+          </WizardPanel>
         </WizardShell>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        <div>
-          <Button type="submit" disabled={submitting}>
-            {submitting ? "Saving…" : existingItem ? "Save Changes" : "Submit for Review"}
-          </Button>
-        </div>
+        {/* A new item is submitted from the Review step only; an existing item's edit
+          can be saved from any step, since every step starts out complete there. */}
+        {(activeStep === "review" || existingItem) && (
+          <div>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Saving…" : existingItem ? "Save Changes" : "Submit for Review"}
+            </Button>
+          </div>
+        )}
       </form>
     </Form>
   );

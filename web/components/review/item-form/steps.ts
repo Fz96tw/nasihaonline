@@ -2,13 +2,15 @@ import type { WizardStatus } from "@/components/shared/wizard/wizard-shell";
 import type { WizardIssue } from "@/components/shared/wizard/collect-issues";
 
 export type ReviewFieldStepId = "basics" | "material" | "reviewers";
-export type ReviewStepId = ReviewFieldStepId;
+export type ReviewStepId = ReviewFieldStepId | "review";
 
 export const REVIEW_ITEM_STEPS: { id: ReviewFieldStepId; label: string }[] = [
   { id: "basics", label: "Basics" },
   { id: "material", label: "Material" },
   { id: "reviewers", label: "Reviewers" },
 ];
+
+export const REVIEW_STEP = { id: "review" as const, label: "Review" };
 
 /**
  * Which step each form field is edited on — used to attribute schema issues

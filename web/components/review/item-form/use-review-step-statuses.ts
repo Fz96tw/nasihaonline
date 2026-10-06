@@ -6,7 +6,7 @@ import {
   REVIEW_ITEM_STEPS,
   SOURCE_REQUIRED_MESSAGE,
   stepForField,
-  type ReviewFieldStepId,
+  type ReviewStepId,
   type ReviewStepIssues,
   type ReviewStepStatuses,
 } from "./steps";
@@ -28,7 +28,7 @@ export function useReviewStepStatuses({
   form: UseFormReturn<CreateReviewItemValues>;
   isEditing: boolean;
   hasSource: boolean;
-  visited: ReadonlySet<ReviewFieldStepId>;
+  visited: ReadonlySet<ReviewStepId>;
 }): { statuses: ReviewStepStatuses; issuesByStep: ReviewStepIssues } {
   const values = form.watch();
   const { dirtyFields } = form.formState;
@@ -60,5 +60,14 @@ export function useReviewStepStatuses({
     else if (!started && id === "reviewers" && reviewersIsOptional) statuses[id] = "optional";
     else statuses[id] = "complete";
   }
+
+  // Review is "ready" only once the member has actually looked at it (or is
+  // editing an existing item) and nothing is blocking; any blocker shows once
+  // they've reached it.
+  const totalIssues = REVIEW_ITEM_STEPS.reduce((sum, { id }) => sum + issuesByStep[id].length, 0);
+  const reviewStarted = isEditing || visited.has("review");
+  statuses.review =
+    totalIssues > 0 ? (reviewStarted ? "incomplete" : "not_started") : reviewStarted ? "complete" : "not_started";
+
   return { statuses, issuesByStep };
 }
