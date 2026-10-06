@@ -168,6 +168,7 @@ export function NewThreadForm({
   // drift apart.
   const audienceId = selectedForum.communityId;
   const categoryOptions = audienceId === null ? generalForums : (communityForumGroups.find((g) => g.community.id === audienceId)?.forums ?? []);
+  const audienceName = audienceId === null ? null : (communities.find((c) => c.id === audienceId)?.name ?? null);
   function selectAudience(nextAudienceId: string | null) {
     const options =
       nextAudienceId === null ? generalForums : (communityForumGroups.find((g) => g.community.id === nextAudienceId)?.forums ?? []);
@@ -344,14 +345,20 @@ export function NewThreadForm({
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value={ForumThreadVisibility.community}>Everyone</SelectItem>
-                  <SelectItem value={ForumThreadVisibility.invited}>Invite only</SelectItem>
+                  <SelectItem value={ForumThreadVisibility.community}>
+                    {isPost && audienceName ? `All ${audienceName} members` : "Everyone"}
+                  </SelectItem>
+                  <SelectItem value={ForumThreadVisibility.invited}>
+                    {isPost ? "Specific members only" : "Invite only"}
+                  </SelectItem>
                 </SelectContent>
               </Select>
               <FormDescription>
                 {isRestricted
-                  ? `Only you and the members you invite can see or reply to this ${noun}.`
-                  : `Every member can see and reply to this ${noun}.`}
+                  ? `Only you and the members you ${isPost ? "choose" : "invite"} can see or reply to this ${noun}.`
+                  : isPost && audienceName
+                    ? `Every ${audienceName} member can see and reply to this post.`
+                    : `Every member can see and reply to this ${noun}.`}
               </FormDescription>
             </FormItem>
           )}
@@ -363,11 +370,11 @@ export function NewThreadForm({
             name="invitedUserIds"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Invited members</FormLabel>
+                <FormLabel>{isPost ? "Choose members" : "Invited members"}</FormLabel>
                 <FormControl>
                   <InviteePicker value={field.value} onChange={field.onChange} excludeUserId={currentUserId} />
                 </FormControl>
-                <FormDescription>Each invited member gets a notification pointing them to the {noun}.</FormDescription>
+                <FormDescription>Each member you {isPost ? "choose" : "invite"} gets a notification pointing them to the {noun}.</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
