@@ -19,6 +19,7 @@ import { CategoryCheckboxField } from "@/components/shared/category-checkbox-fie
 import type { KnowledgeCategoryOption } from "@/lib/library";
 import { hasVideoToken } from "@/lib/linkify";
 import { QuickRecordingPicker, type QuickRecordingListItem } from "@/components/quick-recording-picker";
+import { cn } from "@/lib/utils";
 import { clearLocalDraft, readLocalDraft, writeLocalDraft } from "@/lib/local-draft";
 import { CLINICAL_DISCUSSIONS_SLUG, groupForumsByCommunity, type ForumCategory } from "@/lib/forums";
 
@@ -36,6 +37,30 @@ const DEFAULT_VALUES: CreateForumThreadValues = {
  * called at a real component's top level rather than inside FormField's
  * render-prop callback.
  */
+function ChoiceChip({
+  selected,
+  onClick,
+  children,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-3 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        selected ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted/60",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 function ThreadBodyField({
   field,
   onImageUploadStateChange,
@@ -111,7 +136,14 @@ export function NewThreadForm({
   categories,
   communities,
   myCommunityIds,
+  variant = "forum",
 }: {
+  /**
+   * "post" is the feed-style composer at /post/new: no forum/thread wording,
+   * chip pickers for destination, and a redirect back to the feed. "forum"
+   * is the original fixed-forum form at /forums/[category]/new.
+   */
+  variant?: "forum" | "post";
   forumId: string;
   /** Every forum the member may post to — drives the destination selector. */
   forums: ForumCategory[];
@@ -128,7 +160,28 @@ export function NewThreadForm({
   const forumSlug = selectedForum.slug;
   const communityId = selectedForum.communityId;
   const requireDeidentification = forumSlug === CLINICAL_DISCUSSIONS_SLUG;
+  const isPost = variant === "post";
+  const noun = isPost ? "post" : "thread";
   const { general: generalForums, groups: communityForumGroups } = groupForumsByCommunity(forums, communities);
+  // "Post to" audience chips: Everyone (community-less forums) or a
+  // community. Derived from the selected forum so the two chip rows can't
+  // drift apart.
+  const audienceId = selectedForum.communityId;
+  const categoryOptions = audienceId === null ? generalForums : (communityForumGroups.find((g) => g.community.id === audienceId)?.forums ?? []);
+  function selectAudience(nextAudienceId: string | null) {
+    const options =
+      nextAudienceId === null ? generalForums : (communityForumGroups.find((g) => g.community.id === nextAudienceId)?.forums ?? []);
+    // Prefer General when switching back to Everyone; otherwise the
+    // audience's first forum.
+    const next = options.find((forum) => forum.slug === "general") ?? options[0];
+    if (next) selectForum(next.id);
+  }
+  function selectForum(nextForumId: string) {
+    setForumId(nextForumId);
+    // Tags belong to a community, so a prior selection may not apply to the
+    // new destination.
+    form.setValue("categoryIds", [], { shouldDirty: true });
+  }
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -218,7 +271,7 @@ export function NewThreadForm({
       }
       const { id } = await res.json();
       clearLocalDraft(draftKey);
-      router.push(`/forums/${forumSlug}/${id}`);
+      router.push(isPost ? "/whats-new" : `/forums/${forumSlug}/${id}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
@@ -239,47 +292,51 @@ export function NewThreadForm({
           </div>
         )}
 
-        <FormItem className="rounded-md border p-4">
-          <FormLabel htmlFor="new-thread-forum">Post in</FormLabel>
-          <select
-            id="new-thread-forum"
-            value={forumId}
-            onChange={(event) => {
-              setForumId(event.target.value);
-              // Topics belong to a community, so a prior selection may not
-              // apply to the new destination.
-              form.setValue("categoryIds", [], { shouldDirty: true });
-            }}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {generalForums.length > 0 && (
-              <optgroup label="General Topics">
-                {generalForums.map((forum) => (
-                  <option key={forum.id} value={forum.id}>
-                    {forum.name}
-                  </option>
+        {isPost && (
+          <div className="flex flex-col gap-4 rounded-md border p-4">
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-medium">Post to</span>
+              <div className="flex flex-wrap gap-2">
+                {generalForums.length > 0 && (
+                  <ChoiceChip selected={audienceId === null} onClick={() => selectAudience(null)}>
+                    Everyone
+                  </ChoiceChip>
+                )}
+                {communityForumGroups.map((group) => (
+                  <ChoiceChip
+                    key={group.community.id}
+                    selected={audienceId === group.community.id}
+                    onClick={() => selectAudience(group.community.id)}
+                  >
+                    {group.community.name}
+                  </ChoiceChip>
                 ))}
-              </optgroup>
+              </div>
+            </div>
+            {categoryOptions.length > 1 && (
+              <div className="flex flex-col gap-2">
+                <span className="text-sm font-medium">Category</span>
+                <div className="flex flex-wrap gap-2">
+                  {categoryOptions.map((forum) => (
+                    <ChoiceChip key={forum.id} selected={forum.id === forumId} onClick={() => selectForum(forum.id)}>
+                      {forum.name}
+                    </ChoiceChip>
+                  ))}
+                </div>
+                {selectedForum.description && (
+                  <p className="text-xs text-muted-foreground">{selectedForum.description}</p>
+                )}
+              </div>
             )}
-            {communityForumGroups.map((group) => (
-              <optgroup key={group.community.id} label={group.community.name}>
-                {group.forums.map((forum) => (
-                  <option key={forum.id} value={forum.id}>
-                    {forum.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-          {selectedForum.description && <FormDescription>{selectedForum.description}</FormDescription>}
-        </FormItem>
+          </div>
+        )}
 
         <FormField
           control={form.control}
           name="visibility"
           render={({ field }) => (
             <FormItem className="rounded-md border p-4">
-              <FormLabel>Audience</FormLabel>
+              <FormLabel>{isPost ? "Visibility" : "Audience"}</FormLabel>
               <Select value={field.value} onValueChange={field.onChange}>
                 <FormControl>
                   <SelectTrigger>
@@ -293,8 +350,8 @@ export function NewThreadForm({
               </Select>
               <FormDescription>
                 {isRestricted
-                  ? "Only you and the members you invite can see or reply to this thread."
-                  : "Every member can see and reply to this thread."}
+                  ? `Only you and the members you invite can see or reply to this ${noun}.`
+                  : `Every member can see and reply to this ${noun}.`}
               </FormDescription>
             </FormItem>
           )}
@@ -310,7 +367,7 @@ export function NewThreadForm({
                 <FormControl>
                   <InviteePicker value={field.value} onChange={field.onChange} excludeUserId={currentUserId} />
                 </FormControl>
-                <FormDescription>Each invited member gets a notification pointing them to the thread.</FormDescription>
+                <FormDescription>Each invited member gets a notification pointing them to the {noun}.</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -322,9 +379,9 @@ export function NewThreadForm({
           name="title"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Title</FormLabel>
+              <FormLabel>{isPost ? "Headline" : "Title"}</FormLabel>
               <FormControl>
-                <Input placeholder="e.g. Approach to refractory hypertension" {...field} />
+                <Input placeholder={isPost ? "What do you want to share?" : "e.g. Approach to refractory hypertension"} {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -350,7 +407,7 @@ export function NewThreadForm({
           name="categoryIds"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Topics (optional)</FormLabel>
+              <FormLabel>{isPost ? "Tags (optional)" : "Topics (optional)"}</FormLabel>
               {communityId ? (
                 // This forum already belongs to a single community, so
                 // asking the member to pick a community again (via the
@@ -434,7 +491,7 @@ export function NewThreadForm({
 
         <div>
           <Button type="submit" disabled={submitting || imageUploading}>
-            {submitting ? "Posting…" : "Start Thread"}
+            {submitting ? "Posting…" : isPost ? "Post" : "Start Thread"}
           </Button>
         </div>
       </form>

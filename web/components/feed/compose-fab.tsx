@@ -7,7 +7,7 @@ import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ACTIONS: { label: string; href: string; icon: LucideIcon }[] = [
-  { label: "Start a discussion", href: "/forums/new", icon: MessageSquarePlus },
+  { label: "Create a post", href: "/post/new", icon: MessageSquarePlus },
   { label: "Write a blog post", href: "/library/new?type=blog_post", icon: PenLine },
   { label: "Create library item", href: "/library/new", icon: BookPlus },
   { label: "Request peer review", href: "/review-feedback/new", icon: ClipboardCheck },
@@ -20,8 +20,8 @@ const FROSTED =
 
 /**
  * Floating frosted "compose" button on What's New. Fans out into the main
- * post/create actions so a member who wants to start a discussion can pick
- * the right forum (General Topics or one of their communities) up front.
+ * post/create actions so a member who wants to write a post can pick
+ * an audience and category up front (/post/new).
  */
 export function ComposeFab() {
   const [open, setOpen] = useState(false);
