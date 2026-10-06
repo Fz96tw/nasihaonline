@@ -3,7 +3,7 @@ import { BookOpen, ClipboardList, Eye, FileText, MessageSquare, PenLine, PlayCir
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CONTENT_TYPE_LABELS, LEVEL_LABELS, type LibraryCard as LibraryCardData } from "@/lib/library";
+import { CONTENT_TYPE_LABELS, LEVEL_LABELS, postedAt, type LibraryCard as LibraryCardData } from "@/lib/library";
 import { KnowledgeContentType, KnowledgeStatus } from "@/lib/generated/prisma/enums";
 import { LibraryFlagButton } from "@/components/library/library-flag-button";
 import { youtubeThumbnailUrl } from "@/lib/youtube";
@@ -81,7 +81,7 @@ export function LibraryItemCard({ item, canEdit }: { item: LibraryCardData; canE
       <CardContent className="flex flex-1 flex-col gap-3">
         <p className="line-clamp-3 flex-1 text-sm text-muted-foreground">{item.description}</p>
         <p className="text-xs text-muted-foreground">
-          {item.contributor.name ?? "A member"} · {formatDate(item.createdAt)}
+          {item.contributor.name ?? "A member"} · {formatDate(postedAt(item))}
         </p>
         <div className="flex items-center justify-between gap-2 pt-1">
           <Button size="sm" variant="outline" asChild>

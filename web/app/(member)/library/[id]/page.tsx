@@ -12,7 +12,7 @@ import { FollowMemberButton } from "@/components/members/follow-member-button";
 import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-server";
 import { getForumThreadDetail } from "@/lib/forums-server";
 import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
-import { CONTENT_TYPE_LABELS, LEVEL_LABELS } from "@/lib/library";
+import { CONTENT_TYPE_LABELS, LEVEL_LABELS, postedAt } from "@/lib/library";
 import { FEED_TYPE_LABELS } from "@/lib/feed";
 import { youtubeEmbedUrl, youtubeThumbnailUrl } from "@/lib/youtube";
 import { KnowledgeContentType, KnowledgeStatus, KnowledgeVisibility, Role } from "@/lib/generated/prisma/enums";
@@ -185,7 +185,7 @@ export default async function LibraryItemDetailPage({
               <Avatar name={item.contributor.name ?? "Member"} src={authorProfile.avatarUrl} size="sm" />
               <div className="text-sm text-muted-foreground">
                 <div className="font-medium text-foreground">{item.contributor.name ?? "Member"}</div>
-                <div>{formatDate(item.createdAt)}</div>
+                <div>{formatDate(postedAt(item))}</div>
               </div>
             </Link>
           ) : (
@@ -193,7 +193,7 @@ export default async function LibraryItemDetailPage({
               <Avatar name={item.contributor.name ?? "Member"} size="sm" />
               <div className="text-sm text-muted-foreground">
                 <div className="font-medium text-foreground">{item.contributor.name ?? "A member"}</div>
-                <div>{formatDate(item.createdAt)}</div>
+                <div>{formatDate(postedAt(item))}</div>
               </div>
             </div>
           )}

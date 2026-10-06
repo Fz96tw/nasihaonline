@@ -7,7 +7,8 @@ import { getMySubmissions } from "@/lib/library-server";
 import { getEventsHostedByMember } from "@/lib/events-server";
 import { getMemberForumThreads } from "@/lib/forums-server";
 import { getMyMeetingRequests } from "@/lib/meeting-requests-server";
-import { KnowledgeContentType } from "@/lib/generated/prisma/enums";
+import { KnowledgeContentType, KnowledgeStatus } from "@/lib/generated/prisma/enums";
+import { activityDate } from "@/lib/activity-date";
 import { STATUS_LABELS, STATUS_BADGE_VARIANT } from "@/lib/library";
 import { MEETING_REQUEST_STATUS_LABELS, MEETING_REQUEST_STATUS_BADGE_VARIANT } from "@/lib/meeting-requests";
 import { MySubmissionsTable } from "@/components/library/my-submissions-table";
@@ -29,6 +30,10 @@ function eventStatus(
   return new Date(event.startsAt).getTime() > now
     ? { label: "Upcoming", variant: "success" }
     : { label: "Past", variant: "neutral" };
+}
+
+function dateFields({ label, date }: { label: string; date: string }) {
+  return { date, dateLabel: label };
 }
 
 /**
@@ -66,7 +71,7 @@ export default async function MyPostsPage() {
     type: item.contentType === KnowledgeContentType.blog_post ? "Blog" : "Library",
     title: item.title,
     status: { label: STATUS_LABELS[item.status], variant: STATUS_BADGE_VARIANT[item.status] },
-    date: item.createdAt,
+    ...dateFields(activityDate({ isDraft: item.status === KnowledgeStatus.draft, ...item })),
     href: `/library/${item.id}/edit`,
     actionLabel: "Edit",
   }));
@@ -76,7 +81,7 @@ export default async function MyPostsPage() {
     type: "Event",
     title: event.title,
     status: eventStatus(event, now),
-    date: event.createdAt,
+    ...dateFields(activityDate({ isDraft: event.publishedAt === null, ...event })),
     // A cancelled event dropped off /calendar's own listing (getMemberEvents
     // filters cancelledAt: null), so /my-posts is the only remaining way for
     // its host to reach it — but /calendar/[eventId]/edit is just the title/

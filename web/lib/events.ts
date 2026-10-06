@@ -268,6 +268,8 @@ export type MemberHostedEvent = {
   cancelledAt: string | null;
   /** When the event was created. Used by /my-posts, which shows creation date rather than startsAt. */
   createdAt: string;
+  /** Last save — /my-posts shows it for a still-draft event (see activityDate). */
+  updatedAt: string;
   /** Save as Draft initiative — null means still-draft. Used by /my-posts to badge Draft ahead of Upcoming/Past/Cancelled. */
   publishedAt: string | null;
 };

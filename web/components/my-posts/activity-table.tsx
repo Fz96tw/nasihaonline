@@ -31,6 +31,8 @@ export type ActivityRow = {
   meta?: string;
   status: { label: string; variant: BadgeVariant };
   date: string;
+  /** What `date` means ("Last saved", "Published", ...) — shown small above it. Omitted for rows whose date needs no explaining. */
+  dateLabel?: string;
   href: string;
   actionLabel: "Edit" | "View";
   /**
@@ -173,7 +175,10 @@ export function ActivityTable({
                 <TableCell>
                   <Badge variant={row.status.variant}>{row.status.label}</Badge>
                 </TableCell>
-                <TableCell className="text-muted-foreground">{new Date(row.date).toLocaleDateString()}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {row.dateLabel && <div className="text-xs">{row.dateLabel}</div>}
+                  {new Date(row.date).toLocaleDateString()}
+                </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1">
                     <Link href={row.href} className="text-sm text-primary hover:underline">

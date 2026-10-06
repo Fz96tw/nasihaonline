@@ -36,6 +36,7 @@ import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import { sendLibraryInviteEmail, sendLibraryLifecycleEmail } from "@/lib/email";
 import {
   excerptFromHtml,
+  postedAt,
   type KnowledgeCategoryOption,
   type KnowledgeItemDetail,
   type KnowledgeItemForEdit,
@@ -113,6 +114,7 @@ const LIBRARY_CARD_SELECT = {
   status: true,
   visibility: true,
   createdAt: true,
+  publishedAt: true,
   youtubeUrl: true,
   heroImageUrl: true,
   showTitleOverlay: true,
@@ -140,6 +142,7 @@ function toLibraryCard(item: {
   status: KnowledgeStatus;
   visibility: KnowledgeVisibility;
   createdAt: Date;
+  publishedAt: Date | null;
   youtubeUrl: string | null;
   heroImageUrl: string | null;
   showTitleOverlay: boolean;
@@ -166,6 +169,7 @@ function toLibraryCard(item: {
     communities: item.communities.map(({ community }) => community),
     contributor: item.contributor,
     createdAt: item.createdAt.toISOString(),
+    publishedAt: item.publishedAt?.toISOString() ?? null,
     youtubeUrl: item.youtubeUrl,
     // Custom cover image, if the contributor uploaded one — null falls
     // back to the video's YouTube thumbnail in every renderer (browse
@@ -194,7 +198,8 @@ function sortLibraryCards(cards: LibraryCard[], sort: LibrarySort): LibraryCard[
   const sorted = [...cards];
   if (sort === "viewed") sorted.sort((a, b) => b.viewCount - a.viewCount);
   else if (sort === "commented") sorted.sort((a, b) => b.commentCount - a.commentCount);
-  else sorted.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // "Recent" means most recently published — an item that sat as a draft sorts by when it went live, not when it was first saved.
+  else sorted.sort((a, b) => postedAt(b).localeCompare(postedAt(a)));
   return sorted;
 }
 
@@ -910,7 +915,9 @@ export async function getPublishedKnowledgeItems(params: {
   const items = await db.knowledgeItem.findMany({
     where: { status: { in: visibleStatuses }, ...filters, ...visibilityFilter },
     select: LIBRARY_CARD_SELECT,
-    orderBy: { createdAt: "desc" },
+    // Tie-break order only — sortLibraryCards below is authoritative, and also
+    // folds in items published before publishedAt was recorded (null).
+    orderBy: [{ publishedAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
   });
   return sortLibraryCards(items.map(toLibraryCard), sort);
 }
@@ -1396,6 +1403,8 @@ export async function getMySubmissions(contributorId: string): Promise<MySubmiss
       status: true,
       categories: { select: { category: { select: { name: true } } } },
       createdAt: true,
+      updatedAt: true,
+      publishedAt: true,
       contributionEvent: { select: { id: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -1405,6 +1414,8 @@ export async function getMySubmissions(contributorId: string): Promise<MySubmiss
     ...item,
     categories: item.categories.map(({ category }) => category),
     createdAt: item.createdAt.toISOString(),
+    updatedAt: item.updatedAt.toISOString(),
+    publishedAt: item.publishedAt?.toISOString() ?? null,
     hasEarnedHours: contributionEvent !== null,
   }));
 }

@@ -1109,6 +1109,7 @@ export async function getEventsHostedByMember(
       visibility: true,
       cancelledAt: true,
       createdAt: true,
+      updatedAt: true,
       publishedAt: true,
     },
     orderBy: { startsAt: "desc" },
@@ -1119,6 +1120,7 @@ export async function getEventsHostedByMember(
     heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
     cancelledAt: event.cancelledAt?.toISOString() ?? null,
     createdAt: event.createdAt.toISOString(),
+    updatedAt: event.updatedAt.toISOString(),
     publishedAt: event.publishedAt?.toISOString() ?? null,
   }));
 }

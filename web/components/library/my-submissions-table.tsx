@@ -5,12 +5,17 @@ import Link from "next/link";
 import { CONTENT_TYPE_LABELS, STATUS_BADGE_VARIANT, STATUS_LABELS } from "@/lib/library";
 import type { MySubmission } from "@/lib/library";
 import { KnowledgeStatus } from "@/lib/generated/prisma/enums";
+import { activityDate } from "@/lib/activity-date";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DeleteLibraryItemButton } from "@/components/library/delete-library-item-button";
 
 /** /library/[id] 404s for pending_review/rejected items, even for their own contributor — link those to /edit instead. */
+function dateInfo(item: MySubmission) {
+  return activityDate({ isDraft: item.status === KnowledgeStatus.draft, ...item });
+}
+
 function isViewable(status: KnowledgeStatus) {
   return status === KnowledgeStatus.published || status === KnowledgeStatus.flagged;
 }
@@ -47,7 +52,7 @@ export function MySubmissionsTable({ submissions }: { submissions: MySubmission[
               <TableHead>Type</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Submitted</TableHead>
+              <TableHead>Date</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -78,7 +83,8 @@ export function MySubmissionsTable({ submissions }: { submissions: MySubmission[
                   <Badge variant={STATUS_BADGE_VARIANT[item.status]}>{STATUS_LABELS[item.status]}</Badge>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {new Date(item.createdAt).toLocaleDateString()}
+                  <div className="text-xs">{dateInfo(item).label}</div>
+                  {new Date(dateInfo(item).date).toLocaleDateString()}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-3">

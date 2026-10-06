@@ -55,6 +55,10 @@ export type MySubmission = {
   status: KnowledgeStatus;
   categories: { name: string }[];
   createdAt: string;
+  /** Last save — /library/mine and /my-posts show it for a still-draft item (see activityDate). */
+  updatedAt: string;
+  /** Null until a Steward publishes it. */
+  publishedAt: string | null;
   // See KnowledgeItemDetail.hasEarnedHours.
   hasEarnedHours: boolean;
 };
@@ -71,6 +75,8 @@ export type LibraryCard = {
   categories: { name: string; slug: string }[];
   contributor: { id: string; name: string | null };
   createdAt: string;
+  /** When a Steward published it — null for older items published before this was recorded; use postedAt() for the date to show/sort by. */
+  publishedAt: string | null;
   youtubeUrl: string | null;
   // Custom cover image (§4.9), pre-resolved server-side to a proxied URL —
   // null means "no custom image", which renderers fall back to the video's
@@ -192,4 +198,9 @@ export function excerptFromHtml(html: string, maxLength = 180): string {
     .trim();
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength).trimEnd()}…`;
+}
+
+/** The date a Library item "went up": when it was published, falling back to when it was first created (same rule as the What's New feed). */
+export function postedAt(item: { publishedAt: string | null; createdAt: string }): string {
+  return item.publishedAt ?? item.createdAt;
 }
