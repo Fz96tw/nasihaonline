@@ -20,6 +20,7 @@ export function MaterialStep({
   setSourceMode,
   heroImage,
   setHeroImage,
+  sourceError,
 }: {
   form: UseFormReturn<CreateReviewItemValues>;
   existingItem?: ReviewItemForEdit;
@@ -29,13 +30,15 @@ export function MaterialStep({
   setSourceMode: (mode: "file" | "link") => void;
   heroImage: File | null;
   setHeroImage: (file: File | null) => void;
+  /** Shown under the source picker when a document or link is still missing. */
+  sourceError?: string;
 }) {
   const contentType = form.watch("contentType");
   const isRecordedLecture = contentType === KnowledgeContentType.recorded_lecture;
   const isCaseStudy = contentType === KnowledgeContentType.case_study;
 
   return (
-    <section className="flex flex-col gap-5 border-t pt-6">
+    <section className="flex flex-col gap-5">
       <h2 className="text-base font-semibold">Material</h2>
       {isRecordedLecture ? (
         <FormField
@@ -135,6 +138,8 @@ export function MaterialStep({
           )}
         </div>
       )}
+
+      {sourceError && !isRecordedLecture && <p className="text-sm font-medium text-destructive">{sourceError}</p>}
 
       <div className="flex flex-col gap-2">
         <label htmlFor="review-hero-image" className="text-sm font-medium">

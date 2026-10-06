@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
@@ -13,6 +13,14 @@ import { getCsrfToken } from "@/lib/csrf-client";
 import { BasicsStep } from "@/components/review/item-form/basics-step";
 import { MaterialStep } from "@/components/review/item-form/material-step";
 import { ReviewersStep } from "@/components/review/item-form/reviewers-step";
+import {
+  REVIEW_ITEM_STEPS,
+  SOURCE_REQUIRED_MESSAGE,
+  stepForField,
+  type ReviewFieldStepId,
+} from "@/components/review/item-form/steps";
+import { useReviewStepStatuses } from "@/components/review/item-form/use-review-step-statuses";
+import { WizardPanel, WizardShell, type WizardNavSource } from "@/components/shared/wizard/wizard-shell";
 
 const DEFAULT_VALUES: CreateReviewItemValues = {
   title: "",
@@ -97,6 +105,58 @@ export function SubmitReviewItemForm({
   // the existing item's own value instead.
   const showVolunteerNote = existingItem ? existingItem.seekingReviewers : !isInviteMode;
 
+  // Wizard navigation. The step map shows every step and lets the member jump
+  // to any of them at any time; "Next" only warns (it never blocks) about the
+  // step being left. Audience is create-only, so Reviewers only exists when
+  // creating, or when editing an open call (just its volunteer note).
+  const showReviewersStep = !existingItem || existingItem.seekingReviewers;
+  const hasSource =
+    isRecordedLecture ||
+    (sourceMode === "file" ? Boolean(file || existingItem?.attachment) : Boolean(form.watch("externalUrl")));
+  const [activeStep, setActiveStep] = useState<ReviewFieldStepId>("basics");
+  const [visitedSteps, setVisitedSteps] = useState<ReadonlySet<ReviewFieldStepId>>(() => new Set());
+  const { statuses: stepStatuses, issuesByStep } = useReviewStepStatuses({
+    form,
+    isEditing: existingItem !== undefined,
+    hasSource,
+    visited: visitedSteps,
+  });
+  const wizardSteps = REVIEW_ITEM_STEPS.filter((step) => step.id !== "reviewers" || showReviewersStep);
+
+  // Errors set by hand ("Next") are never re-checked by RHF on a plain change —
+  // mode "onTouched" only re-validates after a blur, which selects, checkboxes
+  // and the pickers never fire. issuesByStep is recomputed from the live
+  // values on every render, so drop any error whose field no longer fails.
+  const formErrors = form.formState.errors;
+  const failingFields = new Set(
+    REVIEW_ITEM_STEPS.flatMap((step) => issuesByStep[step.id].map((issue) => issue.path.split(".")[0])),
+  );
+  useEffect(() => {
+    for (const field of Object.keys(formErrors)) {
+      if (!failingFields.has(field)) form.clearErrors(field as keyof CreateReviewItemValues);
+    }
+  });
+
+  function handleStepSelect(id: string, source: WizardNavSource) {
+    const leaving = activeStep;
+    setVisitedSteps((prev) => new Set(prev).add(leaving).add(id as ReviewFieldStepId));
+    if (source === "next") {
+      for (const issue of issuesByStep[leaving]) {
+        // "source" isn't a form field — it's shown by the Material step itself.
+        if (issue.path !== "source") form.setError(issue.path as keyof CreateReviewItemValues, { message: issue.message });
+      }
+    }
+    setActiveStep(id as ReviewFieldStepId);
+  }
+
+  // A submit was rejected for fields the member may not be looking at (every
+  // step but the active one is hidden) — bring them to the first step with a problem.
+  function onInvalid(errors: FieldErrors<CreateReviewItemValues>) {
+    const failing = new Set(Object.keys(errors).map((field) => stepForField(field)));
+    const target = wizardSteps.find((step) => failing.has(step.id));
+    if (target) setActiveStep(target.id);
+  }
+
   async function onSubmit(values: CreateReviewItemValues) {
     setSubmitting(true);
     setError(null);
@@ -155,23 +215,36 @@ export function SubmitReviewItemForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
-        <BasicsStep form={form} categories={categories} communities={communities} tags={tags} />
+      <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="flex flex-col gap-5" noValidate>
+        <WizardShell
+          steps={wizardSteps.map((step) => ({ ...step, status: stepStatuses[step.id] }))}
+          activeId={activeStep}
+          onSelect={handleStepSelect}
+        >
+          <WizardPanel id="basics">
+            <BasicsStep form={form} categories={categories} communities={communities} tags={tags} />
+          </WizardPanel>
 
-        <MaterialStep
-          form={form}
-          existingItem={existingItem}
-          file={file}
-          setFile={setFile}
-          sourceMode={sourceMode}
-          setSourceMode={setSourceMode}
-          heroImage={heroImage}
-          setHeroImage={setHeroImage}
-        />
+          <WizardPanel id="material">
+            <MaterialStep
+              form={form}
+              existingItem={existingItem}
+              file={file}
+              setFile={setFile}
+              sourceMode={sourceMode}
+              setSourceMode={setSourceMode}
+              heroImage={heroImage}
+              setHeroImage={setHeroImage}
+              sourceError={!hasSource && visitedSteps.has("material") ? SOURCE_REQUIRED_MESSAGE : undefined}
+            />
+          </WizardPanel>
 
-        {(!existingItem || existingItem.seekingReviewers) && (
-          <ReviewersStep form={form} existingItem={existingItem} currentUserId={currentUserId} />
-        )}
+          {showReviewersStep && (
+            <WizardPanel id="reviewers">
+              <ReviewersStep form={form} existingItem={existingItem} currentUserId={currentUserId} />
+            </WizardPanel>
+          )}
+        </WizardShell>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 

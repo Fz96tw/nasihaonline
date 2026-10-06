@@ -27,7 +27,7 @@ export function ReviewersStep({
   const showVolunteerNote = existingItem ? existingItem.seekingReviewers : !isInviteMode;
 
   return (
-    <section className="flex flex-col gap-5 border-t pt-6">
+    <section className="flex flex-col gap-5">
       <h2 className="text-base font-semibold">Reviewers</h2>
       {!existingItem && (
         <FormField
