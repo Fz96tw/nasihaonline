@@ -121,6 +121,8 @@ export function SubmitEventForm({
   // know what to resend/navigate to. Null means no prompt is showing.
   const [linkChangePrompt, setLinkChangePrompt] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
+  // "Discard your changes?" prompt, shown only when Cancel is pressed with unsaved edits.
+  const [discardPromptOpen, setDiscardPromptOpen] = useState(false);
   // Waiting-room greeting shown to attendees on /meet/event/[id] before
   // Start (meeting-join-experience) — plain local state like heroImage
   // above, not RHF-managed, since it's optional auxiliary content outside
@@ -262,6 +264,25 @@ export function SubmitEventForm({
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [hasUnsavedChanges]);
+
+  // Cancel leaves without saving: back through history when there is any (the
+  // host may have arrived from the feed, the calendar or a notification), else
+  // to the event's own page — or the listing for a new event or a draft, whose
+  // detail page isn't a natural landing spot. Any saved draft is left as it is;
+  // deleting one is the separate "Discard Draft" button.
+  function leaveWithoutSaving() {
+    leavingRef.current = true;
+    if (window.history.length > 1) {
+      router.back();
+    } else {
+      router.push(existingEvent && !existingEvent.isDraft ? `/calendar/${existingEvent.id}` : "/calendar");
+    }
+  }
+
+  function handleCancel() {
+    if (hasUnsavedChanges) setDiscardPromptOpen(true);
+    else leaveWithoutSaving();
+  }
 
   // Wizard navigation. The step map shows every step and lets the host jump to
   // any of them at any time; "Next" only warns (it never blocks) about the
@@ -579,7 +600,10 @@ export function SubmitEventForm({
         {error && <p className="text-sm text-destructive">{error}</p>}
         {draftSaved && <p className="text-sm text-success">Draft saved.</p>}
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="ghost" disabled={submitting} onClick={handleCancel}>
+            Cancel
+          </Button>
           {isFirstSubmission && (
             <Button
               type="submit"
@@ -613,6 +637,21 @@ export function SubmitEventForm({
           {existingEvent?.isDraft && <DiscardEventDraftButton eventId={existingEvent.id} title={existingEvent.title} />}
         </div>
       </form>
+
+      <AlertDialog open={discardPromptOpen} onOpenChange={setDiscardPromptOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard your changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes to this event. If you leave now they&apos;ll be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction onClick={leaveWithoutSaving}>Discard changes</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {existingEvent && (
         <AlertDialog
