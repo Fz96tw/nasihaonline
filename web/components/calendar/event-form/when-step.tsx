@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RecurrenceFrequency } from "@/lib/generated/prisma/enums";
 import type { CreateEventValues } from "@/lib/validation/event";
 import { DATETIME_LOCAL_STEP_SECONDS, snapDatetimeLocalValue } from "@/lib/datetime-input";
+import { AdvancedOptions } from "@/components/shared/wizard/advanced-options";
 import { describeRecurrence } from "@/lib/recurrence";
 import { IANA_TIMEZONES, WEEKDAY_LABELS, addOneHour, defaultUntilIso, toggleWeekday } from "./shared";
 
@@ -133,168 +134,174 @@ export function WhenStep({
         )}
       />
 
-      <FormField
-        control={form.control}
-        name="recurrence"
-        render={({ field }) => {
-          const recurrence = field.value;
-          const repeats = recurrence !== null;
-          return (
-            <FormItem className="rounded-md border p-4">
-              <div className="flex flex-row items-center justify-between gap-4">
-                <div>
-                  <FormLabel>Repeat</FormLabel>
-                  <FormDescription>
-                    Changing the repeat schedule on an existing series updates all upcoming occurrences —
-                    there&apos;s no way to edit or skip a single date.
-                  </FormDescription>
-                </div>
-                <FormControl>
-                  <Switch
-                    checked={repeats}
-                    onCheckedChange={(checked) => {
-                      if (!checked) {
-                        field.onChange(null);
-                        return;
-                      }
-                      // Default to the start date's own weekday so a host
-                      // who never touches the day picker doesn't hit the
-                      // "select at least one day" validation trap silently.
-                      const startsAt = new Date(form.getValues("startsAt"));
-                      const defaultWeekday = Number.isNaN(startsAt.getTime()) ? [] : [startsAt.getDay()];
-                      field.onChange({
-                        frequency: RecurrenceFrequency.weekly,
-                        interval: 1,
-                        byWeekday: defaultWeekday,
-                        until: null,
-                      });
-                    }}
-                  />
-                </FormControl>
-              </div>
-              {repeats && recurrence && (
-                <div className="mt-3 flex flex-col gap-3">
-                  <Select
-                    value={recurrence.frequency}
-                    onValueChange={(value) =>
-                      field.onChange({
-                        ...recurrence,
-                        frequency: value as RecurrenceFrequency,
-                        byWeekday: value === RecurrenceFrequency.weekly ? recurrence.byWeekday : [],
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={RecurrenceFrequency.daily}>Daily</SelectItem>
-                      <SelectItem value={RecurrenceFrequency.weekly}>Weekly</SelectItem>
-                      <SelectItem value={RecurrenceFrequency.monthly}>Monthly</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <div className="flex items-center gap-2 text-sm">
-                    <span>Every</span>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={52}
-                      className="w-16"
-                      value={recurrence.interval}
-                      onChange={(e) =>
-                        field.onChange({
-                          ...recurrence,
-                          interval: Math.max(1, Number(e.target.value) || 1),
-                        })
-                      }
-                    />
-                    <span>
-                      {recurrence.frequency === RecurrenceFrequency.daily
-                        ? "day(s)"
-                        : recurrence.frequency === RecurrenceFrequency.weekly
-                          ? "week(s)"
-                          : "month(s)"}
-                    </span>
+      <AdvancedOptions
+        summary="Repeat schedule"
+        defaultOpen={form.getValues("recurrence") !== null}
+        hasError={Boolean(form.formState.errors.recurrence)}
+      >
+        <FormField
+          control={form.control}
+          name="recurrence"
+          render={({ field }) => {
+            const recurrence = field.value;
+            const repeats = recurrence !== null;
+            return (
+              <FormItem className="rounded-md border p-4">
+                <div className="flex flex-row items-center justify-between gap-4">
+                  <div>
+                    <FormLabel>Repeat</FormLabel>
+                    <FormDescription>
+                      Changing the repeat schedule on an existing series updates all upcoming occurrences —
+                      there&apos;s no way to edit or skip a single date.
+                    </FormDescription>
                   </div>
-
-                  {recurrence.frequency === RecurrenceFrequency.weekly && (
-                    <div className="flex flex-col gap-1">
-                      <div className="grid grid-cols-7 gap-1 sm:flex">
-                        {WEEKDAY_LABELS.map((label, day) => (
-                          <Button
-                            key={label}
-                            type="button"
-                            size="sm"
-                            className="px-0 sm:px-3"
-                            variant={recurrence.byWeekday.includes(day) ? "default" : "outline"}
-                            onClick={() =>
-                              field.onChange({
-                                ...recurrence,
-                                byWeekday: toggleWeekday(recurrence.byWeekday, day),
-                              })
-                            }
-                          >
-                            {label}
-                          </Button>
-                        ))}
-                      </div>
-                      {/* FormMessage below only reads the top-level "recurrence"
-                        field's error, which has no .message of its own when
-                        the actual Zod issue is nested at recurrence.byWeekday —
-                        read that path directly so this doesn't fail silently. */}
-                      {form.formState.errors.recurrence?.byWeekday?.message ? (
-                        <p className="text-xs font-medium text-destructive">
-                          {String(form.formState.errors.recurrence.byWeekday.message)}
-                        </p>
-                      ) : null}
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={recurrence.until !== null}
-                      onCheckedChange={(checked) =>
+                  <FormControl>
+                    <Switch
+                      checked={repeats}
+                      onCheckedChange={(checked) => {
+                        if (!checked) {
+                          field.onChange(null);
+                          return;
+                        }
+                        // Default to the start date's own weekday so a host
+                        // who never touches the day picker doesn't hit the
+                        // "select at least one day" validation trap silently.
+                        const startsAt = new Date(form.getValues("startsAt"));
+                        const defaultWeekday = Number.isNaN(startsAt.getTime()) ? [] : [startsAt.getDay()];
+                        field.onChange({
+                          frequency: RecurrenceFrequency.weekly,
+                          interval: 1,
+                          byWeekday: defaultWeekday,
+                          until: null,
+                        });
+                      }}
+                    />
+                  </FormControl>
+                </div>
+                {repeats && recurrence && (
+                  <div className="mt-3 flex flex-col gap-3">
+                    <Select
+                      value={recurrence.frequency}
+                      onValueChange={(value) =>
                         field.onChange({
                           ...recurrence,
-                          until: checked === true ? defaultUntilIso(form.getValues("startsAt")) : null,
+                          frequency: value as RecurrenceFrequency,
+                          byWeekday: value === RecurrenceFrequency.weekly ? recurrence.byWeekday : [],
                         })
                       }
-                    />
-                    <span>Repeat until</span>
-                    {recurrence.until && (
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={RecurrenceFrequency.daily}>Daily</SelectItem>
+                        <SelectItem value={RecurrenceFrequency.weekly}>Weekly</SelectItem>
+                        <SelectItem value={RecurrenceFrequency.monthly}>Monthly</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <div className="flex items-center gap-2 text-sm">
+                      <span>Every</span>
                       <Input
-                        type="date"
-                        className="w-auto"
-                        value={recurrence.until.slice(0, 10)}
+                        type="number"
+                        min={1}
+                        max={52}
+                        className="w-16"
+                        value={recurrence.interval}
                         onChange={(e) =>
                           field.onChange({
                             ...recurrence,
-                            until: `${e.target.value}T23:59:59.000Z`,
+                            interval: Math.max(1, Number(e.target.value) || 1),
                           })
                         }
                       />
-                    )}
-                  </div>
-                  {form.formState.errors.recurrence?.until?.message ? (
-                    <p className="text-xs font-medium text-destructive">
-                      {String(form.formState.errors.recurrence.until.message)}
-                    </p>
-                  ) : null}
+                      <span>
+                        {recurrence.frequency === RecurrenceFrequency.daily
+                          ? "day(s)"
+                          : recurrence.frequency === RecurrenceFrequency.weekly
+                            ? "week(s)"
+                            : "month(s)"}
+                      </span>
+                    </div>
 
-                  <p className="text-xs text-muted-foreground">
-                    {describeRecurrence({
-                      ...recurrence,
-                      until: recurrence.until ? new Date(recurrence.until) : null,
-                    })}
-                  </p>
-                </div>
-              )}
-              <FormMessage />
-            </FormItem>
-          );
-        }}
-      />
+                    {recurrence.frequency === RecurrenceFrequency.weekly && (
+                      <div className="flex flex-col gap-1">
+                        <div className="grid grid-cols-7 gap-1 sm:flex">
+                          {WEEKDAY_LABELS.map((label, day) => (
+                            <Button
+                              key={label}
+                              type="button"
+                              size="sm"
+                              className="px-0 sm:px-3"
+                              variant={recurrence.byWeekday.includes(day) ? "default" : "outline"}
+                              onClick={() =>
+                                field.onChange({
+                                  ...recurrence,
+                                  byWeekday: toggleWeekday(recurrence.byWeekday, day),
+                                })
+                              }
+                            >
+                              {label}
+                            </Button>
+                          ))}
+                        </div>
+                        {/* FormMessage below only reads the top-level "recurrence"
+                          field's error, which has no .message of its own when
+                          the actual Zod issue is nested at recurrence.byWeekday —
+                          read that path directly so this doesn't fail silently. */}
+                        {form.formState.errors.recurrence?.byWeekday?.message ? (
+                          <p className="text-xs font-medium text-destructive">
+                            {String(form.formState.errors.recurrence.byWeekday.message)}
+                          </p>
+                        ) : null}
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={recurrence.until !== null}
+                        onCheckedChange={(checked) =>
+                          field.onChange({
+                            ...recurrence,
+                            until: checked === true ? defaultUntilIso(form.getValues("startsAt")) : null,
+                          })
+                        }
+                      />
+                      <span>Repeat until</span>
+                      {recurrence.until && (
+                        <Input
+                          type="date"
+                          className="w-auto"
+                          value={recurrence.until.slice(0, 10)}
+                          onChange={(e) =>
+                            field.onChange({
+                              ...recurrence,
+                              until: `${e.target.value}T23:59:59.000Z`,
+                            })
+                          }
+                        />
+                      )}
+                    </div>
+                    {form.formState.errors.recurrence?.until?.message ? (
+                      <p className="text-xs font-medium text-destructive">
+                        {String(form.formState.errors.recurrence.until.message)}
+                      </p>
+                    ) : null}
+
+                    <p className="text-xs text-muted-foreground">
+                      {describeRecurrence({
+                        ...recurrence,
+                        until: recurrence.until ? new Date(recurrence.until) : null,
+                      })}
+                    </p>
+                  </div>
+                )}
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
+      </AdvancedOptions>
     </section>
   );
 }

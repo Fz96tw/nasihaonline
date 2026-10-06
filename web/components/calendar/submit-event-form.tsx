@@ -235,6 +235,34 @@ export function SubmitEventForm({
 
   const isCaseDiscussion = form.watch("type") === EventType.case_discussion;
 
+  // Warn before the tab is closed/reloaded with edits that haven't been saved.
+  // savedRef is the baseline for the state that lives outside RHF (the image
+  // pickers and the waiting-room note); it moves forward after a draft save
+  // that stays on this page. leavingRef is set once a save succeeds and the
+  // page is about to navigate away, so that navigation isn't second-guessed.
+  // In-app link clicks aren't covered — the browser only exposes beforeunload.
+  const savedRef = useRef<{ message: string; hero: File | null; waitingRoomImage: File | null }>({
+    message: existingEvent?.meetingOrganizerMessage ?? "",
+    hero: null,
+    waitingRoomImage: null,
+  });
+  const leavingRef = useRef(false);
+  const hasUnsavedChanges =
+    form.formState.isDirty ||
+    heroImage !== savedRef.current.hero ||
+    meetingOrganizerMessageImage !== savedRef.current.waitingRoomImage ||
+    meetingOrganizerMessage.trim() !== savedRef.current.message.trim();
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      if (leavingRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsavedChanges]);
+
   // Wizard navigation. The step map shows every step and lets the host jump to
   // any of them at any time; "Next" only warns (it never blocks) about the
   // step being left, using the same strict schema Publish runs.
@@ -373,6 +401,13 @@ export function SubmitEventForm({
         );
       }
       const { id } = await res.json();
+      if (action === "draft" && existingEvent) {
+        // Stays on this page, so what was just saved becomes the new "unchanged" baseline.
+        savedRef.current = { message: meetingOrganizerMessage, hero: heroImage, waitingRoomImage: meetingOrganizerMessageImage };
+        form.reset(form.getValues());
+      } else {
+        leavingRef.current = true;
+      }
       try {
         window.localStorage.setItem(LAST_MEET_LINK_SOURCE_KEY, values.meetLinkSource);
       } catch {

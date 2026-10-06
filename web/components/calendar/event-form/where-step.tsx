@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EventVisibility } from "@/lib/generated/prisma/enums";
 import type { CreateEventValues } from "@/lib/validation/event";
 import { InviteePicker } from "@/components/members/invitee-picker";
+import { AdvancedOptions } from "@/components/shared/wizard/advanced-options";
 import type { ExistingEvent } from "./shared";
 
 /** "Where" section of the event form: meeting platform/link, co-hosts, waiting-room message and image. */
@@ -115,44 +116,49 @@ export function WhereStep({
         )}
       </div>
 
-      <div className="flex flex-col gap-2">
-        <label htmlFor="waiting-room-message" className="text-sm font-medium">
-          Waiting room message (optional)
-        </label>
-        <p className="text-xs text-muted-foreground">
-          Shown to attendees who join before you start the meeting, on the in-app waiting room page.
-        </p>
-        <Textarea
-          id="waiting-room-message"
-          rows={3}
-          value={meetingOrganizerMessage}
-          onChange={(e) => setMeetingOrganizerMessage(e.target.value)}
-        />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <label htmlFor="waiting-room-image" className="text-sm font-medium">
-          Waiting room image (optional)
-        </label>
-        {existingEvent?.meetingOrganizerMessageImageUrl && !meetingOrganizerMessageImage && (
-          // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
-          <img
-            src={existingEvent.meetingOrganizerMessageImageUrl}
-            alt="Current waiting room image"
-            className="h-32 w-full max-w-xs rounded-md object-cover"
+      <AdvancedOptions
+        summary="Waiting-room message and image"
+        defaultOpen={Boolean(meetingOrganizerMessage || existingEvent?.meetingOrganizerMessageImageUrl)}
+      >
+        <div className="flex flex-col gap-2">
+          <label htmlFor="waiting-room-message" className="text-sm font-medium">
+            Waiting room message (optional)
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Shown to attendees who join before you start the meeting, on the in-app waiting room page.
+          </p>
+          <Textarea
+            id="waiting-room-message"
+            rows={3}
+            value={meetingOrganizerMessage}
+            onChange={(e) => setMeetingOrganizerMessage(e.target.value)}
           />
-        )}
-        <input
-          id="waiting-room-image"
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif"
-          onChange={(e) => setMeetingOrganizerMessageImage(e.target.files?.[0] ?? null)}
-          className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
-        />
-        {existingEvent?.meetingOrganizerMessageImageUrl && (
-          <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
-        )}
-      </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label htmlFor="waiting-room-image" className="text-sm font-medium">
+            Waiting room image (optional)
+          </label>
+          {existingEvent?.meetingOrganizerMessageImageUrl && !meetingOrganizerMessageImage && (
+            // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
+            <img
+              src={existingEvent.meetingOrganizerMessageImageUrl}
+              alt="Current waiting room image"
+              className="h-32 w-full max-w-xs rounded-md object-cover"
+            />
+          )}
+          <input
+            id="waiting-room-image"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            onChange={(e) => setMeetingOrganizerMessageImage(e.target.files?.[0] ?? null)}
+            className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
+          />
+          {existingEvent?.meetingOrganizerMessageImageUrl && (
+            <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
+          )}
+        </div>
+      </AdvancedOptions>
     </section>
   );
 }
