@@ -12,7 +12,7 @@ const ACTIONS: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Create library item", href: "/library/new", icon: BookPlus },
   { label: "Request peer review", href: "/review-feedback/new", icon: ClipboardCheck },
   { label: "Schedule an event", href: "/calendar/new", icon: CalendarPlus },
-  { label: "Message a member", href: "/members", icon: Send },
+  { label: "Message a member", href: "/inbox/new", icon: Send },
 ];
 
 const FROSTED =

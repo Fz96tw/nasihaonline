@@ -26,8 +26,8 @@ const ACTIONS: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Add content to the Library", href: "/library/new", icon: BookOpen },
   { label: "Schedule an event", href: "/calendar", icon: CalendarPlus },
   { label: "Search member directory", href: "/members", icon: Search },
-  { label: "Schedule 1-1 meeting", href: "/inbox", icon: Users },
-  { label: "Send a direct message", href: "/inbox", icon: Send },
+  { label: "Request a 1-1 meeting", href: "/inbox/new?mode=meeting", icon: Users },
+  { label: "Send a direct message", href: "/inbox/new", icon: Send },
 ];
 
 const QUICK_ACTION_ITEM_CLASS =
