@@ -2,14 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { CalendarPlus, MessageSquarePlus, PenLine, Plus } from "lucide-react";
+import { BookPlus, CalendarPlus, ClipboardCheck, MessageSquarePlus, PenLine, Plus, Send } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ACTIONS: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Post message to everyone", href: "/forums/general/new", icon: MessageSquarePlus },
   { label: "Write a blog post", href: "/library/new?type=blog_post", icon: PenLine },
+  { label: "Create library item", href: "/library/new", icon: BookPlus },
+  { label: "Request peer review", href: "/review-feedback/new", icon: ClipboardCheck },
   { label: "Schedule an event", href: "/calendar/new", icon: CalendarPlus },
+  { label: "Message a member", href: "/members", icon: Send },
 ];
 
 const FROSTED =
@@ -26,16 +29,20 @@ export function ComposeFab() {
 
   useEffect(() => {
     if (!open) return;
-    function onPointerDown(event: PointerEvent) {
+    // "click", not "pointerdown": on touch devices a scroll gesture starts
+    // with a pointerdown on the feed, which would close the menu mid-scroll.
+    // A scroll never fires click. Capture phase so iOS Safari still delivers
+    // it for non-interactive targets.
+    function onOutsideClick(event: MouseEvent) {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     }
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
     }
-    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("click", onOutsideClick, true);
     document.addEventListener("keydown", onKeyDown);
     return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("click", onOutsideClick, true);
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [open]);
