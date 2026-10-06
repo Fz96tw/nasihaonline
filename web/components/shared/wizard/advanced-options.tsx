@@ -39,7 +39,20 @@ export function AdvancedOptions({
         {title}
         {summary && !expanded && <span className="text-xs font-normal">· {summary}</span>}
       </button>
-      <div className={cn("flex-col gap-5", expanded ? "flex" : "hidden")}>{children}</div>
+      {/* Height animates via the 0fr -> 1fr grid-row trick; children stay mounted
+        either way. visibility:hidden (flipped at the end of the collapse) keeps
+        collapsed fields out of the tab order and away from screen readers. */}
+      <div
+        className={cn(
+          "grid transition-[grid-template-rows,visibility] duration-200 ease-out motion-reduce:transition-none",
+          expanded ? "visible grid-rows-[1fr]" : "invisible grid-rows-[0fr]",
+        )}
+      >
+        {/* p-1/-m-1 gives focus rings room that overflow-hidden would otherwise clip. */}
+        <div className="-m-1 min-h-0 overflow-hidden p-1">
+          <div className="flex flex-col gap-5">{children}</div>
+        </div>
+      </div>
     </div>
   );
 }
