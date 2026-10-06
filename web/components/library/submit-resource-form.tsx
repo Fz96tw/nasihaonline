@@ -5,6 +5,16 @@ import { useRouter } from "next/navigation";
 import { useForm, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Form } from "@/components/ui/form";
 import { KnowledgeContentType, KnowledgeStatus, KnowledgeVisibility } from "@/lib/generated/prisma/enums";
 import { type KnowledgeCategoryOption, type KnowledgeItemForEdit, type KnowledgeTagOption } from "@/lib/library";
@@ -115,6 +125,8 @@ export function SubmitResourceForm({
   // in this app uses doesn't fire) — this is the only in-component
   // confirmation for that one case. Cleared on the next submit attempt.
   const [draftSaved, setDraftSaved] = useState(false);
+  // "Discard your changes?" prompt, shown only when Cancel is pressed with unsaved edits.
+  const [discardPromptOpen, setDiscardPromptOpen] = useState(false);
 
   // A draft's visibility/invitedUserIds/licenseConsented are genuinely
   // still being decided — this is its real first submission, deferred from
@@ -159,6 +171,48 @@ export function SubmitResourceForm({
   const isRecordedLecture = contentType === KnowledgeContentType.recorded_lecture;
   const isCaseStudy = contentType === KnowledgeContentType.case_study;
   const isBlogPost = contentType === KnowledgeContentType.blog_post;
+
+  // Warn before the tab is closed/reloaded with edits that haven't been saved.
+  // savedRef is the baseline for the state that lives outside RHF (the
+  // document and hero-image pickers); it moves forward after a draft save that
+  // stays on this page. leavingRef is set once a save succeeds and the page is
+  // about to navigate away, so that navigation isn't second-guessed. In-app
+  // link clicks aren't covered — the browser only exposes beforeunload.
+  const savedRef = useRef<{ file: File | null; hero: File | null }>({ file: null, hero: null });
+  const leavingRef = useRef(false);
+  const hasUnsavedChanges =
+    form.formState.isDirty || file !== savedRef.current.file || heroImage !== savedRef.current.hero;
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      if (leavingRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsavedChanges]);
+
+  // Cancel leaves without saving: back through history when there is any (the
+  // contributor may have arrived from the Library, search or a notification),
+  // else to the item's own page when it's published/flagged (the only statuses
+  // its public detail page shows), otherwise to the contributor's list. Any
+  // saved draft is left as it is; deleting one is the separate Delete button.
+  function leaveWithoutSaving() {
+    leavingRef.current = true;
+    if (window.history.length > 1) {
+      router.back();
+    } else {
+      const detailVisible =
+        existingItem && (existingItem.status === KnowledgeStatus.published || existingItem.status === KnowledgeStatus.flagged);
+      router.push(detailVisible ? `/library/${existingItem.id}` : existingItem ? "/library/mine" : "/library");
+    }
+  }
+
+  function handleCancel() {
+    if (hasUnsavedChanges) setDiscardPromptOpen(true);
+    else leaveWithoutSaving();
+  }
 
   // Wizard navigation. The step map shows every step and lets the contributor
   // jump to any of them at any time; "Next" only warns (it never blocks) about
@@ -289,6 +343,14 @@ export function SubmitResourceForm({
         );
       }
 
+      if (action === "draft" && existingItem) {
+        // Stays on this page, so what was just saved becomes the new "unchanged" baseline.
+        savedRef.current = { file, hero: heroImage };
+        form.reset(form.getValues());
+      } else {
+        leavingRef.current = true;
+      }
+
       if (action === "draft") {
         if (existingItem) {
           // Same page, no navigation — the SavedBanner-on-redirect
@@ -302,6 +364,7 @@ export function SubmitResourceForm({
           // applies there instead.
           const created = (await res.json().catch(() => null)) as { id: string } | null;
           if (created?.id) router.replace(`/library/${created.id}/edit?saved=1`);
+          else leavingRef.current = false;
         }
         router.refresh();
         return;
@@ -331,7 +394,10 @@ export function SubmitResourceForm({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
-      setSubmitting(false);
+      // Once a save has succeeded and the page is navigating away, stay
+      // disabled (showing "Saving…") until it actually leaves — otherwise the
+      // button re-enables during the navigation and invites a second submit.
+      if (!leavingRef.current) setSubmitting(false);
     }
   }
 
@@ -388,7 +454,10 @@ export function SubmitResourceForm({
         {error && <p className="text-sm text-destructive">{error}</p>}
         {draftSaved && <p className="text-sm text-success">Draft saved.</p>}
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="ghost" disabled={submitting} onClick={handleCancel}>
+            Cancel
+          </Button>
           {isFirstSubmission && (
             <Button
               type="submit"
@@ -429,6 +498,21 @@ export function SubmitResourceForm({
           )}
         </div>
       </form>
+
+      <AlertDialog open={discardPromptOpen} onOpenChange={setDiscardPromptOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard your changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes to this resource. If you leave now they&apos;ll be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction onClick={leaveWithoutSaving}>Discard changes</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Form>
   );
 }

@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { KnowledgeContentType } from "@/lib/generated/prisma/enums";
 import type { KnowledgeItemForEdit } from "@/lib/library";
 import type { CreateKnowledgeItemValues } from "@/lib/validation/knowledge";
+import { AdvancedOptions } from "@/components/shared/wizard/advanced-options";
 import { TiptapEditor } from "@/components/library/tiptap-editor";
 import { DOCUMENT_ACCEPT } from "./shared";
 
@@ -159,81 +160,87 @@ export function ContentStep({
         </div>
       ))}
 
-      {!isRecordedLecture && (
+      <AdvancedOptions
+        summary="Cover image and extra video"
+        defaultOpen={Boolean(existingItem?.heroImageUrl || form.getValues("showTitleOverlay") || (!isRecordedLecture && form.getValues("youtubeUrl")))}
+        hasError={!isRecordedLecture && Boolean(form.formState.errors.youtubeUrl)}
+      >
+        {!isRecordedLecture && (
+          <FormField
+            control={form.control}
+            name="youtubeUrl"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>YouTube video (optional)</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="https://youtube.com/watch?v=…"
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Embedded on the page{isBlogPost ? " above your post" : " alongside the document or link"}. Also used as the cover image if you don&apos;t add a hero image below.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
+        <div className="flex flex-col gap-2">
+          <label htmlFor="hero-image" className="text-sm font-medium">
+            Hero image (optional)
+          </label>
+          {existingItem?.heroImageUrl && !heroImage && (
+            // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
+            <img
+              src={existingItem.heroImageUrl}
+              alt="Current hero image"
+              className="h-32 w-full max-w-xs rounded-md object-cover"
+            />
+          )}
+          <input
+            id="hero-image"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(e) => setHeroImage(e.target.files?.[0] ?? null)}
+            className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
+          />
+          {existingItem?.heroImageUrl && (
+            <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
+          )}
+          {(isRecordedLecture || form.watch("youtubeUrl")) && (
+            <p className="text-xs text-muted-foreground">
+              Leave blank to use the video&apos;s YouTube thumbnail (default).
+            </p>
+          )}
+        </div>
+
         <FormField
           control={form.control}
-          name="youtubeUrl"
+          name="showTitleOverlay"
           render={({ field }) => (
-            <FormItem>
-              <FormLabel>YouTube video (optional)</FormLabel>
+            <FormItem className="flex flex-row items-start gap-2 space-y-0">
               <FormControl>
-                <Input
-                  placeholder="https://youtube.com/watch?v=…"
-                  value={field.value ?? ""}
-                  onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
+                <Checkbox
+                  checked={field.value}
+                  disabled={!hasHeroImage}
+                  onCheckedChange={(c) => field.onChange(c === true)}
                 />
               </FormControl>
-              <FormDescription>
-                Embedded on the page{isBlogPost ? " above your post" : " alongside the document or link"}. Also used as the cover image if you don&apos;t add a hero image below.
-              </FormDescription>
-              <FormMessage />
+              <div className="space-y-1">
+                <FormLabel className="!mt-0">Show title on banner</FormLabel>
+                <FormDescription>
+                  {hasHeroImage
+                    ? "Overlay the title in white text on a dark gradient at the bottom of the hero image, instead of showing it separately below."
+                    : "Add a hero image above to enable this."}
+                </FormDescription>
+              </div>
             </FormItem>
           )}
         />
-      )}
-
-      <div className="flex flex-col gap-2">
-        <label htmlFor="hero-image" className="text-sm font-medium">
-          Hero image (optional)
-        </label>
-        {existingItem?.heroImageUrl && !heroImage && (
-          // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
-          <img
-            src={existingItem.heroImageUrl}
-            alt="Current hero image"
-            className="h-32 w-full max-w-xs rounded-md object-cover"
-          />
-        )}
-        <input
-          id="hero-image"
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          onChange={(e) => setHeroImage(e.target.files?.[0] ?? null)}
-          className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground"
-        />
-        {existingItem?.heroImageUrl && (
-          <p className="text-xs text-muted-foreground">Choose a new file to replace the current image.</p>
-        )}
-        {(isRecordedLecture || form.watch("youtubeUrl")) && (
-          <p className="text-xs text-muted-foreground">
-            Leave blank to use the video&apos;s YouTube thumbnail (default).
-          </p>
-        )}
-      </div>
-
-      <FormField
-        control={form.control}
-        name="showTitleOverlay"
-        render={({ field }) => (
-          <FormItem className="flex flex-row items-start gap-2 space-y-0">
-            <FormControl>
-              <Checkbox
-                checked={field.value}
-                disabled={!hasHeroImage}
-                onCheckedChange={(c) => field.onChange(c === true)}
-              />
-            </FormControl>
-            <div className="space-y-1">
-              <FormLabel className="!mt-0">Show title on banner</FormLabel>
-              <FormDescription>
-                {hasHeroImage
-                  ? "Overlay the title in white text on a dark gradient at the bottom of the hero image, instead of showing it separately below."
-                  : "Add a hero image above to enable this."}
-              </FormDescription>
-            </div>
-          </FormItem>
-        )}
-      />
+      </AdvancedOptions>
 
       {isCaseStudy && (
         <FormField
