@@ -116,7 +116,9 @@ export function ReactionsControl({ send }: { send: (emoji: string) => Promise<bo
           aria-label="Reactions"
           // Fixed 44px tracks + w-max: the tray is absolutely positioned inside the small button's wrapper, so with
           // `grid-cols-4` (tracks of minmax(0,1fr)) it shrank to that wrapper's width and the 44px emoji buttons overlapped.
-          className={`absolute bottom-full right-0 z-10 mb-2 grid w-max grid-cols-[repeat(4,2.75rem)] gap-1 rounded-lg border p-2 shadow-lg ${LK_PANEL_CLASS}`}
+          // Below `sm` the button sits near the screen edge in a crowded bar, so a button-anchored tray runs off-screen
+          // (reported on mobile) — pin it to the viewport instead, centered just above the 69px control bar.
+          className={`absolute bottom-full right-0 z-10 mb-2 grid w-max grid-cols-[repeat(4,2.75rem)] gap-1 rounded-lg border p-2 shadow-lg max-sm:fixed max-sm:inset-x-0 max-sm:bottom-[calc(69px+0.5rem)] max-sm:right-0 max-sm:mx-auto max-sm:mb-0 ${LK_PANEL_CLASS}`}
         >
           {REACTIONS.map(({ emoji, label }) => (
             <button
