@@ -125,7 +125,7 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
   // for a forum_thread's own bumped row (which has its own, already-correct
   // title-first order below). Confirmed with user: read top to bottom as
   // "<member> replied in the resource/event discussion", then the original
-  // item's title (smaller, same size as a forum thread's own title, not the
+  // item's title (smaller, the base text-base size, not the
   // usual large Library/Event title), then the quoted reply — the reverse
   // of every other row's title-then-excerpt order.
   const isDiscussionReplyRow = (item.type === "library" || item.type === "event") && !!item.replyExcerpt;
@@ -239,9 +239,12 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                             // user) so the two hero-image-bearing feed types
                             // read consistently. Exception: a discussion
                             // reply row's title is the original item's, not
-                            // this row's own — sized like a forum thread's
-                            // title instead (isDiscussionReplyRow above).
-                            !isDiscussionReplyRow && (item.type === "library" || item.type === "event")
+                            // this row's own — sized at the base
+                            // text-base instead (isDiscussionReplyRow above).
+                            // Forum threads match too (confirmed with user), but
+                            // not their reply rows (item.isReply), which stay small.
+                            !isDiscussionReplyRow &&
+                              (item.type === "library" || item.type === "event" || (item.type === "forum_thread" && !item.isReply))
                               ? "text-2xl font-bold"
                               : "text-base font-semibold",
                             hasThreadImage && "text-neutral-900",

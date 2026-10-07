@@ -1138,6 +1138,7 @@ export async function getFeedPage(params: {
               }
             : {}),
           isRestricted: thread.visibility === ForumThreadVisibility.invited,
+          isReply,
         };
       };
 

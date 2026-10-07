@@ -69,6 +69,8 @@ export type FeedItem = {
   bodyImageUrl?: string;
   /** "event", "forum_thread" and "library" items carry this — true when the underlying Event/ForumThread's visibility is `invited`, or the KnowledgeItem's is `restricted`, driving FeedRow's lock-icon title prefix. Undefined for every other type. */
   isRestricted?: boolean;
+  /** Only "forum_thread" items carry this — true when the row is a reply/bump row rather than the thread's own opening row. FeedRow keeps a reply row's title at the smaller size. */
+  isReply?: boolean;
 };
 
 // Marks a feed row's href so the page it lands on (blog post, forum thread,
