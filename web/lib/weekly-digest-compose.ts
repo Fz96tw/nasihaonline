@@ -19,7 +19,7 @@ export type WeeklyDigestData = {
 
 export type WeeklyDigest = {
   title: string;
-  /** Plain text — announcement bodies aren't markdown; URLs are linkified by the detail page. */
+  /** Plain text with `[title](url)` links — the announcement detail page renders those as friendly link text (lib/linkify.tsx). */
   body: string;
   /** Headline numbers and a few public titles, for the inactive-member teaser email. */
   highlights: {
@@ -33,6 +33,15 @@ export type WeeklyDigest = {
     publicTitles: string[];
   };
 };
+
+/**
+ * A `[label](url)` link, which announcement bodies render as friendly link
+ * text (lib/linkify.tsx). Brackets in the label would end it early, so they
+ * become parentheses.
+ */
+function link(label: string, url: string) {
+  return `[${label.replace(/\[/g, "(").replace(/\]/g, ")")}](${url})`;
+}
 
 function plural(count: number, one: string, many: string) {
   return count === 1 ? one : many;
@@ -55,7 +64,7 @@ function formatEventTime(date: Date, timeZone: string) {
 /**
  * Turns a week's gathered activity into the digest post, or null for a quiet
  * week. Rules (see the Weekly Community Digest initiative):
- *  - only public items are listed, with a full URL; restricted/invited-only
+ *  - only public items are listed, each as a `[title](full url)` link; restricted/invited-only
  *    items appear as a count, and only when that count reaches
  *    `weeklyDigestPrivateCountMin` — smaller counts are folded into one
  *    general line so a single private item can't be picked out;
@@ -97,7 +106,7 @@ export function composeWeeklyDigest(
   }
 
   if (settings.weeklyDigestIncludeContent) {
-    const lines = data.library.listed.map((item) => `• ${item.title}\n${base}/library/${item.id}`);
+    const lines = data.library.listed.map((item) => `• ${link(item.title, `${base}/library/${item.id}`)}`);
     const extra = privateLine(data.library.restrictedCount, (n) =>
       n === 1 ? "1 more resource was shared with limited access." : `${n} more resources were shared with limited access.`,
     );
@@ -111,7 +120,7 @@ export function composeWeeklyDigest(
 
   if (settings.weeklyDigestIncludeEvents) {
     const lines = data.events.listed.map(
-      (event) => `• ${event.title}, ${formatEventTime(event.startsAt, tz)}\n${base}/calendar/${event.id}`,
+      (event) => `• ${link(event.title, `${base}/calendar/${event.id}`)} — ${formatEventTime(event.startsAt, tz)}`,
     );
     const extra = privateLine(data.events.invitedCount, (n) =>
       n === 1 ? "1 more event is invite-only." : `${n} more events are invite-only.`,
@@ -126,7 +135,7 @@ export function composeWeeklyDigest(
 
   if (settings.weeklyDigestIncludeForums) {
     const lines = data.forumThreads.listed.map(
-      (thread) => `• ${thread.title}\n${base}/forums/${thread.forumSlug}/${thread.id}`,
+      (thread) => `• ${link(thread.title, `${base}/forums/${thread.forumSlug}/${thread.id}`)}`,
     );
     const extra = privateLine(data.forumThreads.privateCount, (n) =>
       n === 1 ? "1 new private discussion started." : `${n} new private discussions started.`,

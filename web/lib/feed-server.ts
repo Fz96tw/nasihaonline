@@ -1176,7 +1176,8 @@ export async function getFeedPage(params: {
       type: "announcement",
       id: announcement.id,
       title: announcement.title,
-      excerpt: excerptOf(announcement.body),
+      // `[label](url)` links collapse to their label so the feed excerpt never shows raw markdown.
+      excerpt: excerptOf(announcement.body.replace(/\[([^\]]+)\]\(https?:\/\/[^\s()]+\)/g, "$1")),
       href: query
         ? `/whats-new/announcements/${announcement.id}?q=${encodeURIComponent(query)}`
         : `/whats-new/announcements/${announcement.id}`,
