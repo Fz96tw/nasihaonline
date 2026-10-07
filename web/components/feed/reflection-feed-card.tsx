@@ -10,17 +10,23 @@ import { ReflectionBackdrop } from "@/components/reflection/reflection-backdrop"
 
 /**
  * A Weekly Reflection thread's own feed row: the post's image is the
- * background of the ENTIRE panel (edge to edge, no inner card) and everything
- * sits on it in white: author line, the quote large with attribution, the
+ * background of the ENTIRE panel (no inner banner; the panel itself is inset
+ * as a rounded card with margin so it stands apart from the neighboring rows)
+ * and everything sits on it in white: author line, the quote large with attribution, the
  * prompt preview and the view/reply counts. The whole panel is one link to the
  * thread. Reply rows and every other thread keep the normal FeedRow layout.
  */
 export function ReflectionFeedCard({ item, q }: { item: FeedItem & { reflectionCard: NonNullable<FeedItem["reflectionCard"]> }; q?: string }) {
   const card = item.reflectionCard;
   return (
-    <li>
-      <Link href={item.href} className="block w-full transition-[filter] hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white">
-        <ReflectionBackdrop imageUrl={card.imageUrl} className="flex flex-col gap-3 px-5 py-3 sm:px-6">
+    // Inset on every side (rather than edge to edge) so the divider lines of the
+    // rows above and below stay visible and the panel reads as its own card.
+    <li className="px-3 py-3 sm:px-4">
+      <Link
+        href={item.href}
+        className="block w-full rounded-xl shadow-md ring-1 ring-black/15 transition-[filter] hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+      >
+        <ReflectionBackdrop imageUrl={card.imageUrl} className="flex flex-col gap-3 rounded-xl px-5 py-3 sm:px-6">
           <div className="flex items-center gap-2">
             <Avatar name={item.author.name ?? "NASIHA"} src={item.author.avatarUrl} size="sm" />
             <span className="truncate text-base font-medium">{item.author.name ?? "NASIHA"}</span>
