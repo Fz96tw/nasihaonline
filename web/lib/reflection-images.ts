@@ -5,7 +5,8 @@
 /** Where the images are served from (public/images/weeklyreflection/). */
 export const REFLECTION_IMAGE_URL_BASE = "/images/weeklyreflection";
 
-const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
+// AVIF is what Unsplash and similar free-photo sites often hand out now; every current browser renders it in a plain <img>.
+const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".avif"];
 
 /** A usable background: an image extension and not a hidden/dot file (README.md, .gitkeep, .DS_Store are ignored). */
 export function isReflectionImageFile(name: string): boolean {

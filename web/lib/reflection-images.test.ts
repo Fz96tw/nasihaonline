@@ -7,7 +7,7 @@ const used = (entries: Record<string, number>) => new Map(Object.entries(entries
 
 describe("isReflectionImageFile", () => {
   it("accepts jpg/jpeg/png/webp in any case and rejects everything else", () => {
-    for (const ok of ["a.jpg", "b.JPEG", "c.png", "d.webp", "My Sky.JPG"]) assert.equal(isReflectionImageFile(ok), true, ok);
+    for (const ok of ["a.jpg", "b.JPEG", "c.png", "d.webp", "e.avif", "F.AVIF", "photo-1490730141103-6cac27aaab94.avif", "My Sky.JPG"]) assert.equal(isReflectionImageFile(ok), true, ok);
     for (const bad of ["README.md", "notes.txt", "clip.gif", ".gitkeep", ".DS_Store", ".hidden.jpg", "noextension", "photo.jpg.bak"]) {
       assert.equal(isReflectionImageFile(bad), false, bad);
     }
