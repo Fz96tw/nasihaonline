@@ -7,7 +7,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { getCsrfToken } from "@/lib/csrf-client";
 import type { WeeklyDigestPreview } from "@/lib/weekly-digest-job";
 
-type Outcome = { kind: "info" | "error"; text: string; announcementId?: string };
+type DigestState = "draft" | "published" | "retracted";
+type Outcome = { kind: "info" | "error"; text: string; href?: string };
+
+/** A draft is only viewable from the admin drafts page, a published digest from its public page, and a retracted one only in the history list. */
+function digestHref(state: DigestState, id: string | undefined): string | undefined {
+  if (state === "retracted") return "/admin/announcements";
+  if (!id) return undefined;
+  return state === "published" ? `/whats-new/announcements/${id}` : `/admin/announcements/drafts/${id}`;
+}
 
 /**
  * Preview and "Generate now" for the weekly digest. Both use the saved
@@ -51,7 +59,17 @@ export function WeeklyDigestActions({ autoPublish }: { autoPublish: boolean }) {
       const res = await post("/api/admin/weekly-digest/generate");
       const payload = await res.json().catch(() => null);
       if (res.status === 409) {
-        setOutcome({ kind: "error", text: "This week's digest has already been generated.", announcementId: payload?.announcementId });
+        const state: DigestState = payload?.state;
+        setOutcome({
+          kind: "error",
+          text:
+            state === "retracted"
+              ? "This week's digest was already generated, then retracted."
+              : state === "published"
+                ? "This week's digest has already been generated and published."
+                : "This week's digest has already been generated and is waiting as a draft.",
+          href: digestHref(state, payload?.announcementId),
+        });
       } else if (!res.ok) {
         throw new Error();
       } else if (payload.status === "quiet") {
@@ -60,7 +78,7 @@ export function WeeklyDigestActions({ autoPublish }: { autoPublish: boolean }) {
         setOutcome({
           kind: "info",
           text: payload.published ? "Digest published to the feed." : "Digest saved as a draft.",
-          announcementId: payload.announcementId,
+          href: digestHref(payload.published ? "published" : "draft", payload.announcementId),
         });
       }
     } catch {
@@ -69,9 +87,6 @@ export function WeeklyDigestActions({ autoPublish }: { autoPublish: boolean }) {
       setBusy(null);
     }
   }
-
-  const announcementLink = (id: string) =>
-    autoPublish ? `/whats-new/announcements/${id}` : `/admin/announcements/drafts/${id}`;
 
   return (
     <Card>
@@ -96,8 +111,8 @@ export function WeeklyDigestActions({ autoPublish }: { autoPublish: boolean }) {
         {outcome && (
           <p className={outcome.kind === "error" ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
             {outcome.text}{" "}
-            {outcome.announcementId && (
-              <Link href={announcementLink(outcome.announcementId)} className="underline">
+            {outcome.href && (
+              <Link href={outcome.href} className="underline">
                 View it
               </Link>
             )}

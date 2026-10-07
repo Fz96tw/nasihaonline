@@ -175,9 +175,21 @@ export async function previewWeeklyDigest(
   };
 }
 
+/** Where an existing digest is in its life, so a link to it can go to the right page (a draft isn't viewable by members; a retracted one is neither). */
+export type DigestState = "draft" | "published" | "retracted";
+
+async function digestStateOf(weekKey: Date): Promise<{ id: string; state: DigestState } | null> {
+  const row = await db.announcement.findUnique({
+    where: { digestPeriodEnd: weekKey },
+    select: { id: true, sentAt: true, retractedAt: true },
+  });
+  if (!row) return null;
+  return { id: row.id, state: row.retractedAt ? "retracted" : row.sentAt ? "published" : "draft" };
+}
+
 export type GenerateNowResult =
   | { status: "quiet" }
-  | { status: "duplicate"; announcementId: string }
+  | { status: "duplicate"; announcementId: string; state: DigestState }
   | { status: "created"; announcementId: string; published: boolean };
 
 /**
@@ -192,8 +204,8 @@ export async function generateWeeklyDigestNow(now: Date = new Date()): Promise<G
   const settings = await getWeeklyDigestSettings();
   const weekKey = latestScheduledFire(now, settings.weeklyDigestDayOfWeek, settings.weeklyDigestHour, settings.weeklyDigestTimezone);
 
-  const existing = await db.announcement.findUnique({ where: { digestPeriodEnd: weekKey }, select: { id: true } });
-  if (existing) return { status: "duplicate", announcementId: existing.id };
+  const existing = await digestStateOf(weekKey);
+  if (existing) return { status: "duplicate", announcementId: existing.id, state: existing.state };
 
   const digest = await generateWeeklyDigest(now, settings);
   if (!digest) return { status: "quiet" };
@@ -208,8 +220,8 @@ export async function generateWeeklyDigestNow(now: Date = new Date()): Promise<G
     return { status: "created", announcementId: id, published: settings.weeklyDigestAutoPublish };
   } catch (error) {
     if ((error as { code?: string }).code === "P2002") {
-      const winner = await db.announcement.findUnique({ where: { digestPeriodEnd: weekKey }, select: { id: true } });
-      return { status: "duplicate", announcementId: winner?.id ?? "" };
+      const winner = await digestStateOf(weekKey);
+      return { status: "duplicate", announcementId: winner?.id ?? "", state: winner?.state ?? "draft" };
     }
     throw error;
   }
