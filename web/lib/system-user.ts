@@ -1,17 +1,9 @@
 import { db } from "@/lib/db";
 import { Role } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
+import { SYSTEM_CLERK_USER_ID_PREFIX, isSystemUser } from "@/lib/system-user-id";
 
-// Organizational accounts (not people) that author automated content, such
-// as the Weekly Reflection forum thread. They have no Clerk login: the
-// required, unique `clerkUserId` holds a "system:" placeholder that can never
-// collide with a real Clerk id (those start "user_"), so the Clerk webhook's
-// user.deleted handler can never match one.
-const SYSTEM_CLERK_USER_ID_PREFIX = "system:";
-
-export function isSystemUser(user: { clerkUserId: string }): boolean {
-  return user.clerkUserId.startsWith(SYSTEM_CLERK_USER_ID_PREFIX);
-}
+export { isSystemUser };
 
 export const WEEKLY_REFLECTION_USER = {
   clerkUserId: `${SYSTEM_CLERK_USER_ID_PREFIX}weekly-reflection`,

@@ -40,6 +40,8 @@ import { communityVisibilityWhere, getMemberCommunityContext } from "@/lib/event
 import { getInboxList } from "@/lib/inbox-server";
 import { matchesInboxSearch } from "@/lib/inbox";
 import { digestContentOf, type DigestContent } from "@/lib/weekly-digest-compose";
+import { buildFeedAuthor, type FeedAuthorSource } from "@/lib/feed-author";
+import { ORGANIZATION_AVATAR_URL } from "@/lib/system-user-id";
 
 const DEFAULT_PAGE_SIZE = 20;
 const EXCERPT_LENGTH = 180;
@@ -53,6 +55,7 @@ const SEARCH_POST_SCAN_LIMIT = 30;
 
 const AUTHOR_SELECT = {
   id: true,
+  clerkUserId: true,
   name: true,
   profile: { select: { avatarUrl: true, titleSpecialty: true, countryRegion: true, showSpecialtyLocation: true } },
 } as const;
@@ -63,19 +66,8 @@ function truncate(text: string, maxLength = EXCERPT_LENGTH): string {
   return `${trimmed.slice(0, maxLength).trimEnd()}…`;
 }
 
-function authorOf(user: {
-  id: string;
-  name: string | null;
-  profile: { avatarUrl: string | null; titleSpecialty: string | null; countryRegion: string | null; showSpecialtyLocation: boolean } | null;
-}) {
-  return {
-    id: user.id,
-    name: user.name,
-    avatarUrl: getProfileAvatarUrl(user.profile?.avatarUrl ?? null),
-    // Same showSpecialtyLocation enforcement as the Directory (lib/members-server.ts).
-    titleSpecialty: user.profile?.showSpecialtyLocation ? user.profile.titleSpecialty : null,
-    countryRegion: user.profile?.showSpecialtyLocation ? user.profile.countryRegion : null,
-  };
+function authorOf(user: FeedAuthorSource) {
+  return buildFeedAuthor(user, getProfileAvatarUrl);
 }
 
 // An event's/Library item's discussion thread, as its parent's feed row
@@ -117,7 +109,7 @@ function latestDiscussionReply(thread: DiscussionThreadForFeed, lastActivityAt: 
 const BOARD_SENDER = {
   id: null,
   name: "NASIHA Board",
-  avatarUrl: "/images/nasihalogo-cropped.png",
+  avatarUrl: ORGANIZATION_AVATAR_URL,
   titleSpecialty: null,
   countryRegion: null,
 };
