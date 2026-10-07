@@ -425,6 +425,11 @@ for (const name of KNOWLEDGE_CATEGORIES) {
 const FORUMS: { name: string; description: string; displayOrder: number; slug?: string }[] = [
   { name: "General", description: "Community announcements, introductions, open discussion.", displayOrder: 0 },
   {
+    name: "Weekly Reflection",
+    description: "A new quote each week with a prompt to reflect on and share your own experience.",
+    displayOrder: 1,
+  },
+  {
     name: "Research & Resources",
     description: "Sharing articles, tools, guidelines, curated learning materials.",
     displayOrder: 2,
