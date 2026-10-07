@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Eye, Hand, Lock, MessageSquare, Users } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Eye, Hand, Lock, MessageSquare, Play, Users } from "lucide-react";
 import { type FeedItem, FEED_TYPE_LABELS } from "@/lib/feed";
 import { formatRelativeTime } from "@/lib/format-date";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
@@ -12,6 +13,76 @@ import { ReviewOfferButton } from "@/components/review/review-offer-button";
 import { HighlightText } from "@/components/highlight-text";
 import { useHasMounted } from "@/lib/use-has-mounted";
 import { cn } from "@/lib/utils";
+
+/**
+ * YouTube player for a feed row. Autoplays muted (the only autoplay browsers
+ * allow) once the row is mostly on screen, and pauses/resumes via the
+ * iframe API's postMessage commands as it scrolls out of/back into view —
+ * the iframe is mounted once, so progress isn't lost. Falls back to a
+ * click-to-play thumbnail under prefers-reduced-motion. The row is wrapped
+ * in a <Link>, so the facade's click is swallowed (no navigation); the
+ * iframe captures its own clicks.
+ */
+function FeedYoutubePlayer({ thumbnailUrl, embedUrl }: { thumbnailUrl: string; embedUrl: string }) {
+  const [mounted, setMounted] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const reduceMotion = useRef(false);
+
+  useEffect(() => {
+    reduceMotion.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const el = containerRef.current;
+    if (!el || reduceMotion.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setMounted(true);
+        }
+        iframeRef.current?.contentWindow?.postMessage(
+          JSON.stringify({ event: "command", func: entry.isIntersecting ? "playVideo" : "pauseVideo", args: "" }),
+          "https://www.youtube.com",
+        );
+      },
+      { threshold: 0.6 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={containerRef} className="mt-2 aspect-video w-full overflow-hidden rounded-md bg-black">
+      {mounted ? (
+        <iframe
+          ref={iframeRef}
+          src={`${embedUrl}?autoplay=1&mute=1&playsinline=1&enablejsapi=1`}
+          title="YouTube video"
+          className="h-full w-full"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      ) : (
+        <button
+          type="button"
+          aria-label="Play video"
+          className="relative block h-full w-full"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setMounted(true);
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element -- external YouTube thumbnail */}
+          <img src={thumbnailUrl} alt="" className="h-full w-full object-cover" />
+          <span className="absolute inset-0 flex items-center justify-center bg-black/20">
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/70 text-white">
+              <Play className="h-6 w-6 fill-current" />
+            </span>
+          </span>
+        </button>
+      )}
+    </div>
+  );
+}
 
 // Deliberately not lib/format-date.ts's formatTimestamp: that's a generic
 // "when did this happen" formatter shared by ~20 unrelated call sites
@@ -223,7 +294,10 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                     </div>
                   </div>
                 </div>
-                {!isForumThread && item.imageUrl && (
+                {!isForumThread && item.imageUrl && item.youtubeEmbedUrl && (
+                  <FeedYoutubePlayer thumbnailUrl={item.imageUrl} embedUrl={item.youtubeEmbedUrl} />
+                )}
+                {!isForumThread && item.imageUrl && !item.youtubeEmbedUrl && (
                   // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
                   <img
                     src={item.imageUrl}

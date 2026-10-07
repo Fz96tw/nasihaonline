@@ -21,7 +21,7 @@ import {
 import { withFeedRef, type FeedItem, type FeedItemType, type FeedCursor } from "@/lib/feed";
 import { firstForumPostImageUrl, stripPastedImageTokens } from "@/lib/pasted-images";
 import { extractSnippet, textContainsMatch } from "@/lib/text-highlight";
-import { youtubeThumbnailUrl } from "@/lib/youtube";
+import { youtubeEmbedUrl, youtubeThumbnailUrl } from "@/lib/youtube";
 import {
   searchEventDocuments,
   searchLibraryDocuments,
@@ -912,6 +912,9 @@ export async function getFeedPage(params: {
         // time), so this is never true for the YouTube-thumbnail fallback
         // above — only ever for a real uploaded hero image.
         showTitleOverlay: item.showTitleOverlay,
+        youtubeEmbedUrl: !getKnowledgeItemHeroImageUrl(item.heroImageUrl) && item.youtubeUrl
+          ? (youtubeEmbedUrl(item.youtubeUrl) ?? undefined)
+          : undefined,
         libraryViewCount: item._count.views,
         forumReplyCount: item.forumThread ? item.forumThread._count.posts - 1 : undefined,
       };
