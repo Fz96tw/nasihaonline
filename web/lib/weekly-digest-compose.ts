@@ -115,6 +115,8 @@ function formatEventTime(date: Date, timeZone: string) {
  *  - disabled sections are skipped;
  *  - Knowledge Hours only ever appears alongside real activity, and the
  *    all-time total only alongside this week's figure;
+ *  - invite-only events are the exception to that minimum: they are always
+ *    counted (never named) when scheduled;
  *  - a week whose only content is folded private activity and/or Knowledge
  *    Hours is quiet.
  */
@@ -168,12 +170,23 @@ export function composeWeeklyDigest(
       path: `/calendar/${event.id}`,
       meta: formatEventTime(event.startsAt, tz),
     }));
-    const extra = privateLine(data.events.invitedCount, (n) =>
-      n === 1 ? "1 more event is invite-only." : `${n} more events are invite-only.`,
-    );
+    // Unlike other private totals, invite-only events are always counted
+    // (never folded below the minimum): a scheduled event is only ever
+    // mentioned as a number, never named, and members want to know they exist.
+    const invited = data.events.invitedCount;
+    const extra =
+      invited <= 0
+        ? null
+        : items.length > 0
+          ? invited === 1
+            ? "1 more event is invite-only."
+            : `${invited} more events are invite-only.`
+          : invited === 1
+            ? "1 invite-only event is scheduled."
+            : `${invited} invite-only events are scheduled.`;
     if (items.length > 0 || extra) {
       sections.push({ icon: "events", heading: "Upcoming events", items, lines: extra ? [extra] : [] });
-      counts.events = items.length + (extra ? data.events.invitedCount : 0);
+      counts.events = items.length + invited;
       publicTitles.push(...data.events.listed.map((event) => event.title));
     }
   }
