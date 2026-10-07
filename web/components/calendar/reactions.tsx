@@ -114,7 +114,9 @@ export function ReactionsControl({ send }: { send: (emoji: string) => Promise<bo
         <div
           role="group"
           aria-label="Reactions"
-          className={`absolute bottom-full right-0 z-10 mb-2 grid grid-cols-4 gap-1 rounded-lg border p-2 shadow-lg ${LK_PANEL_CLASS}`}
+          // Fixed 44px tracks + w-max: the tray is absolutely positioned inside the small button's wrapper, so with
+          // `grid-cols-4` (tracks of minmax(0,1fr)) it shrank to that wrapper's width and the 44px emoji buttons overlapped.
+          className={`absolute bottom-full right-0 z-10 mb-2 grid w-max grid-cols-[repeat(4,2.75rem)] gap-1 rounded-lg border p-2 shadow-lg ${LK_PANEL_CLASS}`}
         >
           {REACTIONS.map(({ emoji, label }) => (
             <button
