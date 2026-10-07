@@ -42,6 +42,7 @@ import { matchesInboxSearch } from "@/lib/inbox";
 import { digestContentOf, type DigestContent } from "@/lib/weekly-digest-compose";
 import { buildFeedAuthor, type FeedAuthorSource } from "@/lib/feed-author";
 import { ORGANIZATION_AVATAR_URL } from "@/lib/system-user-id";
+import { reflectionImageUrl } from "@/lib/reflection-images";
 
 const DEFAULT_PAGE_SIZE = 20;
 const EXCERPT_LENGTH = 180;
@@ -613,6 +614,9 @@ export async function getFeedPage(params: {
           orderBy: { createdAt: "desc" },
           take: query ? SEARCH_POST_SCAN_LIMIT : 1,
         },
+        // Set only for a Weekly Reflection thread: its background image and
+        // the quote snapshot behind the feed row's image-panel look.
+        reflectionPost: { select: { imageFile: true, quoteText: true, quoteAttribution: true } },
         // posts includes the thread's own opening post, so replyCount below
         // subtracts one — same convention as toThreadListItem in forums-server.ts.
         _count: { select: { posts: true, views: true } },
@@ -1132,6 +1136,16 @@ export async function getFeedPage(params: {
             : {}),
           isRestricted: thread.visibility === ForumThreadVisibility.invited,
           isReply,
+          // The image-panel look is only for the thread's own opening row.
+          ...(!isReply && thread.reflectionPost?.quoteText
+            ? {
+                reflectionCard: {
+                  imageUrl: thread.reflectionPost.imageFile ? reflectionImageUrl(thread.reflectionPost.imageFile) : null,
+                  quote: thread.reflectionPost.quoteText,
+                  attribution: thread.reflectionPost.quoteAttribution ?? "",
+                },
+              }
+            : {}),
         };
       };
 

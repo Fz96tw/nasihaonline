@@ -148,4 +148,6 @@ export type ForumThreadDetail = {
   isEditable: boolean;
   /** Optional "Topics" (community-based-categorization initiative, objective 6) — empty for most threads. */
   categories: { id: string; name: string; slug: string }[];
+  /** Only a Weekly Reflection thread: the hero banner's image (null = gradient) and the quote snapshot taken when it was posted. */
+  reflection: { imageUrl: string | null; quote: string; attribution: string } | null;
 };

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { HighlightText } from "@/components/highlight-text";
 import { RestrictedAccessNotice } from "@/components/restricted-access-notice";
+import { ReflectionHero } from "@/components/reflection/reflection-hero";
 import { CLINICAL_DISCUSSIONS_SLUG, getForumThreadAudienceBadge } from "@/lib/forums";
 import { FEED_TYPE_LABELS } from "@/lib/feed";
 import { ForumThreadVisibility, Role } from "@/lib/generated/prisma/enums";
@@ -77,6 +78,8 @@ export default async function ForumThreadPage({
         <RestrictedAccessNotice role={user.role} ownerName={thread.authorName ?? "the author"} />
       )}
 
+      {thread.reflection && <ReflectionHero reflection={thread.reflection} />}
+
       <div>
         <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           <span>{FEED_TYPE_LABELS.forum_thread}</span>
@@ -89,7 +92,8 @@ export default async function ForumThreadPage({
           <div className="flex flex-wrap items-center gap-2">
             {thread.pinned && <Pin className="h-4 w-4 text-primary" />}
             {isRestricted && <Lock className="h-4 w-4 text-muted-foreground" />}
-            <h1 className="text-2xl font-bold tracking-tight">
+            {/* The hero banner already shows the quote, so a reflection thread's title stays for screen readers/SEO but is not repeated visually. */}
+            <h1 className={thread.reflection ? "sr-only" : "text-2xl font-bold tracking-tight"}>
               <HighlightText text={thread.title} query={q} />
             </h1>
             {isRestricted && <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>}

@@ -2968,6 +2968,13 @@ model ReflectionPost {
   quoteId  String?
   quote    ReflectionQuote? @relation(fields: [quoteId], references: [id], onDelete: SetNull)
   postedAt DateTime         @default(now())
+  // Look of the post, fixed when it is created: the background image file
+  // (a name in public/images/weeklyreflection/, null if the folder was empty)
+  // and a snapshot of the quote, so later edits/retirement of the pool quote
+  // never change how an existing post looks in the feed or on its page.
+  imageFile        String?
+  quoteText        String?
+  quoteAttribution String?
 
   @@index([quoteId])
   @@map("reflection_posts")

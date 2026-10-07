@@ -13,6 +13,7 @@ import { ReviewOfferButton } from "@/components/review/review-offer-button";
 import { HighlightText } from "@/components/highlight-text";
 import { useHasMounted } from "@/lib/use-has-mounted";
 import { cn } from "@/lib/utils";
+import { ReflectionFeedCard } from "@/components/feed/reflection-feed-card";
 
 /**
  * YouTube player for a feed row. Autoplays muted (the only autoplay browsers
@@ -106,6 +107,9 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
   // event-list-item.tsx's identical guard on its own event date line.
   const hasMounted = useHasMounted();
   const subtitle = [item.author.titleSpecialty, item.author.countryRegion].filter(Boolean).join(", ");
+  // A Weekly Reflection thread's own row is a full-panel image look instead of
+  // the standard layout (after the hooks above, so hook order is unchanged).
+  if (item.reflectionCard) return <ReflectionFeedCard item={{ ...item, reflectionCard: item.reflectionCard }} q={q} />;
   // Forum threads always carry the same static default image (no per-thread
   // upload), so instead of the full-width hero image other feed types render
   // below their content, it's shown as a small dimmed square in the

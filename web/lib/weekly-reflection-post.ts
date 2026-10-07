@@ -13,6 +13,8 @@ import {
   renderReflectionTemplate,
 } from "@/lib/reflection-template";
 import { getWeeklyReflectionMessage } from "@/lib/settings";
+import { pickNextImage } from "@/lib/reflection-images";
+import { listReflectionImageFiles } from "@/lib/reflection-images-server";
 import { reflectionMessageSchema } from "@/lib/validation/weekly-reflection";
 import { findWeeklyReflectionUser } from "@/lib/system-user";
 import { enqueueForumThreadIndexSync } from "@/lib/queues/search-index-queue";
@@ -65,9 +67,12 @@ export async function postWeeklyReflection(
   // Injectable so tests don't push jobs onto the real Redis search-index queue.
   {
     enqueueIndexSync = enqueueForumThreadIndexSync,
+    listImages = listReflectionImageFiles,
     allowAdditional = false,
   }: {
     enqueueIndexSync?: (threadId: string) => Promise<void>;
+    /** Injectable so tests don't depend on what is in public/images/weeklyreflection/. */
+    listImages?: () => Promise<string[]>;
     /** Admin "post now" with the override confirmed: post a further thread this week (weekKey "<week>-extra-N"). */
     allowAdditional?: boolean;
   } = {},
@@ -103,7 +108,21 @@ export async function postWeeklyReflection(
   const { titleTemplate, bodyTemplate } = await loadMessageTemplates();
   const weekStart = isoWeekStart(now);
   const title = renderReflectionTemplate(titleTemplate, buildTitleValues(quote, weekStart));
-  const body = renderReflectionTemplate(bodyTemplate, buildReflectionValues(quote, weekStart));
+  const values = buildReflectionValues(quote, weekStart);
+  const body = renderReflectionTemplate(bodyTemplate, values);
+
+  // The post's look is fixed now: the least recently used background image
+  // (null when the folder is empty, which just means the gradient look) and a
+  // snapshot of the quote, so later pool edits never change an existing post.
+  const imageHistory = new Map<string, Date>();
+  for (const row of await db.reflectionPost.findMany({
+    where: { imageFile: { not: null } },
+    select: { imageFile: true, postedAt: true },
+    orderBy: { postedAt: "asc" },
+  })) {
+    if (row.imageFile) imageHistory.set(row.imageFile, row.postedAt);
+  }
+  const imageFile = pickNextImage(await listImages(), imageHistory);
 
   let threadId: string;
   try {
@@ -129,7 +148,15 @@ export async function postWeeklyReflection(
         select: { id: true },
       });
       await tx.reflectionPost.create({
-        data: { weekKey, threadId: thread.id, quoteId: quote.id, postedAt: now },
+        data: {
+          weekKey,
+          threadId: thread.id,
+          quoteId: quote.id,
+          postedAt: now,
+          imageFile,
+          quoteText: quote.text,
+          quoteAttribution: values.attribution,
+        },
       });
       await tx.reflectionQuote.update({
         where: { id: quote.id },

@@ -15,6 +15,7 @@ import { getDirectoryMembersByIds, getMentionableMembers } from "@/lib/members-s
 import { getProfileAvatarUrl } from "@/lib/storage";
 import { findMentionedMembers } from "@/lib/mentions";
 import { getSystemUserIds } from "@/lib/system-user";
+import { reflectionImageUrl } from "@/lib/reflection-images";
 import { DIRECTORY_TIERS } from "@/lib/members";
 import { CLINICAL_DISCUSSIONS_SLUG, EVENTS_FORUM_SLUG, LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import { ensureCommunityMembership, getMemberCommunityContext, type MemberCommunityContext } from "@/lib/profile-server";
@@ -410,6 +411,8 @@ export async function getForumThreadDetail(
       visibility: true,
       removed: true,
       categories: { select: { category: { select: { id: true, name: true, slug: true } } } },
+      // Set only for a Weekly Reflection thread — drives the hero banner.
+      reflectionPost: { select: { imageFile: true, quoteText: true, quoteAttribution: true } },
       invitees: {
         select: { userId: true, user: { select: { name: true, profile: { select: { avatarUrl: true } } } } },
         orderBy: { createdAt: "asc" },
@@ -490,6 +493,13 @@ export async function getForumThreadDetail(
     invitees,
     isEditable: !thread.eventId && !thread.knowledgeItemId,
     categories: thread.categories.map((c) => c.category),
+    reflection: thread.reflectionPost?.quoteText
+      ? {
+          imageUrl: thread.reflectionPost.imageFile ? reflectionImageUrl(thread.reflectionPost.imageFile) : null,
+          quote: thread.reflectionPost.quoteText,
+          attribution: thread.reflectionPost.quoteAttribution ?? "",
+        }
+      : null,
   };
 }
 

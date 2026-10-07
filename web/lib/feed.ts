@@ -71,6 +71,14 @@ export type FeedItem = {
   isRestricted?: boolean;
   /** Only a weekly-digest "announcement" item carries this — true when the row is the community's weekly digest, so FeedRow prefixes the title with a digest icon. */
   isDigest?: boolean;
+  /**
+   * Only the opening row of a Weekly Reflection thread carries this: FeedRow
+   * then renders the whole panel with `imageUrl` as its background (a brand
+   * gradient when null) and the quote overlaid. Snapshotted when the thread
+   * was posted, so editing the pool quote later never changes it. Never set
+   * on reply rows or any other thread.
+   */
+  reflectionCard?: { imageUrl: string | null; quote: string; attribution: string };
   /** Only "forum_thread" items carry this — true when the row is a reply/bump row rather than the thread's own opening row. FeedRow keeps a reply row's title at the smaller size. */
   isReply?: boolean;
 };

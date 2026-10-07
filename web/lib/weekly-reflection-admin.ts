@@ -184,7 +184,7 @@ export async function postReflectionNow(
   actorId: string,
   { override = false }: { override?: boolean } = {},
   now: Date = new Date(),
-  options: { enqueueIndexSync?: (threadId: string) => Promise<void> } = {},
+  options: Omit<NonNullable<Parameters<typeof postWeeklyReflection>[1]>, "allowAdditional"> = {},
 ): Promise<WeeklyReflectionResult> {
   const result = await postWeeklyReflection(now, { ...options, allowAdditional: override });
   if (result.status === "posted") {
