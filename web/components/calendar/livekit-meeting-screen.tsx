@@ -13,6 +13,7 @@ import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/compo
 import { PresenterOverlayControl } from "@/components/calendar/presenter-overlay-control";
 import { OverlayGuestControl } from "@/components/calendar/overlay-guest-control";
 import { ShareStage } from "@/components/calendar/share-stage";
+import { RaiseHandControl, RaisedHandsQueue, playHandChime, useRaisedHands } from "@/components/calendar/raise-hand";
 
 /**
  * Title/host banner pinned to the top of the call — per-viewer local state
@@ -169,6 +170,8 @@ type ParticipantSummary = {
   isHost: boolean;
   /** identity is in the live coHostUserIds set (Recording Access initiative) — see CoHostStateListener. Always false for a MeetingRequest. */
   isCoHost: boolean;
+  /** Raise hand is up — read from the participant's `handRaised` attribute (components/calendar/raise-hand.tsx). */
+  handRaised: boolean;
 };
 
 /**
@@ -200,6 +203,7 @@ function ParticipantsListener({
         isLocal: p.isLocal,
         isHost: hostId !== undefined && p.identity === hostId,
         isCoHost: coHostUserIds.includes(p.identity),
+        handRaised: p.attributes?.handRaised === "1",
       })),
     );
   }, [participants, hostId, coHostUserIds, onChange]);
@@ -635,6 +639,11 @@ function ParticipantRow({
         {participant.isLocal && <span className="text-white/50"> (You)</span>}
       </span>
       <span className="flex shrink-0 items-center gap-2">
+        {participant.handRaised && (
+          <span role="img" aria-label="Hand raised" title="Hand raised" className="text-base leading-none">
+            ✋
+          </span>
+        )}
         {participant.isHost ? (
           <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white/70">Host</span>
         ) : isGuestIdentity(participant.identity) ? null : viewerIsHostOrCoHost && coHostsEndpoint ? (
@@ -897,6 +906,7 @@ export function LiveKitMeetingScreen({
   recordingStopEndpoint,
   coHostsEndpoint,
   kickEndpoint,
+  lowerHandEndpoint,
   chatEndpoint,
   title,
   organizerName,
@@ -916,6 +926,8 @@ export function LiveKitMeetingScreen({
   coHostsEndpoint?: string | null;
   /** POST endpoint to force-disconnect a participant — Event: host/co-host; MeetingRequest: sender/organizer only, both enforced server-side (see canKick). */
   kickEndpoint?: string | null;
+  /** POST endpoint for a host/co-host to lower someone else's raised hand — its presence is what enables the raise-hand feature (Events only; null/undefined for a MeetingRequest and quick recordings). */
+  lowerHandEndpoint?: string | null;
   /** POST endpoint for archiving this participant's own chat messages (LiveKit meeting chat archival) — null/undefined for a MeetingRequest, which has no discussion thread to archive into. */
   chatEndpoint?: string | null;
   title: string;
@@ -964,6 +976,7 @@ export function LiveKitMeetingScreen({
   const [resetPending, setResetPending] = useState(false);
   // Identities whose camera is on the presenter overlay; their camera tiles are hidden (see ShareStage).
   const [overlayIds, setOverlayIds] = useState<string[]>([]);
+  const [handAnnouncement, setHandAnnouncement] = useState("");
   const wasRecordingRef = useRef(false);
   // Set right before calling the discard endpoint (handleReset), checked
   // instead of firing onRecordingStopped in the recording-transition effect
@@ -974,6 +987,21 @@ export function LiveKitMeetingScreen({
   const isQuickRecording = maxRecordingSeconds !== undefined;
 
   usePreventScreenShareSelfMirror();
+
+  const raiseHandEnabled = !isQuickRecording && !!lowerHandEndpoint;
+  // Only the host/co-host is told when someone else raises a hand — everyone else just sees the badge.
+  const raisedHands = useRaisedHands(
+    raiseHandEnabled ? room : null,
+    isHostOrCoHost
+      ? (hand) => {
+          const message = `${hand.name} raised a hand`;
+          pushToast(message);
+          setHandAnnouncement(message);
+          playHandChime();
+        }
+      : undefined,
+  );
+  const ownHandRaised = raisedHands.some((hand) => hand.isLocal);
 
   // Countdown + auto-stop (Quick Video Recording & Sharing initiative) —
   // primary, client-side enforcement of maxRecordingSeconds; the
@@ -1131,9 +1159,19 @@ export function LiveKitMeetingScreen({
             kickEndpoint={kickEndpoint}
             onError={pushToast}
           />
+          {raiseHandEnabled && <RaiseHandControl room={room} raised={ownHandRaised} onError={pushToast} />}
           <PresenterOverlayControl room={room} onError={pushToast} onOverlayIds={setOverlayIds} />
           <OverlayGuestControl room={room} onOverlayIds={setOverlayIds} />
         </TopLeftOverlay>
+      )}
+      {raiseHandEnabled && isHostOrCoHost && lowerHandEndpoint && (
+        <RaisedHandsQueue
+          room={room}
+          hands={raisedHands}
+          announcement={handAnnouncement}
+          lowerHandEndpoint={lowerHandEndpoint}
+          onError={pushToast}
+        />
       )}
       <LiveKitRoom
         token={credentials.token}

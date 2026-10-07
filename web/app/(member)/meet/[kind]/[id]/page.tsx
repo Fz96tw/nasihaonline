@@ -202,6 +202,8 @@ export default async function MeetPage({
       : `/api/inbox/meeting-requests/${id}/meeting/recording/stop`;
   // Event-only (Recording Access initiative) — a MeetingRequest has no co-host concept.
   const coHostsEndpoint = kind === "event" ? `/api/events/${id}/meeting/co-hosts` : null;
+  // Event-only — raise hand is for events (a MeetingRequest is a private 1:1 where interrupting is just speaking).
+  const lowerHandEndpoint = kind === "event" ? `/api/events/${id}/meeting/lower-hand` : null;
   const kickEndpoint =
     kind === "event" ? `/api/events/${id}/meeting/kick` : `/api/inbox/meeting-requests/${id}/meeting/kick`;
   // A MeetingRequest has no discussion thread — its chat compiles into a
@@ -222,6 +224,7 @@ export default async function MeetPage({
       recordingStopEndpoint={recordingStopEndpoint}
       coHostsEndpoint={coHostsEndpoint}
       kickEndpoint={kickEndpoint}
+      lowerHandEndpoint={lowerHandEndpoint}
       chatEndpoint={chatEndpoint}
       backHref={backHref}
     />

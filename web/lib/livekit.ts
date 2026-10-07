@@ -96,6 +96,10 @@ export async function mintLiveKitToken(
       roomJoin: true,
       canPublish: true,
       canSubscribe: true,
+      // Lets the client call localParticipant.setAttributes() — the raise-hand
+      // signal (see components/calendar/raise-hand.tsx). Without this grant
+      // LiveKit silently rejects client-side attribute updates.
+      canUpdateOwnMetadata: true,
       ...(isOrganizer ? { roomAdmin: true } : {}),
     });
     return { token: await token.toJwt(), serverUrl: LIVEKIT_URL };
@@ -219,6 +223,26 @@ export async function removeLiveKitParticipant(roomName: string, identity: strin
     return true;
   } catch (error) {
     console.error("[livekit] Failed to remove participant", error);
+    return false;
+  }
+}
+
+/**
+ * Clears one participant's raise-hand attributes server-side (host/co-host
+ * "Lower hand" — a client can only ever edit its own attributes, so lowering
+ * someone else's hand has to go through the RoomServiceClient, same as
+ * removeLiveKitParticipant). LiveKit then pushes ParticipantAttributesChanged
+ * to every client, so the badge/queue update with no further signalling.
+ * Empty-string values delete an attribute.
+ */
+export async function lowerParticipantHand(roomName: string, identity: string): Promise<boolean> {
+  const roomService = getRoomServiceClient();
+  if (!roomService) return false;
+  try {
+    await roomService.updateParticipant(roomName, identity, { attributes: { handRaised: "", handRaisedAt: "" } });
+    return true;
+  } catch (error) {
+    console.error("[livekit] Failed to lower participant hand", error);
     return false;
   }
 }

@@ -11,12 +11,12 @@ import {
   FocusLayoutContainer,
   GridLayout,
   LayoutContextProvider,
-  ParticipantTile,
   RoomAudioRenderer,
   useCreateLayoutContext,
   useTracks,
   type WidgetState,
 } from "@livekit/components-react";
+import { HandAwareTile } from "@/components/calendar/raise-hand";
 
 /**
  * Replaces LiveKit's `VideoConference` prefab (Camera Overlay / Co-Ghosts
@@ -59,7 +59,7 @@ export function ShareStage({ overlayIds }: { overlayIds: string[] }) {
       <div className="lk-focus-layout-wrapper">
         <FocusLayoutContainer>
           <CarouselLayout tracks={cameras}>
-            <ParticipantTile />
+            <HandAwareTile />
           </CarouselLayout>
           <FocusLayout trackRef={screenShares[0]} />
         </FocusLayoutContainer>
@@ -69,7 +69,7 @@ export function ShareStage({ overlayIds }: { overlayIds: string[] }) {
     stage = (
       <div className="lk-grid-layout-wrapper">
         <GridLayout tracks={[...screenShares, ...cameras]}>
-          <ParticipantTile />
+          <HandAwareTile />
         </GridLayout>
       </div>
     );

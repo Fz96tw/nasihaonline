@@ -78,6 +78,7 @@ export function MeetingWaitingRoom({
   recordingStopEndpoint,
   coHostsEndpoint,
   kickEndpoint,
+  lowerHandEndpoint,
   chatEndpoint,
   backHref,
 }: {
@@ -93,6 +94,8 @@ export function MeetingWaitingRoom({
   coHostsEndpoint?: string | null;
   /** POST endpoint to force-disconnect a participant — Event (host/co-host) and MeetingRequest (sender/organizer only) both support this. */
   kickEndpoint?: string | null;
+  /** POST endpoint for a host/co-host to lower another participant's raised hand — also what turns the raise-hand feature on; null for a MeetingRequest. */
+  lowerHandEndpoint?: string | null;
   /** POST endpoint for archiving in-meeting chat into a discussion thread — null for a MeetingRequest, which has none. */
   chatEndpoint?: string | null;
   backHref: string;
@@ -286,6 +289,7 @@ export function MeetingWaitingRoom({
         recordingStopEndpoint={recordingStopEndpoint}
         coHostsEndpoint={coHostsEndpoint}
         kickEndpoint={kickEndpoint}
+        lowerHandEndpoint={lowerHandEndpoint}
         chatEndpoint={chatEndpoint}
         title={status.title}
         organizerName={status.organizerName}
