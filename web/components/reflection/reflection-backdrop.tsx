@@ -34,7 +34,12 @@ export function ReflectionBackdrop({
   }, [imageUrl]);
 
   return (
-    <div className={cn("relative isolate overflow-hidden bg-gradient-to-br from-blue-700 via-blue-900 to-slate-950 text-white", className)}>
+    <div
+      className={cn(
+        "relative isolate overflow-hidden bg-gradient-to-br from-blue-700 via-blue-900 to-slate-950 text-white [text-shadow:0_1px_8px_rgba(0,0,0,.5)]",
+        className,
+      )}
+    >
       {showImage && (
         // eslint-disable-next-line @next/next/no-img-element -- static file from public/, sized by the container (object-cover); same rationale as the feed's other hero images
         <img
@@ -46,8 +51,10 @@ export function ReflectionBackdrop({
           onError={() => setBrokenUrl(imageUrl)}
         />
       )}
-      {/* Darkens the whole panel (text sits at the top, middle and bottom), a little more at the edges. */}
-      <div className="absolute inset-0 -z-10 bg-gradient-to-b from-black/70 via-black/45 to-black/70" aria-hidden="true" />
+      {/* A light scrim over the whole panel (text sits at the top, middle and bottom), a little more at the
+          edges. Kept gentle so the photo still reads as a photo; the white text stays legible on bright
+          images through the soft text-shadow on the wrapper above rather than a heavy overlay. */}
+      <div className="absolute inset-0 -z-10 bg-gradient-to-b from-black/35 via-black/15 to-black/40" aria-hidden="true" />
       {children}
     </div>
   );
