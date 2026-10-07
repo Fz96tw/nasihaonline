@@ -32,6 +32,15 @@ const DEFAULT_VALUES: CreateForumThreadValues = {
   categoryIds: [],
 };
 
+const BODY_PLACEHOLDER = [
+  "Share the details here, for example:",
+  "• The situation or question, with relevant background",
+  "• What you've already tried or considered",
+  "• What kind of input would help most",
+  "",
+  "Tip: you can copy or cut an image and paste it straight into this box to include it.",
+].join("\n");
+
 /**
  * The "Post" body Textarea, split out so usePasteImageUpload (a hook) is
  * called at a real component's top level rather than inside FormField's
@@ -100,7 +109,8 @@ function ThreadBodyField({
         </div>
       )}
       <Textarea
-        rows={6}
+        rows={8}
+        placeholder={BODY_PLACEHOLDER}
         name={field.name}
         value={field.value}
         onChange={(event) => field.onChange(event.target.value)}
