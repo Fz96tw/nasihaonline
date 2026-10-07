@@ -49,6 +49,12 @@ describe("Weekly Reflection posting (DB-backed)", { skip }, () => {
     forumId = forum.id;
     systemUserId = (await getOrCreateWeeklyReflectionUser()).id;
 
+    // Clean slate: the admin suite shares this database, and both depend on exact counts.
+    await db.reflectionPost.deleteMany({});
+    await db.forumThread.deleteMany({ where: { forumId } });
+    await db.reflectionQuote.deleteMany({});
+    await db.siteSettings.deleteMany({});
+
     for (const n of [1, 2, 3]) {
       await db.reflectionQuote.upsert({
         where: { text: `Test quote ${n}` },
@@ -202,7 +208,17 @@ describe("Weekly Reflection posting (DB-backed)", { skip }, () => {
     // Default schedule is Monday 09:00 UTC. runWeeklyReflectionCheck has no
     // injection seam, so use a week whose posting we can't confuse with the
     // stubbed index queue: assert only on database effects.
-    assert.deepEqual(await runCheck(utc(2030, 3, 4, 8)), { status: "not-due" });
+    // The schedule is off by default (see SiteSettings.weeklyReflectionEnabled); switch it on, Monday 09:00 UTC.
+    await db.siteSettings.upsert({
+      where: { id: 1 },
+      create: { id: 1, weeklyReflectionEnabled: true },
+      update: { weeklyReflectionEnabled: true },
+    });
+    assert.deepEqual(await runCheck(utc(2030, 3, 4, 8), { enqueueIndexSync }), { status: "not-due" });
     assert.equal(await db.reflectionPost.count({ where: { weekKey: "2030-W10" } }), 0);
+
+    const due = await runCheck(utc(2030, 3, 4, 9), { enqueueIndexSync });
+    assert.equal(due.status, "posted");
+    assert.equal(await db.reflectionPost.count({ where: { weekKey: "2030-W10" } }), 1);
   });
 });

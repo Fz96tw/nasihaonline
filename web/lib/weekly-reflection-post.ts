@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { ForumThreadVisibility } from "@/lib/generated/prisma/enums";
 import { WEEKLY_REFLECTION_FORUM_SLUG } from "@/lib/forums";
-import { pickNextQuote } from "@/lib/reflection-quotes";
+import { resolveNextReflectionQuote } from "@/lib/reflection-quotes-server";
 import { isoWeekKey, isoWeekStart } from "@/lib/reflection-schedule";
 import { findWeeklyReflectionUser } from "@/lib/system-user";
 import { enqueueForumThreadIndexSync } from "@/lib/queues/search-index-queue";
@@ -58,12 +58,24 @@ function buildBody(quote: { text: string; author: string; source: string | null;
 export async function postWeeklyReflection(
   now: Date = new Date(),
   // Injectable so tests don't push jobs onto the real Redis search-index queue.
-  { enqueueIndexSync = enqueueForumThreadIndexSync }: { enqueueIndexSync?: (threadId: string) => Promise<void> } = {},
+  {
+    enqueueIndexSync = enqueueForumThreadIndexSync,
+    allowAdditional = false,
+  }: {
+    enqueueIndexSync?: (threadId: string) => Promise<void>;
+    /** Admin "post now" with the override confirmed: post a further thread this week (weekKey "<week>-extra-N"). */
+    allowAdditional?: boolean;
+  } = {},
 ): Promise<WeeklyReflectionResult> {
-  const weekKey = isoWeekKey(now);
+  const baseKey = isoWeekKey(now);
+  let weekKey = baseKey;
 
   const existing = await db.reflectionPost.findUnique({ where: { weekKey }, select: { threadId: true } });
-  if (existing) return { status: "already-posted", weekKey, threadId: existing.threadId };
+  if (existing) {
+    if (!allowAdditional) return { status: "already-posted", weekKey, threadId: existing.threadId };
+    const extras = await db.reflectionPost.count({ where: { weekKey: { startsWith: `${baseKey}-extra-` } } });
+    weekKey = `${baseKey}-extra-${extras + 1}`;
+  }
 
   const skip = (reason: WeeklyReflectionSkipReason): WeeklyReflectionResult => {
     console.warn(`[weekly-reflection] skipping ${weekKey}: ${SKIP_MESSAGES[reason]}`);
@@ -79,9 +91,9 @@ export async function postWeeklyReflection(
   const author = await findWeeklyReflectionUser();
   if (!author) return skip("system-user-missing");
 
-  const picked = pickNextQuote(await db.reflectionQuote.findMany({ where: { active: true } }));
-  if (picked.status === "empty") return skip("pool-empty");
-  const quote = picked.quote;
+  const next = await resolveNextReflectionQuote();
+  if (!next) return skip("pool-empty");
+  const { quote } = next;
 
   let threadId: string;
   try {
@@ -112,6 +124,11 @@ export async function postWeeklyReflection(
       await tx.reflectionQuote.update({
         where: { id: quote.id },
         data: { lastPostedAt: now, timesPosted: { increment: 1 } },
+      });
+      // Consume an admin's "swap" override so it applies to exactly one post.
+      await tx.siteSettings.updateMany({
+        where: { id: 1, weeklyReflectionNextQuoteId: quote.id },
+        data: { weeklyReflectionNextQuoteId: null },
       });
       return thread.id;
     });

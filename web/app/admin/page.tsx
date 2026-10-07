@@ -118,6 +118,12 @@ const ADMIN_SECTIONS = [
     group: "Communications",
   },
   {
+    href: "/admin/weekly-reflection",
+    title: "Weekly Reflection",
+    description: "Manage the weekly quote thread: schedule, quote pool and what posts next.",
+    group: "Communications",
+  },
+  {
     href: "/admin/email-notifications",
     title: "Email Notifications",
     description: "Turn member-wide broadcast emails on or off to manage send quota.",

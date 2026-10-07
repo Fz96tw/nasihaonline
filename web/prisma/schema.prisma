@@ -344,6 +344,16 @@ model SiteSettings {
   // replaced per recipient. The intro may use blank lines for paragraphs.
   weeklyDigestEmailSubject         String         @default("See what's been happening at NASIHA")
   weeklyDigestEmailIntro           String         @default("Hi {firstName}, it's been a little while, and we've missed you. Here's a look at what's happened in the community recently.")
+  // Weekly Reflection forum thread (lib/weekly-reflection-job.ts), managed
+  // at /admin/weekly-reflection. Off by default: it posts to the whole
+  // community unprompted, so an admin switches it on after reviewing the quote
+  // pool. Day/hour are UTC, read fresh on every worker tick so changes apply
+  // without a redeploy. `NextQuoteId` is the admin's "swap" override — used (and
+  // cleared) by the next post in preference to the normal rotation.
+  weeklyReflectionEnabled          Boolean        @default(false)
+  weeklyReflectionDayOfWeek        Int            @default(1) // 0 = Sunday … 6 = Saturday
+  weeklyReflectionHour             Int            @default(9) // 0–23, UTC
+  weeklyReflectionNextQuoteId      String?
   updatedAt                        DateTime       @updatedAt
 
   @@map("site_settings")

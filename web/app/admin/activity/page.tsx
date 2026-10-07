@@ -26,6 +26,7 @@ const ACTIVITY_DOMAIN_FILTERS: Record<string, { label: string; entityType: strin
   contact: { label: "Contact Messages", entityType: "ContactMessage" },
   ledger: { label: "Knowledge Hours Ledger", entityType: "ContributionLedger" },
   users: { label: "Users", entityType: "User" },
+  reflection: { label: "Weekly Reflection", entityType: ["ReflectionQuote", "ReflectionPost", "SiteSettings"] },
 };
 
 function filterPillClass(active: boolean): string {

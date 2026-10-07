@@ -180,3 +180,41 @@ export async function setWeeklyDigestSettings(input: Partial<WeeklyDigestSetting
     update: input,
   });
 }
+
+/** Weekly Reflection schedule — see the SiteSettings.weeklyReflection* schema comment. */
+export type WeeklyReflectionSettings = {
+  weeklyReflectionEnabled: boolean;
+  weeklyReflectionDayOfWeek: number;
+  weeklyReflectionHour: number;
+};
+
+export async function getWeeklyReflectionSettings(): Promise<WeeklyReflectionSettings & { weeklyReflectionNextQuoteId: string | null }> {
+  const settings = await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID },
+    update: {},
+  });
+  return {
+    weeklyReflectionEnabled: settings.weeklyReflectionEnabled,
+    weeklyReflectionDayOfWeek: settings.weeklyReflectionDayOfWeek,
+    weeklyReflectionHour: settings.weeklyReflectionHour,
+    weeklyReflectionNextQuoteId: settings.weeklyReflectionNextQuoteId,
+  };
+}
+
+export async function setWeeklyReflectionSettings(input: Partial<WeeklyReflectionSettings>): Promise<void> {
+  await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID, ...input },
+    update: input,
+  });
+}
+
+/** The admin's "swap" override: the quote to post next instead of the normal rotation, or null to clear it. */
+export async function setWeeklyReflectionNextQuoteId(quoteId: string | null): Promise<void> {
+  await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID, weeklyReflectionNextQuoteId: quoteId },
+    update: { weeklyReflectionNextQuoteId: quoteId },
+  });
+}

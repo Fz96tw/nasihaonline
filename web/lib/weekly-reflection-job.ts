@@ -1,17 +1,23 @@
 // No "server-only" guard: imported by scripts/worker.ts, which runs outside
 // Next's server runtime — same convention as lib/weekly-digest-job.ts.
-import { DEFAULT_REFLECTION_SCHEDULE, isReflectionDue, type ReflectionSchedule } from "@/lib/reflection-schedule";
+import { isReflectionDue, type ReflectionSchedule } from "@/lib/reflection-schedule";
+import { getWeeklyReflectionSettings } from "@/lib/settings";
 import { postWeeklyReflection, type WeeklyReflectionResult } from "@/lib/weekly-reflection-post";
 
 export type WeeklyReflectionCheckResult = { status: "disabled" } | { status: "not-due" } | WeeklyReflectionResult;
 
 /**
- * Where the schedule comes from. A fixed default for now (Monday 09:00 UTC,
- * enabled); read fresh on every tick so a settings-backed implementation can
- * replace this body without touching the job or the worker.
+ * The schedule, read fresh from SiteSettings on every tick — so an admin's
+ * enable/day/hour change (/admin/weekly-reflection) applies on the next
+ * 15-minute tick with no redeploy or re-registration.
  */
 export async function getReflectionSchedule(): Promise<ReflectionSchedule> {
-  return DEFAULT_REFLECTION_SCHEDULE;
+  const settings = await getWeeklyReflectionSettings();
+  return {
+    enabled: settings.weeklyReflectionEnabled,
+    dayOfWeek: settings.weeklyReflectionDayOfWeek,
+    hour: settings.weeklyReflectionHour,
+  };
 }
 
 /**
@@ -19,9 +25,12 @@ export async function getReflectionSchedule(): Promise<ReflectionSchedule> {
  * worker. Cheap when nothing is due; when due, postWeeklyReflection's own
  * once-per-week guard makes repeated ticks (and restarts) harmless.
  */
-export async function runWeeklyReflectionCheck(now: Date = new Date()): Promise<WeeklyReflectionCheckResult> {
+export async function runWeeklyReflectionCheck(
+  now: Date = new Date(),
+  options: Parameters<typeof postWeeklyReflection>[1] = {},
+): Promise<WeeklyReflectionCheckResult> {
   const schedule = await getReflectionSchedule();
   if (!schedule.enabled) return { status: "disabled" };
   if (!isReflectionDue(now, schedule)) return { status: "not-due" };
-  return postWeeklyReflection(now);
+  return postWeeklyReflection(now, options);
 }
