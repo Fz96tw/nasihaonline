@@ -14,23 +14,28 @@ import {
 import { getWeeklyDigestSettings } from "@/lib/settings";
 import { composeWeeklyDigest, type WeeklyDigest, type WeeklyDigestData } from "@/lib/weekly-digest-compose";
 import type { WeeklyDigestSettings } from "@/lib/weekly-digest-config";
+import { digestPeriod, scheduleOf } from "@/lib/weekly-digest-schedule";
 
-export const DIGEST_WINDOW_DAYS = 7;
+/** How far ahead "upcoming events" looks, at most — a monthly digest still only lists the next two weeks. */
+const MAX_UPCOMING_DAYS = 14;
 /** Most public titles listed per section — keeps the post readable in a busy week. */
 const MAX_LISTED_PER_SECTION = 8;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Gathers the past week's activity ending at `windowEnd`. Everything shown by
+ * Gathers the activity from `windowStart` to `windowEnd` (one digest period). Everything shown by
  * title is public to every member (library `public`, events/threads
  * `community` visibility); restricted/invited-only items are only counted.
  * Peer reviews, replies and new members are counts only, so nothing about a
  * private item ever leaves this function except a number.
  */
-export async function gatherWeeklyDigestData(windowEnd: Date): Promise<WeeklyDigestData> {
-  const windowStart = new Date(windowEnd.getTime() - DIGEST_WINDOW_DAYS * DAY_MS);
-  const upcomingEnd = new Date(windowEnd.getTime() + DIGEST_WINDOW_DAYS * DAY_MS);
+export async function gatherWeeklyDigestData(
+  windowEnd: Date,
+  windowStart: Date,
+  upcomingDays = 7,
+): Promise<WeeklyDigestData> {
+  const upcomingEnd = new Date(windowEnd.getTime() + Math.min(upcomingDays, MAX_UPCOMING_DAYS) * DAY_MS);
   const inWindow = { gte: windowStart, lt: windowEnd };
 
   const [
@@ -161,7 +166,7 @@ export async function gatherWeeklyDigestData(windowEnd: Date): Promise<WeeklyDig
 }
 
 /**
- * Builds this week's digest, or null when there's nothing to report (a quiet
+ * Builds this period's digest, or null when there's nothing to report (a quiet
  * week — no post and no emails). `settings` is injectable so a preview can
  * pass unsaved values.
  */
@@ -170,6 +175,7 @@ export async function generateWeeklyDigest(
   settings?: WeeklyDigestSettings,
 ): Promise<WeeklyDigest | null> {
   const resolved = settings ?? (await getWeeklyDigestSettings());
-  const data = await gatherWeeklyDigestData(windowEnd);
+  const period = digestPeriod(windowEnd, scheduleOf(resolved));
+  const data = await gatherWeeklyDigestData(windowEnd, period.start, period.days);
   return composeWeeklyDigest(data, resolved, process.env.NEXT_PUBLIC_APP_URL ?? "");
 }

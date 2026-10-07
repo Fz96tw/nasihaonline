@@ -1,8 +1,19 @@
 // Client-safe (no db import) — shared by lib/settings.ts, the settings API's
 // Zod schema and the admin form, same split as lib/admission-phase.ts.
 
+export type DigestFrequency = "weekly" | "biweekly" | "monthly";
+
+export const DIGEST_FREQUENCIES: { value: DigestFrequency; label: string }[] = [
+  { value: "weekly", label: "Weekly" },
+  { value: "biweekly", label: "Every 2 weeks" },
+  { value: "monthly", label: "Monthly" },
+];
+
+export const DIGEST_FREQUENCY_VALUES = DIGEST_FREQUENCIES.map((f) => f.value) as [DigestFrequency, ...DigestFrequency[]];
+
 export type WeeklyDigestSettings = {
   weeklyDigestEnabled: boolean;
+  weeklyDigestFrequency: DigestFrequency;
   weeklyDigestDayOfWeek: number;
   weeklyDigestHour: number;
   weeklyDigestTimezone: string;

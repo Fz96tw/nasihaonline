@@ -18,6 +18,7 @@ import {
   setWeeklyDigestSettings,
 } from "@/lib/settings";
 import {
+  DIGEST_FREQUENCY_VALUES,
   WEEKLY_DIGEST_EMAIL_INTRO_MAX,
   WEEKLY_DIGEST_EMAIL_SUBJECT_MAX,
   WEEKLY_DIGEST_TIMEZONE_VALUES,
@@ -34,6 +35,7 @@ const patchSchema = z.object({
   bodyFont: z.nativeEnum(BodyFont).optional(),
   headingFont: z.nativeEnum(HeadingFont).optional(),
   weeklyDigestEnabled: z.boolean().optional(),
+  weeklyDigestFrequency: z.enum(DIGEST_FREQUENCY_VALUES).optional(),
   weeklyDigestDayOfWeek: z.number().int().min(0).max(6).optional(),
   weeklyDigestHour: z.number().int().min(0).max(23).optional(),
   weeklyDigestTimezone: z.enum(WEEKLY_DIGEST_TIMEZONE_VALUES).optional(),
@@ -55,6 +57,7 @@ const patchSchema = z.object({
 
 const WEEKLY_DIGEST_KEYS = [
   "weeklyDigestEnabled",
+  "weeklyDigestFrequency",
   "weeklyDigestDayOfWeek",
   "weeklyDigestHour",
   "weeklyDigestTimezone",

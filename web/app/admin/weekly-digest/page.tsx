@@ -31,9 +31,9 @@ export default async function AdminWeeklyDigestPage() {
         <Link href="/admin" className="text-sm text-muted-foreground hover:underline">
           ← Back to Admin
         </Link>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">Weekly Digest</h1>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">Community Digest</h1>
         <p className="text-muted-foreground">
-          A weekly announcement summarizing new members, content and activity across the community.
+          A recurring announcement summarizing new members, content and activity across the community.
         </p>
       </div>
 

@@ -2,6 +2,7 @@
 // digest generator (lib/weekly-digest-server.ts gathers the data), kept
 // separate so the privacy/omission rules can be exercised without a database.
 import type { WeeklyDigestSettings } from "@/lib/weekly-digest-config";
+import { periodWording } from "@/lib/weekly-digest-schedule";
 
 type Listed = { id: string; title: string };
 
@@ -123,6 +124,7 @@ export function composeWeeklyDigest(
   baseUrl: string,
 ): WeeklyDigest | null {
   const tz = settings.weeklyDigestTimezone;
+  const wording = periodWording(settings.weeklyDigestFrequency);
   const min = settings.weeklyDigestPrivateCountMin;
   let foldedPrivate = false;
 
@@ -195,7 +197,7 @@ export function composeWeeklyDigest(
     sections.push({
       icon: "reviews",
       heading: "Peer reviews",
-      lines: [`${data.peerReviewsStarted} ${plural(data.peerReviewsStarted, "peer review", "peer reviews")} started this week.`],
+      lines: [`${data.peerReviewsStarted} ${plural(data.peerReviewsStarted, "peer review", "peer reviews")} started ${wording.phrase}.`],
     });
   }
 
@@ -217,7 +219,7 @@ export function composeWeeklyDigest(
       icon: "hours",
       heading: "Knowledge Hours",
       lines: [
-        `${formatHours(hours.earnedThisWeek)} Knowledge ${plural(hours.earnedThisWeek, "Hour", "Hours")} earned this week. ${formatHours(hours.earnedAllTime)} all-time.`,
+        `${formatHours(hours.earnedThisWeek)} Knowledge ${plural(hours.earnedThisWeek, "Hour", "Hours")} earned ${wording.phrase}. ${formatHours(hours.earnedAllTime)} all-time.`,
       ],
     });
   }
@@ -226,7 +228,7 @@ export function composeWeeklyDigest(
     sections.push({
       icon: "private",
       heading: "Private activity",
-      lines: ["Some additional activity took place in private spaces this week."],
+      lines: [`Some additional activity took place in private spaces ${wording.phrase}.`],
     });
   }
 
@@ -253,9 +255,9 @@ export function composeWeeklyDigest(
     .join(" · ");
 
   const lastDay = new Date(data.windowEnd.getTime() - 1);
-  const title = `This week at NASIHA: ${formatDay(data.windowStart, tz)} – ${formatDay(lastDay, tz)}`;
+  const title = `${wording.titlePrefix}: ${formatDay(data.windowStart, tz)} – ${formatDay(lastDay, tz)}`;
   const content: DigestContent = {
-    intro: "Here's what happened in our community this week.",
+    intro: `Here's what happened in our community ${wording.phrase}.`,
     outro: "See you in the community.",
     summary,
     stats,

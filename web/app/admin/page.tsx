@@ -113,8 +113,8 @@ const ADMIN_SECTIONS = [
   },
   {
     href: "/admin/weekly-digest",
-    title: "Weekly Digest",
-    description: "Schedule and configure the weekly community activity summary.",
+    title: "Community Digest",
+    description: "Schedule and configure the recurring community activity summary.",
     group: "Communications",
   },
   {

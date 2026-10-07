@@ -152,6 +152,7 @@ export async function getWeeklyDigestSettings(): Promise<WeeklyDigestSettings> {
   });
   return {
     weeklyDigestEnabled: settings.weeklyDigestEnabled,
+    weeklyDigestFrequency: settings.weeklyDigestFrequency,
     weeklyDigestDayOfWeek: settings.weeklyDigestDayOfWeek,
     weeklyDigestHour: settings.weeklyDigestHour,
     weeklyDigestTimezone: settings.weeklyDigestTimezone,

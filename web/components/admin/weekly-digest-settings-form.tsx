@@ -10,6 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { getCsrfToken } from "@/lib/csrf-client";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  DIGEST_FREQUENCIES,
+  type DigestFrequency,
   WEEKLY_DIGEST_EMAIL_INTRO_MAX,
   WEEKLY_DIGEST_EMAIL_SUBJECT_MAX,
   WEEKDAY_LABELS,
@@ -149,17 +151,44 @@ export function WeeklyDigestSettingsForm({ initial }: { initial: WeeklyDigestSet
         <CardHeader>
           <CardTitle>Schedule</CardTitle>
           <CardDescription>
-            When the digest is generated. It covers the seven days before it runs. If nothing happened, no post or emails are sent. Leave it off on the
+            When the digest is generated. It covers the period since the previous one. If nothing happened, no post or emails are sent. Leave it off on the
             test instance so only the live site posts one.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <SwitchRow
-            label="Weekly digest"
-            hint="Generate a digest announcement every week."
+            label="Community digest"
+            hint="Generate a digest announcement on the schedule below."
             checked={values.weeklyDigestEnabled}
             onChange={(v) => set("weeklyDigestEnabled", v)}
           />
+          <div className="flex flex-col gap-2">
+            <label htmlFor="digest-frequency" className="text-sm font-medium">
+              How often
+            </label>
+            <Select
+              value={values.weeklyDigestFrequency}
+              onValueChange={(v) => set("weeklyDigestFrequency", v as DigestFrequency)}
+            >
+              <SelectTrigger id="digest-frequency" className="w-48" aria-label="How often">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DIGEST_FREQUENCIES.map((frequency) => (
+                  <SelectItem key={frequency.value} value={frequency.value}>
+                    {frequency.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {values.weeklyDigestFrequency === "monthly"
+                ? `Goes out on the first ${WEEKDAY_LABELS[values.weeklyDigestDayOfWeek]} of each month.`
+                : values.weeklyDigestFrequency === "biweekly"
+                  ? `Goes out every other ${WEEKDAY_LABELS[values.weeklyDigestDayOfWeek]}.`
+                  : `Goes out every ${WEEKDAY_LABELS[values.weeklyDigestDayOfWeek]}.`}
+            </p>
+          </div>
           <div className="flex flex-wrap gap-3">
             <Select
               value={String(values.weeklyDigestDayOfWeek)}

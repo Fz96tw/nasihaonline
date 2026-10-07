@@ -1,18 +1,17 @@
 // No "server-only" guard: imported by scripts/worker.ts (the weekly-digest
 // check), which runs outside Next's server runtime — same convention as
 // lib/inbox-reminders.ts.
-import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import { db } from "@/lib/db";
 import { Role } from "@/lib/generated/prisma/enums";
 import { getWeeklyDigestSettings } from "@/lib/settings";
 import { createAnnouncementDraft, publishAnnouncementDraft } from "@/lib/announcements-server";
 import { generateWeeklyDigest } from "@/lib/weekly-digest-server";
+import { latestScheduledFire, scheduleOf } from "@/lib/weekly-digest-schedule";
 import type { WeeklyDigest } from "@/lib/weekly-digest-compose";
 import { buildTeaserEmail } from "@/lib/weekly-digest-email";
 import { enqueueAnnouncementIndexSync } from "@/lib/queues/search-index-queue";
 
 const SETTINGS_ROW_ID = 1;
-const WEEK_DAYS = 7;
 /**
  * How long after its scheduled time a missed digest is still produced — covers
  * a worker that was down or restarting at the exact fire time. Past this it's
@@ -20,19 +19,7 @@ const WEEK_DAYS = 7;
  */
 const CATCH_UP_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-/**
- * The most recent moment at or before `now` that falls on `dayOfWeek` (0 =
- * Sunday) at `hour`:00 wall-clock time in `timeZone` — as a UTC instant, so
- * daylight-saving shifts are handled by the zone rather than by adding 7×24h.
- */
-export function latestScheduledFire(now: Date, dayOfWeek: number, hour: number, timeZone: string): Date {
-  const local = toZonedTime(now, timeZone);
-  const candidate = new Date(local);
-  candidate.setHours(hour, 0, 0, 0);
-  candidate.setDate(candidate.getDate() - ((local.getDay() - dayOfWeek + WEEK_DAYS) % WEEK_DAYS));
-  if (candidate.getTime() > local.getTime()) candidate.setDate(candidate.getDate() - WEEK_DAYS);
-  return fromZonedTime(candidate, timeZone);
-}
+export { latestScheduledFire };
 
 export type WeeklyDigestCheckResult =
   | { status: "disabled" }
@@ -58,7 +45,7 @@ export async function runWeeklyDigestCheck(now: Date = new Date()): Promise<Week
   const settings = await getWeeklyDigestSettings();
   if (!settings.weeklyDigestEnabled) return { status: "disabled" };
 
-  const fireAt = latestScheduledFire(now, settings.weeklyDigestDayOfWeek, settings.weeklyDigestHour, settings.weeklyDigestTimezone);
+  const fireAt = latestScheduledFire(now, scheduleOf(settings));
   const fireIso = fireAt.toISOString();
   if (now.getTime() - fireAt.getTime() > CATCH_UP_WINDOW_MS) return { status: "not-due", fireAt: fireIso };
 
@@ -178,9 +165,17 @@ export async function previewWeeklyDigest(
 /** Where an existing digest is in its life, so a link to it can go to the right page (a draft isn't viewable by members; a retracted one is neither). */
 export type DigestState = "draft" | "published" | "retracted";
 
+/**
+ * The digest already covering the period keyed by `weekKey` — or a later one.
+ * "Or a later one" matters when the frequency changes: switching from weekly
+ * to every-2-weeks can make the latest on-cadence fire earlier than a digest
+ * that already exists, and generating that older period now would be a
+ * backdated near-duplicate.
+ */
 async function digestStateOf(weekKey: Date): Promise<{ id: string; state: DigestState } | null> {
-  const row = await db.announcement.findUnique({
-    where: { digestPeriodEnd: weekKey },
+  const row = await db.announcement.findFirst({
+    where: { digestPeriodEnd: { gte: weekKey } },
+    orderBy: { digestPeriodEnd: "desc" },
     select: { id: true, sentAt: true, retractedAt: true },
   });
   if (!row) return null;
@@ -202,7 +197,7 @@ export type GenerateNowResult =
  */
 export async function generateWeeklyDigestNow(now: Date = new Date()): Promise<GenerateNowResult> {
   const settings = await getWeeklyDigestSettings();
-  const weekKey = latestScheduledFire(now, settings.weeklyDigestDayOfWeek, settings.weeklyDigestHour, settings.weeklyDigestTimezone);
+  const weekKey = latestScheduledFire(now, scheduleOf(settings));
 
   const existing = await digestStateOf(weekKey);
   if (existing) return { status: "duplicate", announcementId: existing.id, state: existing.state };

@@ -315,6 +315,10 @@ model SiteSettings {
   // A week with nothing to report (across the sections enabled below)
   // produces no post and no emails — not configurable.
   weeklyDigestEnabled              Boolean        @default(false)
+  // How often a digest goes out: weekly, every 2 weeks (alternating weeks),
+  // or monthly (the first configured weekday of the month). Schedule math is
+  // in lib/weekly-digest-schedule.ts.
+  weeklyDigestFrequency            DigestFrequency @default(weekly)
   weeklyDigestDayOfWeek            Int            @default(1) // 0 = Sunday … 6 = Saturday
   weeklyDigestHour                 Int            @default(9) // 0–23, in weeklyDigestTimezone
   weeklyDigestTimezone             String         @default("America/New_York")
@@ -343,6 +347,12 @@ model SiteSettings {
   updatedAt                        DateTime       @updatedAt
 
   @@map("site_settings")
+}
+
+enum DigestFrequency {
+  weekly
+  biweekly
+  monthly
 }
 
 enum BodyFont {

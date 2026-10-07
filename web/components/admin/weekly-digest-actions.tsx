@@ -51,7 +51,7 @@ export function WeeklyDigestActions({ autoPublish }: { autoPublish: boolean }) {
     const what = autoPublish
       ? "This publishes the digest to the feed right away."
       : "This saves it as a draft for you to review and publish.";
-    if (!window.confirm(`Generate this week's digest now? ${what}`)) return;
+    if (!window.confirm(`Generate the current digest now? ${what}`)) return;
 
     setBusy("generate");
     setOutcome(null);
@@ -64,16 +64,16 @@ export function WeeklyDigestActions({ autoPublish }: { autoPublish: boolean }) {
           kind: "error",
           text:
             state === "retracted"
-              ? "This week's digest was already generated, then retracted."
+              ? "The current digest was already generated, then retracted."
               : state === "published"
-                ? "This week's digest has already been generated and published."
-                : "This week's digest has already been generated and is waiting as a draft.",
+                ? "The current digest has already been generated and published."
+                : "The current digest has already been generated and is waiting as a draft.",
           href: digestHref(state, payload?.announcementId),
         });
       } else if (!res.ok) {
         throw new Error();
       } else if (payload.status === "quiet") {
-        setOutcome({ kind: "info", text: "Nothing to report this week, so no digest was created." });
+        setOutcome({ kind: "info", text: "Nothing to report for this period, so no digest was created." });
       } else {
         setOutcome({
           kind: "info",
@@ -93,15 +93,15 @@ export function WeeklyDigestActions({ autoPublish }: { autoPublish: boolean }) {
       <CardHeader>
         <CardTitle>Preview &amp; generate</CardTitle>
         <CardDescription>
-          Uses the settings as last saved. Preview shows what this week&apos;s digest and the inactive-member
-          email would say, without creating anything. Generate now makes this week&apos;s digest immediately —
+          Uses the settings as last saved. Preview shows what the current digest and the inactive-member
+          email would say, without creating anything. Generate now makes the current digest immediately —
           useful to test, or if a scheduled run was missed.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap gap-3">
           <Button variant="outline" onClick={runPreview} disabled={busy !== null}>
-            {busy === "preview" ? "Loading…" : "Preview this week's digest"}
+            {busy === "preview" ? "Loading…" : "Preview the current digest"}
           </Button>
           <Button onClick={generate} disabled={busy !== null}>
             {busy === "generate" ? "Generating…" : "Generate now"}
