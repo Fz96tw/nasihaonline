@@ -97,6 +97,7 @@ export async function runWeeklyDigestCheck(now: Date = new Date()): Promise<Week
       notifyInApp: false,
       sendEmail: false,
       digestPeriodEnd: fireAt,
+      digestHighlights: digest.highlights,
     });
 
     if (settings.weeklyDigestAutoPublish) {

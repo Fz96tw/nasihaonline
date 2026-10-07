@@ -167,6 +167,8 @@ export async function getWeeklyDigestSettings(): Promise<WeeklyDigestSettings> {
     weeklyDigestEmailLapsed: settings.weeklyDigestEmailLapsed,
     weeklyDigestLapsedDays: settings.weeklyDigestLapsedDays,
     weeklyDigestMaxEmailsPerMember: settings.weeklyDigestMaxEmailsPerMember,
+    weeklyDigestEmailSubject: settings.weeklyDigestEmailSubject,
+    weeklyDigestEmailIntro: settings.weeklyDigestEmailIntro,
   };
 }
 

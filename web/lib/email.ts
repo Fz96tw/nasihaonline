@@ -625,6 +625,67 @@ export async function sendAnnouncementEmail(
   }
 }
 
+export type WeeklyDigestTeaserEmail = {
+  subject: string;
+  /** Intro paragraphs, already personalised. */
+  introParagraphs: string[];
+  highlightLines: string[];
+  /** A short "worth a look" line built from a few public titles; null when there are none. */
+  titlesLine: string | null;
+  visitUrl: string;
+  digestUrl: string;
+  unsubscribeUrl: string;
+};
+
+/**
+ * The inactive-member "here's what you've missed" teaser for a published
+ * weekly digest. Unlike the other senders in this file it reports whether the
+ * send actually went out (true/false) rather than only logging, because the
+ * caller counts consecutive digests emailed per member and must not count a
+ * failed or skipped one. Never throws. Carries a List-Unsubscribe header as
+ * well as the visible link, since this goes to members who didn't ask for it.
+ */
+export async function sendWeeklyDigestTeaserEmail(to: string, email: WeeklyDigestTeaserEmail): Promise<boolean> {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping weekly digest teaser to ${to}`);
+    return false;
+  }
+
+  const intro = email.introParagraphs.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join("");
+  const highlights = email.highlightLines.map((line) => `<li>${escapeHtml(line)}</li>`).join("");
+  const titles = email.titlesLine ? `<p>${escapeHtml(email.titlesLine)}</p>` : "";
+  const html = `<div style="font-family:sans-serif;max-width:560px">${intro}<ul>${highlights}</ul>${titles}<p><a href="${email.visitUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;padding:10px 20px;border-radius:6px;text-decoration:none">Visit NASIHA</a></p><p>Or read the full weekly update: <a href="${email.digestUrl}">${email.digestUrl}</a></p><p style="color:#6b7280;font-size:12px">You're receiving this because it's been a while since you visited. <a href="${email.unsubscribeUrl}">Unsubscribe from these updates</a>.</p></div>`;
+  const text = [
+    ...email.introParagraphs,
+    email.highlightLines.map((line) => `- ${line}`).join("\n"),
+    ...(email.titlesLine ? [email.titlesLine] : []),
+    `Visit NASIHA: ${email.visitUrl}`,
+    `Read the full weekly update: ${email.digestUrl}`,
+    `You're receiving this because it's been a while since you visited. Unsubscribe from these updates: ${email.unsubscribeUrl}`,
+  ].join("\n\n");
+
+  try {
+    const { data, error } = await sendEmail({
+      from: "NASIHA <no-reply@mail.nasihaforyou.org>",
+      to,
+      subject: email.subject,
+      text,
+      html,
+      headers: { "List-Unsubscribe": `<${email.unsubscribeUrl}>` },
+    });
+    if (error) {
+      console.error("[email] Failed to send weekly digest teaser", error);
+      return false;
+    }
+    // sendEmail() reports a withheld test-environment send as a success with
+    // this id; that isn't a real delivery, so it mustn't count toward a member's cap.
+    return data?.id !== "skipped-non-admin-test-recipient";
+  } catch (error) {
+    console.error("[email] Failed to send weekly digest teaser", error);
+    return false;
+  }
+}
+
 /**
  * Sent to each SurveyInvitation recipient once a survey is scheduled/opened.
  * respondUrl already carries the recipient's unique token (the magic link

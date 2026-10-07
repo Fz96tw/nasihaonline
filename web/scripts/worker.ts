@@ -40,6 +40,7 @@ import { openSurveyNow, autoCloseSurveyIfDue } from "@/lib/surveys-lifecycle";
 import { syncMeetingRecordings } from "@/lib/meeting-recordings-sync";
 import { sendInboxReminders } from "@/lib/inbox-reminders";
 import { runWeeklyDigestCheck } from "@/lib/weekly-digest-job";
+import { sendPendingDigestTeasers } from "@/lib/weekly-digest-email";
 
 /**
  * Standalone process (`npm run worker`, docker-compose "worker" service) —
@@ -178,14 +179,32 @@ async function main() {
 
   const weeklyDigestWorker = new Worker<WeeklyDigestJob>(
     WEEKLY_DIGEST_QUEUE_NAME,
-    async () => runWeeklyDigestCheck(),
+    async () => {
+      const check = await runWeeklyDigestCheck();
+      // Teaser emails for any published digest that hasn't had them yet —
+      // covers a digest an admin approved after the tick that created it.
+      // Run even if the check itself threw nothing but did nothing, and
+      // never let an email problem hide the check's own result.
+      let teasers: Awaited<ReturnType<typeof sendPendingDigestTeasers>> = [];
+      try {
+        teasers = await sendPendingDigestTeasers();
+      } catch (error) {
+        console.error("[weekly-digest-worker] teaser emails failed:", error);
+      }
+      return { ...check, teasers };
+    },
     { connection: queueConnection },
   );
 
-  weeklyDigestWorker.on("completed", (_job, result: { status: string }) => {
+  weeklyDigestWorker.on("completed", (_job, result) => {
     // Only log ticks that did something; "disabled"/"not-due" fire every 15 minutes.
     if (result.status === "created" || result.status === "quiet") {
       console.log(`[weekly-digest-worker] ${result.status}`, result);
+    }
+    for (const teaser of result.teasers) {
+      if (teaser.status === "sent") {
+        console.log(`[weekly-digest-worker] teaser emails — eligible ${teaser.eligible}, sent ${teaser.sent}, failed ${teaser.failed}`);
+      }
     }
   });
   weeklyDigestWorker.on("failed", (job, error) => {

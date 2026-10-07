@@ -149,6 +149,16 @@ model User {
   // the only per-request activity signal in the schema; see lib/auth.ts.
   lastActiveAt DateTime?
 
+  // Weekly digest teaser email to inactive members (lib/weekly-digest-email.ts).
+  // digestEmailsSent counts digests emailed since the member was last seen
+  // returning (lastActiveAt newer than lastDigestEmailAt means it's stale and
+  // treated as 0); digestUnsubscribeToken is the random secret in the email's
+  // public unsubscribe link, created on first send.
+  digestEmailOptedOut    Boolean   @default(false)
+  digestEmailsSent       Int       @default(0)
+  lastDigestEmailAt      DateTime?
+  digestUnsubscribeToken String?   @unique
+
   @@map("users")
 }
 
@@ -326,6 +336,10 @@ model SiteSettings {
   // produced a digest or found a quiet week — the per-week idempotency claim
   // (lib/weekly-digest-job.ts).
   weeklyDigestLastFiredFor         DateTime?
+  // Editable wording of the inactive-member teaser email; {firstName} is
+  // replaced per recipient. The intro may use blank lines for paragraphs.
+  weeklyDigestEmailSubject         String         @default("See what's been happening at NASIHA")
+  weeklyDigestEmailIntro           String         @default("Hi {firstName}, it's been a little while, and we've missed you. Here's a look at what's happened in the community recently.")
   updatedAt                        DateTime       @updatedAt
 
   @@map("site_settings")
@@ -2680,6 +2694,12 @@ model Announcement {
   // week it summarizes. Unique, so the database itself refuses a second
   // digest for the same week even if two workers race.
   digestPeriodEnd DateTime? @unique
+  // The headline numbers/titles the teaser email is built from, captured when
+  // the digest is generated (the body itself is free text an admin may edit).
+  digestHighlights Json?
+  // Claimed (compare-and-set) once the inactive-member teaser emails for this
+  // digest have been sent, so a digest is only ever emailed once.
+  digestEmailsSentAt DateTime?
   sentAt        DateTime?
   retractedAt   DateTime?
   retractedById String?

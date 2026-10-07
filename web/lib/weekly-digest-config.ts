@@ -18,7 +18,12 @@ export type WeeklyDigestSettings = {
   weeklyDigestEmailLapsed: boolean;
   weeklyDigestLapsedDays: number;
   weeklyDigestMaxEmailsPerMember: number;
+  weeklyDigestEmailSubject: string;
+  weeklyDigestEmailIntro: string;
 };
+
+export const WEEKLY_DIGEST_EMAIL_SUBJECT_MAX = 150;
+export const WEEKLY_DIGEST_EMAIL_INTRO_MAX = 1000;
 
 export const WEEKDAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 

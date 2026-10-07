@@ -17,7 +17,11 @@ import {
   getWeeklyDigestSettings,
   setWeeklyDigestSettings,
 } from "@/lib/settings";
-import { WEEKLY_DIGEST_TIMEZONE_VALUES } from "@/lib/weekly-digest-config";
+import {
+  WEEKLY_DIGEST_EMAIL_INTRO_MAX,
+  WEEKLY_DIGEST_EMAIL_SUBJECT_MAX,
+  WEEKLY_DIGEST_TIMEZONE_VALUES,
+} from "@/lib/weekly-digest-config";
 
 const patchSchema = z.object({
   admissionPhase: z.nativeEnum(AdmissionPhase).optional(),
@@ -45,6 +49,8 @@ const patchSchema = z.object({
   weeklyDigestEmailLapsed: z.boolean().optional(),
   weeklyDigestLapsedDays: z.number().int().min(1).max(365).optional(),
   weeklyDigestMaxEmailsPerMember: z.number().int().min(1).max(20).optional(),
+  weeklyDigestEmailSubject: z.string().trim().min(1).max(WEEKLY_DIGEST_EMAIL_SUBJECT_MAX).optional(),
+  weeklyDigestEmailIntro: z.string().trim().min(1).max(WEEKLY_DIGEST_EMAIL_INTRO_MAX).optional(),
 });
 
 const WEEKLY_DIGEST_KEYS = [
@@ -64,6 +70,8 @@ const WEEKLY_DIGEST_KEYS = [
   "weeklyDigestEmailLapsed",
   "weeklyDigestLapsedDays",
   "weeklyDigestMaxEmailsPerMember",
+  "weeklyDigestEmailSubject",
+  "weeklyDigestEmailIntro",
 ] as const;
 
 export async function GET() {

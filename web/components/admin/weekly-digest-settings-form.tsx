@@ -8,7 +8,10 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { Textarea } from "@/components/ui/textarea";
 import {
+  WEEKLY_DIGEST_EMAIL_INTRO_MAX,
+  WEEKLY_DIGEST_EMAIL_SUBJECT_MAX,
   WEEKDAY_LABELS,
   WEEKLY_DIGEST_SECTIONS,
   WEEKLY_DIGEST_TIMEZONES,
@@ -86,6 +89,8 @@ export function WeeklyDigestSettingsForm({ initial }: { initial: WeeklyDigestSet
   const [privateCountMin, setPrivateCountMin] = useState(String(initial.weeklyDigestPrivateCountMin));
   const [lapsedDays, setLapsedDays] = useState(String(initial.weeklyDigestLapsedDays));
   const [maxEmails, setMaxEmails] = useState(String(initial.weeklyDigestMaxEmailsPerMember));
+  const [emailSubject, setEmailSubject] = useState(initial.weeklyDigestEmailSubject);
+  const [emailIntro, setEmailIntro] = useState(initial.weeklyDigestEmailIntro);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,11 +114,17 @@ export function WeeklyDigestSettingsForm({ initial }: { initial: WeeklyDigestSet
     numbers.weeklyDigestMaxEmailsPerMember >= 1 &&
     numbers.weeklyDigestMaxEmailsPerMember <= 20;
 
-  const next: WeeklyDigestSettings = { ...values, ...numbers };
+  const textValid = emailSubject.trim().length > 0 && emailIntro.trim().length > 0;
+  const next: WeeklyDigestSettings = {
+    ...values,
+    ...numbers,
+    weeklyDigestEmailSubject: emailSubject.trim(),
+    weeklyDigestEmailIntro: emailIntro.trim(),
+  };
   const changed = (Object.keys(initial) as (keyof WeeklyDigestSettings)[]).filter((key) => next[key] !== initial[key]);
 
   async function save() {
-    if (!numbersValid || changed.length === 0) return;
+    if (!numbersValid || !textValid || changed.length === 0) return;
     setSaving(true);
     setError(null);
     try {
@@ -259,11 +270,38 @@ export function WeeklyDigestSettingsForm({ initial }: { initial: WeeklyDigestSet
             max={20}
             onChange={setMaxEmails}
           />
+          <div className="flex flex-col gap-2">
+            <label htmlFor="digest-email-subject" className="text-sm font-medium">
+              Email subject
+            </label>
+            <Input
+              id="digest-email-subject"
+              value={emailSubject}
+              maxLength={WEEKLY_DIGEST_EMAIL_SUBJECT_MAX}
+              onChange={(e) => setEmailSubject(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="digest-email-intro" className="text-sm font-medium">
+              Email introduction
+            </label>
+            <Textarea
+              id="digest-email-intro"
+              rows={4}
+              value={emailIntro}
+              maxLength={WEEKLY_DIGEST_EMAIL_INTRO_MAX}
+              onChange={(e) => setEmailIntro(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Use {"{firstName}"} to greet each member by name. The highlights, a visit button, a link to the
+              full digest and an unsubscribe link are added automatically.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
-      <Button onClick={save} disabled={saving || !numbersValid || changed.length === 0} className="self-start">
+      <Button onClick={save} disabled={saving || !numbersValid || !textValid || changed.length === 0} className="self-start">
         {saving ? "Saving…" : "Save"}
       </Button>
     </div>
