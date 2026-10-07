@@ -8,9 +8,9 @@ import { getBroadcastEmailSettings } from "@/lib/settings";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
 /**
- * Composes and immediately broadcasts a Board Announcement (§4.10) — there's
- * no separate draft-save step in this flow, so `sentAt` is always set on
- * create. Fans out a `board_announcement` Notification + email to every real
+ * Composes and immediately broadcasts a Board Announcement (§4.10) — `sentAt`
+ * is always set on create here. To stage one for approval instead, use
+ * createAnnouncementDraft + publishAnnouncementDraft below. Fans out a `board_announcement` Notification + email to every real
  * member (role member/moderator/admin with a tier assigned, same filter
  * reports-server.ts uses for "recently-active members"). Deliberately skips
  * any NotificationPreference opt-out check: no other NotificationType
@@ -63,23 +63,53 @@ export async function createAndSendAnnouncement(
     },
   });
 
+  await deliverAnnouncement({
+    id: announcement.id,
+    title: input.title,
+    body: input.body,
+    heroImageUrl,
+    notifyInApp: input.notifyInApp,
+    sendEmail: input.sendEmail,
+  });
+
+  return { id: announcement.id };
+}
+
+type DeliverableAnnouncement = {
+  id: string;
+  title: string;
+  body: string;
+  heroImageUrl: string | null;
+  notifyInApp: boolean;
+  sendEmail: boolean;
+};
+
+/**
+ * The fan-out half of sending an Announcement — bell notifications and
+ * emails to every real member. Shared by createAndSendAnnouncement (send now)
+ * and publishAnnouncementDraft (approve a draft), so both honor the same
+ * channel toggles and the same global email kill switch. The feed leg needs
+ * no work here: it's driven by sentAt/showInFeed on the row itself.
+ */
+async function deliverAnnouncement(announcement: DeliverableAnnouncement): Promise<void> {
+  const { heroImageUrl } = announcement;
   const detailPath = `/whats-new/announcements/${announcement.id}`;
   const emailGloballyEnabled = (await getBroadcastEmailSettings()).announcementEmailEnabled;
-  const shouldEmail = input.sendEmail && emailGloballyEnabled;
+  const shouldEmail = announcement.sendEmail && emailGloballyEnabled;
 
-  if (input.notifyInApp || shouldEmail) {
+  if (announcement.notifyInApp || shouldEmail) {
     const recipients = await db.user.findMany({
       where: { role: { in: [Role.member, Role.moderator, Role.admin] }, tier: { not: null } },
       select: { id: true, email: true, name: true },
     });
 
     if (recipients.length > 0) {
-      if (input.notifyInApp) {
+      if (announcement.notifyInApp) {
         await db.notification.createMany({
           data: recipients.map((recipient) => ({
             recipientId: recipient.id,
             type: NotificationType.board_announcement,
-            message: `NASIHA Board sent a new announcement: "${input.title}"`,
+            message: `NASIHA Board sent a new announcement: "${announcement.title}"`,
             link: detailPath,
           })),
         });
@@ -92,8 +122,8 @@ export async function createAndSendAnnouncement(
         await Promise.allSettled(
           recipients.map((recipient) =>
             sendAnnouncementEmail(recipient.email, {
-              title: input.title,
-              body: input.body,
+              title: announcement.title,
+              body: announcement.body,
               heroImageUrl: getAnnouncementHeroImageUrl(heroImageUrl)
                 ? `${APP_URL}${getAnnouncementHeroImageUrl(heroImageUrl)}`
                 : null,
@@ -104,8 +134,6 @@ export async function createAndSendAnnouncement(
       }
     }
   }
-
-  return { id: announcement.id };
 }
 
 export type AnnouncementTemplate = {
@@ -243,4 +271,139 @@ export async function getTrendingAnnouncements(
     title: announcement.title,
     updatedAt: announcement.updatedAt.toISOString(),
   }));
+}
+
+export type AnnouncementDraftInput = {
+  title: string;
+  body: string;
+  showInFeed: boolean;
+  notifyInApp: boolean;
+  sendEmail: boolean;
+};
+
+/**
+ * Stages an unsent Announcement (`sentAt` null) for an admin to review. A
+ * draft notifies nobody and is invisible everywhere members can look: the
+ * feed, the detail page (getSentAnnouncement) and the search index all
+ * already require `sentAt` to be set. The weekly digest job uses this too.
+ */
+export async function createAnnouncementDraft(
+  authorId: string,
+  input: AnnouncementDraftInput & { heroImage?: File | null; templateHeroImageUrl?: string | null },
+): Promise<{ id: string }> {
+  let heroImageUrl: string | null = input.templateHeroImageUrl ?? null;
+  if (input.heroImage) {
+    heroImageUrl = await uploadAnnouncementHeroImage(input.heroImage);
+  }
+
+  const draft = await db.announcement.create({
+    data: {
+      title: input.title,
+      body: input.body,
+      authorId,
+      heroImageUrl,
+      showInFeed: input.showInFeed,
+      notifyInApp: input.notifyInApp,
+      sendEmail: input.sendEmail,
+      sentAt: null,
+    },
+  });
+  return { id: draft.id };
+}
+
+export type AnnouncementDraft = AnnouncementDraftInput & {
+  id: string;
+  authorName: string;
+  createdAt: string;
+};
+
+const DRAFT_SELECT = {
+  id: true,
+  title: true,
+  body: true,
+  showInFeed: true,
+  notifyInApp: true,
+  sendEmail: true,
+  createdAt: true,
+  author: { select: { name: true } },
+} as const;
+
+function toDraft(row: {
+  id: string;
+  title: string;
+  body: string;
+  showInFeed: boolean;
+  notifyInApp: boolean;
+  sendEmail: boolean;
+  createdAt: Date;
+  author: { name: string | null };
+}): AnnouncementDraft {
+  return {
+    id: row.id,
+    title: row.title,
+    body: row.body,
+    showInFeed: row.showInFeed,
+    notifyInApp: row.notifyInApp,
+    sendEmail: row.sendEmail,
+    authorName: row.author.name ?? "NASIHA Member",
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export async function listAnnouncementDrafts(): Promise<AnnouncementDraft[]> {
+  const drafts = await db.announcement.findMany({
+    where: { sentAt: null, retractedAt: null, welcomeTier: null },
+    orderBy: { createdAt: "desc" },
+    select: DRAFT_SELECT,
+  });
+  return drafts.map(toDraft);
+}
+
+export async function getAnnouncementDraft(id: string): Promise<AnnouncementDraft | null> {
+  const draft = await db.announcement.findFirst({
+    where: { id, sentAt: null, retractedAt: null },
+    select: DRAFT_SELECT,
+  });
+  return draft ? toDraft(draft) : null;
+}
+
+/** Throws 404 when `id` doesn't exist, 409 when it does but is already sent (no longer a draft). */
+async function draftNotAvailable(id: string): Promise<AnnouncementError> {
+  const exists = await db.announcement.findUnique({ where: { id }, select: { id: true } });
+  return exists
+    ? new AnnouncementError(409, "This announcement has already been published.")
+    : new AnnouncementError(404, "Draft not found.");
+}
+
+export async function updateAnnouncementDraft(id: string, input: AnnouncementDraftInput): Promise<void> {
+  const result = await db.announcement.updateMany({ where: { id, sentAt: null }, data: input });
+  if (result.count === 0) throw await draftNotAvailable(id);
+}
+
+export async function discardAnnouncementDraft(id: string): Promise<void> {
+  const result = await db.announcement.deleteMany({ where: { id, sentAt: null } });
+  if (result.count === 0) throw await draftNotAvailable(id);
+}
+
+/**
+ * Approves a draft: stamps `sentAt` and runs the normal fan-out per the
+ * draft's own channel toggles (and the global email switch). The stamp is an
+ * atomic `updateMany ... where sentAt is null`, so a double-click or two
+ * admins publishing at once can only ever win once — the loser gets a 409
+ * and no second round of notifications/emails goes out.
+ */
+export async function publishAnnouncementDraft(id: string): Promise<void> {
+  const draft = await db.announcement.findFirst({
+    where: { id, sentAt: null },
+    select: { id: true, title: true, body: true, heroImageUrl: true, notifyInApp: true, sendEmail: true },
+  });
+  if (!draft) throw await draftNotAvailable(id);
+
+  const claimed = await db.announcement.updateMany({
+    where: { id, sentAt: null },
+    data: { sentAt: new Date() },
+  });
+  if (claimed.count === 0) throw await draftNotAvailable(id);
+
+  await deliverAnnouncement(draft);
 }

@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { listAnnouncementHistory } from "@/lib/announcements-server";
+import { listAnnouncementDrafts, listAnnouncementHistory } from "@/lib/announcements-server";
 import { Button } from "@/components/ui/button";
 import { AnnouncementHistoryTable } from "@/components/admin/announcement-history-table";
+import { AnnouncementDraftsTable } from "@/components/admin/announcement-drafts-table";
 
 export default async function AdminAnnouncementsPage() {
   const user = await getSessionUser();
@@ -18,7 +19,7 @@ export default async function AdminAnnouncementsPage() {
     );
   }
 
-  const announcements = await listAnnouncementHistory();
+  const [announcements, drafts] = await Promise.all([listAnnouncementHistory(), listAnnouncementDrafts()]);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 p-8">
@@ -36,6 +37,18 @@ export default async function AdminAnnouncementsPage() {
           <Link href="/admin/announcements/new">Send Announcement</Link>
         </Button>
       </div>
+
+      {drafts.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <div>
+            <h2 className="text-xl font-semibold">Drafts awaiting review</h2>
+            <p className="text-sm text-muted-foreground">
+              Not sent yet — members see nothing until a draft is approved and published.
+            </p>
+          </div>
+          <AnnouncementDraftsTable drafts={drafts} />
+        </section>
+      )}
 
       <AnnouncementHistoryTable announcements={announcements} />
     </main>

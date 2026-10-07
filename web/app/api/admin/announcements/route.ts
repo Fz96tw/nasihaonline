@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { AuthError, authErrorResponse, requireRole } from "@/lib/auth";
 import { Role } from "@/lib/generated/prisma/enums";
 import { createAnnouncementSchema } from "@/lib/validation/announcement";
-import { createAndSendAnnouncement, getAnnouncementTemplate } from "@/lib/announcements-server";
+import {
+  createAndSendAnnouncement,
+  createAnnouncementDraft,
+  getAnnouncementTemplate,
+} from "@/lib/announcements-server";
 import { UploadValidationError } from "@/lib/storage";
 import { enqueueAnnouncementIndexSync } from "@/lib/queues/search-index-queue";
 
@@ -10,7 +14,9 @@ import { enqueueAnnouncementIndexSync } from "@/lib/queues/search-index-queue";
  * POST /api/admin/announcements — "Send Announcement" (§4.10), admin-only.
  * Multipart rather than JSON since the optional cover image travels
  * alongside title/body in one request, same as POST /api/blog. Composing
- * and sending are one step (no draft mode): this broadcasts immediately.
+ * and sending are one step by default: this broadcasts immediately. With
+ * `draft=true` it only stages an unsent draft (nobody is notified and nothing
+ * shows in the feed) for later review via /api/admin/announcements/:id/publish.
  */
 export async function POST(request: Request) {
   let user;
@@ -49,6 +55,11 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (formData.get("draft") === "true") {
+      const draft = await createAnnouncementDraft(user.id, { ...parsed.data, heroImage, templateHeroImageUrl });
+      return NextResponse.json({ id: draft.id, draft: true }, { status: 201 });
+    }
+
     const announcement = await createAndSendAnnouncement(user.id, {
       ...parsed.data,
       heroImage,

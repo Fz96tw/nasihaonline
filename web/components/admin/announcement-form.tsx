@@ -31,9 +31,10 @@ type TemplateAnnouncement = {
  * "Compose Announcement" form (§4.10), posted from /admin/announcements/new.
  * Multipart rather than JSON since the optional cover image travels
  * alongside title/body in one request — same pattern as WritePostForm.
- * Sending is immediate on submit (no separate draft-save step): the Board
- * Announcement broadcasts to every member and can't be un-sent, so this
- * shows a confirm before firing.
+ * Sending is immediate on submit: the Board Announcement broadcasts to every
+ * member and can't be un-sent, so this shows a confirm before firing. "Save as
+ * draft" instead stages it unsent (no confirm needed) to review and publish
+ * from the Drafts list on /admin/announcements.
  *
  * `templateAnnouncement` supports "use as template" resends from a past
  * (live or retracted) announcement (?fromId=<id>): pre-fills title/body/cover
@@ -58,8 +59,9 @@ export function AnnouncementForm({ templateAnnouncement }: { templateAnnouncemen
   const channelValues = form.watch(["showInFeed", "notifyInApp", "sendEmail"]);
   const checkedChannelCount = channelValues.filter(Boolean).length;
 
-  async function onSubmit(values: CreateAnnouncementValues) {
+  async function submit(values: CreateAnnouncementValues, asDraft: boolean) {
     if (
+      !asDraft &&
       !window.confirm(
         "Send this announcement to every member now? This can't be undone or un-sent.",
       )
@@ -77,6 +79,7 @@ export function AnnouncementForm({ templateAnnouncement }: { templateAnnouncemen
       formData.append("showInFeed", String(values.showInFeed));
       formData.append("notifyInApp", String(values.notifyInApp));
       formData.append("sendEmail", String(values.sendEmail));
+      if (asDraft) formData.append("draft", "true");
       if (heroImage) formData.append("heroImage", heroImage);
       if (templateAnnouncement) formData.append("fromId", templateAnnouncement.sourceId);
 
@@ -106,7 +109,7 @@ export function AnnouncementForm({ templateAnnouncement }: { templateAnnouncemen
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
+      <form onSubmit={form.handleSubmit((values) => submit(values, false))} className="flex flex-col gap-5" noValidate>
         <FormField
           control={form.control}
           name="title"
@@ -228,9 +231,17 @@ export function AnnouncementForm({ templateAnnouncement }: { templateAnnouncemen
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        <div>
+        <div className="flex flex-wrap gap-3">
           <Button type="submit" disabled={submitting}>
-            {submitting ? "Sending…" : "Send Announcement"}
+            {submitting ? "Working…" : "Send Announcement"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={submitting}
+            onClick={form.handleSubmit((values) => submit(values, true))}
+          >
+            Save as draft
           </Button>
         </div>
       </form>
