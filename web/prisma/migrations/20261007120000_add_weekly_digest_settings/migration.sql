@@ -1,0 +1,17 @@
+-- AlterTable
+ALTER TABLE "site_settings" ADD COLUMN     "weeklyDigestEnabled" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "weeklyDigestDayOfWeek" INTEGER NOT NULL DEFAULT 1,
+ADD COLUMN     "weeklyDigestHour" INTEGER NOT NULL DEFAULT 9,
+ADD COLUMN     "weeklyDigestTimezone" TEXT NOT NULL DEFAULT 'America/New_York',
+ADD COLUMN     "weeklyDigestAutoPublish" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "weeklyDigestPrivateCountMin" INTEGER NOT NULL DEFAULT 3,
+ADD COLUMN     "weeklyDigestIncludeNewMembers" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "weeklyDigestIncludeContent" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "weeklyDigestIncludeEvents" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "weeklyDigestIncludeForums" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "weeklyDigestIncludePeerReviews" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "weeklyDigestIncludeReplies" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "weeklyDigestIncludeKnowledgeHours" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "weeklyDigestEmailLapsed" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "weeklyDigestLapsedDays" INTEGER NOT NULL DEFAULT 30,
+ADD COLUMN     "weeklyDigestMaxEmailsPerMember" INTEGER NOT NULL DEFAULT 3;

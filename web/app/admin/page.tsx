@@ -112,6 +112,12 @@ const ADMIN_SECTIONS = [
     group: "Communications",
   },
   {
+    href: "/admin/weekly-digest",
+    title: "Weekly Digest",
+    description: "Schedule and configure the weekly community activity summary.",
+    group: "Communications",
+  },
+  {
     href: "/admin/email-notifications",
     title: "Email Notifications",
     description: "Turn member-wide broadcast emails on or off to manage send quota.",

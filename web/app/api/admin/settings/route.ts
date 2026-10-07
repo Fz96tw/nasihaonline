@@ -14,7 +14,10 @@ import {
   setQuickRecordingMaxDuration,
   getSiteFonts,
   setSiteFonts,
+  getWeeklyDigestSettings,
+  setWeeklyDigestSettings,
 } from "@/lib/settings";
+import { WEEKLY_DIGEST_TIMEZONE_VALUES } from "@/lib/weekly-digest-config";
 
 const patchSchema = z.object({
   admissionPhase: z.nativeEnum(AdmissionPhase).optional(),
@@ -26,7 +29,42 @@ const patchSchema = z.object({
   quickRecordingMaxDurationSeconds: z.number().int().min(1).max(3600).optional(),
   bodyFont: z.nativeEnum(BodyFont).optional(),
   headingFont: z.nativeEnum(HeadingFont).optional(),
+  weeklyDigestEnabled: z.boolean().optional(),
+  weeklyDigestDayOfWeek: z.number().int().min(0).max(6).optional(),
+  weeklyDigestHour: z.number().int().min(0).max(23).optional(),
+  weeklyDigestTimezone: z.enum(WEEKLY_DIGEST_TIMEZONE_VALUES).optional(),
+  weeklyDigestAutoPublish: z.boolean().optional(),
+  weeklyDigestPrivateCountMin: z.number().int().min(1).max(20).optional(),
+  weeklyDigestIncludeNewMembers: z.boolean().optional(),
+  weeklyDigestIncludeContent: z.boolean().optional(),
+  weeklyDigestIncludeEvents: z.boolean().optional(),
+  weeklyDigestIncludeForums: z.boolean().optional(),
+  weeklyDigestIncludePeerReviews: z.boolean().optional(),
+  weeklyDigestIncludeReplies: z.boolean().optional(),
+  weeklyDigestIncludeKnowledgeHours: z.boolean().optional(),
+  weeklyDigestEmailLapsed: z.boolean().optional(),
+  weeklyDigestLapsedDays: z.number().int().min(1).max(365).optional(),
+  weeklyDigestMaxEmailsPerMember: z.number().int().min(1).max(20).optional(),
 });
+
+const WEEKLY_DIGEST_KEYS = [
+  "weeklyDigestEnabled",
+  "weeklyDigestDayOfWeek",
+  "weeklyDigestHour",
+  "weeklyDigestTimezone",
+  "weeklyDigestAutoPublish",
+  "weeklyDigestPrivateCountMin",
+  "weeklyDigestIncludeNewMembers",
+  "weeklyDigestIncludeContent",
+  "weeklyDigestIncludeEvents",
+  "weeklyDigestIncludeForums",
+  "weeklyDigestIncludePeerReviews",
+  "weeklyDigestIncludeReplies",
+  "weeklyDigestIncludeKnowledgeHours",
+  "weeklyDigestEmailLapsed",
+  "weeklyDigestLapsedDays",
+  "weeklyDigestMaxEmailsPerMember",
+] as const;
 
 export async function GET() {
   try {
@@ -37,6 +75,7 @@ export async function GET() {
       ...(await getBroadcastEmailSettings()),
       quickRecordingMaxDurationSeconds: await getQuickRecordingMaxDuration(),
       ...(await getSiteFonts()),
+      ...(await getWeeklyDigestSettings()),
     });
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
@@ -97,11 +136,19 @@ export async function PATCH(request: Request) {
     });
   }
 
+  const weeklyDigestPatch = Object.fromEntries(
+    WEEKLY_DIGEST_KEYS.filter((key) => parsed.data[key] !== undefined).map((key) => [key, parsed.data[key]]),
+  );
+  if (Object.keys(weeklyDigestPatch).length > 0) {
+    await setWeeklyDigestSettings(weeklyDigestPatch);
+  }
+
   return NextResponse.json({
     admissionPhase: await getAdmissionPhase(),
     ...(await getWelcomeAnnouncementSettings()),
     ...(await getBroadcastEmailSettings()),
     quickRecordingMaxDurationSeconds: await getQuickRecordingMaxDuration(),
     ...(await getSiteFonts()),
+    ...(await getWeeklyDigestSettings()),
   });
 }

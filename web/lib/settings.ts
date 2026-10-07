@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { AdmissionPhase, BodyFont, HeadingFont } from "@/lib/generated/prisma/enums";
 
 export { ADMISSION_PHASE_LABELS } from "@/lib/admission-phase";
+import type { WeeklyDigestSettings } from "@/lib/weekly-digest-config";
 
 const SETTINGS_ROW_ID = 1;
 
@@ -135,6 +136,41 @@ export async function getSiteFonts(): Promise<SiteFontSettings> {
 }
 
 export async function setSiteFonts(input: SiteFontSettings): Promise<void> {
+  await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID, ...input },
+    update: input,
+  });
+}
+
+/** /admin/weekly-digest — see the SiteSettings.weeklyDigest* schema comment. */
+export async function getWeeklyDigestSettings(): Promise<WeeklyDigestSettings> {
+  const settings = await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID },
+    update: {},
+  });
+  return {
+    weeklyDigestEnabled: settings.weeklyDigestEnabled,
+    weeklyDigestDayOfWeek: settings.weeklyDigestDayOfWeek,
+    weeklyDigestHour: settings.weeklyDigestHour,
+    weeklyDigestTimezone: settings.weeklyDigestTimezone,
+    weeklyDigestAutoPublish: settings.weeklyDigestAutoPublish,
+    weeklyDigestPrivateCountMin: settings.weeklyDigestPrivateCountMin,
+    weeklyDigestIncludeNewMembers: settings.weeklyDigestIncludeNewMembers,
+    weeklyDigestIncludeContent: settings.weeklyDigestIncludeContent,
+    weeklyDigestIncludeEvents: settings.weeklyDigestIncludeEvents,
+    weeklyDigestIncludeForums: settings.weeklyDigestIncludeForums,
+    weeklyDigestIncludePeerReviews: settings.weeklyDigestIncludePeerReviews,
+    weeklyDigestIncludeReplies: settings.weeklyDigestIncludeReplies,
+    weeklyDigestIncludeKnowledgeHours: settings.weeklyDigestIncludeKnowledgeHours,
+    weeklyDigestEmailLapsed: settings.weeklyDigestEmailLapsed,
+    weeklyDigestLapsedDays: settings.weeklyDigestLapsedDays,
+    weeklyDigestMaxEmailsPerMember: settings.weeklyDigestMaxEmailsPerMember,
+  };
+}
+
+export async function setWeeklyDigestSettings(input: Partial<WeeklyDigestSettings>): Promise<void> {
   await db.siteSettings.upsert({
     where: { id: SETTINGS_ROW_ID },
     create: { id: SETTINGS_ROW_ID, ...input },

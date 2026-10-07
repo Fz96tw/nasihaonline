@@ -295,6 +295,33 @@ model SiteSettings {
   // Google Font name, since next/font self-hosts fonts at build time.
   bodyFont                         BodyFont       @default(montserrat)
   headingFont                      HeadingFont    @default(mulish)
+  // Weekly Digest admin page (/admin/weekly-digest) — a scheduled
+  // announcement summarizing the past week's activity. Off by default so
+  // the test instance (which runs its own worker) never posts one; the
+  // schedule fields are read by the worker at fire time, not baked into a
+  // cron registration. Restricted content (private threads/peer reviews,
+  // reply totals) is only ever shown as counts, suppressed below
+  // weeklyDigestPrivateCountMin so a tiny number can't identify one item.
+  // A week with nothing to report (across the sections enabled below)
+  // produces no post and no emails — not configurable.
+  weeklyDigestEnabled              Boolean        @default(false)
+  weeklyDigestDayOfWeek            Int            @default(1) // 0 = Sunday … 6 = Saturday
+  weeklyDigestHour                 Int            @default(9) // 0–23, in weeklyDigestTimezone
+  weeklyDigestTimezone             String         @default("America/New_York")
+  weeklyDigestAutoPublish          Boolean        @default(false) // false = create an unsent draft for an admin to approve
+  weeklyDigestPrivateCountMin      Int            @default(3)
+  weeklyDigestIncludeNewMembers    Boolean        @default(true)
+  weeklyDigestIncludeContent       Boolean        @default(true)
+  weeklyDigestIncludeEvents        Boolean        @default(true)
+  weeklyDigestIncludeForums        Boolean        @default(true)
+  weeklyDigestIncludePeerReviews   Boolean        @default(true)
+  weeklyDigestIncludeReplies       Boolean        @default(true)
+  weeklyDigestIncludeKnowledgeHours Boolean       @default(true)
+  // Teaser email to members who haven't been active in a while
+  // (User.lastActiveAt), separate from the feed post everyone sees.
+  weeklyDigestEmailLapsed          Boolean        @default(false)
+  weeklyDigestLapsedDays           Int            @default(30)
+  weeklyDigestMaxEmailsPerMember   Int            @default(3)
   updatedAt                        DateTime       @updatedAt
 
   @@map("site_settings")
