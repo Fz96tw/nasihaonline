@@ -36,11 +36,17 @@ import {
   type WeeklyDigestJob,
   enqueueRepeatingWeeklyDigestCheck,
 } from "@/lib/queues/weekly-digest-queue";
+import {
+  WEEKLY_REFLECTION_QUEUE_NAME,
+  type WeeklyReflectionJob,
+  enqueueRepeatingWeeklyReflectionCheck,
+} from "@/lib/queues/weekly-reflection-queue";
 import { openSurveyNow, autoCloseSurveyIfDue } from "@/lib/surveys-lifecycle";
 import { syncMeetingRecordings } from "@/lib/meeting-recordings-sync";
 import { sendInboxReminders } from "@/lib/inbox-reminders";
 import { runWeeklyDigestCheck } from "@/lib/weekly-digest-job";
 import { sendPendingDigestTeasers } from "@/lib/weekly-digest-email";
+import { runWeeklyReflectionCheck } from "@/lib/weekly-reflection-job";
 
 /**
  * Standalone process (`npm run worker`, docker-compose "worker" service) —
@@ -212,6 +218,28 @@ async function main() {
   });
 
   console.log("[weekly-digest-worker] listening for jobs on", WEEKLY_DIGEST_QUEUE_NAME);
+
+  const weeklyReflectionWorker = new Worker<WeeklyReflectionJob>(
+    WEEKLY_REFLECTION_QUEUE_NAME,
+    async () => runWeeklyReflectionCheck(),
+    { connection: queueConnection },
+  );
+
+  weeklyReflectionWorker.on("completed", (_job, result) => {
+    // Only log ticks that did something; "disabled"/"not-due"/"already-posted" fire every 15 minutes.
+    if (result.status === "posted" || result.status === "skipped") {
+      console.log(`[weekly-reflection-worker] ${result.status}`, result);
+    }
+  });
+
+  // A failed tick (e.g. a transient DB error) is retried by the next 15-minute
+  // tick; it must never take the worker process down.
+  weeklyReflectionWorker.on("failed", (_job, error) => {
+    console.error("[weekly-reflection-worker] tick failed:", error);
+  });
+
+  await enqueueRepeatingWeeklyReflectionCheck();
+  console.log("[weekly-reflection-worker] listening for jobs on", WEEKLY_REFLECTION_QUEUE_NAME);
 }
 
 main().catch((error) => {

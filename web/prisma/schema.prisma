@@ -2405,6 +2405,8 @@ model ForumThread {
   posts      ForumPost[]
   views      ThreadView[]
   invitees   ForumThreadInvitee[]
+  // Set only for a thread published by the Weekly Reflection job.
+  reflectionPost ReflectionPost?
   // Optional, multi-select "Topics" (community-based-categorization
   // initiative, objective 6) — deliberately labeled "Topics" not
   // "Category" in the UI, since Forum/[category] already means something
@@ -2928,6 +2930,29 @@ model ReflectionQuote {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  posts ReflectionPost[]
+
   @@index([active, lastPostedAt])
   @@map("reflection_quotes")
+}
+
+// One row per Weekly Reflection thread the posting job has published.
+// `weekKey` (UTC ISO week, e.g. "2026-W41") is UNIQUE: that constraint is the
+// once-per-week guard, enforced by the database so a worker restart or two
+// overlapping ticks can't both post. The row is written in the same
+// transaction as the thread, so a crash never leaves a thread without its
+// record (duplicate next tick) or a record without its thread (week skipped).
+// threadId/quoteId are SetNull on delete rather than Cascade: if a moderator
+// deletes this week's thread the week stays consumed, not silently reposted.
+model ReflectionPost {
+  id       String           @id @default(cuid())
+  weekKey  String           @unique
+  threadId String?          @unique
+  thread   ForumThread?     @relation(fields: [threadId], references: [id], onDelete: SetNull)
+  quoteId  String?
+  quote    ReflectionQuote? @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  postedAt DateTime         @default(now())
+
+  @@index([quoteId])
+  @@map("reflection_posts")
 }

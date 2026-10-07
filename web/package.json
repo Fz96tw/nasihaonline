@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --test --experimental-strip-types lib/presenter-overlay/*.test.ts lib/reflection-quotes*.test.ts",
+    "test": "node --test --experimental-strip-types lib/presenter-overlay/*.test.ts lib/reflection-*.test.ts",
     "worker": "tsx scripts/worker.ts",
     "reindex:profiles": "tsx scripts/reindex-profiles.ts",
     "reindex:library": "tsx scripts/reindex-library.ts",
@@ -17,7 +17,8 @@
     "reindex:announcements": "tsx scripts/reindex-announcements.ts",
     "reindex:surveys": "tsx scripts/reindex-surveys.ts",
     "reindex:review-items": "tsx scripts/reindex-review-items.ts",
-    "get:google-refresh-token": "tsx scripts/get-google-refresh-token.ts"
+    "get:google-refresh-token": "tsx scripts/get-google-refresh-token.ts",
+    "test:db": "NODE_OPTIONS='--require ./lib/test-support/stub-server-only.cjs' tsx --test lib/weekly-reflection.db.test.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.39.5",

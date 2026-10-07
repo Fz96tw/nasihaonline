@@ -43,3 +43,18 @@ export async function getOrCreateWeeklyReflectionUser(): Promise<UserModel> {
     },
   });
 }
+
+/** The Weekly Reflection account if it exists — unlike getOrCreate…, never creates it. */
+export async function findWeeklyReflectionUser(): Promise<UserModel | null> {
+  return db.user.findUnique({ where: { clerkUserId: WEEKLY_REFLECTION_USER.clerkUserId } });
+}
+
+/** Subset of `userIds` that are organizational (Clerk-less) accounts — used to keep them out of notification recipient sets. */
+export async function getSystemUserIds(userIds: string[]): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set();
+  const rows = await db.user.findMany({
+    where: { id: { in: userIds }, clerkUserId: { startsWith: SYSTEM_CLERK_USER_ID_PREFIX } },
+    select: { id: true },
+  });
+  return new Set(rows.map((row) => row.id));
+}

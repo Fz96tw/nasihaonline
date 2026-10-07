@@ -14,6 +14,7 @@ import { recordAdminAction } from "@/lib/audit-server";
 import { getDirectoryMembersByIds, getMentionableMembers } from "@/lib/members-server";
 import { getProfileAvatarUrl } from "@/lib/storage";
 import { findMentionedMembers } from "@/lib/mentions";
+import { getSystemUserIds } from "@/lib/system-user";
 import { DIRECTORY_TIERS } from "@/lib/members";
 import { CLINICAL_DISCUSSIONS_SLUG, EVENTS_FORUM_SLUG, LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import { ensureCommunityMembership, getMemberCommunityContext, type MemberCommunityContext } from "@/lib/profile-server";
@@ -1131,9 +1132,17 @@ export async function createForumPost(
           (member) => member.id === thread.authorId || thread.invitees.some((invitee) => invitee.userId === member.id),
         )
       : mentionableMembers;
-  const mentionedMembers = findMentionedMembers(input.body, mentionCandidates).filter(
+  // Organizational accounts (e.g. the Weekly Reflection author, which owns
+  // its thread and so is otherwise a "participant" of every reply) have no
+  // inbox or deliverable address — never notify them.
+  const mentionedCandidates = findMentionedMembers(input.body, mentionCandidates).filter(
     (member) => member.id !== authorId,
   );
+  const systemUserIds = await getSystemUserIds(
+    Array.from(otherParticipantIds).concat(mentionedCandidates.map((member) => member.id)),
+  );
+  Array.from(systemUserIds).forEach((id) => otherParticipantIds.delete(id));
+  const mentionedMembers = mentionedCandidates.filter((member) => !systemUserIds.has(member.id));
   const postLink = `/forums/${thread.forum.slug}/${threadId}#post-${post.id}`;
 
   await Promise.all(

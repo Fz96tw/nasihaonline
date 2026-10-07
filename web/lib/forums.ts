@@ -22,6 +22,11 @@ export const EVENTS_FORUM_SLUG = "events";
 // first time any member actually wants to discuss the resource.
 export const LIBRARY_FORUM_SLUG = "library-discussions";
 
+// Seeded forum slug (the "Weekly Reflection" forum in prisma/seed.ts —
+// slugify("Weekly Reflection")) that holds the weekly quote thread the
+// Weekly Reflection job posts (lib/weekly-reflection-post.ts).
+export const WEEKLY_REFLECTION_FORUM_SLUG = "weekly-reflection";
+
 export type ForumCategory = {
   id: string;
   name: string;
