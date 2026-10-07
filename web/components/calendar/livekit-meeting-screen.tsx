@@ -1159,7 +1159,6 @@ export function LiveKitMeetingScreen({
             kickEndpoint={kickEndpoint}
             onError={pushToast}
           />
-          {raiseHandEnabled && <RaiseHandControl room={room} raised={ownHandRaised} onError={pushToast} />}
           <PresenterOverlayControl room={room} onError={pushToast} onOverlayIds={setOverlayIds} />
           <OverlayGuestControl room={room} onOverlayIds={setOverlayIds} />
         </TopLeftOverlay>
@@ -1197,7 +1196,12 @@ export function LiveKitMeetingScreen({
         <ChatCaptureListener chatEndpoint={chatEndpoint} />
         <ParticipantsListener hostId={hostId} coHostUserIds={coHostUserIds} onChange={setParticipants} />
         <RoomExitBridge onRoomReady={setRoom} />
-        <ShareStage overlayIds={overlayIds} />
+        <ShareStage
+          overlayIds={overlayIds}
+          barExtra={
+            raiseHandEnabled ? <RaiseHandControl room={room} raised={ownHandRaised} onError={pushToast} inControlBar /> : undefined
+          }
+        />
       </LiveKitRoom>
     </div>
   );

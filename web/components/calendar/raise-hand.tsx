@@ -129,10 +129,13 @@ export function RaiseHandControl({
   room,
   raised,
   onError,
+  inControlBar = false,
 }: {
   room: Room | null;
   raised: boolean;
   onError: (message: string) => void;
+  /** Rendered inside LiveKit's bottom control bar (uses its own `lk-button` look) rather than the dark overlay cluster. */
+  inControlBar?: boolean;
 }) {
   const lastToggle = useRef(0);
   const raisedRef = useRef(raised);
@@ -174,7 +177,11 @@ export function RaiseHandControl({
       aria-pressed={raised}
       aria-keyshortcuts="Alt+H"
       title="Alt+H"
-      className={`pointer-events-auto ${LK_BUTTON_CLASS} ${raised ? LK_BUTTON_ACTIVE_CLASS : ""}`}
+      className={
+        inControlBar
+          ? "lk-button"
+          : `pointer-events-auto ${LK_BUTTON_CLASS} ${raised ? LK_BUTTON_ACTIVE_CLASS : ""}`
+      }
     >
       <Hand className={`h-4 w-4 ${raised ? "text-yellow-400" : ""}`} />
       <span className="hidden sm:inline">{raised ? "Lower hand" : "Raise hand"}</span>

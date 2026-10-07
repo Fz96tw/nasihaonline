@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Track } from "livekit-client";
 import {
   Chat,
@@ -33,6 +33,8 @@ import { HandAwareTile } from "@/components/calendar/raise-hand";
  * Showup's version (no camera-off attendees expected there) omits it
  * entirely.
  *
+ * `barExtra` is an optional extra button for the bottom control bar (the prefab ControlBar takes no children).
+ *
  * `overlayIds` is who's currently a ghost on the shared screen (the host,
  * plus up to 2 co-ghosts — see PresenterOverlayControl's overlay-roster
  * broadcast and OverlayGuestControl's receipt of it); their camera track is
@@ -40,7 +42,7 @@ import { HandAwareTile } from "@/components/calendar/raise-hand";
  * on the share itself. Everyone else's camera tile (on or off) renders
  * exactly as it always has.
  */
-export function ShareStage({ overlayIds }: { overlayIds: string[] }) {
+export function ShareStage({ overlayIds, barExtra }: { overlayIds: string[]; barExtra?: ReactNode }) {
   const layoutContext = useCreateLayoutContext();
   const [widgetState, setWidgetState] = useState<WidgetState>({ showChat: false, unreadMessages: 0, showSettings: false });
   const tracks = useTracks(
@@ -80,7 +82,19 @@ export function ShareStage({ overlayIds }: { overlayIds: string[] }) {
       <LayoutContextProvider value={layoutContext} onWidgetChange={setWidgetState}>
         <div className="lk-video-conference-inner">
           {stage}
-          <ControlBar controls={{ chat: true, settings: false }} />
+          {barExtra ? (
+            // ControlBar renders no children, so an extra bar button (Raise hand) sits in a row beside it. The row
+            // takes over the bar's own background/top border so the two read as one bar, centered together.
+            <div
+              className="flex items-center justify-center"
+              style={{ background: "var(--lk-bg2)", borderTop: "1px solid var(--lk-border-color)" }}
+            >
+              <ControlBar controls={{ chat: true, settings: false }} style={{ borderTop: "none", flex: "none", background: "none" }} />
+              <div className="pr-3">{barExtra}</div>
+            </div>
+          ) : (
+            <ControlBar controls={{ chat: true, settings: false }} />
+          )}
         </div>
         <Chat style={{ display: widgetState.showChat ? "grid" : "none" }} />
       </LayoutContextProvider>
