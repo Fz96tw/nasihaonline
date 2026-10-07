@@ -22,9 +22,18 @@ import { enqueueForumThreadIndexSync } from "@/lib/queues/search-index-queue";
 export type WeeklyReflectionSkipReason = "forum-missing" | "system-user-missing" | "pool-empty";
 
 export type WeeklyReflectionResult =
-  | { status: "posted"; weekKey: string; threadId: string; quoteId: string }
+  | { status: "posted"; weekKey: string; threadId: string; quoteId: string; replacedThreadId?: string }
+  // Replace was asked for but a member has replied to the earlier thread: nothing was posted or hidden.
+  | { status: "replace-blocked"; weekKey: string; replyCount: number }
   | { status: "already-posted"; weekKey: string; threadId: string | null }
   | { status: "skipped"; weekKey: string; reason: WeeklyReflectionSkipReason };
+
+/** Thrown inside the posting transaction (rolling it back) when the thread to replace has gained replies. */
+class ReplaceBlockedError extends Error {
+  constructor(public readonly replyCount: number) {
+    super("replace blocked: the earlier thread has replies");
+  }
+}
 
 const SKIP_MESSAGES: Record<WeeklyReflectionSkipReason, string> = {
   "forum-missing": `no active forum with slug "${WEEKLY_REFLECTION_FORUM_SLUG}" — run the seed`,
@@ -69,20 +78,30 @@ export async function postWeeklyReflection(
     enqueueIndexSync = enqueueForumThreadIndexSync,
     listImages = listReflectionImageFiles,
     allowAdditional = false,
+    replaceThreadId,
   }: {
     enqueueIndexSync?: (threadId: string) => Promise<void>;
     /** Injectable so tests don't depend on what is in public/images/weeklyreflection/. */
     listImages?: () => Promise<string[]>;
     /** Admin "post now" with the override confirmed: post a further thread this week (weekKey "<week>-extra-N"). */
     allowAdditional?: boolean;
+    /**
+     * Admin "Replace this week's": soft-remove this earlier thread (it vanishes
+     * from the feed, forum list, direct access and search) in the SAME
+     * transaction as the new post. Refused — nothing posted or hidden — if it
+     * has any replies, re-checked inside the transaction so a reply that lands
+     * in between can't be hidden. Implies allowAdditional.
+     */
+    replaceThreadId?: string;
   } = {},
 ): Promise<WeeklyReflectionResult> {
   const baseKey = isoWeekKey(now);
   let weekKey = baseKey;
+  const additional = allowAdditional || !!replaceThreadId;
 
   const existing = await db.reflectionPost.findUnique({ where: { weekKey }, select: { threadId: true } });
   if (existing) {
-    if (!allowAdditional) return { status: "already-posted", weekKey, threadId: existing.threadId };
+    if (!additional) return { status: "already-posted", weekKey, threadId: existing.threadId };
     const extras = await db.reflectionPost.count({ where: { weekKey: { startsWith: `${baseKey}-extra-` } } });
     weekKey = `${baseKey}-extra-${extras + 1}`;
   }
@@ -125,8 +144,22 @@ export async function postWeeklyReflection(
   const imageFile = pickNextImage(await listImages(), imageHistory);
 
   let threadId: string;
+  let replacedThreadId: string | undefined;
   try {
     threadId = await db.$transaction(async (tx) => {
+      if (replaceThreadId) {
+        const target = await tx.forumThread.findUnique({
+          where: { id: replaceThreadId },
+          select: { id: true, removed: true, _count: { select: { posts: true } } },
+        });
+        if (target && !target.removed) {
+          // posts includes the opening post, so anything beyond it is a reply.
+          if (target._count.posts > 1) throw new ReplaceBlockedError(target._count.posts - 1);
+          await tx.forumThread.update({ where: { id: target.id }, data: { removed: true, pinned: false } });
+          replacedThreadId = target.id;
+        }
+      }
+
       const previous = await tx.reflectionPost.findMany({
         where: { threadId: { not: null } },
         select: { threadId: true },
@@ -170,6 +203,7 @@ export async function postWeeklyReflection(
       return thread.id;
     });
   } catch (error) {
+    if (error instanceof ReplaceBlockedError) return { status: "replace-blocked", weekKey, replyCount: error.replyCount };
     // Lost a race to another run for this week: the whole transaction rolled
     // back (no stray thread), and the winner's row is what already-posted reports.
     if ((error as { code?: string }).code === "P2002") {
@@ -186,6 +220,14 @@ export async function postWeeklyReflection(
   } catch (error) {
     console.error(`[weekly-reflection] posted ${threadId} but couldn't enqueue its search-index sync:`, error);
   }
+  // The replaced thread is now removed, so its sync deletes it from search.
+  if (replacedThreadId) {
+    try {
+      await enqueueIndexSync(replacedThreadId);
+    } catch (error) {
+      console.error(`[weekly-reflection] replaced ${replacedThreadId} but couldn't enqueue its search-index removal:`, error);
+    }
+  }
 
-  return { status: "posted", weekKey, threadId, quoteId: quote.id };
+  return { status: "posted", weekKey, threadId, quoteId: quote.id, ...(replacedThreadId ? { replacedThreadId } : {}) };
 }

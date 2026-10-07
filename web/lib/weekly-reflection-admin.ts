@@ -6,6 +6,7 @@
 import { db } from "@/lib/db";
 import { recordAdminAction } from "@/lib/audit-server";
 import { skipNextReflectionQuote } from "@/lib/reflection-quotes-server";
+import { isoWeekKey } from "@/lib/reflection-schedule";
 import { postWeeklyReflection, type WeeklyReflectionResult } from "@/lib/weekly-reflection-post";
 import type { ReflectionMessage, ReflectionQuoteFields } from "@/lib/validation/weekly-reflection";
 
@@ -174,27 +175,65 @@ export async function clearNextQuoteOverride(actorId: string): Promise<void> {
   });
 }
 
+export type CurrentReflectionThread = { threadId: string; replyCount: number };
+
+/** The live (not removed) reflection thread for `now`'s ISO week — the newest of the base post and any extras — with its reply count. */
+export async function getCurrentReflectionThread(now: Date = new Date()): Promise<CurrentReflectionThread | null> {
+  const baseKey = isoWeekKey(now);
+  const rows = await db.reflectionPost.findMany({
+    where: { OR: [{ weekKey: baseKey }, { weekKey: { startsWith: `${baseKey}-extra-` } }], threadId: { not: null } },
+    orderBy: { postedAt: "desc" },
+    select: { thread: { select: { id: true, removed: true, _count: { select: { posts: true } } } } },
+  });
+  const live = rows.find((row) => row.thread && !row.thread.removed)?.thread;
+  // posts includes the opening post, so replies = posts - 1.
+  return live ? { threadId: live.id, replyCount: live._count.posts - 1 } : null;
+}
+
+export type PostNowResult = WeeklyReflectionResult & {
+  /** Set on an already-posted result so the UI can offer the right choices. */
+  current?: CurrentReflectionThread | null;
+};
+
 /**
  * Admin "Post now": the very same postWeeklyReflection the worker runs. If this
  * week already has its thread it returns {status: "already-posted"} untouched
- * unless `override` was explicitly confirmed, in which case a further thread
- * is posted (and the previous one unpinned, as always).
+ * (with the current thread and its reply count, so the UI can offer choices)
+ * unless the admin chose one of:
+ *   - `override`: add another thread this week (the earlier one is unpinned,
+ *     but stays visible); or
+ *   - `replace`: post a new one and hide the earlier thread from everyone
+ *     (soft removal: feed, forum list, direct links, search) — only allowed
+ *     while nobody has replied to it, enforced inside the posting transaction.
  */
 export async function postReflectionNow(
   actorId: string,
-  { override = false }: { override?: boolean } = {},
+  { override = false, replace = false }: { override?: boolean; replace?: boolean } = {},
   now: Date = new Date(),
-  options: Omit<NonNullable<Parameters<typeof postWeeklyReflection>[1]>, "allowAdditional"> = {},
-): Promise<WeeklyReflectionResult> {
-  const result = await postWeeklyReflection(now, { ...options, allowAdditional: override });
+  options: Omit<NonNullable<Parameters<typeof postWeeklyReflection>[1]>, "allowAdditional" | "replaceThreadId"> = {},
+): Promise<PostNowResult> {
+  const current = replace ? await getCurrentReflectionThread(now) : null;
+  const result = await postWeeklyReflection(now, {
+    ...options,
+    allowAdditional: override || replace,
+    replaceThreadId: current?.threadId,
+  });
+
   if (result.status === "posted") {
     await recordAdminAction({
       actorId,
-      action: "weekly_reflection.posted_now",
+      action: result.replacedThreadId ? "weekly_reflection.replaced" : "weekly_reflection.posted_now",
       entityType: "ReflectionPost",
       entityId: result.threadId,
-      metadata: { weekKey: result.weekKey, quoteId: result.quoteId, override },
+      metadata: {
+        weekKey: result.weekKey,
+        quoteId: result.quoteId,
+        override,
+        ...(result.replacedThreadId ? { replacedThreadId: result.replacedThreadId, newThreadId: result.threadId } : {}),
+      },
     });
+    return result;
   }
+  if (result.status === "already-posted") return { ...result, current: await getCurrentReflectionThread(now) };
   return result;
 }

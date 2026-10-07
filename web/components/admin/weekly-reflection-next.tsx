@@ -6,6 +6,14 @@ import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCsrfToken } from "@/lib/csrf-client";
 import type { ReflectionNextDto, ReflectionQuoteDto } from "@/lib/weekly-reflection-config";
@@ -30,6 +38,8 @@ export function WeeklyReflectionNext({
   const [busy, setBusy] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [swapTo, setSwapTo] = useState<string>("");
+  // Set when this week's reflection already exists: what the admin can do about it.
+  const [choice, setChoice] = useState<{ replyCount: number; hasCurrent: boolean } | null>(null);
 
   async function send(url: string, body: unknown, method = "POST") {
     const csrfToken = await getCsrfToken();
@@ -55,28 +65,28 @@ export function WeeklyReflectionNext({
     }
   }
 
-  async function postNow() {
-    if (!next) return;
-    if (!window.confirm("Post the next reflection to the Weekly Reflection forum now? Members will see it right away.")) return;
+  const POST_URL = "/api/admin/weekly-reflection/post";
+
+  /** body {} posts if the week has none yet; {override:true} adds another; {replace:true} replaces the earlier one. */
+  async function submit(body: { override?: boolean; replace?: boolean }) {
     setBusy("post");
     setOutcome(null);
     try {
-      let res = await send("/api/admin/weekly-reflection/post", {});
-      if (res.status === 409) {
-        if (
-          !window.confirm(
-            "This week's reflection has already been posted. Post another one anyway? The current thread will be unpinned in favor of the new one.",
-          )
-        ) {
-          setOutcome({ kind: "info", text: "Nothing was posted: this week's reflection is already up." });
-          return;
-        }
-        res = await send("/api/admin/weekly-reflection/post", { override: true });
-      }
+      const res = await send(POST_URL, body);
       const payload = await res.json().catch(() => null);
       if (res.ok && payload?.status === "posted") {
-        setOutcome({ kind: "info", text: "Posted to the Weekly Reflection forum.", href: `/forums/weekly-reflection/${payload.threadId}` });
+        setOutcome({
+          kind: "info",
+          text: payload.replacedThreadId
+            ? "Posted. The earlier reflection was removed from the feed and forum."
+            : "Posted to the Weekly Reflection forum.",
+          href: `/forums/weekly-reflection/${payload.threadId}`,
+        });
         router.refresh();
+      } else if (res.status === 409 && payload?.status === "already-posted") {
+        setChoice({ replyCount: payload.current?.replyCount ?? 0, hasCurrent: !!payload.current });
+      } else if (res.status === 409 && payload?.status === "replace-blocked") {
+        setOutcome({ kind: "error", text: payload.error });
       } else if (res.status === 422) {
         setOutcome({ kind: "error", text: "Nothing was posted: the forum, the system user or an active quote is missing." });
       } else {
@@ -89,9 +99,16 @@ export function WeeklyReflectionNext({
     }
   }
 
+  async function postNow() {
+    if (!next) return;
+    if (!window.confirm("Post the next reflection to the Weekly Reflection forum now? Members will see it right away.")) return;
+    await submit({});
+  }
+
   const swapChoices = activeQuotes.filter((quote) => quote.id !== next?.quote.id);
 
   return (
+    <>
     <Card>
       <CardHeader>
         <CardTitle>Next reflection</CardTitle>
@@ -160,5 +177,47 @@ export function WeeklyReflectionNext({
         </div>
       </CardContent>
     </Card>
+
+    <AlertDialog open={choice !== null} onOpenChange={(open) => !open && setChoice(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>This week&apos;s reflection is already up</AlertDialogTitle>
+          <AlertDialogDescription>
+            {choice?.hasCurrent
+              ? choice.replyCount === 0
+                ? "Nobody has replied to it yet. You can replace it, which removes it from the feed, the forum and search, or add another alongside it (the current one is unpinned but stays visible)."
+                : `Members have replied to it (${choice.replyCount}), so it can't be replaced without hiding their comments. You can add another alongside it; the current one is unpinned but stays visible.`
+              : "Its thread was removed. You can post a new one."}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="gap-2 sm:gap-2">
+          <Button variant="outline" onClick={() => setChoice(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setChoice(null);
+              void submit({ override: true });
+            }}
+          >
+            {choice?.hasCurrent ? "Add another" : "Post a new one"}
+          </Button>
+          {choice?.hasCurrent && (
+            <Button
+              disabled={choice.replyCount > 0}
+              title={choice.replyCount > 0 ? "Not available: members have replied" : undefined}
+              onClick={() => {
+                setChoice(null);
+                void submit({ replace: true });
+              }}
+            >
+              Replace this week&apos;s
+            </Button>
+          )}
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

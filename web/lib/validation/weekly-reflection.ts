@@ -64,7 +64,10 @@ export const reflectionNextQuoteSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("clear") }),
 ]);
 
-export const reflectionPostNowSchema = z.object({ override: z.boolean().optional() });
+// `override` = add another thread this week; `replace` = post a new one and hide the earlier one. Not both.
+export const reflectionPostNowSchema = z
+  .object({ override: z.boolean().optional(), replace: z.boolean().optional() })
+  .refine((value) => !(value.override && value.replace), "Choose either add another or replace, not both");
 
 export const reflectionMessageSchema = z.object({
   titleTemplate: z
