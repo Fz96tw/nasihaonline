@@ -2906,3 +2906,28 @@ model PastedImage {
   @@index([knowledgeItemId])
   @@map("pasted_images")
 }
+
+// Curated pool behind the Weekly Reflection forum thread (own table rather
+// than a live quote API: no third-party dependency, rate limit or attribution
+// requirement at post time, and every entry is vetted). Rotation is
+// least-recently-posted-first (lib/reflection-quotes.ts), so `lastPostedAt`
+// doubles as the cycle state — a never-posted quote sorts first, and once all
+// active quotes have been posted the oldest simply comes around again.
+// `text` is the seed's upsert key; seeding never touches lastPostedAt.
+model ReflectionQuote {
+  id           String    @id @default(cuid())
+  text         String    @unique
+  author       String
+  // Optional work/context, e.g. "Letter from Birmingham Jail".
+  source       String?
+  // Member-facing discussion prompt shown under the quote in the thread.
+  prompt       String
+  active       Boolean   @default(true)
+  lastPostedAt DateTime?
+  timesPosted  Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([active, lastPostedAt])
+  @@map("reflection_quotes")
+}

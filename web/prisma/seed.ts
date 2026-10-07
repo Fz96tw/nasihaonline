@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { EVENTS_FORUM_SLUG } from "@/lib/forums";
 import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
 import { getOrCreateWeeklyReflectionUser } from "@/lib/system-user";
+import { REFLECTION_QUOTES } from "./reflection-quotes-data";
 
 // Absolute, not relative — same rationale as events-server.ts's createEvent:
 // lib/linkify.tsx's linkifyText only turns absolute http(s) URLs into links.
@@ -721,6 +722,21 @@ async function backfillEventForumThreads() {
   console.log(`Backfilled ${events.length} event discussion thread(s).`);
 }
 
+// Weekly Reflection pool. Not sample data, so it ignores SEED_SAMPLE_DATA.
+// Upsert keyed on the quote text with an empty `update`, so the re-run that
+// happens on every container start never resets lastPostedAt/timesPosted nor
+// reverts an admin's edits (e.g. active=false) to an existing row.
+async function seedReflectionQuotes() {
+  for (const quote of REFLECTION_QUOTES) {
+    await db.reflectionQuote.upsert({
+      where: { text: quote.text },
+      update: {},
+      create: quote,
+    });
+  }
+  console.log(`Seeded ${REFLECTION_QUOTES.length} reflection quotes.`);
+}
+
 async function main() {
   for (const name of SKILLS) {
     await db.skill.upsert({
@@ -750,6 +766,7 @@ async function main() {
   // Not sample data (unlike the seeds above) — runs regardless of SEED_SAMPLE_DATA.
   await getOrCreateWeeklyReflectionUser();
   console.log("Ensured Weekly Reflection system user.");
+  await seedReflectionQuotes();
 }
 
 main()
