@@ -32,3 +32,23 @@ export function youtubeThumbnailUrl(rawUrl: string): string | null {
   const id = extractYoutubeVideoId(rawUrl);
   return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : null;
 }
+
+/**
+ * First YouTube watch/short/embed URL in a block of plain text (a forum
+ * post body), or null — same host check as lib/linkify.tsx's own embed
+ * decision, so the feed only previews a video the thread itself would embed.
+ */
+export function firstYoutubeUrlInText(text: string | null | undefined): string | null {
+  if (!text) return null;
+  for (const match of Array.from(text.matchAll(/https?:\/\/[^\s<>"]+/g))) {
+    const url = match[0].replace(/[.,;:!?)\]}]+$/, "");
+    try {
+      const { hostname } = new URL(url);
+      const isYoutubeHost = hostname === "youtu.be" || hostname === "youtube.com" || hostname.endsWith(".youtube.com");
+      if (isYoutubeHost && extractYoutubeVideoId(url)) return url;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}

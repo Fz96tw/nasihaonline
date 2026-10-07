@@ -114,7 +114,8 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
   // full-width below (like other feed types) and the corner square is
   // dropped to avoid showing two images for the same row.
   const isForumThread = item.type === "forum_thread";
-  const hasThreadImage = isForumThread && !!item.imageUrl && !item.bodyImageUrl;
+  const hasThreadYoutube = isForumThread && !item.bodyImageUrl && !!item.youtubeEmbedUrl && !!item.youtubeThumbnailUrl;
+  const hasThreadImage = isForumThread && !!item.imageUrl && !item.bodyImageUrl && !hasThreadYoutube;
   // Library items opted into the title-overlay treatment (§ Library hero
   // banner title overlay option) show the title on the image instead of in
   // the text block above it, mirroring the detail page/browse card.
@@ -309,6 +310,9 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                   />
                 )}
               </>
+            )}
+            {hasThreadYoutube && (
+              <FeedYoutubePlayer thumbnailUrl={item.youtubeThumbnailUrl!} embedUrl={item.youtubeEmbedUrl!} />
             )}
             {isForumThread && item.bodyImageUrl && (
               // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale

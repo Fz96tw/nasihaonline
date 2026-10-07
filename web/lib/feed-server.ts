@@ -21,7 +21,7 @@ import {
 import { withFeedRef, type FeedItem, type FeedItemType, type FeedCursor } from "@/lib/feed";
 import { firstForumPostImageUrl, stripPastedImageTokens } from "@/lib/pasted-images";
 import { extractSnippet, textContainsMatch } from "@/lib/text-highlight";
-import { youtubeEmbedUrl, youtubeThumbnailUrl } from "@/lib/youtube";
+import { firstYoutubeUrlInText, youtubeEmbedUrl, youtubeThumbnailUrl } from "@/lib/youtube";
 import {
   searchEventDocuments,
   searchLibraryDocuments,
@@ -383,7 +383,12 @@ export async function getFeedPage(params: {
     // the sort/cursor field here rather than createdAt, so a thread with
     // fresh activity resurfaces near the top instead of only ever
     // appearing once at its original creation time.
-    ...(before ? { lastActivityAt: { lt: before } } : {}),
+    // Browse/following mode keys off createdAt instead (like libraryWhere's
+    // publishedAt): a thread's own row never gets bumped by replies, which
+    // surface as a separate row (see the forumThreads.flatMap branch below).
+    // Search mode keeps lastActivityAt so a hit still lands on the post that
+    // matched, via the single bumped row.
+    ...(before ? (query ? { lastActivityAt: { lt: before } } : { createdAt: { lt: before } }) : {}),
     ...(forumHitIds ? { id: { in: forumHitIds } } : {}),
     ...(authorIds
       ? { AND: [{ OR: [{ authorId: { in: authorIds } }, { posts: { some: { authorId: { in: authorIds } } } }] }] }
@@ -408,6 +413,23 @@ export async function getFeedPage(params: {
           ],
         }),
   };
+  // libraryWhere minus its publishedAt cursor, re-keyed to lastActivityAt —
+  // the reply-row fetch (see the library findMany above).
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { publishedAt: _publishedAtCursor, ...libraryWhereWithoutCursor } = libraryWhere as typeof libraryWhere & { publishedAt?: unknown };
+  const libraryReplyWhere = {
+    ...libraryWhereWithoutCursor,
+    ...(before ? { lastActivityAt: { lt: before } } : {}),
+  } as typeof libraryWhere;
+
+  // forumWhere minus its createdAt cursor, re-keyed to lastActivityAt — the
+  // reply-row fetch (see the forum_thread findMany below).
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { createdAt: _createdAtCursor, ...forumWhereWithoutCursor } = forumWhere as typeof forumWhere & { createdAt?: unknown };
+  const forumReplyWhere = {
+    ...forumWhereWithoutCursor,
+    ...(before ? { lastActivityAt: { lt: before } } : {}),
+  } as typeof forumWhere;
   const announcementWhere = {
     sentAt: { not: null },
     retractedAt: null,
@@ -468,6 +490,93 @@ export async function getFeedPage(params: {
   // Run alongside countsPromise below (not sequentially after) — both are
   // independent, so awaiting them together via Promise.all(itemsPromise,
   // countsPromise) halves the added latency of the extra count queries.
+  const fetchLibraryItems = (
+    where: typeof libraryWhere,
+    orderBy: { publishedAt: "desc" } | { lastActivityAt: "desc" },
+  ) =>
+    db.knowledgeItem.findMany({
+      where,
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        createdAt: true,
+        publishedAt: true,
+        youtubeUrl: true,
+        heroImageUrl: true,
+        showTitleOverlay: true,
+        visibility: true,
+        contributorId: true,
+        contributor: { select: AUTHOR_SELECT },
+        _count: { select: { views: true } },
+        // posts includes the thread's own system-authored opening post, so
+        // forumReplyCount below subtracts one — same convention as the
+        // events branch above. Also feeds latestDiscussionReply below: a
+        // real reply still gets its own feed row, just a separate one
+        // (see the libraryItems.flatMap branch below) instead of
+        // overwriting this item's own row.
+        forumThread: { select: DISCUSSION_THREAD_FEED_SELECT },
+        lastActivityAt: true,
+      },
+      orderBy,
+      take: pageSize,
+    });
+
+    const fetchForumThreads = (
+    where: typeof forumWhere,
+    orderBy: { lastActivityAt: "desc" } | { createdAt: "desc" },
+  ) =>
+    db.forumThread.findMany({
+      // eventId: null/knowledgeItemId: null excludes the Events forum's
+      // auto-created threads and the Library's on-demand discussion threads
+      // during ordinary browse — those already surface as their parent
+      // Event/KnowledgeItem's own feed row (with forumReplyCount above), so
+      // listing them again here would be a duplicate, bodiless-looking
+      // "Forum" row for the same activity. In search mode this exclusion is
+      // dropped: a Meilisearch hit here means the query matched this
+      // thread's actual text (root post or a reply), which the parent
+      // Event/KnowledgeItem's own indexed document doesn't carry — hiding it
+      // would silently throw away a real match. The isThreadVisible filter
+      // below (after the query resolves) then re-applies the inherited
+      // event/library visibility gate that the eventId/knowledgeItemId
+      // exclusion made unnecessary here before. Beyond de-duplication, the
+      // OR below is Member-Initiated Restricted Forum Threads' (§4.13/
+      // §11.16) own per-viewer visibility filter — same shape as the
+      // events/library branches above — since a standalone thread can now
+      // independently carry `visibility: invited`.
+      where,
+      select: {
+        id: true,
+        title: true,
+        createdAt: true,
+        lastActivityAt: true,
+        author: { select: AUTHOR_SELECT },
+        forum: { select: { name: true, slug: true, category: { select: { communityId: true } } } },
+        // Latest post's author + body — a bump from a reply should credit
+        // the replier (not the thread creator) and show what they wrote.
+        // Falls back to `author` above when the thread has no posts yet.
+        posts: {
+          select: { id: true, author: { select: AUTHOR_SELECT }, body: true },
+          orderBy: { createdAt: "desc" },
+          take: query ? SEARCH_POST_SCAN_LIMIT : 1,
+        },
+        // posts includes the thread's own opening post, so replyCount below
+        // subtracts one — same convention as toThreadListItem in forums-server.ts.
+        _count: { select: { posts: true, views: true } },
+        // Only needed for the isThreadVisible filter below — never rendered.
+        // (removed is already excluded by forumWhere above; selected only
+        // to satisfy isThreadVisible's OwnThreadAccess type.)
+        visibility: true,
+        authorId: true,
+        removed: true,
+        invitees: { select: { userId: true } },
+        event: EVENT_THREAD_ACCESS_SELECT,
+        knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
+      },
+      orderBy,
+      take: pageSize,
+    }).then((threads) => threads.filter((thread) => isThreadVisible(thread, viewerId ?? undefined, isPrivileged, forumMember)));
+
   const itemsPromise = Promise.all([
     !wants("event") || eventHitIds?.length === 0 ? Promise.resolve([]) : db.event.findMany({
       where: eventWhere,
@@ -509,83 +618,35 @@ export async function getFeedPage(params: {
       orderBy: { publishedAt: "desc" },
       take: pageSize,
     }),
-    !wants("library") || libraryHitIds?.length === 0 ? Promise.resolve([]) : db.knowledgeItem.findMany({
-      where: libraryWhere,
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        createdAt: true,
-        publishedAt: true,
-        youtubeUrl: true,
-        heroImageUrl: true,
-        showTitleOverlay: true,
-        visibility: true,
-        contributorId: true,
-        contributor: { select: AUTHOR_SELECT },
-        _count: { select: { views: true } },
-        // posts includes the thread's own system-authored opening post, so
-        // forumReplyCount below subtracts one — same convention as the
-        // events branch above. Also feeds latestDiscussionReply below: a
-        // real reply still gets its own feed row, just a separate one
-        // (see the libraryItems.flatMap branch below) instead of
-        // overwriting this item's own row.
-        forumThread: { select: DISCUSSION_THREAD_FEED_SELECT },
-        lastActivityAt: true,
-      },
-      orderBy: { publishedAt: "desc" },
-      take: pageSize,
-    }),
-    !wants("forum_thread") || forumHitIds?.length === 0 ? Promise.resolve([]) : db.forumThread.findMany({
-      // eventId: null/knowledgeItemId: null excludes the Events forum's
-      // auto-created threads and the Library's on-demand discussion threads
-      // during ordinary browse — those already surface as their parent
-      // Event/KnowledgeItem's own feed row (with forumReplyCount above), so
-      // listing them again here would be a duplicate, bodiless-looking
-      // "Forum" row for the same activity. In search mode this exclusion is
-      // dropped: a Meilisearch hit here means the query matched this
-      // thread's actual text (root post or a reply), which the parent
-      // Event/KnowledgeItem's own indexed document doesn't carry — hiding it
-      // would silently throw away a real match. The isThreadVisible filter
-      // below (after the query resolves) then re-applies the inherited
-      // event/library visibility gate that the eventId/knowledgeItemId
-      // exclusion made unnecessary here before. Beyond de-duplication, the
-      // OR below is Member-Initiated Restricted Forum Threads' (§4.13/
-      // §11.16) own per-viewer visibility filter — same shape as the
-      // events/library branches above — since a standalone thread can now
-      // independently carry `visibility: invited`.
-      where: forumWhere,
-      select: {
-        id: true,
-        title: true,
-        createdAt: true,
-        lastActivityAt: true,
-        author: { select: AUTHOR_SELECT },
-        forum: { select: { name: true, slug: true, category: { select: { communityId: true } } } },
-        // Latest post's author + body — a bump from a reply should credit
-        // the replier (not the thread creator) and show what they wrote.
-        // Falls back to `author` above when the thread has no posts yet.
-        posts: {
-          select: { id: true, author: { select: AUTHOR_SELECT }, body: true },
-          orderBy: { createdAt: "desc" },
-          take: query ? SEARCH_POST_SCAN_LIMIT : 1,
-        },
-        // posts includes the thread's own opening post, so replyCount below
-        // subtracts one — same convention as toThreadListItem in forums-server.ts.
-        _count: { select: { posts: true, views: true } },
-        // Only needed for the isThreadVisible filter below — never rendered.
-        // (removed is already excluded by forumWhere above; selected only
-        // to satisfy isThreadVisible's OwnThreadAccess type.)
-        visibility: true,
-        authorId: true,
-        removed: true,
-        invitees: { select: { userId: true } },
-        event: EVENT_THREAD_ACCESS_SELECT,
-        knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
-      },
-      orderBy: { lastActivityAt: "desc" },
-      take: pageSize,
-    }).then((threads) => threads.filter((thread) => isThreadVisible(thread, viewerId ?? undefined, isPrivileged, forumMember))),
+    !wants("library") || libraryHitIds?.length === 0 ? Promise.resolve([]) : query
+      ? fetchLibraryItems(libraryWhere, { publishedAt: "desc" })
+      // Browse/following: items are found twice — by publishedAt for their
+      // own rows, and by lastActivityAt for the reply rows of items too old
+      // to be in the first set. Same merge as forumThreads below; the
+      // libraryItems.flatMap branch only emits whichever row's own
+      // timestamp falls inside the page's cursor window.
+      : Promise.all([
+          fetchLibraryItems(libraryWhere, { publishedAt: "desc" }),
+          fetchLibraryItems(libraryReplyWhere, { lastActivityAt: "desc" }),
+        ]).then(([byPublished, byActivity]) => {
+          const seen = new Set(byPublished.map((item) => item.id));
+          return [...byPublished, ...byActivity.filter((item) => !seen.has(item.id))];
+        }),
+    !wants("forum_thread") || forumHitIds?.length === 0 ? Promise.resolve([]) : query
+      ? fetchForumThreads(forumWhere, { lastActivityAt: "desc" })
+      // Browse/following: threads are found twice — by createdAt for their
+      // own "New thread" rows, and by lastActivityAt for the reply rows of
+      // threads too old to be in the first set (a reply to a month-old
+      // thread must still surface at the top). Merged by id; the
+      // forumThreads.flatMap branch below only emits whichever row's own
+      // timestamp falls inside the page's cursor window.
+      : Promise.all([
+          fetchForumThreads(forumWhere, { createdAt: "desc" }),
+          fetchForumThreads(forumReplyWhere, { lastActivityAt: "desc" }),
+        ]).then(([byCreated, byActivity]) => {
+          const seen = new Set(byCreated.map((thread) => thread.id));
+          return [...byCreated, ...byActivity.filter((thread) => !seen.has(thread.id))];
+        }),
     !wants("announcement") || announcementHitIds?.length === 0 ? Promise.resolve([]) : db.announcement.findMany({
       where: announcementWhere,
       select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true, welcomeTier: true },
@@ -680,6 +741,20 @@ export async function getFeedPage(params: {
     [events, libraryItems, forumThreads, announcements, surveys, seekingReviewItems, inboxRaw],
     [eventCount, libraryCount, forumCount, announcementCount, surveyCount, reviewCount],
   ] = await Promise.all([itemsPromise, countsPromise]);
+
+  // Each browsed/followed thread's opening post, for the thread's own
+  // "New thread" row — the `posts` select above is newest-first (take: 1),
+  // which is the reply, not the opening post, once a thread has replies.
+  const openingPostByThread = new Map<string, { id: string; body: string }>();
+  if (!query && forumThreads.length > 0) {
+    const openingPosts = await db.forumPost.findMany({
+      where: { threadId: { in: forumThreads.map((thread) => thread.id) } },
+      select: { id: true, threadId: true, body: true },
+      orderBy: { createdAt: "asc" },
+      distinct: ["threadId"],
+    });
+    for (const post of openingPosts) openingPostByThread.set(post.threadId, post);
+  }
 
   // Following mode: the newest non-removed post by a followed member in each
   // event/library discussion thread and standalone forum thread, flagged as a
@@ -925,14 +1000,20 @@ export async function getFeedPage(params: {
       // description, not discussion framing that carries no hint of why it
       // matched the query.
       // Following mode: same shape as the events branch above.
-      const libraryRows = !authorIds || followedAuthorSet.has(item.contributorId) ? [ownRow] : [];
+      // Each row only inside its own timestamp's cursor window — an item
+      // fetched via the other query (see libraryItems above) may have one
+      // row already shown on an earlier page.
+      const libraryRows =
+        (!authorIds || followedAuthorSet.has(item.contributorId)) && (!before || (item.publishedAt ?? item.createdAt) < before)
+          ? [ownRow]
+          : [];
       const followedReply = authorIds && item.forumThread ? followedPostByThread.get(item.forumThread.id) : undefined;
       const reply = query
         ? null
         : authorIds
           ? (followedReply?.isReply ? followedReply.post : null)
           : latestDiscussionReply(item.forumThread, item.lastActivityAt, item.publishedAt ?? item.createdAt);
-      if (!reply) return libraryRows;
+      if (!reply || (before && item.lastActivityAt >= before)) return libraryRows;
 
       // The latest reply, as its OWN row (id: reply.id, not item.id) rather
       // than overwriting ownRow above — confirmed with user: a reply
@@ -960,63 +1041,92 @@ export async function getFeedPage(params: {
     }),
     ...forumThreads
       .filter((thread) => !authorIds || followedPostByThread.has(thread.id))
-      .map((thread): FeedItem => {
-      // A thread bumped up by a fresh reply (lastActivityAt > createdAt)
-      // reads as "Replied to" rather than "New thread" — it isn't new,
-      // it's resurfacing, and the row's author is the replier, not the
-      // thread's original creator.
-      // Following mode: credited to the newest post by a followed member
-      // (their opening post reads as "New thread", a later one as "Replied"),
-      // never to a replier who isn't followed.
+      .flatMap((thread): FeedItem[] => {
       const followedPost = authorIds ? followedPostByThread.get(thread.id) : undefined;
-      const isReply = authorIds
-        ? Boolean(followedPost?.isReply)
-        : thread.lastActivityAt.getTime() > thread.createdAt.getTime();
       const latestPost = thread.posts[0];
-      // In search mode, prefer whichever fetched post actually contains the
-      // match over always the latest — the latest post might not be why
-      // this thread matched at all (see SEARCH_POST_SCAN_LIMIT above).
-      const matchingPost = query ? thread.posts.find((post) => textContainsMatch(post.body, query)) : undefined;
-      const excerptPost = query
-        ? (matchingPost ?? latestPost)
-        : authorIds
-          ? followedPost?.post
-          : latestPost;
-      return {
-        type: "forum_thread",
-        id: thread.id,
-        title: thread.title,
-        excerpt: isReply
-          ? `Replied to a thread in ${thread.forum.name}`
-          : `New thread in ${thread.forum.name}`,
-        // Reply-bumped threads link straight to the replying post (matching
-        // the #post-<id> convention used by @-mention notifications, see
-        // lib/forums-server.ts) instead of always landing at the thread top.
-        href:
-          withFeedRef(`/forums/${thread.forum.slug}/${thread.id}`, query) +
-          (isReply && excerptPost ? `#post-${excerptPost.id}` : ""),
-        timestamp: thread.lastActivityAt.toISOString(),
-        author: authorOf(excerptPost?.author ?? thread.author),
-        // Forum threads have no per-thread hero image (no upload UI, no
-        // schema column) — every thread shows the same static default so the
-        // feed row still gets a thumbnail (see FeedRow's forum_thread layout).
-        imageUrl: "/images/forum-thread.jpg",
-        stats: { views: thread._count.views, comments: thread._count.posts - 1 },
-        // Browse mode: excerptPost is latestPost — either the opening post
-        // (fresh thread) or the newest reply (bumped thread), both real
-        // content worth previewing. Search mode centres it on the matched
-        // post instead. Either way, strip any `![](url)` pasted-image token
-        // so the snippet shows prose, not raw markdown (an image-only post
-        // strips to "" and the row shows just bodyImageUrl below).
-        replyExcerpt: excerptPost ? excerptOf(stripPastedImageTokens(excerptPost.body)) || undefined : undefined,
-        // When that previewed post embeds a pasted screenshot
-        // (lib/use-paste-image-upload.ts), surface it inline in the feed row
-        // (FeedRow renders it full-width, like other feed types' hero
-        // images). The /api/forums/post-image proxy re-checks thread
-        // visibility per request, so it's never more visible than the thread.
-        bodyImageUrl: firstForumPostImageUrl(excerptPost?.body),
-        isRestricted: thread.visibility === ForumThreadVisibility.invited,
+
+      // `post` is whichever post the row previews. The row's own fields are
+      // shared between the three shapes below (search hit, original thread,
+      // reply) — only the post, framing, and timestamp differ.
+      const buildRow = (
+        id: string,
+        post: { id: string; author: Parameters<typeof authorOf>[0]; body: string } | undefined,
+        isReply: boolean,
+        timestamp: Date,
+      ): FeedItem => {
+        const bodyImageUrl = firstForumPostImageUrl(post?.body);
+        const youtubeLink = firstYoutubeUrlInText(post?.body);
+        return {
+          type: "forum_thread",
+          id,
+          title: thread.title,
+          excerpt: isReply
+            ? `Replied to a thread in ${thread.forum.name}`
+            : `New thread in ${thread.forum.name}`,
+          // A reply row links straight to the replying post (matching the
+          // #post-<id> convention used by @-mention notifications, see
+          // lib/forums-server.ts) instead of landing at the thread top.
+          href:
+            withFeedRef(`/forums/${thread.forum.slug}/${thread.id}`, query) +
+            (isReply && post ? `#post-${post.id}` : ""),
+          timestamp: timestamp.toISOString(),
+          author: authorOf(post?.author ?? thread.author),
+          // Forum threads have no per-thread hero image (no upload UI, no
+          // schema column) — every thread shows the same static default so
+          // the feed row still gets a thumbnail (see FeedRow's forum_thread
+          // layout).
+          imageUrl: "/images/forum-thread.jpg",
+          stats: { views: thread._count.views, comments: thread._count.posts - 1 },
+          // Strips any `![](url)` pasted-image token so the snippet shows
+          // prose, not raw markdown (an image-only post strips to "" and the
+          // row shows just bodyImageUrl below).
+          replyExcerpt: post ? excerptOf(stripPastedImageTokens(post.body)) || undefined : undefined,
+          // A pasted screenshot in the previewed post is surfaced inline
+          // (FeedRow renders it full-width). The /api/forums/post-image
+          // proxy re-checks thread visibility per request, so it's never
+          // more visible than the thread.
+          bodyImageUrl,
+          // A YouTube link in that same post previews as an inline player —
+          // but only when there's no pasted image, which wins the one slot.
+          ...(!bodyImageUrl && youtubeLink
+            ? {
+                youtubeEmbedUrl: youtubeEmbedUrl(youtubeLink) ?? undefined,
+                youtubeThumbnailUrl: youtubeThumbnailUrl(youtubeLink) ?? undefined,
+              }
+            : {}),
+          isRestricted: thread.visibility === ForumThreadVisibility.invited,
+        };
       };
+
+      // Search mode: one row centred on whichever fetched post actually
+      // contains the match, rather than always the latest — the latest
+      // post might not be why this thread matched at all (see
+      // SEARCH_POST_SCAN_LIMIT above). Framed "Replied" when it's bumped.
+      if (query) {
+        const matchingPost = thread.posts.find((post) => textContainsMatch(post.body, query));
+        const isReply = thread.lastActivityAt.getTime() > thread.createdAt.getTime();
+        return [buildRow(thread.id, matchingPost ?? latestPost, isReply, thread.lastActivityAt)];
+      }
+
+      // Browse/following mode, mirroring the Library branch above —
+      // confirmed with user: a reply shouldn't replace the thread's own
+      // feed entry. The thread's row stays at its createdAt with its opening
+      // post; the latest reply surfaces as its OWN row (id: the reply's id)
+      // at lastActivityAt, one per thread, replaced by the next reply's.
+      const opening = openingPostByThread.get(thread.id);
+      // Each row only inside its own timestamp's cursor window — a thread
+      // fetched via the other query (see forumThreads above) may have one
+      // row already shown on an earlier page.
+      const ownRow = (!authorIds || followedAuthorSet.has(thread.authorId)) && (!before || thread.createdAt < before)
+        ? [buildRow(thread.id, opening ? { ...opening, author: thread.author } : undefined, false, thread.createdAt)]
+        : [];
+      const reply = authorIds
+        ? (followedPost?.isReply ? followedPost.post : null)
+        : thread._count.posts >= 2 && thread.lastActivityAt.getTime() > thread.createdAt.getTime()
+          ? (latestPost ?? null)
+          : null;
+      const replyInWindow = !before || thread.lastActivityAt < before;
+      return reply && replyInWindow ? [...ownRow, buildRow(reply.id, reply, true, thread.lastActivityAt)] : ownRow;
     }),
     ...announcements.map((announcement): FeedItem => ({
       type: "announcement",

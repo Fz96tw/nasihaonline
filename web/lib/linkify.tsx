@@ -5,6 +5,8 @@ import { Fragment, type ReactNode } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { HighlightText } from "@/components/highlight-text";
 import { VideoEmbed } from "@/components/shared/video-embed";
+import { YoutubeEmbed } from "@/components/shared/youtube-embed";
+import { extractYoutubeVideoId, youtubeEmbedUrl, youtubeThumbnailUrl } from "@/lib/youtube";
 import { PASTED_IMAGE_PROXY_PREFIXES as IMAGE_PROXY_PREFIXES } from "@/lib/pasted-images";
 
 // Matches, in priority order: a `![alt](url)` pasted-image token (see
@@ -100,6 +102,16 @@ function renderImage(key: number, alt: string, url: string): ReactNode | null {
   );
 }
 
+function isYoutubeUrl(url: string): boolean {
+  try {
+    const { hostname } = new URL(url);
+    const isYoutubeHost = hostname === "youtu.be" || hostname === "youtube.com" || hostname.endsWith(".youtube.com");
+    return isYoutubeHost && !!extractYoutubeVideoId(url);
+  } catch {
+    return false;
+  }
+}
+
 function getAppOrigin(): string | null {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
   if (!appUrl) return null;
@@ -149,7 +161,15 @@ function renderLink(key: number, label: string, url: string, appOrigin: string |
  * withFeedRef) wraps matching words in every plain-text run with <mark> —
  * never inside a link/image/mention, only the ordinary text around them.
  */
-export function linkifyText(text: string, highlightQuery?: string): ReactNode {
+export function linkifyText(
+  text: string,
+  highlightQuery?: string,
+  // Opt-in (forum posts only): a bare YouTube URL also renders a click-to-play
+  // embed under its link, until `remaining` runs out. A mutable counter
+  // rather than a number so it can be shared across the several linkifyText
+  // calls renderTextWithMentions splits one post into.
+  youtubeBudget?: { remaining: number },
+): ReactNode {
   const appOrigin = getAppOrigin();
   const parts: ReactNode[] = [];
   let lastIndex = 0;
@@ -207,6 +227,14 @@ export function linkifyText(text: string, highlightQuery?: string): ReactNode {
     }
 
     parts.push(renderLink(key++, url, url, appOrigin));
+    if (youtubeBudget && youtubeBudget.remaining > 0 && isYoutubeUrl(url)) {
+      const embedUrl = youtubeEmbedUrl(url);
+      const thumbnailUrl = youtubeThumbnailUrl(url);
+      if (embedUrl && thumbnailUrl) {
+        youtubeBudget.remaining--;
+        parts.push(<YoutubeEmbed key={key++} embedUrl={embedUrl} thumbnailUrl={thumbnailUrl} />);
+      }
+    }
     if (trailing) parts.push(renderPlain(trailing, key++));
     lastIndex = start + rawUrl.length;
   }

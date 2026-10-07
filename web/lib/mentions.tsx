@@ -59,9 +59,12 @@ export function renderTextWithMentions(
   body: string,
   candidates: MentionCandidate[],
   highlightQuery?: string,
+  /** Forum posts only — max YouTube links in this body that also render an inline player. Omitted = links only. */
+  maxYoutubeEmbeds?: number,
 ): ReactNode {
+  const youtubeBudget = maxYoutubeEmbeds ? { remaining: maxYoutubeEmbeds } : undefined;
   const spans = findMentionSpans(body, candidates);
-  if (spans.length === 0) return linkifyText(body, highlightQuery);
+  if (spans.length === 0) return linkifyText(body, highlightQuery, youtubeBudget);
 
   const parts: ReactNode[] = [];
   let lastIndex = 0;
@@ -69,7 +72,7 @@ export function renderTextWithMentions(
 
   for (const span of spans) {
     if (span.start > lastIndex) {
-      parts.push(<Fragment key={key++}>{linkifyText(body.slice(lastIndex, span.start), highlightQuery)}</Fragment>);
+      parts.push(<Fragment key={key++}>{linkifyText(body.slice(lastIndex, span.start), highlightQuery, youtubeBudget)}</Fragment>);
     }
     parts.push(
       <span key={key++} className="rounded bg-primary/10 px-1 py-0.5 font-medium text-primary">
@@ -80,7 +83,7 @@ export function renderTextWithMentions(
   }
 
   if (lastIndex < body.length) {
-    parts.push(<Fragment key={key++}>{linkifyText(body.slice(lastIndex), highlightQuery)}</Fragment>);
+    parts.push(<Fragment key={key++}>{linkifyText(body.slice(lastIndex), highlightQuery, youtubeBudget)}</Fragment>);
   }
 
   return parts;

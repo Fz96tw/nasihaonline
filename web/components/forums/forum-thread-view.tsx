@@ -318,7 +318,7 @@ function PostNode({
           </div>
         ) : (
           <p className={cn("whitespace-pre-wrap break-words text-sm", post.removed && "italic text-muted-foreground")}>
-            {renderTextWithMentions(post.body, mentionableMembers, highlightQuery)}
+            {renderTextWithMentions(post.body, mentionableMembers, highlightQuery, 2)}
           </p>
         )}
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">

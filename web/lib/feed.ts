@@ -37,6 +37,8 @@ export type FeedItem = {
   imageUrl: string | null;
   /** Only library items with a YouTube link and no uploaded hero image carry this — FeedRow renders imageUrl (the video's thumbnail) as a click-to-play facade that swaps in this embed. Undefined for every other row. */
   youtubeEmbedUrl?: string;
+  /** Paired with youtubeEmbedUrl — the poster image FeedRow shows until the player autoplays. Only set alongside it. */
+  youtubeThumbnailUrl?: string;
   /** Only "library" items carry this — when true, FeedRow overlays the title in white on a dark gradient directly on imageUrl instead of rendering the full-width image below the title block. Undefined for every other type; always false/undefined when imageUrl is null. */
   showTitleOverlay?: boolean;
   /** Only forum threads carry the combined eye/reply count shown on their detail page — undefined for every other type. Library items (including blog_post) carry libraryViewCount + forumReplyCount separately instead. */
