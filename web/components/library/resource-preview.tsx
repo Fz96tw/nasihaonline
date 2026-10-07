@@ -401,7 +401,7 @@ function BlogPostBody({ body, highlightQuery }: { body?: string | null; highligh
     <div
       key={highlightQuery ?? ""}
       ref={containerRef}
-      className="prose prose-sm max-w-none"
+      className="prose prose-sm max-w-none break-words [overflow-wrap:anywhere] prose-a:text-primary prose-a:underline prose-img:h-auto prose-img:max-w-full"
       dangerouslySetInnerHTML={{ __html: body ?? "" }}
     />
   );
@@ -483,6 +483,25 @@ export function ResourcePreview({
 
   if (contentType === KnowledgeContentType.blog_post) {
     return <BlogPostBody body={body} highlightQuery={highlightQuery} />;
+  }
+
+  // Every non-blog type also carries a rich-text body (see
+  // submit-resource-form.tsx) — render it above the type's own
+  // attachment/link/lecture preview, which re-enters below with no body.
+  if (body?.trim()) {
+    return (
+      <div className="flex flex-col gap-6">
+        <BlogPostBody body={body} highlightQuery={highlightQuery} />
+        <ResourcePreview
+          title={title}
+          contentType={contentType}
+          youtubeUrl={youtubeUrl}
+          externalUrl={externalUrl}
+          attachment={attachment}
+          highlightQuery={highlightQuery}
+        />
+      </div>
+    );
   }
 
   if (isRecordedLecture) {

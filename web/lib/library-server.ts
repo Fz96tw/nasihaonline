@@ -86,6 +86,7 @@ const KNOWLEDGE_ITEM_BODY_ALLOWED_TAGS = [
   "blockquote",
   "hr",
   "img",
+  "a",
 ];
 
 // The only src an <img> in a KnowledgeItem body is ever allowed to keep —
@@ -99,7 +100,12 @@ const LIBRARY_BODY_IMAGE_SRC_PREFIX = "/api/library/body-image/";
 export function sanitizeKnowledgeItemBody(html: string): string {
   return sanitizeHtml(html, {
     allowedTags: KNOWLEDGE_ITEM_BODY_ALLOWED_TAGS,
-    allowedAttributes: { img: ["src", "alt"] },
+    allowedAttributes: { img: ["src", "alt"], a: ["href", "rel", "target"] },
+    allowedSchemes: ["http", "https", "mailto"],
+    allowedSchemesAppliedToAttributes: ["href"],
+    transformTags: {
+      a: sanitizeHtml.simpleTransform("a", { rel: "noopener noreferrer nofollow", target: "_blank" }),
+    },
     exclusiveFilter: (frame) =>
       frame.tag === "img" && !frame.attribs.src?.startsWith(LIBRARY_BODY_IMAGE_SRC_PREFIX),
   });

@@ -207,7 +207,7 @@ export default async function LibraryItemDetailPage({
         <LibraryViewCounter itemId={item.id} initialViews={item.viewCount} />
       </div>
 
-      {item.contentType !== KnowledgeContentType.blog_post && (
+      {item.contentType !== KnowledgeContentType.blog_post && !item.body?.trim() && (
         <p className="mb-8 whitespace-pre-wrap text-base leading-relaxed text-muted-foreground">
           <HighlightText text={item.description} query={q} />
         </p>
