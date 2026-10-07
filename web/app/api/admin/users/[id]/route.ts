@@ -6,6 +6,7 @@ import { deleteClerkUser, syncUserRoleTierToClerk } from "@/lib/clerk-admin";
 import { recordAdminAction } from "@/lib/audit-server";
 import { enqueueProfileIndexSync } from "@/lib/queues/search-index-queue";
 import { userAdminActionSchema } from "@/lib/validation/user-admin";
+import { isSystemUser } from "@/lib/system-user";
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   let admin;
@@ -24,6 +25,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const target = await db.user.findUnique({ where: { id: params.id } });
   if (!target) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  // No Clerk login behind an organizational account — the Clerk calls below would fail.
+  if (isSystemUser(target)) {
+    return NextResponse.json({ error: "System accounts cannot be modified here" }, { status: 400 });
   }
 
   if (parsed.data.action === "suspend") {
@@ -112,6 +118,11 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
   const target = await db.user.findUnique({ where: { id: params.id } });
   if (!target) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  // No Clerk login behind an organizational account — the Clerk calls below would fail.
+  if (isSystemUser(target)) {
+    return NextResponse.json({ error: "System accounts cannot be modified here" }, { status: 400 });
   }
 
   if (target.id === admin.id) {

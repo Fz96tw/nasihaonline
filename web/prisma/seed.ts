@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { EVENTS_FORUM_SLUG } from "@/lib/forums";
 import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
+import { getOrCreateWeeklyReflectionUser } from "@/lib/system-user";
 
 // Absolute, not relative — same rationale as events-server.ts's createEvent:
 // lib/linkify.tsx's linkifyText only turns absolute http(s) URLs into links.
@@ -745,6 +746,10 @@ async function main() {
   await seedKnowledgeLibrary();
   await seedForums();
   await backfillEventForumThreads();
+
+  // Not sample data (unlike the seeds above) — runs regardless of SEED_SAMPLE_DATA.
+  await getOrCreateWeeklyReflectionUser();
+  console.log("Ensured Weekly Reflection system user.");
 }
 
 main()
