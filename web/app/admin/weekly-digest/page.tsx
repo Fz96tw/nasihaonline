@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getWeeklyDigestSettings } from "@/lib/settings";
 import { WeeklyDigestSettingsForm } from "@/components/admin/weekly-digest-settings-form";
+import { WeeklyDigestActions } from "@/components/admin/weekly-digest-actions";
 
 /**
  * Settings for the weekly activity digest announcement — when it runs, what
@@ -36,6 +37,7 @@ export default async function AdminWeeklyDigestPage() {
         </p>
       </div>
 
+      <WeeklyDigestActions autoPublish={settings.weeklyDigestAutoPublish} />
       <WeeklyDigestSettingsForm initial={settings} />
     </main>
   );
