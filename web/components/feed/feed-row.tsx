@@ -185,6 +185,9 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                   <img src={item.imageUrl!} alt="" className="max-h-48 w-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
                   <p className="absolute inset-x-0 bottom-3 line-clamp-4 px-4 text-2xl font-bold text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)]">
+                    {item.isRestricted && (
+                      <Lock className="mr-2 inline h-5 w-5 align-[-2px]" aria-label="Restricted resource" />
+                    )}
                     {item.title}
                   </p>
                 </div>
@@ -221,7 +224,7 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                               "h-4 w-4 flex-shrink-0",
                               hasThreadImage ? "text-neutral-900" : "text-muted-foreground",
                             )}
-                            aria-label="Restricted event"
+                            aria-label={`Restricted ${item.type === "library" ? "resource" : item.type === "forum_thread" ? "thread" : "event"}`}
                           />
                         )}
                         <span

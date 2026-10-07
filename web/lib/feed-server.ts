@@ -915,6 +915,7 @@ export async function getFeedPage(params: {
         youtubeEmbedUrl: !getKnowledgeItemHeroImageUrl(item.heroImageUrl) && item.youtubeUrl
           ? (youtubeEmbedUrl(item.youtubeUrl) ?? undefined)
           : undefined,
+        isRestricted: item.visibility === KnowledgeVisibility.restricted,
         libraryViewCount: item._count.views,
         forumReplyCount: item.forumThread ? item.forumThread._count.posts - 1 : undefined,
       };
@@ -953,6 +954,7 @@ export async function getFeedPage(params: {
         // No hero banner here (confirmed with user) — unlike ownRow above,
         // which always carries the item's own hero/YouTube-thumbnail image.
         imageUrl: null,
+        isRestricted: item.visibility === KnowledgeVisibility.restricted,
       };
       return [...libraryRows, replyRow];
     }),

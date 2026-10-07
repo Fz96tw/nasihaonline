@@ -65,7 +65,7 @@ export type FeedItem = {
   replyExcerpt?: string;
   /** Only "forum_thread" items whose previewed post body embeds one of our own pasted images (a `![](/api/forums/post-image/…)` token) carry this — the first such image's proxied URL, rendered inline in the feed row the way other feed types render their hero image. Undefined when the post has no pasted image, and for every other type. */
   bodyImageUrl?: string;
-  /** "event" and "forum_thread" items carry this — true when the underlying Event/ForumThread's visibility is `invited` (restricted), driving FeedRow's lock-icon title prefix. Undefined for every other type. */
+  /** "event", "forum_thread" and "library" items carry this — true when the underlying Event/ForumThread's visibility is `invited`, or the KnowledgeItem's is `restricted`, driving FeedRow's lock-icon title prefix. Undefined for every other type. */
   isRestricted?: boolean;
 };
 
