@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getWeeklyDigestSettings } from "@/lib/settings";
+import { getCurrentDigest } from "@/lib/weekly-digest-job";
 import { WeeklyDigestSettingsForm } from "@/components/admin/weekly-digest-settings-form";
 import { WeeklyDigestActions } from "@/components/admin/weekly-digest-actions";
 
@@ -23,7 +24,7 @@ export default async function AdminWeeklyDigestPage() {
     );
   }
 
-  const settings = await getWeeklyDigestSettings();
+  const [settings, existingDigest] = await Promise.all([getWeeklyDigestSettings(), getCurrentDigest()]);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 p-8">
@@ -37,7 +38,7 @@ export default async function AdminWeeklyDigestPage() {
         </p>
       </div>
 
-      <WeeklyDigestActions autoPublish={settings.weeklyDigestAutoPublish} />
+      <WeeklyDigestActions autoPublish={settings.weeklyDigestAutoPublish} existing={existingDigest} />
       <WeeklyDigestSettingsForm initial={settings} />
     </main>
   );

@@ -4,7 +4,12 @@
 import { db } from "@/lib/db";
 import { Role } from "@/lib/generated/prisma/enums";
 import { getWeeklyDigestSettings } from "@/lib/settings";
-import { createAnnouncementDraft, publishAnnouncementDraft } from "@/lib/announcements-server";
+import {
+  createAnnouncementDraft,
+  discardAnnouncementDraft,
+  publishAnnouncementDraft,
+  retractAnnouncement,
+} from "@/lib/announcements-server";
 import { generateWeeklyDigest } from "@/lib/weekly-digest-server";
 import { latestScheduledFire, scheduleOf } from "@/lib/weekly-digest-schedule";
 import type { WeeklyDigest } from "@/lib/weekly-digest-compose";
@@ -221,3 +226,71 @@ export async function generateWeeklyDigestNow(now: Date = new Date()): Promise<G
     throw error;
   }
 }
+
+/** The digest covering the current period (or a later one), for the admin page to offer the right actions. */
+export async function getCurrentDigest(now: Date = new Date()): Promise<{ id: string; state: DigestState } | null> {
+  const settings = await getWeeklyDigestSettings();
+  const found = await digestStateOf(latestScheduledFire(now, scheduleOf(settings)));
+  return found ? { id: found.id, state: found.state } : null;
+}
+
+export type RegenerateResult =
+  | { status: "quiet" }
+  | { status: "blocked"; announcementId: string }
+  | { status: "created"; announcementId: string; published: boolean; replaced: DigestState | null };
+
+/**
+ * Admin "Regenerate": replaces the current period's digest with a freshly
+ * built one — for testing a change to the layout or settings, or redoing a
+ * digest that came out wrong. The new digest is built first; if the period is
+ * quiet nothing is touched. The old one is then removed from circulation: a
+ * draft is deleted, a published digest is retracted (hidden from the feed,
+ * search and bell, as for any announcement), and its period key is released
+ * so the new digest can take it. A digest for a *later* period (possible after
+ * switching frequency) blocks this, as it does Generate now. Note a
+ * regenerated, auto-published digest is a new announcement, so inactive-member
+ * teaser emails for it are sent again when that is enabled.
+ */
+export async function regenerateWeeklyDigestNow(actorId: string, now: Date = new Date()): Promise<RegenerateResult> {
+  const settings = await getWeeklyDigestSettings();
+  const weekKey = latestScheduledFire(now, scheduleOf(settings));
+
+  const later = await db.announcement.findFirst({
+    where: { digestPeriodEnd: { gt: weekKey } },
+    select: { id: true },
+  });
+  if (later) return { status: "blocked", announcementId: later.id };
+
+  const digest = await generateWeeklyDigest(now, settings);
+  if (!digest) return { status: "quiet" };
+
+  const existing = await db.announcement.findUnique({
+    where: { digestPeriodEnd: weekKey },
+    select: { id: true, sentAt: true, retractedAt: true },
+  });
+  let replaced: DigestState | null = null;
+  if (existing) {
+    if (!existing.sentAt) {
+      replaced = "draft";
+      await discardAnnouncementDraft(existing.id);
+    } else {
+      if (existing.retractedAt) {
+        replaced = "retracted";
+      } else {
+        replaced = "published";
+        await retractAnnouncement(existing.id, actorId);
+        await enqueueAnnouncementIndexSync(existing.id);
+      }
+      // Keep the old row for the admin history, but free the period key.
+      await db.announcement.update({ where: { id: existing.id }, data: { digestPeriodEnd: null } });
+    }
+  }
+
+  const { id } = await saveWeeklyDigest(digest, weekKey, settings.weeklyDigestAutoPublish);
+  await db.siteSettings.updateMany({
+    where: { id: SETTINGS_ROW_ID, OR: [{ weeklyDigestLastFiredFor: null }, { weeklyDigestLastFiredFor: { lt: weekKey } }] },
+    data: { weeklyDigestLastFiredFor: weekKey },
+  });
+  return { status: "created", announcementId: id, published: settings.weeklyDigestAutoPublish, replaced };
+}
+

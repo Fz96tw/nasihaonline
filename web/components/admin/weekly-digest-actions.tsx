@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCsrfToken } from "@/lib/csrf-client";
@@ -23,9 +24,17 @@ function digestHref(state: DigestState, id: string | undefined): string | undefi
  * now makes this week's digest as a draft or published per the auto-publish
  * setting, and the server refuses a second one for the same week.
  */
-export function WeeklyDigestActions({ autoPublish }: { autoPublish: boolean }) {
+export function WeeklyDigestActions({
+  autoPublish,
+  existing,
+}: {
+  autoPublish: boolean;
+  /** The digest already covering the current period, if any — which is what Regenerate would replace. */
+  existing: { id: string; state: DigestState } | null;
+}) {
+  const router = useRouter();
   const [preview, setPreview] = useState<WeeklyDigestPreview | null>(null);
-  const [busy, setBusy] = useState<"preview" | "generate" | null>(null);
+  const [busy, setBusy] = useState<"preview" | "generate" | "regenerate" | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   async function post(url: string) {
@@ -88,13 +97,48 @@ export function WeeklyDigestActions({ autoPublish }: { autoPublish: boolean }) {
     }
   }
 
+  async function regenerate() {
+    const warning =
+      existing?.state === "published"
+        ? "The published digest will be retracted (hidden from the feed and search) and a new one created. If emails to inactive members are on and the new digest is published, they are sent again."
+        : existing?.state === "draft"
+          ? "The current draft will be discarded and replaced."
+          : "A new digest will be created to replace the retracted one.";
+    if (!window.confirm(`Regenerate the current digest? ${warning}`)) return;
+
+    setBusy("regenerate");
+    setOutcome(null);
+    try {
+      const res = await post("/api/admin/weekly-digest/regenerate");
+      const payload = await res.json().catch(() => null);
+      if (res.status === 409) {
+        setOutcome({ kind: "error", text: "A digest for a later period already exists, so this one can't be replaced." });
+      } else if (!res.ok) {
+        throw new Error();
+      } else if (payload.status === "quiet") {
+        setOutcome({ kind: "info", text: "Nothing to report for this period, so the existing digest was left as it is." });
+      } else {
+        setOutcome({
+          kind: "info",
+          text: payload.published ? "Replaced. The new digest is published." : "Replaced. The new digest is saved as a draft.",
+          href: digestHref(payload.published ? "published" : "draft", payload.announcementId),
+        });
+        router.refresh();
+      }
+    } catch {
+      setOutcome({ kind: "error", text: "Couldn't regenerate the digest. Please try again." });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Preview &amp; generate</CardTitle>
         <CardDescription>
           Uses the settings as last saved. Preview shows what the current digest and the inactive-member
-          email would say, without creating anything. Generate now makes the current digest immediately —
+          email would say, without creating anything. Generate now makes the current digest immediately; once one exists, Regenerate replaces it —
           useful to test, or if a scheduled run was missed.
         </CardDescription>
       </CardHeader>
@@ -103,9 +147,14 @@ export function WeeklyDigestActions({ autoPublish }: { autoPublish: boolean }) {
           <Button variant="outline" onClick={runPreview} disabled={busy !== null}>
             {busy === "preview" ? "Loading…" : "Preview the current digest"}
           </Button>
-          <Button onClick={generate} disabled={busy !== null}>
+          <Button onClick={generate} disabled={busy !== null || existing !== null}>
             {busy === "generate" ? "Generating…" : "Generate now"}
           </Button>
+          {existing && (
+            <Button variant="destructive" onClick={regenerate} disabled={busy !== null}>
+              {busy === "regenerate" ? "Regenerating…" : "Regenerate"}
+            </Button>
+          )}
         </div>
 
         {outcome && (
