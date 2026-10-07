@@ -413,6 +413,21 @@ export async function getFeedPage(params: {
           ],
         }),
   };
+  // eventWhere minus its publishedAt cursor (keeping `not: null` — drafts
+  // stay out), re-keyed to lastActivityAt / rescheduledAt for the reply-row
+  // and rescheduled-row fetches (see the event findMany above).
+  const eventWhereWithoutCursor = { ...eventWhere, publishedAt: { not: null } };
+  const eventReplyWhere = {
+    ...eventWhereWithoutCursor,
+    ...(before ? { lastActivityAt: { lt: before } } : {}),
+  } as typeof eventWhere;
+  const eventRescheduledWhere = {
+    ...eventWhereWithoutCursor,
+    // Only an upcoming event gets a "Rescheduled" row (see the events.flatMap branch).
+    startsAt: { gt: new Date() },
+    rescheduledAt: before ? { not: null, lt: before } : { not: null },
+  } as typeof eventWhere;
+
   // libraryWhere minus its publishedAt cursor, re-keyed to lastActivityAt —
   // the reply-row fetch (see the library findMany above).
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -490,6 +505,51 @@ export async function getFeedPage(params: {
   // Run alongside countsPromise below (not sequentially after) — both are
   // independent, so awaiting them together via Promise.all(itemsPromise,
   // countsPromise) halves the added latency of the extra count queries.
+  const fetchEvents = (
+    where: typeof eventWhere,
+    orderBy: { publishedAt: "desc" } | { lastActivityAt: "desc" } | { rescheduledAt: "desc" },
+  ) =>
+    db.event.findMany({
+      where,
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        createdAt: true,
+        publishedAt: true,
+        startsAt: true,
+        timezone: true,
+        rescheduledAt: true,
+        heroImageUrl: true,
+        visibility: true,
+        hostId: true,
+        host: { select: AUTHOR_SELECT },
+        // Going RSVPs (members) plus EventRegistrations (non-members) —
+        // same merge as getEventEngagementForAdmin's attendee/interest count.
+        _count: {
+          select: {
+            rsvps: { where: { status: RSVPStatus.going } },
+            registrations: true,
+            views: true,
+          },
+        },
+        // posts includes the thread's own system-authored opening post, so
+        // forumReplyCount below subtracts one — same convention as the
+        // forumThreads feed query and getMemberEventById's forumReplyCount.
+        // Also feeds latestDiscussionReply below: a real reply still gets
+        // its own feed row, just a separate one (see the events.flatMap
+        // branch below) instead of overwriting this event's own row.
+        forumThread: { select: DISCUSSION_THREAD_FEED_SELECT },
+        lastActivityAt: true,
+        // Whether the viewer themself RSVP'd going — gates the discussion
+        // reply row below (attendees and invitees get event discussion activity).
+        rsvps: { where: { userId: viewerId ?? "", status: RSVPStatus.going }, select: { id: true }, take: 1 },
+        invitees: { where: { userId: viewerId ?? "" }, select: { id: true }, take: 1 },
+      },
+      orderBy,
+      take: pageSize,
+    });
+
   const fetchLibraryItems = (
     where: typeof libraryWhere,
     orderBy: { publishedAt: "desc" } | { lastActivityAt: "desc" },
@@ -578,46 +638,23 @@ export async function getFeedPage(params: {
     }).then((threads) => threads.filter((thread) => isThreadVisible(thread, viewerId ?? undefined, isPrivileged, forumMember)));
 
   const itemsPromise = Promise.all([
-    !wants("event") || eventHitIds?.length === 0 ? Promise.resolve([]) : db.event.findMany({
-      where: eventWhere,
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        createdAt: true,
-        publishedAt: true,
-        startsAt: true,
-        timezone: true,
-        rescheduledAt: true,
-        heroImageUrl: true,
-        visibility: true,
-        hostId: true,
-        host: { select: AUTHOR_SELECT },
-        // Going RSVPs (members) plus EventRegistrations (non-members) —
-        // same merge as getEventEngagementForAdmin's attendee/interest count.
-        _count: {
-          select: {
-            rsvps: { where: { status: RSVPStatus.going } },
-            registrations: true,
-            views: true,
-          },
-        },
-        // posts includes the thread's own system-authored opening post, so
-        // forumReplyCount below subtracts one — same convention as the
-        // forumThreads feed query and getMemberEventById's forumReplyCount.
-        // Also feeds latestDiscussionReply below: a real reply still gets
-        // its own feed row, just a separate one (see the events.flatMap
-        // branch below) instead of overwriting this event's own row.
-        forumThread: { select: DISCUSSION_THREAD_FEED_SELECT },
-        lastActivityAt: true,
-        // Whether the viewer themself RSVP'd going — gates the discussion
-        // reply row below (attendees and invitees get event discussion activity).
-        rsvps: { where: { userId: viewerId ?? "", status: RSVPStatus.going }, select: { id: true }, take: 1 },
-        invitees: { where: { userId: viewerId ?? "" }, select: { id: true }, take: 1 },
-      },
-      orderBy: { publishedAt: "desc" },
-      take: pageSize,
-    }),
+    !wants("event") || eventHitIds?.length === 0 ? Promise.resolve([]) : query
+      ? fetchEvents(eventWhere, { publishedAt: "desc" })
+      // Browse/following: events are found three ways — by publishedAt for
+      // their own rows, by lastActivityAt for reply rows, and by
+      // rescheduledAt for "Rescheduled" rows (a reschedule doesn't bump
+      // lastActivityAt) — so a reply or reschedule on an old event still
+      // surfaces at the top. Same merge as library/forumThreads; the
+      // events.flatMap branch only emits whichever row's own timestamp
+      // falls inside the page's cursor window.
+      : Promise.all([
+          fetchEvents(eventWhere, { publishedAt: "desc" }),
+          fetchEvents(eventReplyWhere, { lastActivityAt: "desc" }),
+          fetchEvents(eventRescheduledWhere, { rescheduledAt: "desc" }),
+        ]).then((sets) => {
+          const seen = new Set<string>();
+          return sets.flat().filter((event) => !seen.has(event.id) && !!seen.add(event.id));
+        }),
     !wants("library") || libraryHitIds?.length === 0 ? Promise.resolve([]) : query
       ? fetchLibraryItems(libraryWhere, { publishedAt: "desc" })
       // Browse/following: items are found twice — by publishedAt for their
@@ -898,7 +935,13 @@ export async function getFeedPage(params: {
       // Following mode: the event's own row only when its host is followed;
       // the reply row is the newest reply by a followed member (same
       // attendee/invitee gate on discussion activity as the ordinary feed).
-      const eventRows: FeedItem[] = !authorIds || followedAuthorSet.has(event.hostId) ? [ownRow] : [];
+      // Each row only inside its own timestamp's cursor window — an event
+      // fetched via another query (see events above) may have one row
+      // already shown on an earlier page.
+      const eventRows: FeedItem[] =
+        (!authorIds || followedAuthorSet.has(event.hostId)) && (!before || (event.publishedAt ?? event.createdAt) < before)
+          ? [ownRow]
+          : [];
       const followedReply = authorIds && event.forumThread ? followedPostByThread.get(event.forumThread.id) : undefined;
       const reply = query || !viewerAttends
         ? null
@@ -911,7 +954,7 @@ export async function getFeedPage(params: {
       // position. Never in search mode; in following mode only when the host
       // is followed (same as the event's own row).
       const rescheduledRow: FeedItem | null =
-        !query && event.rescheduledAt && event.startsAt.getTime() > Date.now() && (!authorIds || followedAuthorSet.has(event.hostId))
+        !query && event.rescheduledAt && event.startsAt.getTime() > Date.now() && (!authorIds || followedAuthorSet.has(event.hostId)) && (!before || event.rescheduledAt < before)
           ? {
               type: "event",
               id: `rescheduled-${event.id}`,
@@ -926,7 +969,7 @@ export async function getFeedPage(params: {
             }
           : null;
       if (rescheduledRow) eventRows.push(rescheduledRow);
-      if (!reply) return eventRows;
+      if (!reply || (before && event.lastActivityAt >= before)) return eventRows;
 
       // The latest reply, as its own row (id: reply.id, not event.id)
       // rather than overwriting ownRow above — same fix as the library
