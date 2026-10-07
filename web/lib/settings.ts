@@ -218,3 +218,13 @@ export async function setWeeklyReflectionNextQuoteId(quoteId: string | null): Pr
     update: { weeklyReflectionNextQuoteId: quoteId },
   });
 }
+
+/** Raw stored wording of the weekly post — validated/fallen back by lib/weekly-reflection-post.ts before use. */
+export async function getWeeklyReflectionMessage(): Promise<{ titleTemplate: string; bodyTemplate: string }> {
+  const settings = await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID },
+    update: {},
+  });
+  return { titleTemplate: settings.weeklyReflectionTitleTemplate, bodyTemplate: settings.weeklyReflectionBodyTemplate };
+}

@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { recordAdminAction } from "@/lib/audit-server";
 import { skipNextReflectionQuote } from "@/lib/reflection-quotes-server";
 import { postWeeklyReflection, type WeeklyReflectionResult } from "@/lib/weekly-reflection-post";
-import type { ReflectionQuoteFields } from "@/lib/validation/weekly-reflection";
+import type { ReflectionMessage, ReflectionQuoteFields } from "@/lib/validation/weekly-reflection";
 
 const SETTINGS_ROW_ID = 1;
 
@@ -32,6 +32,23 @@ export async function updateReflectionSettings(
     });
     await recordAdminAction(
       { actorId, action: "weekly_reflection.settings_updated", entityType: "SiteSettings", metadata: input },
+      tx,
+    );
+  });
+}
+
+/** Saves the wording of future weekly posts. Threads already posted are not touched. */
+export async function updateReflectionMessage(actorId: string, input: ReflectionMessage): Promise<void> {
+  const data = { weeklyReflectionTitleTemplate: input.titleTemplate, weeklyReflectionBodyTemplate: input.bodyTemplate };
+  await db.$transaction(async (tx) => {
+    await tx.siteSettings.upsert({ where: { id: SETTINGS_ROW_ID }, create: { id: SETTINGS_ROW_ID, ...data }, update: data });
+    await recordAdminAction(
+      {
+        actorId,
+        action: "weekly_reflection.message_updated",
+        entityType: "SiteSettings",
+        metadata: { titleTemplate: input.titleTemplate, bodyTemplate: input.bodyTemplate },
+      },
       tx,
     );
   });

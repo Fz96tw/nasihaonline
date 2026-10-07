@@ -200,6 +200,79 @@ describe("Weekly Reflection admin (DB-backed)", { skip }, () => {
     assert.ok(rows.every((row) => row.actorId === adminId));
   });
 
+  it("the database defaults for the post wording match the code's default templates", async () => {
+    const { DEFAULT_BODY_TEMPLATE, DEFAULT_TITLE_TEMPLATE } = await import("@/lib/reflection-template");
+    await db.siteSettings.deleteMany({});
+    const row = await db.siteSettings.create({ data: { id: 1 } });
+    assert.equal(row.weeklyReflectionTitleTemplate, DEFAULT_TITLE_TEMPLATE);
+    assert.equal(row.weeklyReflectionBodyTemplate, DEFAULT_BODY_TEMPLATE);
+    await db.siteSettings.deleteMany({});
+  });
+
+  it("posts with the default wording exactly as before, until an admin edits it", async () => {
+    const result = await admin.postReflectionNow(adminId, {}, utc(2031, 5, 12), stub);
+    assert.equal(result.status, "posted");
+    if (result.status !== "posted") return;
+    const thread = await db.forumThread.findUniqueOrThrow({ where: { id: result.threadId }, include: { posts: true } });
+    const quote = await db.reflectionQuote.findUniqueOrThrow({ where: { id: result.quoteId } });
+    assert.equal(thread.title, "Weekly Reflection: week of May 12, 2031");
+    assert.equal(thread.posts[0].body, `\u201C${quote.text}\u201D\n\u2014 ${quote.author}\n\n${quote.prompt}`);
+  });
+
+  it("uses an admin's edited wording for later posts, leaves earlier threads untouched, and audits the edit", async () => {
+    const before = await db.forumThread.findMany({ where: { forumId }, include: { posts: true }, orderBy: { createdAt: "asc" } });
+    const snapshot = JSON.stringify(before.map((t) => [t.id, t.title, t.posts.map((p) => p.body)]));
+
+    await admin.updateReflectionMessage(adminId, {
+      titleTemplate: "\u201C{quote}\u201D",
+      bodyTemplate: "Happy Monday, everyone!\n\n{quote}\n\u2014 {author}\n\nTell us: {prompt}\n\nThe NASIHA team",
+    });
+    const result = await admin.postReflectionNow(adminId, {}, utc(2031, 5, 19), stub);
+    assert.equal(result.status, "posted");
+    if (result.status !== "posted") return;
+    const thread = await db.forumThread.findUniqueOrThrow({ where: { id: result.threadId }, include: { posts: true } });
+    const quote = await db.reflectionQuote.findUniqueOrThrow({ where: { id: result.quoteId } });
+    assert.equal(thread.title, `\u201C${quote.text}\u201D`);
+    assert.equal(
+      thread.posts[0].body,
+      `Happy Monday, everyone!\n\n${quote.text}\n\u2014 ${quote.author}\n\nTell us: ${quote.prompt}\n\nThe NASIHA team`,
+    );
+
+    const after = await db.forumThread.findMany({
+      where: { forumId, id: { in: before.map((t) => t.id) } },
+      include: { posts: true },
+      orderBy: { createdAt: "asc" },
+    });
+    assert.equal(JSON.stringify(after.map((t) => [t.id, t.title, t.posts.map((p) => p.body)])), snapshot, "earlier threads are unchanged");
+
+    const rows = await audit("weekly_reflection.message_updated");
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].actorId, adminId);
+  });
+
+  it("falls back to the default wording, never a literal placeholder, if the stored template is invalid", async () => {
+    await db.siteSettings.update({ where: { id: 1 }, data: { weeklyReflectionBodyTemplate: "Oops {qoute}", weeklyReflectionTitleTemplate: "Week {nope}" } });
+    const result = await admin.postReflectionNow(adminId, {}, utc(2031, 5, 26), stub);
+    assert.equal(result.status, "posted");
+    if (result.status !== "posted") return;
+    const thread = await db.forumThread.findUniqueOrThrow({ where: { id: result.threadId }, include: { posts: true } });
+    assert.equal(thread.title, "Weekly Reflection: week of May 26, 2031");
+    assert.ok(!thread.posts[0].body.includes("{qoute}"));
+    assert.ok(thread.posts[0].body.startsWith("\u201C"));
+  });
+
+  it("returns to the original wording byte-for-byte after a reset", async () => {
+    const { DEFAULT_BODY_TEMPLATE, DEFAULT_TITLE_TEMPLATE } = await import("@/lib/reflection-template");
+    await admin.updateReflectionMessage(adminId, { titleTemplate: DEFAULT_TITLE_TEMPLATE, bodyTemplate: DEFAULT_BODY_TEMPLATE });
+    const result = await admin.postReflectionNow(adminId, {}, utc(2031, 6, 2), stub);
+    assert.equal(result.status, "posted");
+    if (result.status !== "posted") return;
+    const thread = await db.forumThread.findUniqueOrThrow({ where: { id: result.threadId }, include: { posts: true } });
+    const quote = await db.reflectionQuote.findUniqueOrThrow({ where: { id: result.quoteId } });
+    assert.equal(thread.title, "Weekly Reflection: week of Jun 2, 2031");
+    assert.equal(thread.posts[0].body, `\u201C${quote.text}\u201D\n\u2014 ${quote.author}\n\n${quote.prompt}`);
+  });
+
   it("route shell: signed-out is 401, non-admin is 403, admin runs the handler, domain errors map to their status", async () => {
     const { NextResponse } = await import("next/server");
     const ok = async () => NextResponse.json({ ok: true });

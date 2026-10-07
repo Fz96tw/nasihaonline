@@ -5,6 +5,15 @@ import { ForumThreadVisibility } from "@/lib/generated/prisma/enums";
 import { WEEKLY_REFLECTION_FORUM_SLUG } from "@/lib/forums";
 import { resolveNextReflectionQuote } from "@/lib/reflection-quotes-server";
 import { isoWeekKey, isoWeekStart } from "@/lib/reflection-schedule";
+import {
+  DEFAULT_BODY_TEMPLATE,
+  DEFAULT_TITLE_TEMPLATE,
+  buildReflectionValues,
+  buildTitleValues,
+  renderReflectionTemplate,
+} from "@/lib/reflection-template";
+import { getWeeklyReflectionMessage } from "@/lib/settings";
+import { reflectionMessageSchema } from "@/lib/validation/weekly-reflection";
 import { findWeeklyReflectionUser } from "@/lib/system-user";
 import { enqueueForumThreadIndexSync } from "@/lib/queues/search-index-queue";
 
@@ -21,21 +30,17 @@ const SKIP_MESSAGES: Record<WeeklyReflectionSkipReason, string> = {
   "pool-empty": "the quote pool has no active quotes",
 };
 
-function buildTitle(now: Date): string {
-  const weekOf = isoWeekStart(now).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-  return `Weekly Reflection: week of ${weekOf}`;
-}
-
-// Forum bodies are plain text (rendered with mention highlighting, no
-// markdown), so this is just the quote, its attribution and the prompt.
-function buildBody(quote: { text: string; author: string; source: string | null; prompt: string }): string {
-  const attribution = quote.source ? `${quote.author}, ${quote.source}` : quote.author;
-  return `“${quote.text}”\n— ${attribution}\n\n${quote.prompt}`;
+/**
+ * The admin-edited wording, or the defaults if what's stored fails today's
+ * validation (e.g. edited directly in the database): a bad template must never
+ * stop the week's post or put a literal "{qoute}" in front of members.
+ */
+async function loadMessageTemplates(): Promise<{ titleTemplate: string; bodyTemplate: string }> {
+  const stored = await getWeeklyReflectionMessage();
+  const parsed = reflectionMessageSchema.safeParse(stored);
+  if (parsed.success) return parsed.data;
+  console.warn("[weekly-reflection] stored message template is invalid; using the default wording:", parsed.error.issues[0]?.message);
+  return { titleTemplate: DEFAULT_TITLE_TEMPLATE, bodyTemplate: DEFAULT_BODY_TEMPLATE };
 }
 
 /**
@@ -95,6 +100,11 @@ export async function postWeeklyReflection(
   if (!next) return skip("pool-empty");
   const { quote } = next;
 
+  const { titleTemplate, bodyTemplate } = await loadMessageTemplates();
+  const weekStart = isoWeekStart(now);
+  const title = renderReflectionTemplate(titleTemplate, buildTitleValues(quote, weekStart));
+  const body = renderReflectionTemplate(bodyTemplate, buildReflectionValues(quote, weekStart));
+
   let threadId: string;
   try {
     threadId = await db.$transaction(async (tx) => {
@@ -111,10 +121,10 @@ export async function postWeeklyReflection(
         data: {
           forumId: forum.id,
           authorId: author.id,
-          title: buildTitle(now),
+          title,
           pinned: true,
           visibility: ForumThreadVisibility.community,
-          posts: { create: { authorId: author.id, body: buildBody(quote) } },
+          posts: { create: { authorId: author.id, body } },
         },
         select: { id: true },
       });

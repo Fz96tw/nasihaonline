@@ -27,6 +27,7 @@ const ADMIN_GROUPS = [
   "Content & Trust",
   "Money",
   "Communications",
+  "Weekly Reflection",
   "Programs & Reports",
 ] as const;
 
@@ -119,9 +120,21 @@ const ADMIN_SECTIONS = [
   },
   {
     href: "/admin/weekly-reflection",
-    title: "Weekly Reflection",
-    description: "Manage the weekly quote thread: schedule, quote pool and what posts next.",
-    group: "Communications",
+    title: "Schedule & next post",
+    description: "Turn the weekly quote thread on or off, set when it posts, and post it now.",
+    group: "Weekly Reflection",
+  },
+  {
+    href: "/admin/weekly-reflection/quotes",
+    title: "Quote pool",
+    description: "Add, edit and retire the quotes, and see which have been used.",
+    group: "Weekly Reflection",
+  },
+  {
+    href: "/admin/weekly-reflection/message",
+    title: "Post message",
+    description: "Edit the title and wording of each weekly thread, with a live preview.",
+    group: "Weekly Reflection",
   },
   {
     href: "/admin/email-notifications",
