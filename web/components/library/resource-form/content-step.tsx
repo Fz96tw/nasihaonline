@@ -9,7 +9,7 @@ import { KnowledgeContentType } from "@/lib/generated/prisma/enums";
 import type { KnowledgeItemForEdit } from "@/lib/library";
 import type { CreateKnowledgeItemValues } from "@/lib/validation/knowledge";
 import { AdvancedOptions } from "@/components/shared/wizard/advanced-options";
-import { TiptapEditor } from "@/components/library/tiptap-editor";
+import { BODY_PLACEHOLDERS, TiptapEditor } from "@/components/library/tiptap-editor";
 import { DOCUMENT_ACCEPT } from "./shared";
 
 /** "Content" section of the resource form: the rich-text body, the document/link/YouTube source, hero image and the case-study de-identification confirm. */
@@ -52,6 +52,7 @@ export function ContentStep({
             <FormControl>
               <TiptapEditor
                 content={field.value ?? ""}
+                placeholder={BODY_PLACEHOLDERS[contentType]}
                 onChange={field.onChange}
                 onImageUploadStateChange={setImageUploading}
               />

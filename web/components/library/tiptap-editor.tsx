@@ -10,14 +10,48 @@ import { uploadPastedImage } from "@/lib/use-paste-image-upload";
 
 const LIBRARY_BODY_IMAGE_UPLOAD_URL = "/api/library/body-image";
 
-const DEFAULT_PLACEHOLDER = [
-  "Write your post here, for example:",
-  "• Open with the main point or question",
-  "• Add background, examples, or what you've learned",
-  "• Finish with takeaways or what you'd like readers to do",
-  "",
-  "Tip: you can copy or cut an image and paste it straight into this box to include it.",
-].join("\n");
+const PASTE_IMAGE_TIP = "Tip: you can copy or cut an image and paste it straight into this box to include it.";
+
+function buildPlaceholder(lines: string[]): string {
+  return [...lines, "", PASTE_IMAGE_TIP].join("\n");
+}
+
+/** Muted empty-state hint for the body editor, keyed by KnowledgeContentType. */
+export const BODY_PLACEHOLDERS: Record<string, string> = {
+  blog_post: buildPlaceholder([
+    "Write your post here, for example:",
+    "• Open with the main point or question",
+    "• Add background, examples, or what you've learned",
+    "• Finish with takeaways or what you'd like readers to do",
+  ]),
+  article: buildPlaceholder([
+    "Add the article text or a summary, for example:",
+    "• What the article covers and who it's for",
+    "• Key points or findings",
+    "• Why it's worth reading",
+  ]),
+  case_study: buildPlaceholder([
+    "Describe the case, for example:",
+    "• Background and presentation",
+    "• What was done and why",
+    "• Outcome and what others can learn from it",
+    "Remove all identifying patient information.",
+  ]),
+  guideline: buildPlaceholder([
+    "Summarize the guideline, for example:",
+    "• What it covers and who it applies to",
+    "• The key recommendations or steps",
+    "• Source, version, or date, if relevant",
+  ]),
+  recorded_lecture: buildPlaceholder([
+    "Describe the lecture, for example:",
+    "• What the talk covers and who it's for",
+    "• Key topics or timestamps",
+    "• Speaker background or related reading",
+  ]),
+};
+
+const DEFAULT_PLACEHOLDER = BODY_PLACEHOLDERS.blog_post;
 
 /**
  * Intercepts an image file from a paste or drop DataTransfer, uploads it,
