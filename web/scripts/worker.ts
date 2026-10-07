@@ -31,9 +31,15 @@ import {
   type InboxReminderJob,
   enqueueRepeatingInboxReminderSweep,
 } from "@/lib/queues/inbox-reminder-queue";
+import {
+  WEEKLY_DIGEST_QUEUE_NAME,
+  type WeeklyDigestJob,
+  enqueueRepeatingWeeklyDigestCheck,
+} from "@/lib/queues/weekly-digest-queue";
 import { openSurveyNow, autoCloseSurveyIfDue } from "@/lib/surveys-lifecycle";
 import { syncMeetingRecordings } from "@/lib/meeting-recordings-sync";
 import { sendInboxReminders } from "@/lib/inbox-reminders";
+import { runWeeklyDigestCheck } from "@/lib/weekly-digest-job";
 
 /**
  * Standalone process (`npm run worker`, docker-compose "worker" service) —
@@ -163,6 +169,30 @@ async function main() {
   });
 
   console.log("[inbox-reminder-worker] listening for jobs on", INBOX_REMINDER_QUEUE_NAME);
+
+  // Weekly community digest — a 15-minute check that creates the digest
+  // announcement once the admin-configured day/hour arrives (see
+  // lib/weekly-digest-job.ts). Off unless enabled on /admin/weekly-digest, so
+  // the homelab/test instance's own worker stays silent.
+  await enqueueRepeatingWeeklyDigestCheck();
+
+  const weeklyDigestWorker = new Worker<WeeklyDigestJob>(
+    WEEKLY_DIGEST_QUEUE_NAME,
+    async () => runWeeklyDigestCheck(),
+    { connection: queueConnection },
+  );
+
+  weeklyDigestWorker.on("completed", (_job, result: { status: string }) => {
+    // Only log ticks that did something; "disabled"/"not-due" fire every 15 minutes.
+    if (result.status === "created" || result.status === "quiet") {
+      console.log(`[weekly-digest-worker] ${result.status}`, result);
+    }
+  });
+  weeklyDigestWorker.on("failed", (job, error) => {
+    console.error(`[weekly-digest-worker] failed job ${job?.id}:`, error);
+  });
+
+  console.log("[weekly-digest-worker] listening for jobs on", WEEKLY_DIGEST_QUEUE_NAME);
 }
 
 main().catch((error) => {

@@ -322,6 +322,10 @@ model SiteSettings {
   weeklyDigestEmailLapsed          Boolean        @default(false)
   weeklyDigestLapsedDays           Int            @default(30)
   weeklyDigestMaxEmailsPerMember   Int            @default(3)
+  // The scheduled fire time (UTC instant) the worker last handled, whether it
+  // produced a digest or found a quiet week — the per-week idempotency claim
+  // (lib/weekly-digest-job.ts).
+  weeklyDigestLastFiredFor         DateTime?
   updatedAt                        DateTime       @updatedAt
 
   @@map("site_settings")
@@ -2672,6 +2676,10 @@ model Announcement {
   // tier badge after the member's name in the title — null for every other
   // Announcement.
   welcomeTier   Tier?
+  // Set only on a weekly-digest Announcement: the scheduled fire time of the
+  // week it summarizes. Unique, so the database itself refuses a second
+  // digest for the same week even if two workers race.
+  digestPeriodEnd DateTime? @unique
   sentAt        DateTime?
   retractedAt   DateTime?
   retractedById String?

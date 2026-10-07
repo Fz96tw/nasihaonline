@@ -1,7 +1,9 @@
-import "server-only";
+// No "server-only" guard: the weekly-digest job (scripts/worker.ts, outside
+// Next's server runtime) creates and publishes announcements through this
+// module. lib/storage.ts does carry the guard, so it's only ever loaded
+// lazily, in the paths that actually have a cover image — never for a digest.
 import { db } from "@/lib/db";
 import { NotificationType, Role, type Tier } from "@/lib/generated/prisma/enums";
-import { uploadAnnouncementHeroImage, getAnnouncementHeroImageUrl } from "@/lib/storage";
 import { sendAnnouncementEmail } from "@/lib/email";
 import { getBroadcastEmailSettings } from "@/lib/settings";
 
@@ -46,7 +48,7 @@ export async function createAndSendAnnouncement(
 ): Promise<{ id: string }> {
   let heroImageUrl: string | null = input.templateHeroImageUrl ?? null;
   if (input.heroImage) {
-    heroImageUrl = await uploadAnnouncementHeroImage(input.heroImage);
+    heroImageUrl = await (await import("@/lib/storage")).uploadAnnouncementHeroImage(input.heroImage);
   }
 
   const announcement = await db.announcement.create({
@@ -92,7 +94,9 @@ type DeliverableAnnouncement = {
  * no work here: it's driven by sentAt/showInFeed on the row itself.
  */
 async function deliverAnnouncement(announcement: DeliverableAnnouncement): Promise<void> {
-  const { heroImageUrl } = announcement;
+  const heroDisplayUrl = announcement.heroImageUrl
+    ? (await import("@/lib/storage")).getAnnouncementHeroImageUrl(announcement.heroImageUrl)
+    : null;
   const detailPath = `/whats-new/announcements/${announcement.id}`;
   const emailGloballyEnabled = (await getBroadcastEmailSettings()).announcementEmailEnabled;
   const shouldEmail = announcement.sendEmail && emailGloballyEnabled;
@@ -124,9 +128,7 @@ async function deliverAnnouncement(announcement: DeliverableAnnouncement): Promi
             sendAnnouncementEmail(recipient.email, {
               title: announcement.title,
               body: announcement.body,
-              heroImageUrl: getAnnouncementHeroImageUrl(heroImageUrl)
-                ? `${APP_URL}${getAnnouncementHeroImageUrl(heroImageUrl)}`
-                : null,
+              heroImageUrl: heroDisplayUrl ? `${APP_URL}${heroDisplayUrl}` : null,
               detailUrl: `${APP_URL}${detailPath}`,
             }),
           ),
@@ -289,11 +291,16 @@ export type AnnouncementDraftInput = {
  */
 export async function createAnnouncementDraft(
   authorId: string,
-  input: AnnouncementDraftInput & { heroImage?: File | null; templateHeroImageUrl?: string | null },
+  input: AnnouncementDraftInput & {
+    heroImage?: File | null;
+    templateHeroImageUrl?: string | null;
+    /** Weekly digests only — see Announcement.digestPeriodEnd. */
+    digestPeriodEnd?: Date;
+  },
 ): Promise<{ id: string }> {
   let heroImageUrl: string | null = input.templateHeroImageUrl ?? null;
   if (input.heroImage) {
-    heroImageUrl = await uploadAnnouncementHeroImage(input.heroImage);
+    heroImageUrl = await (await import("@/lib/storage")).uploadAnnouncementHeroImage(input.heroImage);
   }
 
   const draft = await db.announcement.create({
@@ -306,6 +313,7 @@ export async function createAnnouncementDraft(
       notifyInApp: input.notifyInApp,
       sendEmail: input.sendEmail,
       sentAt: null,
+      digestPeriodEnd: input.digestPeriodEnd ?? null,
     },
   });
   return { id: draft.id };
