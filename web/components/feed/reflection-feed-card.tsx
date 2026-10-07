@@ -12,8 +12,9 @@ import { ReflectionBackdrop } from "@/components/reflection/reflection-backdrop"
  * A Weekly Reflection thread's own feed row: the post's image is the
  * background of the ENTIRE panel (no inner banner; the panel itself is inset
  * as a rounded card with margin so it stands apart from the neighboring rows)
- * and everything sits on it in white: author line, the quote large with attribution, the
- * prompt preview and the view/reply counts. The whole panel is one link to the
+ * and everything sits on it in white: author line (the account's name and logo
+ * already say what the post is, so there is no separate label), the quote large
+ * with attribution, the prompt preview and the view/reply counts. The whole panel is one link to the
  * thread. Reply rows and every other thread keep the normal FeedRow layout.
  */
 export function ReflectionFeedCard({ item, q }: { item: FeedItem & { reflectionCard: NonNullable<FeedItem["reflectionCard"]> }; q?: string }) {
@@ -30,9 +31,6 @@ export function ReflectionFeedCard({ item, q }: { item: FeedItem & { reflectionC
           <div className="flex items-center gap-2">
             <Avatar name={item.author.name ?? "NASIHA"} src={item.author.avatarUrl} size="sm" />
             <span className="truncate text-base font-medium">{item.author.name ?? "NASIHA"}</span>
-            <span className="flex-shrink-0 rounded-full border border-white/40 px-2.5 py-0.5 text-xs font-medium uppercase tracking-wide text-white/90">
-              Weekly Reflection
-            </span>
             <span className="ml-auto flex-shrink-0 text-xs text-white/80">{formatRelativeTime(item.timestamp)}</span>
           </div>
 
