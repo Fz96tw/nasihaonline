@@ -3,9 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, ExternalLink, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { KnowledgeContentType } from "@/lib/generated/prisma/enums";
 import { youtubeEmbedUrl } from "@/lib/youtube";
 import { splitHighlightSegments } from "@/lib/text-highlight";
+import { linkifyDomText } from "@/lib/linkify-dom";
 
 /** Friendly label for docs.google.com/drive.google.com links, whose path is a cryptic file ID rather than a filename. Returns null for non-Google URLs. */
 function googleWorkspaceLabel(url: string): string | null {
@@ -391,19 +393,43 @@ function highlightDomText(container: HTMLElement, query: string) {
  */
 function BlogPostBody({ body, highlightQuery }: { body?: string | null; highlightQuery?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [enlargedSrc, setEnlargedSrc] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!highlightQuery || !containerRef.current) return;
-    highlightDomText(containerRef.current, highlightQuery);
+    if (!containerRef.current) return;
+    // Linkify before highlighting so a matched URL's <mark> lands inside
+    // the anchor's text instead of splitting a not-yet-created link.
+    linkifyDomText(containerRef.current);
+    if (highlightQuery) highlightDomText(containerRef.current, highlightQuery);
   }, [highlightQuery, body]);
 
+  // Body images render as capped-height thumbnails (see the img classes
+  // below); a click on one opens the original in a dialog. Delegated on the
+  // container since the body is raw HTML (dangerouslySetInnerHTML) and
+  // highlightDomText mutates it after mount.
   return (
-    <div
-      key={highlightQuery ?? ""}
-      ref={containerRef}
-      className="prose prose-sm max-w-none break-words [overflow-wrap:anywhere] prose-a:text-primary prose-a:underline prose-img:h-auto prose-img:max-w-full"
-      dangerouslySetInnerHTML={{ __html: body ?? "" }}
-    />
+    <>
+      <div
+        key={highlightQuery ?? ""}
+        ref={containerRef}
+        className="prose prose-sm max-w-none break-words [overflow-wrap:anywhere] prose-a:text-primary prose-a:underline prose-img:h-auto prose-img:max-h-80 prose-img:w-auto prose-img:max-w-full prose-img:cursor-zoom-in prose-img:rounded-md"
+        onClick={(event) => {
+          const target = event.target as HTMLElement;
+          if (target instanceof HTMLImageElement && target.src) setEnlargedSrc(target.src);
+        }}
+        dangerouslySetInnerHTML={{ __html: body ?? "" }}
+      />
+      <Dialog open={!!enlargedSrc} onOpenChange={(open) => !open && setEnlargedSrc(null)}>
+        <DialogContent className="max-h-[95vh] w-auto max-w-[95vw] overflow-auto p-2">
+          <DialogTitle className="sr-only">Image</DialogTitle>
+          <DialogDescription className="sr-only">Full-size view of an image from this resource.</DialogDescription>
+          {enlargedSrc && (
+            // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
+            <img src={enlargedSrc} alt="" className="mx-auto h-auto max-h-[90vh] w-auto max-w-full object-contain" />
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
