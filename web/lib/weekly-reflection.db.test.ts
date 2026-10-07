@@ -96,12 +96,12 @@ describe("Weekly Reflection posting (DB-backed)", { skip }, () => {
     assert.equal(all.length, 1);
     assert.equal(all[0].authorId, systemUserId);
     assert.equal(all[0].pinned, true);
-    assert.match(all[0].title, /Weekly Reflection: week of Jan 7, 2030/);
+    assert.equal(all[0].title, "Weekly Reflection: \u201CTest quote 1\u201D");
 
     const posts = await db.forumPost.findMany({ where: { threadId: all[0].id } });
     assert.equal(posts.length, 1);
     assert.equal(posts[0].authorId, systemUserId);
-    assert.equal(posts[0].body, "“Test quote 1”\n— Author 1, Some Book\n\nPrompt 1");
+    assert.equal(posts[0].body, "Prompt 1\n\n\u201CTest quote 1\u201D\n\u2014 Author 1, Some Book");
 
     const quote = await db.reflectionQuote.findUniqueOrThrow({ where: { text: "Test quote 1" } });
     assert.equal(quote.timesPosted, 1);

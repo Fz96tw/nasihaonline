@@ -23,11 +23,13 @@ export const PLACEHOLDER_HELP: Record<(typeof BODY_PLACEHOLDERS)[number], string
   weekOf: "The Monday of the current week, e.g. Oct 5, 2026",
 };
 
-// These reproduce the post exactly as it was before the template was editable:
-// the title "Weekly Reflection: week of Jan 7, 2030" and the body
-// “quote” / — attribution / blank line / prompt.
-export const DEFAULT_TITLE_TEMPLATE = "Weekly Reflection: week of {weekOf}";
-export const DEFAULT_BODY_TEMPLATE = "“{quote}”\n— {attribution}\n\n{prompt}";
+// The default wording: the quote is the thread title, so it leads in the feed
+// and forum list, and the body opens with the discussion prompt, then the
+// quote and attribution, so the feed preview shows the question rather than
+// repeating the quote. These must equal the SiteSettings column defaults in
+// prisma/schema.prisma and the migration (a DB test asserts that).
+export const DEFAULT_TITLE_TEMPLATE = "Weekly Reflection: “{quote}”";
+export const DEFAULT_BODY_TEMPLATE = "{prompt}\n\n“{quote}”\n— {attribution}";
 
 export const TITLE_PLACEHOLDER_HELP: Record<(typeof TITLE_PLACEHOLDERS)[number], string> = {
   weekOf: "The Monday of the current week, e.g. Oct 5, 2026",

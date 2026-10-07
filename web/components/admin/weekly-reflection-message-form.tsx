@@ -18,6 +18,7 @@ import {
   buildTitleValues,
   renderReflectionTemplate,
 } from "@/lib/reflection-template";
+import { REFLECTION_TITLE_QUOTE_MAX } from "@/lib/reflection-limits";
 import { REFLECTION_BODY_TEMPLATE_MAX, REFLECTION_TITLE_TEMPLATE_MAX, reflectionMessageSchema } from "@/lib/validation/weekly-reflection";
 import type { ReflectionQuoteDto } from "@/lib/weekly-reflection-config";
 
@@ -109,7 +110,7 @@ export function WeeklyReflectionMessageForm({
             <Input id="reflection-title-template" value={titleTemplate} onChange={(e) => setTitleTemplate(e.target.value)} />
             <p className="text-xs text-muted-foreground">
               The title is what members see in the feed and forum list. You can use {TITLE_PLACEHOLDERS.map((name) => `{${name}}`).join(" and ")}
-              . Try <code>{"“{quote}”"}</code> to show the quote itself as the title.
+              . In a title, {"{quote}"} is shortened to {REFLECTION_TITLE_QUOTE_MAX} characters with an ellipsis if it is longer; the full quote is always in the message.
             </p>
             <p className={`text-right text-xs ${titleTemplate.length > REFLECTION_TITLE_TEMPLATE_MAX ? "text-destructive" : "text-muted-foreground"}`}>
               {titleTemplate.length}/{REFLECTION_TITLE_TEMPLATE_MAX}
@@ -176,7 +177,7 @@ export function WeeklyReflectionMessageForm({
               Reset to default
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">Reset fills in the original wording; click Save to apply it.</p>
+          <p className="text-xs text-muted-foreground">Reset fills in the default wording; click Save to apply it.</p>
         </CardContent>
       </Card>
 

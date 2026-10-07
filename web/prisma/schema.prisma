@@ -357,10 +357,9 @@ model SiteSettings {
   // Editable wording of the weekly post (/admin/weekly-reflection/message).
   // {placeholders} are filled by lib/reflection-template.ts; these defaults
   // are the same text as DEFAULT_TITLE_TEMPLATE / DEFAULT_BODY_TEMPLATE there
-  // (a DB test asserts they match) and reproduce the post as it was before the
-  // wording was editable. Edits apply to future posts only.
-  weeklyReflectionTitleTemplate    String         @default("Weekly Reflection: week of {weekOf}")
-  weeklyReflectionBodyTemplate     String         @default("“{quote}”\n— {attribution}\n\n{prompt}")
+  // (a DB test asserts they match). Edits apply to future posts only.
+  weeklyReflectionTitleTemplate    String         @default("Weekly Reflection: “{quote}”")
+  weeklyReflectionBodyTemplate     String         @default("{prompt}\n\n“{quote}”\n— {attribution}")
   updatedAt                        DateTime       @updatedAt
 
   @@map("site_settings")

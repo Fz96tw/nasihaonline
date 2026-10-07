@@ -215,8 +215,22 @@ describe("Weekly Reflection admin (DB-backed)", { skip }, () => {
     if (result.status !== "posted") return;
     const thread = await db.forumThread.findUniqueOrThrow({ where: { id: result.threadId }, include: { posts: true } });
     const quote = await db.reflectionQuote.findUniqueOrThrow({ where: { id: result.quoteId } });
-    assert.equal(thread.title, "Weekly Reflection: week of May 12, 2031");
-    assert.equal(thread.posts[0].body, `\u201C${quote.text}\u201D\n\u2014 ${quote.author}\n\n${quote.prompt}`);
+    assert.equal(thread.title, `Weekly Reflection: \u201C${quote.text}\u201D`);
+    assert.equal(thread.posts[0].body, `${quote.prompt}\n\n\u201C${quote.text}\u201D\n\u2014 ${quote.author}`);
+  });
+
+  it("shortens a long quote in the default title but keeps it whole in the body", async () => {
+    const longText = "Long quote. ".repeat(40).trim();
+    const longQuote = await admin.createReflectionQuote(adminId, { text: longText, author: "Verbose", source: null, prompt: "Thoughts?" });
+    await admin.swapNextQuote(adminId, longQuote.id);
+    const result = await admin.postReflectionNow(adminId, { override: true }, utc(2031, 5, 12), stub);
+    assert.equal(result.status, "posted");
+    if (result.status !== "posted") return;
+    const thread = await db.forumThread.findUniqueOrThrow({ where: { id: result.threadId }, include: { posts: true } });
+    assert.ok(thread.title.endsWith("\u2026\u201D"), thread.title);
+    assert.ok(thread.title.length <= 200, `title length ${thread.title.length}`);
+    assert.ok(thread.posts[0].body.includes(longText), "the full quote is in the body");
+    await admin.updateReflectionQuote(adminId, longQuote.id, { active: false });
   });
 
   it("uses an admin's edited wording for later posts, leaves earlier threads untouched, and audits the edit", async () => {
@@ -248,6 +262,10 @@ describe("Weekly Reflection admin (DB-backed)", { skip }, () => {
     const rows = await audit("weekly_reflection.message_updated");
     assert.equal(rows.length, 1);
     assert.equal(rows[0].actorId, adminId);
+
+    // A saved custom wording isn't clobbered by the settings read that creates the row with defaults when missing.
+    const { getWeeklyReflectionMessage } = await import("@/lib/settings");
+    assert.equal((await getWeeklyReflectionMessage()).titleTemplate, "\u201C{quote}\u201D");
   });
 
   it("falls back to the default wording, never a literal placeholder, if the stored template is invalid", async () => {
@@ -256,12 +274,13 @@ describe("Weekly Reflection admin (DB-backed)", { skip }, () => {
     assert.equal(result.status, "posted");
     if (result.status !== "posted") return;
     const thread = await db.forumThread.findUniqueOrThrow({ where: { id: result.threadId }, include: { posts: true } });
-    assert.equal(thread.title, "Weekly Reflection: week of May 26, 2031");
+    const quote = await db.reflectionQuote.findUniqueOrThrow({ where: { id: result.quoteId } });
+    assert.equal(thread.title, `Weekly Reflection: \u201C${quote.text}\u201D`);
     assert.ok(!thread.posts[0].body.includes("{qoute}"));
-    assert.ok(thread.posts[0].body.startsWith("\u201C"));
+    assert.ok(thread.posts[0].body.startsWith(quote.prompt));
   });
 
-  it("returns to the original wording byte-for-byte after a reset", async () => {
+  it("returns to the default wording byte-for-byte after a reset", async () => {
     const { DEFAULT_BODY_TEMPLATE, DEFAULT_TITLE_TEMPLATE } = await import("@/lib/reflection-template");
     await admin.updateReflectionMessage(adminId, { titleTemplate: DEFAULT_TITLE_TEMPLATE, bodyTemplate: DEFAULT_BODY_TEMPLATE });
     const result = await admin.postReflectionNow(adminId, {}, utc(2031, 6, 2), stub);
@@ -269,8 +288,8 @@ describe("Weekly Reflection admin (DB-backed)", { skip }, () => {
     if (result.status !== "posted") return;
     const thread = await db.forumThread.findUniqueOrThrow({ where: { id: result.threadId }, include: { posts: true } });
     const quote = await db.reflectionQuote.findUniqueOrThrow({ where: { id: result.quoteId } });
-    assert.equal(thread.title, "Weekly Reflection: week of Jun 2, 2031");
-    assert.equal(thread.posts[0].body, `\u201C${quote.text}\u201D\n\u2014 ${quote.author}\n\n${quote.prompt}`);
+    assert.equal(thread.title, `Weekly Reflection: \u201C${quote.text}\u201D`);
+    assert.equal(thread.posts[0].body, `${quote.prompt}\n\n\u201C${quote.text}\u201D\n\u2014 ${quote.author}`);
   });
 
   it("route shell: signed-out is 401, non-admin is 403, admin runs the handler, domain errors map to their status", async () => {

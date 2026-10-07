@@ -1,7 +1,6 @@
 -- AlterTable
-ALTER TABLE "site_settings" ADD COLUMN     "weeklyReflectionBodyTemplate" TEXT NOT NULL DEFAULT '“{quote}”
-— {attribution}
+ALTER TABLE "site_settings" ADD COLUMN     "weeklyReflectionBodyTemplate" TEXT NOT NULL DEFAULT '{prompt}
 
-{prompt}',
-ADD COLUMN     "weeklyReflectionTitleTemplate" TEXT NOT NULL DEFAULT 'Weekly Reflection: week of {weekOf}';
-
+“{quote}”
+— {attribution}',
+ADD COLUMN     "weeklyReflectionTitleTemplate" TEXT NOT NULL DEFAULT 'Weekly Reflection: “{quote}”';

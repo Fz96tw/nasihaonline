@@ -19,20 +19,30 @@ const monday = new Date(Date.UTC(2030, 0, 7));
 const withSource = { text: "Test quote 1", author: "Author 1", source: "Some Book", prompt: "Prompt 1" };
 const noSource = { ...withSource, source: null };
 
-describe("default templates reproduce the original post exactly", () => {
+describe("default templates: the quote is the title and the prompt leads the body", () => {
   it("title", () => {
-    assert.equal(renderReflectionTemplate(DEFAULT_TITLE_TEMPLATE, buildTitleValues(withSource, monday)), "Weekly Reflection: week of Jan 7, 2030");
+    assert.equal(renderReflectionTemplate(DEFAULT_TITLE_TEMPLATE, buildTitleValues(withSource, monday)), "Weekly Reflection: \u201CTest quote 1\u201D");
   });
 
   it("body, with and without a source", () => {
     assert.equal(
       renderReflectionTemplate(DEFAULT_BODY_TEMPLATE, buildReflectionValues(withSource, monday)),
-      "“Test quote 1”\n— Author 1, Some Book\n\nPrompt 1",
+      "Prompt 1\n\n\u201CTest quote 1\u201D\n\u2014 Author 1, Some Book",
     );
     assert.equal(
       renderReflectionTemplate(DEFAULT_BODY_TEMPLATE, buildReflectionValues(noSource, monday)),
-      "“Test quote 1”\n— Author 1\n\nPrompt 1",
+      "Prompt 1\n\n\u201CTest quote 1\u201D\n\u2014 Author 1",
     );
+  });
+
+  it("a long quote is shortened with an ellipsis in the title but appears in full in the body", () => {
+    const long = { ...withSource, text: "word ".repeat(80).trim() };
+    const title = renderReflectionTemplate(DEFAULT_TITLE_TEMPLATE, buildTitleValues(long, monday));
+    const body = renderReflectionTemplate(DEFAULT_BODY_TEMPLATE, buildReflectionValues(long, monday));
+    assert.ok(title.includes("\u2026"), title);
+    assert.ok(title.length <= 200, `title length ${title.length}`);
+    assert.ok(!title.includes(long.text));
+    assert.ok(body.includes(long.text), "full quote in the body");
   });
 });
 
