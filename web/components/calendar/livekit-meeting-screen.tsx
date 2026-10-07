@@ -13,6 +13,7 @@ import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/compo
 import { PresenterOverlayControl } from "@/components/calendar/presenter-overlay-control";
 import { OverlayGuestControl } from "@/components/calendar/overlay-guest-control";
 import { ShareStage } from "@/components/calendar/share-stage";
+import { ReactionsControl, ReactionsOverlay, useReactions } from "@/components/calendar/reactions";
 import { RaiseHandControl, RaisedHandsQueue, playHandChime, useRaisedHands } from "@/components/calendar/raise-hand";
 
 /**
@@ -1002,6 +1003,8 @@ export function LiveKitMeetingScreen({
       : undefined,
   );
   const ownHandRaised = raisedHands.some((hand) => hand.isLocal);
+  // Same Events-only gate as raise hand.
+  const reactions = useReactions(room, raiseHandEnabled);
 
   // Countdown + auto-stop (Quick Video Recording & Sharing initiative) —
   // primary, client-side enforcement of maxRecordingSeconds; the
@@ -1127,6 +1130,7 @@ export function LiveKitMeetingScreen({
       <MeetingBanner title={title} organizerName={organizerName} />
       <DisclaimerReminderFlash isQuickRecording={isQuickRecording} />
       <ParticipantActivityToasts toasts={toasts} />
+      {raiseHandEnabled && <ReactionsOverlay floats={reactions.floats} />}
       {isQuickRecording ? (
         <QuickRecordingOverlay
           recording={recording}
@@ -1199,7 +1203,12 @@ export function LiveKitMeetingScreen({
         <ShareStage
           overlayIds={overlayIds}
           barExtra={
-            raiseHandEnabled ? <RaiseHandControl room={room} raised={ownHandRaised} onError={pushToast} inControlBar /> : undefined
+            raiseHandEnabled ? (
+              <>
+                <RaiseHandControl room={room} raised={ownHandRaised} onError={pushToast} inControlBar />
+                <ReactionsControl send={reactions.send} />
+              </>
+            ) : undefined
           }
         />
       </LiveKitRoom>

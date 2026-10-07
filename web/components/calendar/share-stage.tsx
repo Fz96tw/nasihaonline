@@ -33,7 +33,7 @@ import { HandAwareTile } from "@/components/calendar/raise-hand";
  * Showup's version (no camera-off attendees expected there) omits it
  * entirely.
  *
- * `barExtra` is an optional extra button for the bottom control bar (the prefab ControlBar takes no children).
+ * `barExtra` is optional extra button(s) for the bottom control bar (the prefab ControlBar takes no children).
  *
  * `overlayIds` is who's currently a ghost on the shared screen (the host,
  * plus up to 2 co-ghosts — see PresenterOverlayControl's overlay-roster
@@ -90,7 +90,7 @@ export function ShareStage({ overlayIds, barExtra }: { overlayIds: string[]; bar
               style={{ background: "var(--lk-bg2)", borderTop: "1px solid var(--lk-border-color)" }}
             >
               <ControlBar controls={{ chat: true, settings: false }} style={{ borderTop: "none", flex: "none", background: "none" }} />
-              <div className="pr-3">{barExtra}</div>
+              <div className="flex items-center gap-2 pr-3">{barExtra}</div>
             </div>
           ) : (
             <ControlBar controls={{ chat: true, settings: false }} />
