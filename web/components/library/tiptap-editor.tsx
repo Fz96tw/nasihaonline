@@ -10,6 +10,15 @@ import { uploadPastedImage } from "@/lib/use-paste-image-upload";
 
 const LIBRARY_BODY_IMAGE_UPLOAD_URL = "/api/library/body-image";
 
+const DEFAULT_PLACEHOLDER = [
+  "Write your post here, for example:",
+  "• Open with the main point or question",
+  "• Add background, examples, or what you've learned",
+  "• Finish with takeaways or what you'd like readers to do",
+  "",
+  "Tip: you can copy or cut an image and paste it straight into this box to include it.",
+].join("\n");
+
 /**
  * Intercepts an image file from a paste or drop DataTransfer, uploads it,
  * and inserts a Tiptap image node at the current selection — shared by the
@@ -53,7 +62,7 @@ const TOOLBAR_BUTTON_CLASSES =
 export function TiptapEditor({
   content,
   onChange,
-  placeholder = "Write your post…",
+  placeholder = DEFAULT_PLACEHOLDER,
   onImageUploadStateChange,
 }: {
   content: string;
@@ -78,7 +87,6 @@ export function TiptapEditor({
     editorProps: {
       attributes: {
         class: "prose prose-sm max-w-none min-h-[240px] px-3 py-2 focus:outline-none",
-        "data-placeholder": placeholder,
       },
       handlePaste: (_view, event) => {
         return handleImageFiles(
@@ -169,7 +177,14 @@ export function TiptapEditor({
           <Quote className="h-4 w-4" />
         </button>
       </div>
-        <EditorContent editor={editor} />
+        <div className="relative">
+          {editor.isEmpty && (
+            <div className="pointer-events-none absolute inset-0 whitespace-pre-line px-3 py-2 text-sm text-muted-foreground">
+              {placeholder}
+            </div>
+          )}
+          <EditorContent editor={editor} />
+        </div>
       </div>
       {imageError && <p className="mt-1 text-xs text-destructive">{imageError}</p>}
     </>
