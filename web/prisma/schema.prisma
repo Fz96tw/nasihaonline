@@ -2697,6 +2697,11 @@ model Announcement {
   // The headline numbers/titles the teaser email is built from, captured when
   // the digest is generated (the body itself is free text an admin may edit).
   digestHighlights Json?
+  // The digest as structured data (stats, sections, items) for the designed
+  // detail page and feed row; the plain-text body is derived from the same
+  // content. Cleared if an admin edits the draft's body, so a stale layout is
+  // never shown over edited text (lib/announcements-server.ts).
+  digestContent Json?
   // Claimed (compare-and-set) once the inactive-member teaser emails for this
   // digest have been sent, so a digest is only ever emailed once.
   digestEmailsSentAt DateTime?

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Eye, Hand, Lock, MessageSquare, Play, Users } from "lucide-react";
+import { Eye, Hand, Lock, MessageSquare, Newspaper, Play, Users } from "lucide-react";
 import { type FeedItem, FEED_TYPE_LABELS } from "@/lib/feed";
 import { formatRelativeTime } from "@/lib/format-date";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
@@ -227,6 +227,9 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                             )}
                             aria-label={`Restricted ${item.type === "library" ? "resource" : item.type === "forum_thread" ? "thread" : "event"}`}
                           />
+                        )}
+                        {item.isDigest && (
+                          <Newspaper className="h-4 w-4 flex-shrink-0 text-primary" aria-label="Weekly digest" />
                         )}
                         <span
                           className={cn(

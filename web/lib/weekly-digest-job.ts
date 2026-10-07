@@ -126,6 +126,7 @@ async function saveWeeklyDigest(
     sendEmail: false,
     digestPeriodEnd: weekKey,
     digestHighlights: digest.highlights,
+    digestContent: digest.content,
   });
 
   if (publish) {

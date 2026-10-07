@@ -39,6 +39,7 @@ import { formatEventDateTime } from "@/lib/format-date";
 import { communityVisibilityWhere, getMemberCommunityContext } from "@/lib/events-server";
 import { getInboxList } from "@/lib/inbox-server";
 import { matchesInboxSearch } from "@/lib/inbox";
+import { digestContentOf, type DigestContent } from "@/lib/weekly-digest-compose";
 
 const DEFAULT_PAGE_SIZE = 20;
 const EXCERPT_LENGTH = 180;
@@ -686,7 +687,7 @@ export async function getFeedPage(params: {
         }),
     !wants("announcement") || announcementHitIds?.length === 0 ? Promise.resolve([]) : db.announcement.findMany({
       where: announcementWhere,
-      select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true, welcomeTier: true },
+      select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true, welcomeTier: true, digestPeriodEnd: true, digestContent: true },
       orderBy: { sentAt: "desc" },
       take: pageSize,
     }),
@@ -1172,12 +1173,21 @@ export async function getFeedPage(params: {
       const replyInWindow = !before || thread.lastActivityAt < before;
       return reply && replyInWindow ? [...ownRow, buildRow(reply.id, reply, true, thread.lastActivityAt)] : ownRow;
     }),
-    ...announcements.map((announcement): FeedItem => ({
+    ...announcements.map((announcement): FeedItem => {
+      // A weekly digest whose layout is intact leads with its one-line
+      // headline numbers rather than the body's opening sentence; searching
+      // still shows the matched snippet of the body.
+      const digestSummary = digestContentOf(announcement.digestContent)?.summary;
+      return {
       type: "announcement",
       id: announcement.id,
       title: announcement.title,
+      ...(announcement.digestPeriodEnd ? { isDigest: true } : {}),
       // `[label](url)` links collapse to their label so the feed excerpt never shows raw markdown.
-      excerpt: excerptOf(announcement.body.replace(/\[([^\]]+)\]\(https?:\/\/[^\s()]+\)/g, "$1")),
+      excerpt:
+        digestSummary && !query
+          ? digestSummary
+          : excerptOf(announcement.body.replace(/\[([^\]]+)\]\(https?:\/\/[^\s()]+\)/g, "$1")),
       href: query
         ? `/whats-new/announcements/${announcement.id}?q=${encodeURIComponent(query)}`
         : `/whats-new/announcements/${announcement.id}`,
@@ -1186,7 +1196,8 @@ export async function getFeedPage(params: {
       author: BOARD_SENDER,
       imageUrl: getAnnouncementHeroImageUrl(announcement.heroImageUrl),
       titleTier: announcement.welcomeTier,
-    })),
+      };
+    }),
     ...surveys.map((survey): FeedItem => ({
       type: "survey",
       id: survey.id,
@@ -1296,6 +1307,8 @@ export type AnnouncementDetail = {
   imageUrl: string | null;
   /** Only the welcome-new-member Announcement carries this — the member's tier, rendered as a badge after their name in the title. */
   titleTier: Tier | null;
+  /** A weekly digest's structured layout, when it has one (and wasn't edited) — the detail page renders it instead of the plain body. */
+  digest: DigestContent | null;
 };
 
 /**
@@ -1307,7 +1320,7 @@ export type AnnouncementDetail = {
 export async function getSentAnnouncement(id: string): Promise<AnnouncementDetail | null> {
   const announcement = await db.announcement.findUnique({
     where: { id },
-    select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true, retractedAt: true, welcomeTier: true },
+    select: { id: true, title: true, body: true, heroImageUrl: true, sentAt: true, retractedAt: true, welcomeTier: true, digestContent: true },
   });
   if (!announcement || !announcement.sentAt || announcement.retractedAt) return null;
 
@@ -1319,5 +1332,6 @@ export async function getSentAnnouncement(id: string): Promise<AnnouncementDetai
     author: BOARD_SENDER,
     imageUrl: getAnnouncementHeroImageUrl(announcement.heroImageUrl),
     titleTier: announcement.welcomeTier,
+    digest: digestContentOf(announcement.digestContent),
   };
 }

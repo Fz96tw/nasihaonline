@@ -17,10 +17,39 @@ export type WeeklyDigestData = {
   knowledgeHours: { earnedThisWeek: number; earnedAllTime: number };
 };
 
+export type DigestIcon = "members" | "library" | "events" | "forums" | "reviews" | "replies" | "hours" | "private";
+
+export type DigestSection = {
+  icon: DigestIcon;
+  heading: string;
+  /** Public items, each a link by in-app path. Defined (even if empty) for list-style sections, undefined for single-statement ones. */
+  items?: { title: string; path: string; meta?: string }[];
+  /** Counts and plain statements; bulleted when the section has `items`, plain otherwise. */
+  lines: string[];
+};
+
+/**
+ * The digest as structured data, saved on the Announcement (digestContent) so
+ * the detail page can render stat tiles and section cards. The plain-text
+ * `body` is derived from the same object (renderDigestBody), so the two
+ * can't drift. Contains only what the body already contains: public titles
+ * and counts.
+ */
+export type DigestContent = {
+  intro: string;
+  outro: string;
+  /** One line of headline numbers, e.g. "12 new members · 4 new resources" — the feed row's excerpt. */
+  summary: string;
+  stats: { icon: DigestIcon; label: string; value: string }[];
+  sections: DigestSection[];
+};
+
 export type WeeklyDigest = {
   title: string;
   /** Plain text with `[title](url)` links — the announcement detail page renders those as friendly link text (lib/linkify.tsx). */
   body: string;
+  /** Structured form of the same digest, for the designed detail page and feed row. */
+  content: DigestContent;
   /** Headline numbers and a few public titles, for the inactive-member teaser email. */
   highlights: {
     newMembers: number;
@@ -41,6 +70,19 @@ export type WeeklyDigest = {
  */
 function link(label: string, url: string) {
   return `[${label.replace(/\[/g, "(").replace(/\]/g, ")")}](${url})`;
+}
+
+/** The plain-text body (`[title](url)` links, bulleted lists) for a digest's structured content. */
+export function renderDigestBody(content: DigestContent, baseUrl: string): string {
+  const base = baseUrl.replace(/\/$/, "");
+  const sections = content.sections.map((section) => {
+    const itemLines = (section.items ?? []).map(
+      (item) => `• ${link(item.title, `${base}${item.path}`)}${item.meta ? ` — ${item.meta}` : ""}`,
+    );
+    const lines = section.lines.map((line) => (section.items ? `• ${line}` : line));
+    return [section.heading, ...itemLines, ...lines].join("\n");
+  });
+  return [content.intro, ...sections, content.outro].join("\n\n");
 }
 
 function plural(count: number, one: string, many: string) {
@@ -64,7 +106,7 @@ function formatEventTime(date: Date, timeZone: string) {
 /**
  * Turns a week's gathered activity into the digest post, or null for a quiet
  * week. Rules (see the Weekly Community Digest initiative):
- *  - only public items are listed, each as a `[title](full url)` link; restricted/invited-only
+ *  - only public items are listed, each as a link; restricted/invited-only
  *    items appear as a count, and only when that count reaches
  *    `weeklyDigestPrivateCountMin` — smaller counts are folded into one
  *    general line so a single private item can't be picked out;
@@ -82,7 +124,6 @@ export function composeWeeklyDigest(
 ): WeeklyDigest | null {
   const tz = settings.weeklyDigestTimezone;
   const min = settings.weeklyDigestPrivateCountMin;
-  const base = baseUrl.replace(/\/$/, "");
   let foldedPrivate = false;
 
   /** A private total as its own line when it clears the minimum, otherwise folded (and dropped here). */
@@ -92,108 +133,168 @@ export function composeWeeklyDigest(
       foldedPrivate = true;
       return null;
     }
-    return `• ${text(count)}`;
+    return text(count);
   };
 
-  const sections: string[] = [];
+  const sections: DigestSection[] = [];
   const publicTitles: string[] = [];
   const counts = { library: 0, events: 0, threads: 0 };
 
   if (settings.weeklyDigestIncludeNewMembers && data.newMembers > 0) {
-    sections.push(
-      `New members\n${data.newMembers} ${plural(data.newMembers, "member joined us.", "members joined us.")}`,
-    );
+    sections.push({
+      icon: "members",
+      heading: "New members",
+      lines: [`${data.newMembers} ${plural(data.newMembers, "member joined us.", "members joined us.")}`],
+    });
   }
 
   if (settings.weeklyDigestIncludeContent) {
-    const lines = data.library.listed.map((item) => `• ${link(item.title, `${base}/library/${item.id}`)}`);
+    const items = data.library.listed.map((item) => ({ title: item.title, path: `/library/${item.id}` }));
     const extra = privateLine(data.library.restrictedCount, (n) =>
       n === 1 ? "1 more resource was shared with limited access." : `${n} more resources were shared with limited access.`,
     );
-    if (extra) lines.push(extra);
-    if (lines.length > 0) {
-      sections.push(`New library content\n${lines.join("\n")}`);
-      counts.library = data.library.listed.length + (extra ? data.library.restrictedCount : 0);
+    if (items.length > 0 || extra) {
+      sections.push({ icon: "library", heading: "New library content", items, lines: extra ? [extra] : [] });
+      counts.library = items.length + (extra ? data.library.restrictedCount : 0);
       publicTitles.push(...data.library.listed.map((item) => item.title));
     }
   }
 
   if (settings.weeklyDigestIncludeEvents) {
-    const lines = data.events.listed.map(
-      (event) => `• ${link(event.title, `${base}/calendar/${event.id}`)} — ${formatEventTime(event.startsAt, tz)}`,
-    );
+    const items = data.events.listed.map((event) => ({
+      title: event.title,
+      path: `/calendar/${event.id}`,
+      meta: formatEventTime(event.startsAt, tz),
+    }));
     const extra = privateLine(data.events.invitedCount, (n) =>
       n === 1 ? "1 more event is invite-only." : `${n} more events are invite-only.`,
     );
-    if (extra) lines.push(extra);
-    if (lines.length > 0) {
-      sections.push(`Upcoming events\n${lines.join("\n")}`);
-      counts.events = data.events.listed.length + (extra ? data.events.invitedCount : 0);
+    if (items.length > 0 || extra) {
+      sections.push({ icon: "events", heading: "Upcoming events", items, lines: extra ? [extra] : [] });
+      counts.events = items.length + (extra ? data.events.invitedCount : 0);
       publicTitles.push(...data.events.listed.map((event) => event.title));
     }
   }
 
   if (settings.weeklyDigestIncludeForums) {
-    const lines = data.forumThreads.listed.map(
-      (thread) => `• ${link(thread.title, `${base}/forums/${thread.forumSlug}/${thread.id}`)}`,
-    );
+    const items = data.forumThreads.listed.map((thread) => ({
+      title: thread.title,
+      path: `/forums/${thread.forumSlug}/${thread.id}`,
+    }));
     const extra = privateLine(data.forumThreads.privateCount, (n) =>
       n === 1 ? "1 new private discussion started." : `${n} new private discussions started.`,
     );
-    if (extra) lines.push(extra);
-    if (lines.length > 0) {
-      sections.push(`New forum threads\n${lines.join("\n")}`);
-      counts.threads = data.forumThreads.listed.length + (extra ? data.forumThreads.privateCount : 0);
+    if (items.length > 0 || extra) {
+      sections.push({ icon: "forums", heading: "New forum threads", items, lines: extra ? [extra] : [] });
+      counts.threads = items.length + (extra ? data.forumThreads.privateCount : 0);
       publicTitles.push(...data.forumThreads.listed.map((thread) => thread.title));
     }
   }
 
   if (settings.weeklyDigestIncludePeerReviews && data.peerReviewsStarted > 0) {
-    sections.push(
-      `Peer reviews\n${data.peerReviewsStarted} ${plural(data.peerReviewsStarted, "peer review", "peer reviews")} started this week.`,
-    );
+    sections.push({
+      icon: "reviews",
+      heading: "Peer reviews",
+      lines: [`${data.peerReviewsStarted} ${plural(data.peerReviewsStarted, "peer review", "peer reviews")} started this week.`],
+    });
   }
 
   if (settings.weeklyDigestIncludeReplies && data.replies > 0) {
-    sections.push(
-      `Replies\n${data.replies} ${plural(data.replies, "reply was", "replies were")} posted across the community.`,
-    );
+    sections.push({
+      icon: "replies",
+      heading: "Replies",
+      lines: [`${data.replies} ${plural(data.replies, "reply was", "replies were")} posted across the community.`],
+    });
   }
 
   // Quiet week: nothing but (possibly) folded private activity or Knowledge Hours.
   if (sections.length === 0) return null;
 
   const hours = data.knowledgeHours;
-  if (settings.weeklyDigestIncludeKnowledgeHours && hours.earnedThisWeek > 0) {
-    sections.push(
-      `Knowledge Hours\n${formatHours(hours.earnedThisWeek)} Knowledge ${plural(hours.earnedThisWeek, "Hour", "Hours")} earned this week. ${formatHours(hours.earnedAllTime)} all-time.`,
-    );
+  const showHours = settings.weeklyDigestIncludeKnowledgeHours && hours.earnedThisWeek > 0;
+  if (showHours) {
+    sections.push({
+      icon: "hours",
+      heading: "Knowledge Hours",
+      lines: [
+        `${formatHours(hours.earnedThisWeek)} Knowledge ${plural(hours.earnedThisWeek, "Hour", "Hours")} earned this week. ${formatHours(hours.earnedAllTime)} all-time.`,
+      ],
+    });
   }
 
   if (foldedPrivate) {
-    sections.push("Private activity\nSome additional activity took place in private spaces this week.");
+    sections.push({
+      icon: "private",
+      heading: "Private activity",
+      lines: ["Some additional activity took place in private spaces this week."],
+    });
   }
+
+  const members = settings.weeklyDigestIncludeNewMembers ? data.newMembers : 0;
+  const reviews = settings.weeklyDigestIncludePeerReviews ? data.peerReviewsStarted : 0;
+  const replies = settings.weeklyDigestIncludeReplies ? data.replies : 0;
+
+  const stats: DigestContent["stats"] = [];
+  const addStat = (icon: DigestIcon, count: number, one: string, many: string) => {
+    if (count > 0) stats.push({ icon, value: count.toLocaleString("en-US"), label: count === 1 ? one : many });
+  };
+  addStat("members", members, "new member", "new members");
+  addStat("library", counts.library, "new resource", "new resources");
+  addStat("events", counts.events, "upcoming event", "upcoming events");
+  addStat("forums", counts.threads, "new thread", "new threads");
+  addStat("reviews", reviews, "peer review started", "peer reviews started");
+  addStat("replies", replies, "reply", "replies");
+  if (showHours) stats.push({ icon: "hours", value: formatHours(hours.earnedThisWeek), label: "Knowledge Hours earned" });
+
+  const summary = stats
+    .filter((stat) => stat.icon !== "hours")
+    .slice(0, 4)
+    .map((stat) => `${stat.value} ${stat.label}`)
+    .join(" · ");
 
   const lastDay = new Date(data.windowEnd.getTime() - 1);
   const title = `This week at NASIHA: ${formatDay(data.windowStart, tz)} – ${formatDay(lastDay, tz)}`;
-  const body = [
-    "Here's what happened in our community this week.",
-    ...sections,
-    "See you in the community.",
-  ].join("\n\n");
+  const content: DigestContent = {
+    intro: "Here's what happened in our community this week.",
+    outro: "See you in the community.",
+    summary,
+    stats,
+    sections,
+  };
 
   return {
     title,
-    body,
+    body: renderDigestBody(content, baseUrl),
+    content,
     highlights: {
-      newMembers: settings.weeklyDigestIncludeNewMembers ? data.newMembers : 0,
+      newMembers: members,
       libraryTotal: counts.library,
       eventsTotal: counts.events,
       forumThreadsTotal: counts.threads,
-      peerReviewsStarted: settings.weeklyDigestIncludePeerReviews ? data.peerReviewsStarted : 0,
-      replies: settings.weeklyDigestIncludeReplies ? data.replies : 0,
+      peerReviewsStarted: reviews,
+      replies,
       knowledgeHoursThisWeek: settings.weeklyDigestIncludeKnowledgeHours ? hours.earnedThisWeek : 0,
       publicTitles: publicTitles.slice(0, 5),
     },
   };
+}
+
+/**
+ * Reads a stored `digestContent` JSON value back into a DigestContent, or
+ * null when it's absent or not the expected shape — callers then fall back to
+ * the plain-text body, which is also what an old or admin-edited digest gets.
+ */
+export function digestContentOf(value: unknown): DigestContent | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<DigestContent>;
+  if (
+    typeof candidate.summary !== "string" ||
+    typeof candidate.intro !== "string" ||
+    typeof candidate.outro !== "string" ||
+    !Array.isArray(candidate.stats) ||
+    !Array.isArray(candidate.sections)
+  ) {
+    return null;
+  }
+  return candidate as DigestContent;
 }

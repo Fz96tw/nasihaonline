@@ -3,7 +3,7 @@
 // module. lib/storage.ts does carry the guard, so it's only ever loaded
 // lazily, in the paths that actually have a cover image — never for a digest.
 import { db } from "@/lib/db";
-import type { Prisma } from "@/lib/generated/prisma/client";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { NotificationType, Role, type Tier } from "@/lib/generated/prisma/enums";
 import { sendAnnouncementEmail } from "@/lib/email";
 import { getBroadcastEmailSettings } from "@/lib/settings";
@@ -299,6 +299,8 @@ export async function createAnnouncementDraft(
     digestPeriodEnd?: Date;
     /** Weekly digests only — see Announcement.digestHighlights. */
     digestHighlights?: Prisma.InputJsonValue;
+    /** Weekly digests only — see Announcement.digestContent. */
+    digestContent?: Prisma.InputJsonValue;
   },
 ): Promise<{ id: string }> {
   let heroImageUrl: string | null = input.templateHeroImageUrl ?? null;
@@ -318,6 +320,7 @@ export async function createAnnouncementDraft(
       sentAt: null,
       digestPeriodEnd: input.digestPeriodEnd ?? null,
       ...(input.digestHighlights ? { digestHighlights: input.digestHighlights } : {}),
+      ...(input.digestContent ? { digestContent: input.digestContent } : {}),
     },
   });
   return { id: draft.id };
@@ -388,7 +391,15 @@ async function draftNotAvailable(id: string): Promise<AnnouncementError> {
 }
 
 export async function updateAnnouncementDraft(id: string, input: AnnouncementDraftInput): Promise<void> {
-  const result = await db.announcement.updateMany({ where: { id, sentAt: null }, data: input });
+  // A digest's designed layout is generated from its original body; if an
+  // admin rewrites that body, drop the layout so members see the edited text,
+  // not stale generated sections.
+  const current = await db.announcement.findFirst({ where: { id, sentAt: null }, select: { body: true } });
+  const bodyChanged = current !== null && current.body !== input.body;
+  const result = await db.announcement.updateMany({
+    where: { id, sentAt: null },
+    data: bodyChanged ? { ...input, digestContent: Prisma.DbNull } : input,
+  });
   if (result.count === 0) throw await draftNotAvailable(id);
 }
 

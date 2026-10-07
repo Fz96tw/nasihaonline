@@ -1,3 +1,4 @@
+import { WeeklyDigestView } from "@/components/feed/weekly-digest-view";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
@@ -64,9 +65,13 @@ export default async function AnnouncementDetailPage({
         />
       )}
 
-      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-        {linkifyText(announcement.body, q)}
-      </p>
+      {announcement.digest ? (
+        <WeeklyDigestView content={announcement.digest} />
+      ) : (
+        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+          {linkifyText(announcement.body, q)}
+        </p>
+      )}
     </main>
   );
 }
