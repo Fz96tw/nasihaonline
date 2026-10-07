@@ -22,6 +22,8 @@ export type DigestIcon = "members" | "library" | "events" | "forums" | "reviews"
 
 export type DigestSection = {
   icon: DigestIcon;
+  /** `ahead` sections (upcoming events) are looking forward; everything else, or absent, looks back over the period. */
+  group?: "ahead";
   heading: string;
   /** Public items, each a link by in-app path. Defined (even if empty) for list-style sections, undefined for single-statement ones. */
   items?: { title: string; path: string; meta?: string }[];
@@ -41,7 +43,11 @@ export type DigestContent = {
   outro: string;
   /** One line of headline numbers, e.g. "12 new members · 4 new resources" — the feed row's excerpt. */
   summary: string;
-  stats: { icon: DigestIcon; label: string; value: string }[];
+  /** Group labels, e.g. "Looking back: Sep 29 – Oct 6" and "Coming up". Absent on digests made before the split. */
+  lookBackLabel?: string;
+  comingUpLabel?: string;
+  /** `ahead` stats count scheduled things, not past activity. */
+  stats: { icon: DigestIcon; label: string; value: string; ahead?: boolean }[];
   sections: DigestSection[];
 };
 
@@ -76,14 +82,23 @@ function link(label: string, url: string) {
 /** The plain-text body (`[title](url)` links, bulleted lists) for a digest's structured content. */
 export function renderDigestBody(content: DigestContent, baseUrl: string): string {
   const base = baseUrl.replace(/\/$/, "");
-  const sections = content.sections.map((section) => {
+  const renderSection = (section: DigestSection) => {
     const itemLines = (section.items ?? []).map(
       (item) => `• ${link(item.title, `${base}${item.path}`)}${item.meta ? ` — ${item.meta}` : ""}`,
     );
     const lines = section.lines.map((line) => (section.items ? `• ${line}` : line));
     return [section.heading, ...itemLines, ...lines].join("\n");
-  });
-  return [content.intro, ...sections, content.outro].join("\n\n");
+  };
+  const past = content.sections.filter((section) => section.group !== "ahead").map(renderSection);
+  const ahead = content.sections.filter((section) => section.group === "ahead").map(renderSection);
+  return [
+    content.intro,
+    ...(content.lookBackLabel && past.length > 0 ? [content.lookBackLabel] : []),
+    ...past,
+    ...(content.comingUpLabel && ahead.length > 0 ? [content.comingUpLabel] : []),
+    ...ahead,
+    content.outro,
+  ].join("\n\n");
 }
 
 function plural(count: number, one: string, many: string) {
@@ -141,6 +156,8 @@ export function composeWeeklyDigest(
   };
 
   const sections: DigestSection[] = [];
+  // Upcoming events look ahead, so they're collected apart and added last, under "Coming up".
+  let eventsSection: DigestSection | null = null;
   const publicTitles: string[] = [];
   const counts = { library: 0, events: 0, threads: 0 };
 
@@ -185,7 +202,7 @@ export function composeWeeklyDigest(
             ? "1 invite-only event is scheduled."
             : `${invited} invite-only events are scheduled.`;
     if (items.length > 0 || extra) {
-      sections.push({ icon: "events", heading: "Upcoming events", items, lines: extra ? [extra] : [] });
+      eventsSection = { icon: "events", group: "ahead", heading: "Upcoming events", items, lines: extra ? [extra] : [] };
       counts.events = items.length + invited;
       publicTitles.push(...data.events.listed.map((event) => event.title));
     }
@@ -223,7 +240,7 @@ export function composeWeeklyDigest(
   }
 
   // Quiet week: nothing but (possibly) folded private activity or Knowledge Hours.
-  if (sections.length === 0) return null;
+  if (sections.length === 0 && !eventsSection) return null;
 
   const hours = data.knowledgeHours;
   const showHours = settings.weeklyDigestIncludeKnowledgeHours && hours.earnedThisWeek > 0;
@@ -250,29 +267,43 @@ export function composeWeeklyDigest(
   const replies = settings.weeklyDigestIncludeReplies ? data.replies : 0;
 
   const stats: DigestContent["stats"] = [];
-  const addStat = (icon: DigestIcon, count: number, one: string, many: string) => {
-    if (count > 0) stats.push({ icon, value: count.toLocaleString("en-US"), label: count === 1 ? one : many });
+  const addStat = (icon: DigestIcon, count: number, one: string, many: string, ahead = false) => {
+    if (count > 0) {
+      stats.push({ icon, value: count.toLocaleString("en-US"), label: count === 1 ? one : many, ...(ahead ? { ahead: true } : {}) });
+    }
   };
   addStat("members", members, "new member", "new members");
   addStat("library", counts.library, "new resource", "new resources");
-  addStat("events", counts.events, "upcoming event", "upcoming events");
   addStat("forums", counts.threads, "new thread", "new threads");
   addStat("reviews", reviews, "peer review started", "peer reviews started");
   addStat("replies", replies, "reply", "replies");
   if (showHours) stats.push({ icon: "hours", value: formatHours(hours.earnedThisWeek), label: "Knowledge Hours earned" });
+  addStat("events", counts.events, "event scheduled", "events scheduled", true);
 
-  const summary = stats
-    .filter((stat) => stat.icon !== "hours")
-    .slice(0, 4)
-    .map((stat) => `${stat.value} ${stat.label}`)
-    .join(" · ");
+  // Past numbers first, then what's ahead: "12 new members · 5 new resources · coming up: 2 events".
+  const pastSummary = stats
+    .filter((stat) => !stat.ahead && stat.icon !== "hours")
+    .slice(0, 3)
+    .map((stat) => `${stat.value} ${stat.label}`);
+  const aheadStat = stats.find((stat) => stat.ahead);
+  const summary = [
+    ...pastSummary,
+    ...(aheadStat ? [`coming up: ${aheadStat.value} ${aheadStat.value === "1" ? "event" : "events"}`] : []),
+  ].join(" · ");
+
+  if (eventsSection) sections.push(eventsSection);
 
   const lastDay = new Date(data.windowEnd.getTime() - 1);
-  const title = `${wording.titlePrefix}: ${formatDay(data.windowStart, tz)} – ${formatDay(lastDay, tz)}`;
+  const periodLabel = `${formatDay(data.windowStart, tz)} – ${formatDay(lastDay, tz)}`;
+  const title = `${wording.titlePrefix}: ${periodLabel}`;
   const content: DigestContent = {
-    intro: `Here's what happened in our community ${wording.phrase}.`,
+    intro: eventsSection
+      ? `Here's what happened in our community ${wording.phrase}, and what's coming up next.`
+      : `Here's what happened in our community ${wording.phrase}.`,
     outro: "See you in the community.",
     summary,
+    lookBackLabel: `Looking back: ${periodLabel}`,
+    comingUpLabel: "Coming up",
     stats,
     sections,
   };
