@@ -32,13 +32,23 @@ const MARKDOWN_IMAGE_TOKEN = /!\[[^\]]*\]\(([^\s()]+)\)/g;
  * this is never more visible than the thread itself.
  */
 export function firstForumPostImageUrl(body: string | null | undefined): string | undefined {
-  if (!body) return undefined;
+  return allForumPostImageUrls(body)[0];
+}
+
+/**
+ * Every `![](url)` token in `body` pointing at our Forum post-image proxy,
+ * in document order, de-duplicated. The What's New feed row shows these as
+ * a swipeable carousel.
+ */
+export function allForumPostImageUrls(body: string | null | undefined): string[] {
+  if (!body) return [];
+  const urls: string[] = [];
   MARKDOWN_IMAGE_TOKEN.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = MARKDOWN_IMAGE_TOKEN.exec(body)) !== null) {
-    if (match[1].startsWith(FORUM_POST_IMAGE_URL_PREFIX)) return match[1];
+    if (match[1].startsWith(FORUM_POST_IMAGE_URL_PREFIX) && !urls.includes(match[1])) urls.push(match[1]);
   }
-  return undefined;
+  return urls;
 }
 
 /**

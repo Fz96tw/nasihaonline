@@ -16,6 +16,69 @@ import { cn } from "@/lib/utils";
 import { ReflectionFeedCard } from "@/components/feed/reflection-feed-card";
 
 /**
+ * Pasted-image strip for a forum-thread feed row. One image renders as a
+ * plain full-width image; 2+ become a horizontal scroll-snap carousel (touch
+ * swipe / trackpad) with clickable dots above it. The row is wrapped in a
+ * <Link>, so dot clicks are swallowed to avoid navigating.
+ */
+function FeedImageCarousel({ urls }: { urls: string[] }) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState(0);
+
+  if (urls.length === 1) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale
+      <img src={urls[0]} alt="" className="mt-2 max-h-48 w-full rounded-md object-cover" />
+    );
+  }
+
+  return (
+    <div className="mt-2">
+      <div className="mb-1.5 flex justify-center gap-1.5" role="tablist" aria-label="Pasted images">
+        {urls.map((_, i) => (
+          <button
+            key={i}
+            type="button"
+            role="tab"
+            aria-selected={i === active}
+            aria-label={`Image ${i + 1} of ${urls.length}`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const el = scrollerRef.current;
+              if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" });
+            }}
+            className={cn(
+              "h-1.5 w-1.5 rounded-full transition-colors",
+              i === active ? "bg-primary" : "bg-muted-foreground/30",
+            )}
+          />
+        ))}
+      </div>
+      <div
+        ref={scrollerRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          setActive(Math.round(el.scrollLeft / el.clientWidth));
+        }}
+        className="flex snap-x snap-mandatory overflow-x-auto rounded-md [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {urls.map((url) => (
+          // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale
+          <img
+            key={url}
+            src={url}
+            alt=""
+            draggable={false}
+            className="max-h-48 w-full shrink-0 snap-center object-cover"
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
  * YouTube player for a feed row. Autoplays muted (the only autoplay browsers
  * allow) once the row is mostly on screen, and pauses/resumes via the
  * iframe API's postMessage commands as it scrolls out of/back into view —
@@ -325,12 +388,7 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
               <FeedYoutubePlayer thumbnailUrl={item.youtubeThumbnailUrl!} embedUrl={item.youtubeEmbedUrl!} />
             )}
             {isForumThread && item.bodyImageUrl && (
-              // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale
-              <img
-                src={item.bodyImageUrl}
-                alt=""
-                className="mt-2 max-h-48 w-full rounded-md object-cover"
-              />
+              <FeedImageCarousel urls={item.bodyImageUrls?.length ? item.bodyImageUrls : [item.bodyImageUrl]} />
             )}
             {item.stats && (
               <div className="mt-2 flex items-center justify-end gap-3 text-xs text-muted-foreground">

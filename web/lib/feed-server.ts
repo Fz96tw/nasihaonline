@@ -19,7 +19,7 @@ import {
   getKnowledgeItemHeroImageUrl,
 } from "@/lib/storage";
 import { withFeedRef, type FeedItem, type FeedItemType, type FeedCursor } from "@/lib/feed";
-import { firstForumPostImageUrl, stripPastedImageTokens } from "@/lib/pasted-images";
+import { allForumPostImageUrls, stripPastedImageTokens } from "@/lib/pasted-images";
 import { extractSnippet, textContainsMatch } from "@/lib/text-highlight";
 import { firstYoutubeUrlInText, youtubeEmbedUrl, youtubeThumbnailUrl } from "@/lib/youtube";
 import {
@@ -1094,7 +1094,8 @@ export async function getFeedPage(params: {
         isReply: boolean,
         timestamp: Date,
       ): FeedItem => {
-        const bodyImageUrl = firstForumPostImageUrl(post?.body);
+        const bodyImageUrls = allForumPostImageUrls(post?.body);
+        const bodyImageUrl = bodyImageUrls[0];
         const youtubeLink = firstYoutubeUrlInText(post?.body);
         return {
           type: "forum_thread",
@@ -1126,6 +1127,7 @@ export async function getFeedPage(params: {
           // proxy re-checks thread visibility per request, so it's never
           // more visible than the thread.
           bodyImageUrl,
+          bodyImageUrls: bodyImageUrls.length ? bodyImageUrls : undefined,
           // A YouTube link in that same post previews as an inline player —
           // but only when there's no pasted image, which wins the one slot.
           ...(!bodyImageUrl && youtubeLink
