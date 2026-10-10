@@ -19,7 +19,7 @@ import {
   getKnowledgeItemHeroImageUrl,
 } from "@/lib/storage";
 import { withFeedRef, type FeedItem, type FeedItemType, type FeedCursor } from "@/lib/feed";
-import { allForumPostImageUrls, stripPastedImageTokens } from "@/lib/pasted-images";
+import { allForumPostImageUrls, FORUM_POST_IMAGE_URL_PREFIX, MAX_FEED_CAROUSEL_IMAGES, stripPastedImageTokens } from "@/lib/pasted-images";
 import { extractSnippet, textContainsMatch } from "@/lib/text-highlight";
 import { firstYoutubeUrlInText, youtubeEmbedUrl, youtubeThumbnailUrl } from "@/lib/youtube";
 import {
@@ -790,6 +790,30 @@ export async function getFeedPage(params: {
     for (const post of openingPosts) openingPostByThread.set(post.threadId, post);
   }
 
+  // Every pasted image across each thread's (non-removed) posts, oldest
+  // first, so the thread's own row can show the whole set as a carousel even
+  // when the images are spread over replies. Only posts that contain an
+  // image token are fetched.
+  const imagesByThread = new Map<string, string[]>();
+  if (!query && forumThreads.length > 0) {
+    const imagePosts = await db.forumPost.findMany({
+      where: {
+        threadId: { in: forumThreads.map((thread) => thread.id) },
+        removed: false,
+        body: { contains: FORUM_POST_IMAGE_URL_PREFIX },
+      },
+      select: { threadId: true, body: true },
+      orderBy: { createdAt: "asc" },
+    });
+    for (const post of imagePosts) {
+      const urls = imagesByThread.get(post.threadId) ?? [];
+      for (const url of allForumPostImageUrls(post.body)) {
+        if (urls.length < MAX_FEED_CAROUSEL_IMAGES && !urls.includes(url)) urls.push(url);
+      }
+      imagesByThread.set(post.threadId, urls);
+    }
+  }
+
   // Following mode: the newest non-removed post by a followed member in each
   // event/library discussion thread and standalone forum thread, flagged as a
   // real reply (vs. the thread's opening post — auto-created for event/library
@@ -1173,6 +1197,15 @@ export async function getFeedPage(params: {
       const ownRow = (!authorIds || followedAuthorSet.has(thread.authorId)) && (!before || thread.createdAt < before)
         ? [buildRow(thread.id, opening ? { ...opening, author: thread.author } : undefined, false, thread.createdAt)]
         : [];
+      // The thread's own row carries every image pasted anywhere in the
+      // thread (replies included), not just the opening post's.
+      const threadImages = imagesByThread.get(thread.id);
+      if (ownRow[0] && threadImages?.length) {
+        ownRow[0].bodyImageUrl = threadImages[0];
+        ownRow[0].bodyImageUrls = threadImages;
+        delete ownRow[0].youtubeEmbedUrl;
+        delete ownRow[0].youtubeThumbnailUrl;
+      }
       const reply = authorIds
         ? (followedPost?.isReply ? followedPost.post : null)
         : thread._count.posts >= 2 && thread.lastActivityAt.getTime() > thread.createdAt.getTime()

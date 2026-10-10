@@ -35,17 +35,20 @@ export function firstForumPostImageUrl(body: string | null | undefined): string 
   return allForumPostImageUrls(body)[0];
 }
 
+/** Most images a What's New feed carousel will show — keeps the dots readable and the row's load bounded. */
+export const MAX_FEED_CAROUSEL_IMAGES = 10;
+
 /**
- * Every `![](url)` token in `body` pointing at our Forum post-image proxy,
+ * Up to `max` `![](url)` tokens in `body` pointing at our Forum post-image proxy,
  * in document order, de-duplicated. The What's New feed row shows these as
  * a swipeable carousel.
  */
-export function allForumPostImageUrls(body: string | null | undefined): string[] {
+export function allForumPostImageUrls(body: string | null | undefined, max = MAX_FEED_CAROUSEL_IMAGES): string[] {
   if (!body) return [];
   const urls: string[] = [];
   MARKDOWN_IMAGE_TOKEN.lastIndex = 0;
   let match: RegExpExecArray | null;
-  while ((match = MARKDOWN_IMAGE_TOKEN.exec(body)) !== null) {
+  while (urls.length < max && (match = MARKDOWN_IMAGE_TOKEN.exec(body)) !== null) {
     if (match[1].startsWith(FORUM_POST_IMAGE_URL_PREFIX) && !urls.includes(match[1])) urls.push(match[1]);
   }
   return urls;

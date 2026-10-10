@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Eye, Hand, Lock, MessageSquare, Newspaper, Play, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Hand, Lock, MessageSquare, Newspaper, Play, Users } from "lucide-react";
 import { type FeedItem, FEED_TYPE_LABELS } from "@/lib/feed";
 import { formatRelativeTime } from "@/lib/format-date";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
@@ -18,12 +18,19 @@ import { ReflectionFeedCard } from "@/components/feed/reflection-feed-card";
 /**
  * Pasted-image strip for a forum-thread feed row. One image renders as a
  * plain full-width image; 2+ become a horizontal scroll-snap carousel (touch
- * swipe / trackpad) with clickable dots above it. The row is wrapped in a
- * <Link>, so dot clicks are swallowed to avoid navigating.
+ * swipe / trackpad) with clickable dots below it. The row is wrapped in a
+ * <Link>, so dot clicks are swallowed to avoid navigating. The strip is
+ * data-no-swipe so a sideways drag on it scrolls the images instead of also
+ * starting PaneSlider's pane swipe.
  */
 function FeedImageCarousel({ urls }: { urls: string[] }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
+
+  const scrollToIndex = (i: number) => {
+    const el = scrollerRef.current;
+    if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" });
+  };
 
   if (urls.length === 1) {
     return (
@@ -34,7 +41,54 @@ function FeedImageCarousel({ urls }: { urls: string[] }) {
 
   return (
     <div className="mt-2">
-      <div className="mb-1.5 flex justify-center gap-1.5" role="tablist" aria-label="Pasted images">
+      <div className="group relative">
+        <div
+          ref={scrollerRef}
+          data-no-swipe
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            setActive(Math.round(el.scrollLeft / el.clientWidth));
+          }}
+          className="flex snap-x snap-mandatory overflow-x-auto rounded-md [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {urls.map((url, i) => (
+            // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale
+            <img
+              key={url}
+              src={url}
+              alt=""
+              draggable={false}
+              loading={i === 0 ? "eager" : "lazy"}
+              className="max-h-48 w-full shrink-0 snap-center object-cover"
+            />
+          ))}
+        </div>
+        {/* Mouse-only: touch users swipe, and the buttons would just cover the photo. */}
+        {([-1, 1] as const).map((dir) => {
+          const target = active + dir;
+          if (target < 0 || target >= urls.length) return null;
+          const Icon = dir < 0 ? ChevronLeft : ChevronRight;
+          return (
+            <button
+              key={dir}
+              type="button"
+              aria-label={dir < 0 ? "Previous image" : "Next image"}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                scrollToIndex(target);
+              }}
+              className={cn(
+                "absolute top-1/2 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70 [@media(pointer:fine)]:flex",
+                dir < 0 ? "left-2" : "right-2",
+              )}
+            >
+              <Icon className="h-5 w-5" />
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-1.5 flex justify-center gap-1.5" role="tablist" aria-label="Pasted images">
         {urls.map((_, i) => (
           <button
             key={i}
@@ -45,32 +99,12 @@ function FeedImageCarousel({ urls }: { urls: string[] }) {
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              const el = scrollerRef.current;
-              if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" });
+              scrollToIndex(i);
             }}
             className={cn(
               "h-1.5 w-1.5 rounded-full transition-colors",
               i === active ? "bg-primary" : "bg-muted-foreground/30",
             )}
-          />
-        ))}
-      </div>
-      <div
-        ref={scrollerRef}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          setActive(Math.round(el.scrollLeft / el.clientWidth));
-        }}
-        className="flex snap-x snap-mandatory overflow-x-auto rounded-md [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      >
-        {urls.map((url) => (
-          // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale
-          <img
-            key={url}
-            src={url}
-            alt=""
-            draggable={false}
-            className="max-h-48 w-full shrink-0 snap-center object-cover"
           />
         ))}
       </div>
