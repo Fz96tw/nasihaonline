@@ -26,7 +26,8 @@ import { ReflectionFeedCard } from "@/components/feed/reflection-feed-card";
 function FeedImageCarousel({ slides, firstSlideOverlay }: { slides: FeedGallerySlide[]; firstSlideOverlay?: ReactNode }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
-  // A video slide fixes every slide to 16:9 so the row doesn't change height as you swipe between a video and a photo.
+  // Banners are a fixed 2:1 frame (width of the feed item, height half that), cropped and centered. A video slide
+  // fixes every slide to 16:9 instead so the player isn't clipped and the row doesn't change height as you swipe.
   const hasVideo = slides.some((slide) => slide.kind === "video");
 
   const scrollToIndex = (i: number) => {
@@ -37,7 +38,7 @@ function FeedImageCarousel({ slides, firstSlideOverlay }: { slides: FeedGalleryS
   if (slides.length === 1 && slides[0].kind === "image") {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale
-      <img src={slides[0].url} alt="" className="mt-2 h-auto max-h-[28rem] w-full rounded-md bg-muted object-contain" />
+      <img src={slides[0].url} alt="" className="mt-2 aspect-[2/1] w-full rounded-md bg-muted object-cover object-center" />
     );
   }
 
@@ -56,10 +57,7 @@ function FeedImageCarousel({ slides, firstSlideOverlay }: { slides: FeedGalleryS
           {slides.map((slide, i) => (
             <div
               key={`${i}-${slide.kind === "image" ? slide.url : slide.embedUrl}`}
-              className={cn(
-                "relative w-full shrink-0 snap-center bg-muted",
-                hasVideo ? "aspect-video" : "flex max-h-[28rem] items-center",
-              )}
+              className={cn("relative w-full shrink-0 snap-center bg-muted", hasVideo ? "aspect-video" : "aspect-[2/1]")}
             >
               {slide.kind === "video" ? (
                 <FeedYoutubePlayer
@@ -76,7 +74,7 @@ function FeedImageCarousel({ slides, firstSlideOverlay }: { slides: FeedGalleryS
                   alt=""
                   draggable={false}
                   loading={i === 0 ? "eager" : "lazy"}
-                  className={cn("block w-full object-contain", hasVideo ? "h-full" : "h-auto max-h-[28rem]")}
+                  className="block h-full w-full object-cover object-center"
                 />
               )}
               {i === 0 && slide.kind === "image" && firstSlideOverlay}
@@ -474,7 +472,7 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                   <img
                     src={item.imageUrl}
                     alt=""
-                    className="mt-2 h-auto max-h-[28rem] w-full rounded-md bg-muted object-contain"
+                    className="mt-2 aspect-[2/1] w-full rounded-md bg-muted object-cover object-center"
                   />
                 )}
               </>
