@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Eye, Hand, Lock, MessageSquare, Newspaper, Play, Users } from "lucide-react";
 import { type FeedItem, FEED_TYPE_LABELS } from "@/lib/feed";
 import { formatRelativeTime } from "@/lib/format-date";
@@ -23,7 +23,7 @@ import { ReflectionFeedCard } from "@/components/feed/reflection-feed-card";
  * data-no-swipe so a sideways drag on it scrolls the images instead of also
  * starting PaneSlider's pane swipe.
  */
-function FeedImageCarousel({ urls }: { urls: string[] }) {
+function FeedImageCarousel({ urls, firstSlideOverlay }: { urls: string[]; firstSlideOverlay?: ReactNode }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
 
@@ -52,15 +52,17 @@ function FeedImageCarousel({ urls }: { urls: string[] }) {
           className="flex snap-x snap-mandatory overflow-x-auto rounded-md [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {urls.map((url, i) => (
-            // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale
-            <img
-              key={url}
-              src={url}
-              alt=""
-              draggable={false}
-              loading={i === 0 ? "eager" : "lazy"}
-              className="max-h-48 w-full shrink-0 snap-center object-cover"
-            />
+            <div key={url} className="relative w-full shrink-0 snap-center">
+              {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale */}
+              <img
+                src={url}
+                alt=""
+                draggable={false}
+                loading={i === 0 ? "eager" : "lazy"}
+                className="block max-h-48 w-full object-cover"
+              />
+              {i === 0 && firstSlideOverlay}
+            </div>
           ))}
         </div>
         {/* Mouse-only: touch users swipe, and the buttons would just cover the photo. */}
@@ -282,17 +284,34 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                     library item with the overlay on — the excerpt reads as a
                     caption under the banner, mirroring the detail page's
                     image-then-content order, instead of sitting above it. */}
-                <div className="relative mt-2 w-full overflow-hidden rounded-md">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
-                  <img src={item.imageUrl!} alt="" className="max-h-48 w-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-                  <p className="absolute inset-x-0 bottom-3 line-clamp-4 px-4 text-2xl font-bold text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)]">
-                    {item.isRestricted && (
-                      <Lock className="mr-2 inline h-5 w-5 align-[-2px]" aria-label="Restricted resource" />
-                    )}
-                    {item.title}
-                  </p>
-                </div>
+                {item.galleryImageUrls ? (
+                  <FeedImageCarousel
+                    urls={item.galleryImageUrls}
+                    firstSlideOverlay={
+                      <>
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                        <p className="absolute inset-x-0 bottom-3 line-clamp-4 px-4 text-2xl font-bold text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)]">
+                          {item.isRestricted && (
+                            <Lock className="mr-2 inline h-5 w-5 align-[-2px]" aria-label="Restricted resource" />
+                          )}
+                          {item.title}
+                        </p>
+                      </>
+                    }
+                  />
+                ) : (
+                  <div className="relative mt-2 w-full overflow-hidden rounded-md">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
+                    <img src={item.imageUrl!} alt="" className="max-h-48 w-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                    <p className="absolute inset-x-0 bottom-3 line-clamp-4 px-4 text-2xl font-bold text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)]">
+                      {item.isRestricted && (
+                        <Lock className="mr-2 inline h-5 w-5 align-[-2px]" aria-label="Restricted resource" />
+                      )}
+                      {item.title}
+                    </p>
+                  </div>
+                )}
                 <div className="mt-2 line-clamp-2 text-sm text-muted-foreground">
                   <HighlightText text={item.excerpt} query={q} />
                 </div>
@@ -408,7 +427,10 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                 {!isForumThread && item.imageUrl && item.youtubeEmbedUrl && (
                   <FeedYoutubePlayer thumbnailUrl={item.imageUrl} embedUrl={item.youtubeEmbedUrl} />
                 )}
-                {!isForumThread && item.imageUrl && !item.youtubeEmbedUrl && (
+                {!isForumThread && item.galleryImageUrls && !isLibraryOverlay && (
+                  <FeedImageCarousel urls={item.galleryImageUrls} />
+                )}
+                {!isForumThread && item.imageUrl && !item.youtubeEmbedUrl && !item.galleryImageUrls && (
                   // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
                   <img
                     src={item.imageUrl}

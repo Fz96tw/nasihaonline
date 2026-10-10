@@ -54,6 +54,25 @@ export function allForumPostImageUrls(body: string | null | undefined, max = MAX
   return urls;
 }
 
+const LIBRARY_BODY_IMG_TAG = /<img\b[^>]*?\ssrc="(\/api\/library\/body-image\/[^"]+)"/g;
+
+/**
+ * Up to `max` image URLs embedded in a Library article's sanitized HTML body
+ * (<img> tags whose src is our Library body-image proxy — the only src
+ * sanitizeKnowledgeItemBody lets through), in document order, de-duplicated.
+ */
+export function libraryBodyImageUrls(html: string | null | undefined, max = MAX_FEED_CAROUSEL_IMAGES): string[] {
+  if (!html) return [];
+  const urls: string[] = [];
+  LIBRARY_BODY_IMG_TAG.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while (urls.length < max && (match = LIBRARY_BODY_IMG_TAG.exec(html)) !== null) {
+    const url = match[1].replace(/&amp;/g, "&");
+    if (!urls.includes(url)) urls.push(url);
+  }
+  return urls;
+}
+
 /**
  * Strips every `![alt](url)` token pointing at one of our image proxies
  * from `body`, collapsing the whitespace left behind — so a feed excerpt
