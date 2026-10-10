@@ -18,7 +18,7 @@ import {
   getSurveyHeroImageUrl,
   getKnowledgeItemHeroImageUrl,
 } from "@/lib/storage";
-import { withFeedRef, type FeedItem, type FeedItemType, type FeedCursor } from "@/lib/feed";
+import { withFeedRef, type FeedGallerySlide, type FeedItem, type FeedItemType, type FeedCursor } from "@/lib/feed";
 import { allForumPostImageUrls, FORUM_POST_IMAGE_URL_PREFIX, libraryBodyImageUrls, MAX_FEED_CAROUSEL_IMAGES, stripPastedImageTokens } from "@/lib/pasted-images";
 import { extractSnippet, textContainsMatch } from "@/lib/text-highlight";
 import { firstYoutubeUrlInText, youtubeEmbedUrl, youtubeThumbnailUrl } from "@/lib/youtube";
@@ -1019,15 +1019,25 @@ export async function getFeedPage(params: {
       return [...eventRows, replyRow];
     }),
     ...libraryItems.flatMap((item): FeedItem[] => {
-      // Cover = the uploaded hero, else (recorded lecture) the YouTube
-      // thumbnail, else the article's first embedded body image. When the
-      // hero plus body images make 2+ slides the row shows a carousel. A
-      // YouTube-backed item keeps its player, so its body images are ignored.
+      // Slides in the order the item's own page shows them: hero image,
+      // then the YouTube video, then the article body's images. 2+ slides
+      // make a carousel; otherwise the cover is the hero, else the video's
+      // thumbnail, else the first body image (and a lone video keeps its
+      // autoplaying player via youtubeEmbedUrl below).
       const heroUrl = getKnowledgeItemHeroImageUrl(item.heroImageUrl);
-      const bodyImages = item.youtubeUrl && !heroUrl ? [] : libraryBodyImageUrls(item.body);
-      const slides = [...(heroUrl ? [heroUrl] : []), ...bodyImages].slice(0, MAX_FEED_CAROUSEL_IMAGES);
+      const videoEmbed = item.youtubeUrl ? youtubeEmbedUrl(item.youtubeUrl) : null;
+      const videoThumb = item.youtubeUrl ? youtubeThumbnailUrl(item.youtubeUrl) : null;
+      const slides: FeedGallerySlide[] = [
+        ...(heroUrl ? [{ kind: "image" as const, url: heroUrl }] : []),
+        ...(videoEmbed && videoThumb ? [{ kind: "video" as const, thumbnailUrl: videoThumb, embedUrl: videoEmbed }] : []),
+        ...libraryBodyImageUrls(item.body).map((url) => ({ kind: "image" as const, url })),
+      ].slice(0, MAX_FEED_CAROUSEL_IMAGES);
+      const firstSlide = slides[0];
       const libraryImages = {
-        imageUrl: heroUrl ?? (item.youtubeUrl ? youtubeThumbnailUrl(item.youtubeUrl) : null) ?? slides[0] ?? null,
+        imageUrl:
+          heroUrl ??
+          videoThumb ??
+          (firstSlide?.kind === "image" ? firstSlide.url : null),
         gallery: slides.length >= 2 ? slides : undefined,
       };
       const ownRow: FeedItem = {
@@ -1061,14 +1071,12 @@ export async function getFeedPage(params: {
         // falls back to its video's YouTube thumbnail as the default cover —
         // same precedence as LibraryItemCard's browse-grid thumbnail.
         imageUrl: libraryImages.imageUrl,
-        ...(libraryImages.gallery ? { galleryImageUrls: libraryImages.gallery } : {}),
+        ...(libraryImages.gallery ? { gallery: libraryImages.gallery } : {}),
         // Always false when heroImageUrl is null (server-enforced at write
         // time), so this is never true for the YouTube-thumbnail fallback
         // above — only ever for a real uploaded hero image.
         showTitleOverlay: item.showTitleOverlay,
-        youtubeEmbedUrl: !getKnowledgeItemHeroImageUrl(item.heroImageUrl) && item.youtubeUrl
-          ? (youtubeEmbedUrl(item.youtubeUrl) ?? undefined)
-          : undefined,
+        youtubeEmbedUrl: !libraryImages.gallery && !heroUrl && item.youtubeUrl ? (videoEmbed ?? undefined) : undefined,
         isRestricted: item.visibility === KnowledgeVisibility.restricted,
         libraryViewCount: item._count.views,
         forumReplyCount: item.forumThread ? item.forumThread._count.posts - 1 : undefined,

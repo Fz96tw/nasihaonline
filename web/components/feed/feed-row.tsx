@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Eye, Hand, Lock, MessageSquare, Newspaper, Play, Users } from "lucide-react";
-import { type FeedItem, FEED_TYPE_LABELS } from "@/lib/feed";
+import { type FeedGallerySlide, type FeedItem, FEED_TYPE_LABELS } from "@/lib/feed";
 import { formatRelativeTime } from "@/lib/format-date";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
 import { Avatar } from "@/components/ui/avatar";
@@ -23,19 +23,21 @@ import { ReflectionFeedCard } from "@/components/feed/reflection-feed-card";
  * data-no-swipe so a sideways drag on it scrolls the images instead of also
  * starting PaneSlider's pane swipe.
  */
-function FeedImageCarousel({ urls, firstSlideOverlay }: { urls: string[]; firstSlideOverlay?: ReactNode }) {
+function FeedImageCarousel({ slides, firstSlideOverlay }: { slides: FeedGallerySlide[]; firstSlideOverlay?: ReactNode }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
+  // A video slide fixes every slide to 16:9 so the row doesn't change height as you swipe between a video and a photo.
+  const hasVideo = slides.some((slide) => slide.kind === "video");
 
   const scrollToIndex = (i: number) => {
     const el = scrollerRef.current;
     if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" });
   };
 
-  if (urls.length === 1) {
+  if (slides.length === 1 && slides[0].kind === "image") {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale
-      <img src={urls[0]} alt="" className="mt-2 max-h-48 w-full rounded-md object-cover" />
+      <img src={slides[0].url} alt="" className="mt-2 max-h-48 w-full rounded-md object-cover" />
     );
   }
 
@@ -51,30 +53,43 @@ function FeedImageCarousel({ urls, firstSlideOverlay }: { urls: string[]; firstS
           }}
           className="flex snap-x snap-mandatory overflow-x-auto rounded-md [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          {urls.map((url, i) => (
-            <div key={url} className="relative w-full shrink-0 snap-center">
-              {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale */}
-              <img
-                src={url}
-                alt=""
-                draggable={false}
-                loading={i === 0 ? "eager" : "lazy"}
-                className="block max-h-48 w-full object-cover"
-              />
-              {i === 0 && firstSlideOverlay}
+          {slides.map((slide, i) => (
+            <div
+              key={`${i}-${slide.kind === "image" ? slide.url : slide.embedUrl}`}
+              className={cn("relative w-full shrink-0 snap-center", hasVideo && "aspect-video")}
+            >
+              {slide.kind === "video" ? (
+                <FeedYoutubePlayer
+                  thumbnailUrl={slide.thumbnailUrl}
+                  embedUrl={slide.embedUrl}
+                  embedded
+                  autoplay={i === 0}
+                  slideActive={i === active}
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale
+                <img
+                  src={slide.url}
+                  alt=""
+                  draggable={false}
+                  loading={i === 0 ? "eager" : "lazy"}
+                  className={cn("block w-full object-cover", hasVideo ? "h-full" : "max-h-48")}
+                />
+              )}
+              {i === 0 && slide.kind === "image" && firstSlideOverlay}
             </div>
           ))}
         </div>
         {/* Mouse-only: touch users swipe, and the buttons would just cover the photo. */}
         {([-1, 1] as const).map((dir) => {
           const target = active + dir;
-          if (target < 0 || target >= urls.length) return null;
+          if (target < 0 || target >= slides.length) return null;
           const Icon = dir < 0 ? ChevronLeft : ChevronRight;
           return (
             <button
               key={dir}
               type="button"
-              aria-label={dir < 0 ? "Previous image" : "Next image"}
+              aria-label={dir < 0 ? "Previous slide" : "Next slide"}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -90,14 +105,14 @@ function FeedImageCarousel({ urls, firstSlideOverlay }: { urls: string[]; firstS
           );
         })}
       </div>
-      <div className="mt-1.5 flex justify-center gap-1.5" role="tablist" aria-label="Pasted images">
-        {urls.map((_, i) => (
+      <div className="mt-1.5 flex justify-center gap-1.5" role="tablist" aria-label="Slides">
+        {slides.map((_, i) => (
           <button
             key={i}
             type="button"
             role="tab"
             aria-selected={i === active}
-            aria-label={`Image ${i + 1} of ${urls.length}`}
+            aria-label={`Slide ${i + 1} of ${slides.length}`}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -123,8 +138,24 @@ function FeedImageCarousel({ urls, firstSlideOverlay }: { urls: string[]; firstS
  * in a <Link>, so the facade's click is swallowed (no navigation); the
  * iframe captures its own clicks.
  */
-function FeedYoutubePlayer({ thumbnailUrl, embedUrl }: { thumbnailUrl: string; embedUrl: string }) {
+function FeedYoutubePlayer({
+  thumbnailUrl,
+  embedUrl,
+  embedded = false,
+  autoplay = true,
+  slideActive = true,
+}: {
+  thumbnailUrl: string;
+  embedUrl: string;
+  /** Rendered as a carousel slide: fills its parent instead of carrying its own margin/rounding. */
+  embedded?: boolean;
+  /** Mount and play on scrolling into view; false waits for a click (a non-first carousel slide). */
+  autoplay?: boolean;
+  /** False while the carousel shows another slide — pauses the video. */
+  slideActive?: boolean;
+}) {
   const [mounted, setMounted] = useState(false);
+  const [inView, setInView] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const reduceMotion = useRef(false);
@@ -133,24 +164,29 @@ function FeedYoutubePlayer({ thumbnailUrl, embedUrl }: { thumbnailUrl: string; e
     reduceMotion.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const el = containerRef.current;
     if (!el || reduceMotion.current) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setMounted(true);
-        }
-        iframeRef.current?.contentWindow?.postMessage(
-          JSON.stringify({ event: "command", func: entry.isIntersecting ? "playVideo" : "pauseVideo", args: "" }),
-          "https://www.youtube.com",
-        );
-      },
-      { threshold: 0.6 },
-    );
+    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { threshold: 0.6 });
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
 
+  const shouldPlay = slideActive && (inView || reduceMotion.current);
+
+  useEffect(() => {
+    if (autoplay && inView && slideActive) setMounted(true);
+  }, [autoplay, inView, slideActive]);
+
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      JSON.stringify({ event: "command", func: shouldPlay ? "playVideo" : "pauseVideo", args: "" }),
+      "https://www.youtube.com",
+    );
+  }, [shouldPlay]);
+
   return (
-    <div ref={containerRef} className="mt-2 aspect-video w-full overflow-hidden rounded-md bg-black">
+    <div
+      ref={containerRef}
+      className={cn("aspect-video w-full overflow-hidden bg-black", embedded ? "h-full" : "mt-2 rounded-md")}
+    >
       {mounted ? (
         <iframe
           ref={iframeRef}
@@ -284,9 +320,9 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                     library item with the overlay on — the excerpt reads as a
                     caption under the banner, mirroring the detail page's
                     image-then-content order, instead of sitting above it. */}
-                {item.galleryImageUrls ? (
+                {item.gallery ? (
                   <FeedImageCarousel
-                    urls={item.galleryImageUrls}
+                    slides={item.gallery}
                     firstSlideOverlay={
                       <>
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
@@ -424,13 +460,13 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                     </div>
                   </div>
                 </div>
-                {!isForumThread && item.imageUrl && item.youtubeEmbedUrl && (
+                {!isForumThread && !item.gallery && item.imageUrl && item.youtubeEmbedUrl && (
                   <FeedYoutubePlayer thumbnailUrl={item.imageUrl} embedUrl={item.youtubeEmbedUrl} />
                 )}
-                {!isForumThread && item.galleryImageUrls && !isLibraryOverlay && (
-                  <FeedImageCarousel urls={item.galleryImageUrls} />
+                {!isForumThread && item.gallery && !isLibraryOverlay && (
+                  <FeedImageCarousel slides={item.gallery} />
                 )}
-                {!isForumThread && item.imageUrl && !item.youtubeEmbedUrl && !item.galleryImageUrls && (
+                {!isForumThread && item.imageUrl && !item.youtubeEmbedUrl && !item.gallery && (
                   // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
                   <img
                     src={item.imageUrl}
@@ -444,7 +480,9 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
               <FeedYoutubePlayer thumbnailUrl={item.youtubeThumbnailUrl!} embedUrl={item.youtubeEmbedUrl!} />
             )}
             {isForumThread && item.bodyImageUrl && (
-              <FeedImageCarousel urls={item.bodyImageUrls?.length ? item.bodyImageUrls : [item.bodyImageUrl]} />
+              <FeedImageCarousel
+                slides={(item.bodyImageUrls?.length ? item.bodyImageUrls : [item.bodyImageUrl]).map((url) => ({ kind: "image" as const, url }))}
+              />
             )}
             {item.stats && (
               <div className="mt-2 flex items-center justify-end gap-3 text-xs text-muted-foreground">

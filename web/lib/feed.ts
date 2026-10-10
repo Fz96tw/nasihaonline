@@ -23,6 +23,11 @@ export function isFeedItemType(value: string | null | undefined): value is FeedI
   return value != null && (FEED_TYPES as string[]).includes(value);
 }
 
+/** One slide of a FeedItem's carousel: an image, or a YouTube video shown as a click-to-play facade (autoplaying muted only when it is the first slide). */
+export type FeedGallerySlide =
+  | { kind: "image"; url: string }
+  | { kind: "video"; thumbnailUrl: string; embedUrl: string };
+
 export type FeedItem = {
   type: FeedItemType;
   id: string;
@@ -69,8 +74,8 @@ export type FeedItem = {
   bodyImageUrl?: string;
   /** Every pasted image in that same post (document order, includes bodyImageUrl as the first). FeedRow shows a swipeable carousel with dots when there are 2+. Undefined when the post has none. */
   bodyImageUrls?: string[];
-  /** Only "library" items whose cover plus article-body images make 2+ slides carry this — the full slide list (hero/cover first, then body images, capped), rendered by FeedRow as a swipeable carousel. imageUrl stays the first slide. Undefined otherwise. */
-  galleryImageUrls?: string[];
+  /** Only "library" items with 2+ slides carry this — the full slide list in page order (hero/cover image, then the YouTube video, then article-body images; capped), rendered by FeedRow as a swipeable carousel. imageUrl stays the first slide's image. Undefined otherwise. */
+  gallery?: FeedGallerySlide[];
   /** "event", "forum_thread" and "library" items carry this — true when the underlying Event/ForumThread's visibility is `invited`, or the KnowledgeItem's is `restricted`, driving FeedRow's lock-icon title prefix. Undefined for every other type. */
   isRestricted?: boolean;
   /** Only a weekly-digest "announcement" item carries this — true when the row is the community's weekly digest, so FeedRow prefixes the title with a digest icon. */
