@@ -37,7 +37,7 @@ function FeedImageCarousel({ slides, firstSlideOverlay }: { slides: FeedGalleryS
   if (slides.length === 1 && slides[0].kind === "image") {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale
-      <img src={slides[0].url} alt="" className="mt-2 max-h-48 w-full rounded-md bg-muted object-contain" />
+      <img src={slides[0].url} alt="" className="mt-2 h-auto max-h-[28rem] w-full rounded-md bg-muted object-contain" />
     );
   }
 
@@ -56,7 +56,10 @@ function FeedImageCarousel({ slides, firstSlideOverlay }: { slides: FeedGalleryS
           {slides.map((slide, i) => (
             <div
               key={`${i}-${slide.kind === "image" ? slide.url : slide.embedUrl}`}
-              className={cn("relative w-full shrink-0 snap-center bg-muted", hasVideo ? "aspect-video" : "h-48")}
+              className={cn(
+                "relative w-full shrink-0 snap-center bg-muted",
+                hasVideo ? "aspect-video" : "flex max-h-[28rem] items-center",
+              )}
             >
               {slide.kind === "video" ? (
                 <FeedYoutubePlayer
@@ -73,7 +76,7 @@ function FeedImageCarousel({ slides, firstSlideOverlay }: { slides: FeedGalleryS
                   alt=""
                   draggable={false}
                   loading={i === 0 ? "eager" : "lazy"}
-                  className="block h-full w-full object-contain"
+                  className={cn("block w-full object-contain", hasVideo ? "h-full" : "h-auto max-h-[28rem]")}
                 />
               )}
               {i === 0 && slide.kind === "image" && firstSlideOverlay}
@@ -471,7 +474,7 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                   <img
                     src={item.imageUrl}
                     alt=""
-                    className="mt-2 max-h-48 w-full rounded-md bg-muted object-contain"
+                    className="mt-2 h-auto max-h-[28rem] w-full rounded-md bg-muted object-contain"
                   />
                 )}
               </>
