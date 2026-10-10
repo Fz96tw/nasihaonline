@@ -1028,7 +1028,7 @@ export async function getFeedPage(params: {
       const videoEmbed = item.youtubeUrl ? youtubeEmbedUrl(item.youtubeUrl) : null;
       const videoThumb = item.youtubeUrl ? youtubeThumbnailUrl(item.youtubeUrl) : null;
       const slides: FeedGallerySlide[] = [
-        ...(heroUrl ? [{ kind: "image" as const, url: heroUrl }] : []),
+        ...(heroUrl ? [{ kind: "image" as const, url: heroUrl, banner: true }] : []),
         ...(videoEmbed && videoThumb ? [{ kind: "video" as const, thumbnailUrl: videoThumb, embedUrl: videoEmbed }] : []),
         ...libraryBodyImageUrls(item.body).map((url) => ({ kind: "image" as const, url })),
       ].slice(0, MAX_FEED_CAROUSEL_IMAGES);
@@ -1072,6 +1072,7 @@ export async function getFeedPage(params: {
         // same precedence as LibraryItemCard's browse-grid thumbnail.
         imageUrl: libraryImages.imageUrl,
         ...(libraryImages.gallery ? { gallery: libraryImages.gallery } : {}),
+        ...(!heroUrl && !videoThumb && libraryImages.imageUrl ? { imageIsBodyImage: true } : {}),
         // Always false when heroImageUrl is null (server-enforced at write
         // time), so this is never true for the YouTube-thumbnail fallback
         // above — only ever for a real uploaded hero image.

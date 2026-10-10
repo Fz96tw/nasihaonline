@@ -26,8 +26,10 @@ import { ReflectionFeedCard } from "@/components/feed/reflection-feed-card";
 function FeedImageCarousel({ slides, firstSlideOverlay }: { slides: FeedGallerySlide[]; firstSlideOverlay?: ReactNode }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
-  // Banners are a fixed 2:1 frame (width of the feed item, height half that), cropped and centered. A video slide
-  // fixes every slide to 16:9 instead so the player isn't clipped and the row doesn't change height as you swipe.
+  // Every slide shares one frame so the row doesn't change height as you swipe: 2:1 when the item has a banner
+  // (hero image — cropped to fill it, centered), else 16:9 when there's a video, else a fixed 192px. Non-banner
+  // images are fit (not cropped) inside whichever frame applies.
+  const hasBanner = slides.some((slide) => slide.kind === "image" && slide.banner);
   const hasVideo = slides.some((slide) => slide.kind === "video");
 
   const scrollToIndex = (i: number) => {
@@ -38,7 +40,11 @@ function FeedImageCarousel({ slides, firstSlideOverlay }: { slides: FeedGalleryS
   if (slides.length === 1 && slides[0].kind === "image") {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale
-      <img src={slides[0].url} alt="" className="mt-2 aspect-[2/1] w-full rounded-md bg-muted object-cover object-center" />
+      <img src={slides[0].url} alt="" className={cn(
+          "mt-2 w-full rounded-md bg-muted",
+          slides[0].banner ? "aspect-[2/1] object-cover object-center" : "max-h-48 object-contain",
+        )}
+      />
     );
   }
 
@@ -57,7 +63,7 @@ function FeedImageCarousel({ slides, firstSlideOverlay }: { slides: FeedGalleryS
           {slides.map((slide, i) => (
             <div
               key={`${i}-${slide.kind === "image" ? slide.url : slide.embedUrl}`}
-              className={cn("relative w-full shrink-0 snap-center bg-muted", hasVideo ? "aspect-video" : "aspect-[2/1]")}
+              className={cn("relative w-full shrink-0 snap-center bg-muted", hasBanner ? "aspect-[2/1]" : hasVideo ? "aspect-video" : "h-48")}
             >
               {slide.kind === "video" ? (
                 <FeedYoutubePlayer
@@ -74,7 +80,7 @@ function FeedImageCarousel({ slides, firstSlideOverlay }: { slides: FeedGalleryS
                   alt=""
                   draggable={false}
                   loading={i === 0 ? "eager" : "lazy"}
-                  className="block h-full w-full object-cover object-center"
+                  className={cn("block h-full w-full", slide.banner ? "object-cover object-center" : "object-contain")}
                 />
               )}
               {i === 0 && slide.kind === "image" && firstSlideOverlay}
@@ -339,7 +345,7 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                 ) : (
                   <div className="relative mt-2 w-full overflow-hidden rounded-md">
                     {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
-                    <img src={item.imageUrl!} alt="" className="max-h-48 w-full object-cover" />
+                    <img src={item.imageUrl!} alt="" className="block aspect-[2/1] w-full object-cover object-center" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
                     <p className="absolute inset-x-0 bottom-3 line-clamp-4 px-4 text-2xl font-bold text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)]">
                       {item.isRestricted && (
@@ -472,7 +478,10 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                   <img
                     src={item.imageUrl}
                     alt=""
-                    className="mt-2 aspect-[2/1] w-full rounded-md bg-muted object-cover object-center"
+                    className={cn(
+                      "mt-2 w-full rounded-md bg-muted",
+                      item.imageIsBodyImage ? "max-h-48 object-contain" : "aspect-[2/1] object-cover object-center",
+                    )}
                   />
                 )}
               </>
