@@ -37,7 +37,11 @@ export function useReviewStepStatuses({
     { field: "contentType", isEmpty: (v) => !v.contentType, value: KnowledgeContentType.article },
     { field: "level", isEmpty: (v) => !v.level, value: Object.values(KnowledgeLevel)[0] },
   ]);
-  if (values.contentType && values.contentType !== KnowledgeContentType.recorded_lecture && !hasSource) {
+  if (!values.contentType) {
+    // Every Material requirement depends on the content type, so until it's
+    // chosen on Basics the step can't honestly read as complete.
+    issues.push({ path: "source", message: "Choose a content type on the Basics step first." });
+  } else if (values.contentType !== KnowledgeContentType.recorded_lecture && !hasSource) {
     issues.push({ path: "source", message: SOURCE_REQUIRED_MESSAGE });
   }
 
