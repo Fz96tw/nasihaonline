@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --test --experimental-strip-types lib/presenter-overlay/*.test.ts lib/reflection-*.test.ts lib/feed-author.test.ts",
+    "test": "node --test --experimental-strip-types lib/presenter-overlay/*.test.ts lib/reflection-*.test.ts lib/feed-author.test.ts lib/games.test.ts",
     "worker": "tsx scripts/worker.ts",
     "reindex:profiles": "tsx scripts/reindex-profiles.ts",
     "reindex:library": "tsx scripts/reindex-library.ts",

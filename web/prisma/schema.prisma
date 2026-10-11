@@ -159,6 +159,8 @@ model User {
   lastDigestEmailAt      DateTime?
   digestUnsubscribeToken String?   @unique
 
+  gameRuns GameRun[]
+
   @@map("users")
 }
 
@@ -2978,4 +2980,26 @@ model ReflectionPost {
 
   @@index([quoteId])
   @@map("reflection_posts")
+}
+
+// One row per play of a /games/* mini game. Created when a signed-in member
+// starts a run and completed once with the final score, so the server's own
+// startedAt bounds what a submitted score can plausibly be
+// (lib/games-server.ts). Unfinished rows are abandoned runs and never count.
+// Leaderboards read best-per-member over finished runs (weekly = UTC ISO week).
+model GameRun {
+  id         String    @id @default(cuid())
+  game       String
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  score      Int?
+  floors     Int?
+  perfects   Int?
+
+  @@index([game, finishedAt])
+  @@index([game, score])
+  @@index([userId])
+  @@map("game_runs")
 }
