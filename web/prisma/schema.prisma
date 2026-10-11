@@ -2995,8 +2995,11 @@ model GameRun {
   startedAt  DateTime  @default(now())
   finishedAt DateTime?
   score      Int?
+  // Lantern Tower
   floors     Int?
   perfects   Int?
+  // Garden 2048 (score itself is recomputed server-side by replaying the moves)
+  maxTile    Int?
 
   @@index([game, finishedAt])
   @@index([game, score])

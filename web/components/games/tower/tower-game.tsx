@@ -1,13 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { formatDistanceToNowStrict } from "date-fns";
-import { Heart, Loader2, Play, RotateCcw, Trophy, Volume2, VolumeX } from "lucide-react";
-import { Avatar } from "@/components/ui/avatar";
+import { Heart, Play, RotateCcw, Trophy, Volume2, VolumeX } from "lucide-react";
+import { LeaderboardCard } from "@/components/games/leaderboard-card";
+import { SubmitStatus, postJson, type SubmitState } from "@/components/games/game-submit";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCsrfToken } from "@/lib/csrf-client";
 import type { GameLeaderboard } from "@/lib/games";
 import { cn } from "@/lib/utils";
 import { LOGICAL_H, LOGICAL_W, TowerEngine, type TowerSound, type TowerStats } from "./tower-engine";
@@ -15,24 +12,6 @@ import { LOGICAL_H, LOGICAL_W, TowerEngine, type TowerSound, type TowerStats } f
 const EMPTY_STATS: TowerStats = { score: 0, floors: 0, perfects: 0, combo: 0, lives: 3 };
 
 type Phase = "menu" | "playing" | "over";
-
-/** What the game-over screen says about the score's trip to the board. */
-type SubmitState =
-  | { kind: "not-member"; signedIn: boolean }
-  | { kind: "saving" }
-  | { kind: "saved"; newBest: boolean; weeklyRank: number | null }
-  | { kind: "error"; message: string };
-
-async function postJson(url: string, method: "POST" | "PATCH", body?: unknown) {
-  const res = await fetch(url, {
-    method,
-    headers: { "Content-Type": "application/json", "x-csrf-token": await getCsrfToken() },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Couldn't reach the leaderboard.");
-  return data;
-}
 
 /** Tiny synthesized sound effects, so the prototype ships no audio assets. */
 function useSounds(muted: boolean) {
@@ -189,7 +168,6 @@ export function TowerGame({
     return () => window.removeEventListener("keydown", onKey);
   }, [phase, start]);
 
-  const { record, me } = board;
   const beatRecord = recordToBeat !== null && stats.score > recordToBeat.score;
 
   return (
@@ -245,7 +223,7 @@ export function TowerGame({
               </p>
               <p className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/90">
                 <Trophy className="mr-1 inline h-3.5 w-3.5 text-amber-300" />
-                {record ? `Community record: ${record.score} by ${record.name}` : "No record yet. Set the first one!"}
+                {board.record ? `Community record: ${board.record.score} by ${board.record.name}` : "No record yet. Set the first one!"}
               </p>
               <Button type="button" size="lg" onClick={start}>
                 <Play className="mr-2 h-4 w-4" /> Start building
@@ -280,106 +258,9 @@ export function TowerGame({
         </div>
       </div>
 
-      <Card className="w-full lg:max-w-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Trophy className="h-5 w-5 text-amber-500" /> This week&apos;s top builders
-          </CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Resets in {formatDistanceToNowStrict(new Date(board.weekEndsAt))} (Monday 00:00 UTC).
-          </p>
-        </CardHeader>
-        <CardContent>
-          {board.weekly.length === 0 ? (
-            <p className="rounded-md bg-muted px-3 py-6 text-center text-sm text-muted-foreground">
-              No scores yet this week. Be the first on the board!
-            </p>
-          ) : (
-            <ol className="space-y-1.5">
-              {board.weekly.map((row) => (
-                <li
-                  key={row.userId}
-                  className={cn(
-                    "flex items-center justify-between gap-3 rounded-md px-3 py-2 text-sm",
-                    row.userId === me?.userId
-                      ? "bg-primary/10 font-semibold text-primary"
-                      : row.rank === 1
-                        ? "bg-amber-50 dark:bg-amber-950/30"
-                        : "",
-                  )}
-                >
-                  <span className="flex min-w-0 items-center gap-3">
-                    <span className="w-5 shrink-0 text-right tabular-nums text-muted-foreground">{row.rank}</span>
-                    <Avatar name={row.name} src={row.avatarUrl} size="xs" />
-                    <Link href={`/members/${row.userId}`} className="truncate hover:underline">
-                      {row.name}
-                    </Link>
-                  </span>
-                  <span className="tabular-nums">{row.score}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-          <div className="mt-4 space-y-1 text-sm text-muted-foreground">
-            {me ? (
-              <>
-                <p>
-                  Your best this week:{" "}
-                  <span className="font-semibold text-foreground">
-                    {me.weeklyBest ?? "—"}
-                    {me.weeklyRank ? ` (#${me.weeklyRank})` : ""}
-                  </span>
-                </p>
-                <p>
-                  All-time best: <span className="font-semibold text-foreground">{me.allTimeBest ?? "—"}</span>
-                </p>
-              </>
-            ) : (
-              <p>
-                <Link href="/sign-in" className="font-medium text-primary hover:underline">
-                  Sign in
-                </Link>{" "}
-                to put your score on the board.
-              </p>
-            )}
-            {record && (
-              <p className="pt-2 text-xs">
-                <Trophy className="mr-1 inline h-3.5 w-3.5 text-amber-500" />
-                All-time record: {record.score} by {record.name} ({record.floors} floors)
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <LeaderboardCard board={board} title="This week's top builders" />
     </div>
   );
-}
-
-function SubmitStatus({ state }: { state: SubmitState }) {
-  const className = "flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs";
-  switch (state.kind) {
-    case "saving":
-      return (
-        <p className={className}>
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Posting to the leaderboard…
-        </p>
-      );
-    case "saved":
-      return (
-        <p className={className}>
-          <Trophy className="h-3.5 w-3.5 text-amber-300" />
-          {state.weeklyRank ? `You're #${state.weeklyRank} this week` : "Score saved"}
-        </p>
-      );
-    case "error":
-      return <p className={cn(className, "text-rose-200")}>Score not saved: {state.message}</p>;
-    case "not-member":
-      return (
-        <p className={cn(className, "text-white/80")}>
-          {state.signedIn ? "Scores are ranked for members only." : "Sign in to put your score on the board."}
-        </p>
-      );
-  }
 }
 
 function Overlay({ children }: { children: React.ReactNode }) {

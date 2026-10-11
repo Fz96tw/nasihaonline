@@ -71,10 +71,24 @@ const config: Config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        // Garden 2048 tiles (components/games/2048): a new tile grows in, a merge pops.
+        "tile-appear": {
+          from: { opacity: "0", transform: "scale(0.4)" },
+          to: { opacity: "1", transform: "scale(1)" },
+        },
+        "tile-pop": {
+          // Invisible while the merging pair is still sliding in (animation delay).
+          "0%": { opacity: "0", transform: "scale(0.6)" },
+          "30%": { opacity: "1" },
+          "60%": { transform: "scale(1.12)" },
+          "100%": { transform: "scale(1)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "tile-appear": "tile-appear 160ms ease-out 100ms both",
+        "tile-pop": "tile-pop 200ms ease-out 100ms both",
       },
     },
   },

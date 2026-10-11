@@ -4,7 +4,9 @@ import { getProfileAvatarUrl } from "@/lib/storage";
 import { isoWeekStart } from "@/lib/reflection-schedule";
 import { Role } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
+import { gardenStage, replay2048, seedFromString } from "@/lib/game-2048";
 import {
+  game2048PaceProblem,
   towerResultProblem,
   type GameKey,
   type GameLeaderboard,
@@ -31,25 +33,51 @@ export async function startGameRun(game: GameKey, userId: string): Promise<{ id:
 }
 
 /**
- * Completes a run exactly once. The elapsed time comes from the row's own
- * startedAt (set by the database when the run was started), never from the
- * client, which is what makes the plausibility check meaningful.
+ * The caller's own unfinished run of `game`, plus how long ago it started.
+ * Elapsed time always comes from the row's startedAt (set by the database
+ * when the run began), never from the client — that's what makes the
+ * per-game plausibility checks meaningful.
  */
-export async function finishTowerRun(runId: string, userId: string, result: TowerResult): Promise<void> {
+async function openRun(runId: string, userId: string, game: GameKey) {
   const run = await db.gameRun.findUnique({ where: { id: runId } });
-  if (!run || run.userId !== userId || run.game !== "tower") throw new GameError("Game not found.", 404);
+  if (!run || run.userId !== userId || run.game !== game) throw new GameError("Game not found.", 404);
   if (run.finishedAt) throw new GameError("This game was already submitted.", 409);
+  return { run, elapsedMs: Date.now() - run.startedAt.getTime() };
+}
 
-  const elapsedMs = Date.now() - run.startedAt.getTime();
-  const problem = towerResultProblem(result, elapsedMs);
-  if (problem) throw new GameError(problem, 422);
-
-  // finishedAt: null in the filter makes a double submit race a no-op.
+/** Completes a run exactly once; finishedAt: null in the filter makes a double-submit race a no-op. */
+async function completeRun(runId: string, data: { score: number; floors?: number; perfects?: number; maxTile?: number }) {
   const { count } = await db.gameRun.updateMany({
     where: { id: runId, finishedAt: null },
-    data: { finishedAt: new Date(), score: result.score, floors: result.floors, perfects: result.perfects },
+    data: { ...data, finishedAt: new Date() },
   });
   if (count === 0) throw new GameError("This game was already submitted.", 409);
+}
+
+export async function finishTowerRun(runId: string, userId: string, result: TowerResult): Promise<void> {
+  const { elapsedMs } = await openRun(runId, userId, "tower");
+  const problem = towerResultProblem(result, elapsedMs);
+  if (problem) throw new GameError(problem, 422);
+  await completeRun(runId, result);
+}
+
+/**
+ * Garden 2048: the client sends only its moves. The board is replayed from
+ * the seed the run's id implies (the same seed the client was given), and
+ * the score that counts is the one the replay produces.
+ */
+export async function finish2048Run(runId: string, userId: string, moves: string): Promise<void> {
+  const { run, elapsedMs } = await openRun(runId, userId, "2048");
+  const problem = game2048PaceProblem(moves.length, elapsedMs);
+  if (problem) throw new GameError(problem, 422);
+  const result = replay2048(seedFromString(run.id), moves);
+  if (!result.valid) throw new GameError("Those moves don't match this game.", 422);
+  await completeRun(runId, { score: result.score, maxTile: result.maxTile });
+}
+
+function recordDetail(game: GameKey, run: { floors: number | null; maxTile: number | null }): string | null {
+  if (game === "tower") return run.floors === null ? null : `${run.floors} ${run.floors === 1 ? "floor" : "floors"}`;
+  return run.maxTile === null ? null : `grew a ${gardenStage(run.maxTile)}`;
 }
 
 export async function getGameLeaderboard(game: GameKey, viewerId: string | null): Promise<GameLeaderboard> {
@@ -68,7 +96,7 @@ export async function getGameLeaderboard(game: GameKey, viewerId: string | null)
     db.gameRun.findFirst({
       where: counted,
       orderBy: [{ score: "desc" }, { finishedAt: "asc" }],
-      select: { userId: true, score: true, floors: true, user: { select: { name: true } } },
+      select: { userId: true, score: true, floors: true, maxTile: true, user: { select: { name: true } } },
     }),
   ]);
 
@@ -114,7 +142,7 @@ export async function getGameLeaderboard(game: GameKey, viewerId: string | null)
           userId: recordRun.userId,
           name: recordRun.user.name?.trim() || "Member",
           score: recordRun.score ?? 0,
-          floors: recordRun.floors ?? 0,
+          detail: recordDetail(game, recordRun),
         }
       : null,
     me,

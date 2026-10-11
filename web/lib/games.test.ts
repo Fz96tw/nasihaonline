@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { towerResultProblem, TOWER_MIN_MS_PER_FLOOR, GAME_RUN_MAX_AGE_MS } from "./games.ts";
+import { towerResultProblem, game2048PaceProblem, TOWER_MIN_MS_PER_FLOOR, GAME_RUN_MAX_AGE_MS, GAME_2048_MIN_MS_PER_MOVE } from "./games.ts";
 
 const plenty = 10 * 60 * 1000;
 
@@ -37,4 +37,9 @@ test("rejects floors placed faster than the game allows", () => {
 
 test("rejects an expired run", () => {
   assert.notEqual(towerResultProblem({ score: 1, floors: 1, perfects: 0 }, GAME_RUN_MAX_AGE_MS + 1), null);
+});
+
+test("2048 pace: rejects moves faster than a person can swipe", () => {
+  assert.equal(game2048PaceProblem(100, 100 * GAME_2048_MIN_MS_PER_MOVE), null);
+  assert.notEqual(game2048PaceProblem(100, 100 * GAME_2048_MIN_MS_PER_MOVE - 1), null);
 });

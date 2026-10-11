@@ -3,6 +3,7 @@
 
 export const GAMES = {
   tower: { title: "Lantern Tower" },
+  "2048": { title: "Garden 2048" },
 } as const;
 
 export type GameKey = keyof typeof GAMES;
@@ -39,6 +40,21 @@ export function towerResultProblem(result: TowerResult, elapsedMs: number): stri
   return null;
 }
 
+/**
+ * Garden 2048 scores are recomputed by replaying the moves (lib/game-2048.ts),
+ * so the only thing left to check is pace: nobody swipes faster than this,
+ * which keeps scripted move-spam off the board.
+ */
+export const GAME_2048_MIN_MS_PER_MOVE = 60;
+/** 2048 games can run long; still bound how old an open run can be. */
+export const GAME_2048_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+export function game2048PaceProblem(moveCount: number, elapsedMs: number): string | null {
+  if (elapsedMs < moveCount * GAME_2048_MIN_MS_PER_MOVE) return "Too many moves for the time played.";
+  if (elapsedMs > GAME_2048_MAX_AGE_MS) return "This game has expired.";
+  return null;
+}
+
 export type LeaderboardEntry = {
   rank: number;
   userId: string;
@@ -51,7 +67,7 @@ export type GameLeaderboard = {
   /** Best score per member this UTC ISO week, highest first. */
   weekly: LeaderboardEntry[];
   /** All-time single best run. */
-  record: { userId: string; name: string; score: number; floors: number } | null;
+  record: { userId: string; name: string; score: number; detail: string | null } | null;
   /** The viewer's own standing; null when not signed in. */
   me: { userId: string; weeklyBest: number | null; weeklyRank: number | null; allTimeBest: number | null } | null;
   /** When the weekly board resets (next Monday 00:00 UTC), ISO string. */
