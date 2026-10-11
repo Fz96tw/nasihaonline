@@ -266,7 +266,7 @@ export function TowerGame({
               </p>
               <p className="max-w-[17rem] text-sm text-white/90">
                 {beatRecord
-                  ? "You beat the community record. Masha'Allah!"
+                  ? "You beat the community record. Amazing!"
                   : recordToBeat
                     ? `${recordToBeat.score - stats.score} points from the community record. One more try?`
                     : "One more try?"}

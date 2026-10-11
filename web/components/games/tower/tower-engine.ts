@@ -83,7 +83,7 @@ function rng(seed: number) {
   };
 }
 
-type Building = { x: number; w: number; h: number; kind: "box" | "dome" | "minaret"; windows: Array<[number, number]> };
+type Building = { x: number; w: number; h: number; kind: "box" | "roof" | "tall"; windows: Array<[number, number]> };
 
 export class TowerEngine {
   private ctx: CanvasRenderingContext2D;
@@ -121,14 +121,12 @@ export class TowerEngine {
     let x = -10;
     while (x < LOGICAL_W + 10) {
       const r = rand();
-      const kind: Building["kind"] = r < 0.2 ? "minaret" : r < 0.55 ? "dome" : "box";
-      const w = kind === "minaret" ? 12 + rand() * 6 : 34 + rand() * 40;
-      const h = kind === "minaret" ? 90 + rand() * 50 : 30 + rand() * 50;
+      const kind: Building["kind"] = r < 0.25 ? "tall" : r < 0.55 ? "roof" : "box";
+      const w = kind === "tall" ? 22 + rand() * 14 : 34 + rand() * 40;
+      const h = kind === "tall" ? 90 + rand() * 50 : 30 + rand() * 50;
       const windows: Array<[number, number]> = [];
-      if (kind !== "minaret") {
-        for (let wx = 6; wx < w - 6; wx += 10) {
-          for (let wy = 8; wy < h - 6; wy += 12) if (rand() < 0.3) windows.push([wx, wy]);
-        }
+      for (let wx = 6; wx < w - 6; wx += 10) {
+        for (let wy = 8; wy < h - 6; wy += 12) if (rand() < 0.3) windows.push([wx, wy]);
       }
       this.skyline.push({ x, w, h, kind, windows });
       x += w + 2 + rand() * 8;
@@ -448,13 +446,16 @@ export class TowerEngine {
       m.shadowColor = "#fff4d1";
       m.shadowBlur = 16;
       m.beginPath();
-      m.arc(40, 40, 22, 0, Math.PI * 2);
+      m.arc(40, 40, 20, 0, Math.PI * 2);
       m.fill();
-      m.globalCompositeOperation = "destination-out";
+      // A few soft craters on the full moon.
       m.shadowBlur = 0;
-      m.beginPath();
-      m.arc(51, 34, 20, 0, Math.PI * 2);
-      m.fill();
+      m.fillStyle = "rgba(214, 200, 160, 0.55)";
+      for (const [x, y, r] of [[33, 34, 4.5], [46, 45, 3.5], [44, 31, 2.5], [35, 48, 2]]) {
+        m.beginPath();
+        m.arc(x, y, r, 0, Math.PI * 2);
+        m.fill();
+      }
       this.moon = c;
     }
     const ctx = this.ctx;
@@ -499,18 +500,15 @@ export class TowerEngine {
     ctx.fillStyle = mixHex("#101a3d", "#5a74a8", 1 - nightness);
     for (const b of this.skyline) {
       ctx.beginPath();
-      if (b.kind === "minaret") {
-        ctx.rect(b.x, base - b.h, b.w, b.h);
-        ctx.moveTo(b.x - 3, base - b.h);
-        ctx.lineTo(b.x + b.w + 3, base - b.h);
-        ctx.lineTo(b.x + b.w / 2, base - b.h - 22);
+      ctx.rect(b.x, base - b.h, b.w, b.h);
+      if (b.kind === "tall") {
+        // Antenna mast.
+        ctx.rect(b.x + b.w / 2 - 1, base - b.h - 18, 2, 18);
+      } else if (b.kind === "roof") {
+        ctx.moveTo(b.x - 2, base - b.h);
+        ctx.lineTo(b.x + b.w + 2, base - b.h);
+        ctx.lineTo(b.x + b.w / 2, base - b.h - b.w * 0.35);
         ctx.closePath();
-      } else {
-        ctx.rect(b.x, base - b.h, b.w, b.h);
-        if (b.kind === "dome") {
-          ctx.moveTo(b.x + b.w, base - b.h);
-          ctx.arc(b.x + b.w / 2, base - b.h, b.w / 2, 0, Math.PI, true);
-        }
       }
       ctx.fill();
     }
@@ -604,9 +602,9 @@ export class TowerEngine {
       ctx.stroke();
     }
 
-    // Eight-point star ornament on single-window floors.
+    // Round medallions on single-window floors.
     if (style === 0 && !foundation) {
-      for (const dx of [-36, 36]) this.drawStar8(cx + dx, y + BH / 2 + 2, 8, perfect ? "#e7b43a" : "#3b82f6");
+      for (const dx of [-36, 36]) this.drawMedallion(cx + dx, y + BH / 2 + 2, 7, perfect ? "#e7b43a" : "#3b82f6");
     }
 
     ctx.strokeStyle = "rgba(90, 70, 30, 0.35)";
@@ -614,19 +612,19 @@ export class TowerEngine {
     ctx.strokeRect(x + 0.5, y + 0.5, BW - 1, BH - 1);
   }
 
-  private drawStar8(cx: number, cy: number, r: number, color: string) {
+  private drawMedallion(cx: number, cy: number, r: number, color: string) {
     const ctx = this.ctx;
     ctx.fillStyle = color;
-    for (const rot of [0, Math.PI / 4]) {
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(rot);
-      ctx.fillRect(-r / 1.6, -r / 1.6, (r / 1.6) * 2, (r / 1.6) * 2);
-      ctx.restore();
-    }
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = "#f8f0dc";
     ctx.beginPath();
-    ctx.arc(cx, cy, r * 0.32, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.25, 0, Math.PI * 2);
     ctx.fill();
   }
 }
