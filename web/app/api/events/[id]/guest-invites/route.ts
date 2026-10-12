@@ -8,6 +8,8 @@ const bodySchema = z.object({
   // Raw strings, validated per address server-side so one typo doesn't reject the batch.
   emails: z.array(z.string().max(320)).min(1).max(MAX_INVITES_PER_REQUEST),
   note: z.string().max(1000).nullish(),
+  // "Also invite them to join NASIHA" — adds an apply-to-join link to the invitation.
+  inviteToJoin: z.boolean().optional(),
 });
 
 /**

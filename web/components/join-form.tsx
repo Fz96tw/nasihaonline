@@ -32,6 +32,7 @@ import {
   type ApplicationFormValues,
   HOW_HEARD_LABELS,
 } from "@/lib/validation/application";
+import type { GuestJoinPrefill } from "@/lib/guest-membership";
 
 const emptyValues: ApplicationFormValues = {
   firstName: "",
@@ -48,13 +49,33 @@ const emptyValues: ApplicationFormValues = {
   emailUpdatesOptIn: true,
 };
 
-export function JoinForm({ phase }: { phase: AdmissionPhase }) {
+export function JoinForm({
+  phase,
+  guestPrefill = null,
+  guestInvite,
+}: {
+  phase: AdmissionPhase;
+  /** Set when arriving from an event guest's apply-to-join link (/join?gi=). */
+  guestPrefill?: GuestJoinPrefill | null;
+  /** That link's `gi`, sent back with the application so the referral is recorded. */
+  guestInvite?: string;
+}) {
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const form = useForm<ApplicationFormValues>({
     resolver: zodResolver(applicationSchema),
-    defaultValues: emptyValues,
+    defaultValues: guestPrefill
+      ? {
+          ...emptyValues,
+          firstName: guestPrefill.firstName,
+          lastName: guestPrefill.lastName,
+          email: guestPrefill.email,
+          ...(guestPrefill.referrerName
+            ? { howHeardSource: HowHeardSource.member, howHeardMemberName: guestPrefill.referrerName }
+            : {}),
+        }
+      : emptyValues,
     mode: "onTouched",
     reValidateMode: "onChange",
   });
@@ -68,7 +89,7 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
       const res = await fetch("/api/applications", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
-        body: JSON.stringify(values),
+        body: JSON.stringify(guestInvite ? { ...values, guestInvite } : values),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
@@ -112,6 +133,12 @@ export function JoinForm({ phase }: { phase: AdmissionPhase }) {
             Current Phase:{" "}
             <span className="font-medium text-foreground">{ADMISSION_PHASE_LABELS[phase]}</span>
           </p>
+          {guestPrefill && (
+            <p className="mt-2 rounded-md border bg-muted/40 p-3 text-sm">
+              {guestPrefill.referrerName ? `${guestPrefill.referrerName} invited you` : "You were invited"} after
+              &ldquo;{guestPrefill.eventTitle}&rdquo; — we&rsquo;ve filled in what we already know.
+            </p>
+          )}
           <p className="mt-2 text-sm text-muted-foreground">
             Just a few details to get your application started — you&rsquo;ll fill in the rest
             of your profile (career stage, interests, expertise, and more) after you&rsquo;re

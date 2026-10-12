@@ -64,7 +64,18 @@ export function buildApplicationFilterWhere(
     where.status = status as ApplicationStatus;
   }
   if (referredBy) {
-    where.howHeardMemberName = { contains: referredBy, mode: "insensitive" };
+    // Free-text "how heard" member name, or the structured event-guest
+    // referral (MembershipApplication.referredBy) — either counts.
+    where.OR = [
+      { howHeardMemberName: { contains: referredBy, mode: "insensitive" } },
+      { referredBy: { name: { contains: referredBy, mode: "insensitive" } } },
+    ];
   }
   return where;
+}
+
+/** "Referred by {member} (event: {title})" — an application that came in through an event guest's apply-to-join link. */
+export function formatGuestReferral(memberName: string | null | undefined, eventTitle: string | null | undefined): string {
+  const by = `Referred by ${memberName ?? "a member"}`;
+  return eventTitle ? `${by} (event: ${eventTitle})` : by;
 }

@@ -7,6 +7,7 @@ import type { UserModel } from "@/lib/generated/prisma/models/User";
 import { buildEventIcs, EventError, syncGoogleCalendarAttendees, updateEventInvitees } from "@/lib/events-server";
 import { sendEventGuestInviteEmail, sendEventRegistrationConfirmationEmail } from "@/lib/email";
 import { parseGuestAddress, splitGuestAddresses } from "@/lib/guest-address";
+import { guestJoinInviteUrl } from "@/lib/guest-membership";
 
 /**
  * Private guest-invite link + invite-by-email for `open` events, and
@@ -220,7 +221,7 @@ function buildIcsFor(event: GuestEvent) {
 async function deliverInvite(
   event: GuestEvent,
   host: { name: string | null; email: string },
-  registration: { id: string; email: string },
+  registration: { id: string; email: string; inviteToJoin: boolean },
   note: string | null,
 ) {
   return sendEventGuestInviteEmail({
@@ -228,6 +229,9 @@ async function deliverInvite(
     hostName: host.name ?? "A NASIHA member",
     hostEmail: host.email,
     note,
+    // Re-checked on every send (incl. resends): someone who has since
+    // applied or become a member doesn't get asked again.
+    joinInviteUrl: registration.inviteToJoin ? await guestJoinInviteUrl(registration.id, registration.email) : null,
     event: {
       id: event.id,
       registrationId: registration.id,
@@ -256,7 +260,7 @@ async function deliverInvite(
 export async function inviteGuestsByEmail(
   eventId: string,
   actingUser: UserModel,
-  input: { emails: string[]; note?: string | null },
+  input: { emails: string[]; note?: string | null; inviteToJoin?: boolean },
 ): Promise<GuestInviteOutcome[]> {
   const event = await loadManageable(eventId, actingUser, { link: false });
   if (!isRestricted(event) && !event.guestLinkToken) {
@@ -340,7 +344,7 @@ export async function inviteGuestsByEmail(
       continue;
     }
 
-    let registration: { id: string; email: string };
+    let registration: { id: string; email: string; inviteToJoin: boolean };
     try {
       registration = existing
         ? await db.eventRegistration.update({
@@ -352,8 +356,11 @@ export async function inviteGuestsByEmail(
               invitedById: actingUser.id,
               revokedAt: null,
               ...(!existing.name && address.name ? { name: address.name } : {}),
+              // Only ever switched on here — unticking it on a later send
+              // doesn't withdraw an apply-to-join link already emailed.
+              ...(input.inviteToJoin ? { inviteToJoin: true } : {}),
             },
-            select: { id: true, email: true },
+            select: { id: true, email: true, inviteToJoin: true },
           })
         : await db.eventRegistration.create({
             data: {
@@ -363,8 +370,9 @@ export async function inviteGuestsByEmail(
               source: EventRegistrationSource.invited,
               invitedAt: new Date(),
               invitedById: actingUser.id,
+              inviteToJoin: input.inviteToJoin ?? false,
             },
-            select: { id: true, email: true },
+            select: { id: true, email: true, inviteToJoin: true },
           });
     } catch (error) {
       // A concurrent request registered this address first.
@@ -419,7 +427,7 @@ async function inviteMemberInstead(
 async function loadGuest(eventId: string, registrationId: string) {
   const registration = await db.eventRegistration.findUnique({
     where: { id: registrationId },
-    select: { id: true, eventId: true, email: true, source: true, revokedAt: true },
+    select: { id: true, eventId: true, email: true, source: true, revokedAt: true, inviteToJoin: true },
   });
   if (!registration || registration.eventId !== eventId || registration.source === EventRegistrationSource.public) {
     throw new EventError(404, "Guest not found.");

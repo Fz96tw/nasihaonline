@@ -10,6 +10,8 @@ import { MeetingWaitingRoom, type MeetingWaitingRoomStatus } from "@/components/
 import { QuickRecordingMeetingScreen } from "@/components/calendar/quick-recording-meeting-screen";
 import { BackLink } from "@/components/back-link";
 import { Button } from "@/components/ui/button";
+import { GuestApplyCard } from "@/components/events/guest-apply-card";
+import { guestJoinInviteUrlFor } from "@/lib/guest-membership";
 
 export const metadata: Metadata = {
   title: "Join Meeting",
@@ -32,7 +34,7 @@ export default async function MeetPage({
   searchParams,
 }: {
   params: Promise<{ kind: string; id: string }>;
-  searchParams: Promise<{ rid?: string; gt?: string }>;
+  searchParams: Promise<{ rid?: string; gt?: string; left?: string }>;
 }) {
   const { kind, id } = await params;
   // `rid` (EventRegistration.id) rides only on an event's emailed join link
@@ -43,7 +45,7 @@ export default async function MeetPage({
   // endpoint an anonymous browser calls (statusEndpoint/tokenEndpoint/
   // chatEndpoint below), which each independently re-validate it. Meaningless
   // for kind "request" (no anonymous-guest concept there).
-  const { rid, gt } = await searchParams;
+  const { rid, gt, left } = await searchParams;
   if (kind !== "event" && kind !== "request" && kind !== "quick") notFound();
 
   const user = await getSessionUser();
@@ -58,7 +60,32 @@ export default async function MeetPage({
   // thread either (it never appears in the Inbox at all — see
   // getInboxList's `origin: directory` filter), and its own creation entry
   // points are Dashboard/Forums, so it goes back to the Dashboard.
-  const backHref = kind === "event" ? `/calendar/${id}` : kind === "quick" ? "/dashboard" : `/inbox?item=${id}`;
+  // An anonymous event guest can't open /calendar (member-only), so leaving
+  // the call brings them back here with `left=1` instead.
+  const anonymousGuest = kind === "event" && !user && Boolean(rid);
+  const backHref = anonymousGuest
+    ? `/meet/event/${id}?rid=${encodeURIComponent(rid!)}&left=1`
+    : kind === "event"
+      ? `/calendar/${id}`
+      : kind === "quick"
+        ? "/dashboard"
+        : `/inbox?item=${id}`;
+
+  // A guest who just left the call (LiveKit's onDisconnected → backHref):
+  // a resting page rather than straight back into the waiting room, which
+  // would re-join a still-running room. The moment to invite them to apply.
+  if (anonymousGuest && left) {
+    const applyUrl = await guestJoinInviteUrlFor(rid!);
+    return (
+      <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center gap-4 p-8 text-center">
+        <h1 className="text-2xl font-bold tracking-tight">You&apos;ve left the meeting</h1>
+        <Button asChild variant="outline">
+          <a href={`/meet/event/${id}?rid=${encodeURIComponent(rid!)}`}>Rejoin</a>
+        </Button>
+        {applyUrl && <GuestApplyCard url={applyUrl} />}
+      </main>
+    );
+  }
 
   // A host's private guest link (?gt=) — a signed-out visitor with no
   // registration yet gives name + email first (GuestLinkJoin), which mints
@@ -107,6 +134,8 @@ export default async function MeetPage({
   }
 
   if (deniedMessage || !status) {
+    // Event over (410) — an anonymous guest still gets the apply invitation.
+    const applyUrl = anonymousGuest && deniedStatus === 410 ? await guestJoinInviteUrlFor(rid!) : null;
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center gap-4 p-8 text-center">
         <BackLink
@@ -124,6 +153,7 @@ export default async function MeetPage({
             <a href={`/events/${id}`}>Register for this event</a>
           </Button>
         )}
+        {applyUrl && <GuestApplyCard url={applyUrl} />}
       </main>
     );
   }

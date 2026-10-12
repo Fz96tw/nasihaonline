@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { buildApplicationFilterWhere, STATUS_LABELS, STATUS_BADGE_VARIANT } from "@/lib/applications";
+import { buildApplicationFilterWhere, formatGuestReferral, STATUS_LABELS, STATUS_BADGE_VARIANT } from "@/lib/applications";
 import { ApplicationStatus } from "@/lib/generated/prisma/enums";
 import { HOW_HEARD_LABELS } from "@/lib/validation/application";
 import { LocalDateTime } from "@/components/local-date-time";
@@ -46,6 +46,7 @@ export default async function AdminApplicationsPage({
   const applications = await db.membershipApplication.findMany({
     where,
     orderBy: { createdAt: "desc" },
+    include: { referredBy: { select: { name: true } }, referredViaEvent: { select: { title: true } } },
   });
 
   return (
@@ -146,6 +147,11 @@ export default async function AdminApplicationsPage({
                         .filter(Boolean)
                         .join(": ")
                     : "—"}
+                  {application.referredByUserId && (
+                    <span className="block text-xs">
+                      {formatGuestReferral(application.referredBy?.name, application.referredViaEvent?.title)}
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   <LocalDateTime iso={application.createdAt.toISOString()} dateOnly />

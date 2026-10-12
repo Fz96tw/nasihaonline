@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, Copy, Link2, Mail, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { formatTimestamp } from "@/lib/format-date";
@@ -56,6 +57,7 @@ export function ManageGuestInvites({ eventId, restricted = false }: { eventId: s
   const [copied, setCopied] = useState(false);
   const [emailsText, setEmailsText] = useState("");
   const [note, setNote] = useState("");
+  const [inviteToJoin, setInviteToJoin] = useState(false);
   const [outcomes, setOutcomes] = useState<Outcome[] | null>(null);
   const router = useRouter();
 
@@ -151,6 +153,7 @@ export function ManageGuestInvites({ eventId, restricted = false }: { eventId: s
       const payload = await call(`/api/events/${eventId}/guest-invites`, "POST", {
         emails,
         note: note.trim() || null,
+        inviteToJoin,
       });
       const results = payload.outcomes as Outcome[];
       setOutcomes(results);
@@ -259,6 +262,20 @@ export function ManageGuestInvites({ eventId, restricted = false }: { eventId: s
               value={note}
               onChange={(event) => setNote(event.target.value)}
             />
+            <label className="flex items-start gap-2 text-sm">
+              <Checkbox
+                className="mt-0.5"
+                checked={inviteToJoin}
+                onCheckedChange={(checked) => setInviteToJoin(checked === true)}
+              />
+              <span>
+                Also invite them to join NASIHA
+                <span className="block text-xs text-muted-foreground">
+                  Adds a short note with a link to apply for membership (skipped for anyone who&apos;s already a
+                  member or has applied). Their application still goes through the usual review.
+                </span>
+              </span>
+            </label>
             <div className="flex flex-col gap-1 text-xs text-muted-foreground">
               <p>
                 Separate addresses with commas or new lines. To set how a guest is named in the meeting, write it as{" "}

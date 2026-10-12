@@ -4,6 +4,7 @@ import { applicationSchema } from "@/lib/validation/application";
 import { sendApplicationConfirmationEmail } from "@/lib/email";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { findDuplicateApplicant } from "@/lib/applications";
+import { resolveGuestReferral } from "@/lib/guest-membership";
 
 const DUPLICATE_EMAIL_MESSAGES = {
   existing_member: "This email is already associated with a member account.",
@@ -19,7 +20,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Too many applications. Please try again later." }, { status: 429 });
   }
 
-  const parsed = applicationSchema.safeParse(await request.json());
+  const body = await request.json().catch(() => null);
+  const parsed = applicationSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
@@ -38,9 +40,15 @@ export async function POST(request: Request) {
     );
   }
 
+  // Came from an event guest's apply-to-join link (/join?gi=) — record who
+  // referred them. Attribution only: review, tier and approval are untouched.
+  const guestInvite = typeof body?.guestInvite === "string" ? body.guestInvite.slice(0, 64) : null;
+  const referral = await resolveGuestReferral(guestInvite);
+
   const application = await db.membershipApplication.create({
     data: {
       ...applicationFields,
+      ...referral,
       professionalTitle: applicationFields.professionalTitle || null,
       linkedinUrl: applicationFields.linkedinUrl || null,
       howHeardMemberName: howHeardMemberName || null,

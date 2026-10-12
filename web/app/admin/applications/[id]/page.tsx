@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { STATUS_LABELS, STATUS_BADGE_VARIANT } from "@/lib/applications";
+import { formatGuestReferral, STATUS_LABELS, STATUS_BADGE_VARIANT } from "@/lib/applications";
 import { TIER_LABELS } from "@/lib/validation/application-review";
 import { HOW_HEARD_LABELS } from "@/lib/validation/application";
 import { getProfileLinkLabel } from "@/lib/profile-link";
@@ -40,7 +40,10 @@ export default async function AdminApplicationDetailPage({
     );
   }
 
-  const application = await db.membershipApplication.findUnique({ where: { id: params.id } });
+  const application = await db.membershipApplication.findUnique({
+    where: { id: params.id },
+    include: { referredBy: { select: { name: true } }, referredViaEvent: { select: { title: true } } },
+  });
   if (!application) notFound();
 
   const isPending = PENDING_STATUSES.has(application.status);
@@ -108,6 +111,12 @@ export default async function AdminApplicationDetailPage({
                   : null
               }
             />
+            {application.referredByUserId && (
+              <Field
+                label="Referral"
+                value={formatGuestReferral(application.referredBy?.name, application.referredViaEvent?.title)}
+              />
+            )}
             <Field label="Submitted" value={<LocalDateTime iso={application.createdAt.toISOString()} />} />
             <Field label="Email updates opt-in" value={application.emailUpdatesOptIn ? "Yes" : "No"} />
           </dl>

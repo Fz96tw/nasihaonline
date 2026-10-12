@@ -83,6 +83,7 @@ model User {
   // are historical record even if their account is later removed.
   hostedEvents                    Event[]                      @relation("EventHost")
   invitedEventGuests              EventRegistration[]          @relation("EventGuestInviter")
+  referredApplications            MembershipApplication[]      @relation("ApplicationReferrer")
   eventRsvps                      RSVP[]                       @relation("EventRsvp")
   eventAttendances                Attendance[]                 @relation("EventAttendance")
   eventInvitations                EventInvitee[]               @relation("EventInvitee")
@@ -630,9 +631,20 @@ model MembershipApplication {
   // admin so repeat resends don't get triggered without reason.
   lastInvitedAt DateTime?
 
+  // Set when the applicant came through an event guest's apply-to-join
+  // link (/join?gi=<EventRegistration id>) — the member who invited them as
+  // a guest (else the event's host) and that event. Structured
+  // counterpart to the free-text howHeardMemberName, for PRD §3's
+  // source-of-referral reporting; never affects review or tier.
+  referredByUserId   String?
+  referredBy         User?   @relation("ApplicationReferrer", fields: [referredByUserId], references: [id], onDelete: SetNull)
+  referredViaEventId String?
+  referredViaEvent   Event?  @relation("ApplicationReferralEvent", fields: [referredViaEventId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([referredByUserId])
   @@map("membership_applications")
 }
 
@@ -1320,6 +1332,9 @@ model Event {
   // Assigned by the host at scheduling time; the host or an existing
   // co-host can also grant/revoke it live during the meeting.
   coHosts                EventCoHost[]
+  // Membership applications that came in through this event's guest
+  // apply-to-join link (MembershipApplication.referredViaEventId).
+  referredApplications   MembershipApplication[] @relation("ApplicationReferralEvent")
   // Optional discussion thread in the seeded "Events" forum (EVENTS_FORUM_SLUG,
   // lib/forums.ts), opted into at creation time. The FK lives on ForumThread
   // (below) rather than here so createEvent can create the Event first and
@@ -1720,6 +1735,9 @@ model EventRegistration {
   invitedById String?
   invitedBy   User?                   @relation("EventGuestInviter", fields: [invitedById], references: [id], onDelete: SetNull)
   invitedAt   DateTime?
+  // Host ticked "Also invite them to join NASIHA" when inviting this guest —
+  // the invitation (and any resend) carries an apply-to-join link.
+  inviteToJoin Boolean                 @default(false)
   // First time this guest opened the meeting (status/token) — drives the
   // sent-invites list's "joined" column.
   joinedAt    DateTime?

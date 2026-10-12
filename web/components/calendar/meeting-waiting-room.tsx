@@ -13,6 +13,7 @@ import {
 } from "@/lib/legal";
 import { useHasMounted } from "@/lib/use-has-mounted";
 import { LiveKitMeetingScreen } from "@/components/calendar/livekit-meeting-screen";
+import { GuestApplyCard } from "@/components/events/guest-apply-card";
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -34,6 +35,8 @@ export type MeetingWaitingRoomStatus = {
   hostId?: string;
   /** Event-only, anonymous guest only — ask for a display name before joining (see getEventMeetingStatus). */
   guestNamePrompt?: { suggestedName: string | null } | null;
+  /** Event-only, anonymous guest only — set once a Nasiha Conference meeting has ended (see getEventMeetingStatus). */
+  guestJoinInviteUrl?: string | null;
 };
 
 /** Always hours:minutes:seconds, zero-padded — a fixed-width format reads better at large sizes than one that reflows as hours drop off. */
@@ -485,6 +488,9 @@ export function MeetingWaitingRoom({
       {status.organizerMessage && <p className="whitespace-pre-wrap text-sm">{status.organizerMessage}</p>}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
+      {!status.isOrganizer && !status.started && status.guestJoinInviteUrl && (
+        <GuestApplyCard url={status.guestJoinInviteUrl} />
+      )}
 
       {status.isOrganizer && (
         <div className="flex w-full flex-col gap-4 rounded-lg border p-4 text-left">

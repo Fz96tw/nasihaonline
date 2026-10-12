@@ -3,6 +3,7 @@ import { getAdmissionPhase } from "@/lib/settings";
 import { JoinForm } from "@/components/join-form";
 import { TierPreviewStrip } from "@/components/join/tier-preview-strip";
 import { buildMetadata } from "@/lib/seo";
+import { getGuestJoinPrefill } from "@/lib/guest-membership";
 
 export const metadata: Metadata = buildMetadata({
   title: "Apply to Join",
@@ -19,13 +20,18 @@ export const metadata: Metadata = buildMetadata({
 // app/(marketing)'s static win (objective 4) for that reason.
 export const dynamic = "force-dynamic";
 
-export default async function JoinPage() {
+export default async function JoinPage({ searchParams }: { searchParams: Promise<{ gi?: string }> }) {
   const phase = await getAdmissionPhase();
+  // An event guest's apply-to-join link (/join?gi=<their registration id>) —
+  // prefills them and carries the referral; anything unknown or revoked
+  // just shows the normal empty form.
+  const { gi } = await searchParams;
+  const guestPrefill = gi ? await getGuestJoinPrefill(gi) : null;
 
   return (
     <main className="min-h-screen">
       <TierPreviewStrip />
-      <JoinForm phase={phase} />
+      <JoinForm phase={phase} guestPrefill={guestPrefill} guestInvite={guestPrefill ? gi : undefined} />
     </main>
   );
 }

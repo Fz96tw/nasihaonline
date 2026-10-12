@@ -376,6 +376,8 @@ export async function sendEventGuestInviteEmail(params: {
   hostName: string;
   hostEmail: string;
   note: string | null;
+  /** Host ticked "Also invite them to join NASIHA" (and the guest isn't already a member/applicant) — their /join?gi= link. */
+  joinInviteUrl?: string | null;
   event: {
     id: string;
     registrationId: string;
@@ -389,7 +391,13 @@ export async function sendEventGuestInviteEmail(params: {
     icsFilename: string;
   };
 }): Promise<SendResult> {
-  const { to, hostName, hostEmail, note, event } = params;
+  const { to, hostName, hostEmail, note, event, joinInviteUrl } = params;
+  const joinInviteText = joinInviteUrl
+    ? `\n\n${hostName} also thinks you'd be a good fit for NASIHA, a member-driven community for sharing knowledge and peer feedback. If you're interested, you can apply here:\n${joinInviteUrl}`
+    : "";
+  const joinInviteHtml = joinInviteUrl
+    ? `<p>${escapeHtml(hostName)} also thinks you'd be a good fit for NASIHA, a member-driven community for sharing knowledge and peer feedback. If you're interested, <a href="${joinInviteUrl}">apply to join here</a>.</p>`
+    : "";
   const calendarLine = event.icsContent
     ? "We've attached a calendar invite so it's on your calendar."
     : "You'll also get a calendar invitation from Google Calendar.";
@@ -422,7 +430,7 @@ export async function sendEventGuestInviteEmail(params: {
       bcc: hostEmail,
       replyTo: hostEmail,
       subject: `${hostName} invited you: ${event.title}`,
-      text: `${hostName} has invited you to "${event.title}" on ${when}, a NASIHA community event.${noteText}\n\n${calendarLine}\n\n${joinLine}\n\nThis link is personal to you — please don't forward it. You can reply to this email to reach ${hostName}.\n\n— The NASIHA Team`,
+      text: `${hostName} has invited you to "${event.title}" on ${when}, a NASIHA community event.${noteText}\n\n${calendarLine}\n\n${joinLine}\n\nThis link is personal to you — please don't forward it. You can reply to this email to reach ${hostName}.${joinInviteText}\n\n— The NASIHA Team`,
       html: `<div>
         <p>${safeHost} has invited you to <strong>${safeTitle}</strong> on ${safeWhen}, a NASIHA community event.</p>
         ${noteHtml}
@@ -434,6 +442,7 @@ export async function sendEventGuestInviteEmail(params: {
             : "<p>We'll share the joining details closer to the event.</p>"
         }
         <p>This link is personal to you — please don't forward it. You can reply to this email to reach ${safeHost}.</p>
+        ${joinInviteHtml}
         <p>— The NASIHA Team</p>
       </div>`,
       attachments: event.icsContent

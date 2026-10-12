@@ -68,6 +68,7 @@ import { enqueueForumThreadIndexSync } from "@/lib/queues/search-index-queue";
 import { buildRRule, buildRRuleString, describeRecurrence, expandOccurrences, type RecurrenceInput } from "@/lib/recurrence";
 import { guestAccessExpired } from "@/lib/event-guest-access";
 import { guestDisplayName, splitGuestAddresses } from "@/lib/guest-address";
+import { guestJoinInviteUrl } from "@/lib/guest-membership";
 import {
   deleteEventHeroImage,
   deleteMeetingMessageImage,
@@ -4678,6 +4679,8 @@ export async function getEventMeetingStatus(
   guestName: string | null;
   /** Anonymous caller only: ask "What should we call you?" before they join — set when the registration has no name, or on a host-invited guest's first visit (prefilled with the name the host typed). Null otherwise. */
   guestNamePrompt: { suggestedName: string | null } | null;
+  /** Anonymous caller only, once a Nasiha Conference meeting has ended: their apply-to-join link (/join?gi=), or null if they're already a member/applicant. */
+  guestJoinInviteUrl: string | null;
 }> {
   const event = await db.event.findUnique({
     where: { id: eventId },
@@ -4691,6 +4694,7 @@ export async function getEventMeetingStatus(
       meetingUrl: true,
       livekitRoomName: true,
       meetingStartedAt: true,
+      meetingEndedAt: true,
       meetingOrganizerMessage: true,
       meetingOrganizerMessageImageKey: true,
       open: true,
@@ -4711,6 +4715,7 @@ export async function getEventMeetingStatus(
 
   let guestName: string | null = null;
   let guestNamePrompt: { suggestedName: string | null } | null = null;
+  let guestJoinInvite: string | null = null;
   if (userId === null) {
     // Anonymous access is a registration (`rid`): any kind on an open event,
     // only a host's email invitation on a restricted one (which has no
@@ -4722,7 +4727,7 @@ export async function getEventMeetingStatus(
     const registration = registrationId
       ? await db.eventRegistration.findUnique({
           where: { id: registrationId },
-          select: { eventId: true, name: true, source: true, revokedAt: true, joinedAt: true },
+          select: { eventId: true, email: true, name: true, source: true, revokedAt: true, joinedAt: true },
         })
       : null;
     if (
@@ -4755,6 +4760,11 @@ export async function getEventMeetingStatus(
       guestNamePrompt = { suggestedName: registration.name };
     }
     guestName = guestDisplayName(registration.name);
+    // "Started, then genuinely ended" (see meetingEndedAt) — the waiting
+    // room's post-meeting moment to invite a guest to apply.
+    if (event.meetingEndedAt && !event.meetingStartedAt) {
+      guestJoinInvite = await guestJoinInviteUrl(registrationId!, registration.email);
+    }
   } else if (!isHost) {
     const rsvp = await db.rSVP.findUnique({
       where: { eventId_userId: { eventId, userId } },
@@ -4822,6 +4832,7 @@ export async function getEventMeetingStatus(
     requiresCodeOfConductAgreement: userId === null,
     guestName,
     guestNamePrompt,
+    guestJoinInviteUrl: guestJoinInvite,
   };
 }
 
