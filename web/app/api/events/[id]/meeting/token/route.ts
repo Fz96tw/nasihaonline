@@ -15,7 +15,7 @@ import { mintLiveKitToken } from "@/lib/livekit";
  * knew/guessed the event id could join unregistered). An anonymous
  * open-event attendee gets an ephemeral guest identity — LiveKit doesn't
  * need it to map to a real account, only to be unique per connection — but
- * `status.guestName` (their registered name/email) is used as the display
+ * `status.guestName` ("<name> (guest)", never their email) is the display
  * name instead of a bare "Guest".
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {

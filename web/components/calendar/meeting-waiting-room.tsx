@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { BackLink } from "@/components/back-link";
 import { getCsrfToken } from "@/lib/csrf-client";
@@ -31,6 +32,8 @@ export type MeetingWaitingRoomStatus = {
   isHostOrCoHost?: boolean;
   /** Event-only, paired with isHostOrCoHost — see getEventMeetingStatus's doc comment. */
   hostId?: string;
+  /** Event-only, anonymous guest only — ask for a display name before joining (see getEventMeetingStatus). */
+  guestNamePrompt?: { suggestedName: string | null } | null;
 };
 
 /** Always hours:minutes:seconds, zero-padded — a fixed-width format reads better at large sizes than one that reflows as hours drop off. */
@@ -80,6 +83,7 @@ export function MeetingWaitingRoom({
   kickEndpoint,
   lowerHandEndpoint,
   chatEndpoint,
+  guestNameEndpoint = null,
   backHref,
 }: {
   initialStatus: MeetingWaitingRoomStatus;
@@ -98,6 +102,8 @@ export function MeetingWaitingRoom({
   lowerHandEndpoint?: string | null;
   /** POST endpoint for archiving in-meeting chat into a discussion thread — null for a MeetingRequest, which has none. */
   chatEndpoint?: string | null;
+  /** POST endpoint saving an anonymous guest's display name — event guests only, null otherwise. */
+  guestNameEndpoint?: string | null;
   backHref: string;
 }) {
   const [status, setStatus] = useState(initialStatus);
@@ -113,6 +119,14 @@ export function MeetingWaitingRoom({
   // "every time" decision for this gate (no account for an anonymous
   // visitor to remember it against anyway).
   const [agreedToDisclaimer, setAgreedToDisclaimer] = useState(false);
+  // Latched from the page-load status: the server stops asking once the
+  // guest's first visit is recorded (by that same load), so later polls
+  // would otherwise drop the prompt before they've answered it.
+  const [namePrompt] = useState(initialStatus.guestNamePrompt ?? null);
+  const [nameDraft, setNameDraft] = useState(namePrompt?.suggestedName ?? "");
+  const [nameSaved, setNameSaved] = useState(false);
+  const [savingName, setSavingName] = useState(false);
+  const needsNameGate = !initialStatus.isOrganizer && namePrompt !== null && !nameSaved && Boolean(guestNameEndpoint);
   const hasMounted = useHasMounted();
   const abortRef = useRef<AbortController | null>(null);
   const hasAutoOpenedRef = useRef(false);
@@ -165,13 +179,46 @@ export function MeetingWaitingRoom({
       status.meetingUrl &&
       !status.isOrganizer &&
       (!status.requiresCodeOfConductAgreement || agreedToDisclaimer) &&
+      !needsNameGate &&
       !hasAutoOpenedRef.current
     ) {
       hasAutoOpenedRef.current = true;
       const meetingWindow = window.open(status.meetingUrl, "_blank");
       if (meetingWindow) meetingWindow.opener = null;
     }
-  }, [status.started, status.meetingUrl, status.isOrganizer, status.requiresCodeOfConductAgreement, agreedToDisclaimer]);
+  }, [
+    status.started,
+    status.meetingUrl,
+    status.isOrganizer,
+    status.requiresCodeOfConductAgreement,
+    agreedToDisclaimer,
+    needsNameGate,
+  ]);
+
+  async function handleSaveName() {
+    const name = nameDraft.trim();
+    if (!name || !guestNameEndpoint) {
+      setError("Enter your name.");
+      return;
+    }
+    setSavingName(true);
+    setError(null);
+    try {
+      const csrfToken = await getCsrfToken();
+      const res = await fetch(guestNameEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-csrf-token": csrfToken },
+        body: JSON.stringify({ name }),
+      });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(typeof payload?.error === "string" ? payload.error : "Couldn't save your name.");
+      setNameSaved(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save your name.");
+    } finally {
+      setSavingName(false);
+    }
+  }
 
   async function handleStart() {
     setStarting(true);
@@ -281,7 +328,7 @@ export function MeetingWaitingRoom({
   // has clicked Start — but only once needsDisclaimerGate (if applicable)
   // has been satisfied, so an open event's anonymous visitor still sees
   // the click-through gate below before ever reaching the embedded call.
-  if (status.started && status.livekitRoomName && !needsDisclaimerGate) {
+  if (status.started && status.livekitRoomName && !needsDisclaimerGate && !needsNameGate) {
     return (
       <LiveKitMeetingScreen
         tokenEndpoint={tokenEndpoint}
@@ -354,7 +401,34 @@ export function MeetingWaitingRoom({
 
       {!status.isOrganizer && hasMounted && (
         <>
-          {needsDisclaimerGate ? (
+          {needsNameGate ? (
+            <form
+              className="flex w-full flex-col gap-3 rounded-lg border p-4 text-left"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleSaveName();
+              }}
+            >
+              <label htmlFor="guest-display-name" className="text-sm font-medium">
+                What should we call you?
+              </label>
+              <Input
+                id="guest-display-name"
+                autoComplete="name"
+                maxLength={120}
+                value={nameDraft}
+                onChange={(event) => setNameDraft(event.target.value)}
+                placeholder="Your name"
+              />
+              <p className="text-xs text-muted-foreground">
+                Others in the meeting will see this name with a &quot;guest&quot; label. Your email address isn&apos;t
+                shown to them.
+              </p>
+              <Button type="submit" disabled={savingName || !nameDraft.trim()}>
+                {savingName ? "Saving…" : "Continue"}
+              </Button>
+            </form>
+          ) : needsDisclaimerGate ? (
             <div className="flex w-full flex-col gap-3 rounded-lg border p-4 text-left">
               <p className="text-sm font-medium">Before you join</p>
               <p className="text-xs text-muted-foreground">

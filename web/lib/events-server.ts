@@ -19,6 +19,7 @@ import {
   Role,
   RSVPStatus,
   AttendanceRole,
+  EventRegistrationSource,
 } from "@/lib/generated/prisma/enums";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
@@ -66,6 +67,7 @@ import { createForumPost } from "@/lib/forums-server";
 import { enqueueForumThreadIndexSync } from "@/lib/queues/search-index-queue";
 import { buildRRule, buildRRuleString, describeRecurrence, expandOccurrences, type RecurrenceInput } from "@/lib/recurrence";
 import { guestAccessExpired } from "@/lib/event-guest-access";
+import { guestDisplayName } from "@/lib/guest-address";
 import {
   deleteEventHeroImage,
   deleteMeetingMessageImage,
@@ -4619,8 +4621,10 @@ export async function getEventMeetingStatus(
   configured: boolean;
   /** Open events are reachable by never-vetted anonymous registrants (no membership application, so no prior Code of Conduct agreement) — gates the actual Meet redirect on a click-through agreement. Community/invited events skip this: every attendee there is already a member who agreed once at /join. */
   requiresCodeOfConductAgreement: boolean;
-  /** `"<name> (<email>)"` resolved from `registrationId` for an anonymous caller — null for a signed-in caller (their own User.name is used instead, see the token route). */
+  /** `"<name> (guest)"` resolved from `registrationId` for an anonymous caller — never their email, since it's what every other participant sees (LiveKit display name, chat author). Null for a signed-in caller (their own User.name is used instead, see the token route). */
   guestName: string | null;
+  /** Anonymous caller only: ask "What should we call you?" before they join — set when the registration has no name, or on a host-invited guest's first visit (prefilled with the name the host typed). Null otherwise. */
+  guestNamePrompt: { suggestedName: string | null } | null;
 }> {
   const event = await db.event.findUnique({
     where: { id: eventId },
@@ -4653,12 +4657,13 @@ export async function getEventMeetingStatus(
   const isHostOrCoHost = isHost || (userId !== null && (await isEventCoHost(eventId, userId)));
 
   let guestName: string | null = null;
+  let guestNamePrompt: { suggestedName: string | null } | null = null;
   if (userId === null) {
     if (!event.open) throw new EventError(403, "Sign in to view this meeting.", true);
     const registration = registrationId
       ? await db.eventRegistration.findUnique({
           where: { id: registrationId },
-          select: { eventId: true, name: true, email: true, revokedAt: true, joinedAt: true },
+          select: { eventId: true, name: true, source: true, revokedAt: true, joinedAt: true },
         })
       : null;
     if (!registration || registration.eventId !== eventId) {
@@ -4679,9 +4684,12 @@ export async function getEventMeetingStatus(
         data: { joinedAt: new Date() },
       });
     }
-    // An emailed invitee has no name until they give one, so fall back to
-    // just the address rather than rendering "null (email)".
-    guestName = registration.name ? `${registration.name} (${registration.email})` : registration.email;
+    // `registration` predates the joinedAt write above, so a null joinedAt
+    // here still means this is the guest's first visit.
+    if (!registration.name || (registration.source === EventRegistrationSource.invited && !registration.joinedAt)) {
+      guestNamePrompt = { suggestedName: registration.name };
+    }
+    guestName = guestDisplayName(registration.name);
   } else if (!isHost) {
     const rsvp = await db.rSVP.findUnique({
       where: { eventId_userId: { eventId, userId } },
@@ -4740,7 +4748,20 @@ export async function getEventMeetingStatus(
     configured: event.meetingUrl !== null || event.livekitRoomName !== null,
     requiresCodeOfConductAgreement: event.open,
     guestName,
+    guestNamePrompt,
   };
+}
+
+/**
+ * Saves the name an anonymous guest typed into the waiting room's
+ * "What should we call you?" prompt. Access is re-checked through
+ * getEventMeetingStatus (same rid rules as status/token/chat — revoked,
+ * expired and cancelled all refuse), so this can't name someone else's
+ * registration.
+ */
+export async function setEventGuestName(eventId: string, registrationId: string, name: string): Promise<void> {
+  await getEventMeetingStatus(eventId, null, registrationId);
+  await db.eventRegistration.update({ where: { id: registrationId }, data: { name } });
 }
 
 /** Recording Access initiative — is `userId` a designated co-host of `eventId`? DB is authoritative, not LiveKit's ephemeral room state (see EventCoHost's doc comment in schema.prisma). */

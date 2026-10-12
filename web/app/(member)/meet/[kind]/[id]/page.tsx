@@ -175,7 +175,14 @@ export default async function MeetPage({
   // or to Reset), never bounced straight past it the way an attendee is.
   // An open event's anonymous/first-time attendee instead renders the page
   // so MeetingWaitingRoom can show the click-through disclaimer.
-  if (status.started && status.meetingUrl && !status.isOrganizer && !status.requiresCodeOfConductAgreement) {
+  // Also not while an anonymous guest still owes their display name.
+  if (
+    status.started &&
+    status.meetingUrl &&
+    !status.isOrganizer &&
+    !status.requiresCodeOfConductAgreement &&
+    !status.guestNamePrompt
+  ) {
     redirect(status.meetingUrl);
   }
 
@@ -214,6 +221,7 @@ export default async function MeetPage({
   // (finalizeMeetingRequestChatTranscript, meeting-requests-server.ts).
   const chatEndpoint =
     kind === "event" ? `/api/events/${id}/meeting/chat${ridQuery}` : `/api/inbox/meeting-requests/${id}/meeting/chat`;
+  const guestNameEndpoint = kind === "event" && !user && rid ? `/api/events/${id}/meeting/guest-name${ridQuery}` : null;
 
   return (
     <MeetingWaitingRoom
@@ -229,6 +237,7 @@ export default async function MeetPage({
       kickEndpoint={kickEndpoint}
       lowerHandEndpoint={lowerHandEndpoint}
       chatEndpoint={chatEndpoint}
+      guestNameEndpoint={guestNameEndpoint}
       backHref={backHref}
     />
   );

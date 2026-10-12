@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { formatTimestamp } from "@/lib/format-date";
+import { splitGuestAddresses } from "@/lib/guest-address";
 import {
   MAX_INVITES_PER_EVENT,
   MAX_INVITES_PER_HOST_PER_DAY,
@@ -131,10 +132,7 @@ export function ManageGuestInvites({ eventId }: { eventId: string }) {
   }
 
   function sendInvites() {
-    const emails = emailsText
-      .split(/[\s,;]+/)
-      .map((email) => email.trim())
-      .filter(Boolean);
+    const emails = splitGuestAddresses(emailsText);
     if (emails.length === 0) {
       setError("Enter at least one email address.");
       return;
@@ -235,7 +233,7 @@ export function ManageGuestInvites({ eventId }: { eventId: string }) {
             <Textarea
               id="guest-invite-emails"
               rows={2}
-              placeholder="name@example.com, another@example.com"
+              placeholder={"name@example.com\nJane Doe <jane@example.com>"}
               value={emailsText}
               onChange={(event) => setEmailsText(event.target.value)}
             />
@@ -248,7 +246,9 @@ export function ManageGuestInvites({ eventId }: { eventId: string }) {
             />
             <div className="flex flex-col gap-1 text-xs text-muted-foreground">
               <p>
-                Separate addresses with commas, spaces or new lines. Each guest gets their own personal join link and a
+                Separate addresses with commas or new lines. To set how a guest is named in the meeting, write it as{" "}
+                <span className="font-mono">Jane Doe &lt;jane@example.com&gt;</span> — they can change it when they join.
+                Each guest gets their own personal join link and a
                 calendar invite, and the note (if you add one) goes to everyone in this send. You&apos;ll be BCC&apos;d
                 on every invitation, and their replies come to you.
               </p>

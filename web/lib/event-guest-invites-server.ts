@@ -6,6 +6,7 @@ import { EventVisibility, EventRegistrationSource, Role } from "@/lib/generated/
 import type { UserModel } from "@/lib/generated/prisma/models/User";
 import { buildEventIcs, EventError } from "@/lib/events-server";
 import { sendEventGuestInviteEmail, sendEventRegistrationConfirmationEmail } from "@/lib/email";
+import { parseGuestAddress } from "@/lib/guest-address";
 
 /**
  * Private guest-invite link + invite-by-email for `open` events.
@@ -257,7 +258,10 @@ export async function inviteGuestsByEmail(
   const seen = new Set<string>();
 
   for (const raw of input.emails) {
-    const parsed = emailSchema.safeParse(raw);
+    // An entry may be `Jane Doe <jane@example.com>` — the name prefills the
+    // guest's own name prompt when they first open the meeting.
+    const address = parseGuestAddress(raw);
+    const parsed = emailSchema.safeParse(address.email);
     if (!parsed.success) {
       outcomes.push({ email: raw.trim(), status: "invalid", message: "Not a valid email address." });
       continue;
@@ -271,7 +275,7 @@ export async function inviteGuestsByEmail(
 
     const existing = await db.eventRegistration.findFirst({
       where: { eventId, email: { equals: email, mode: "insensitive" } },
-      select: { id: true, source: true, revokedAt: true },
+      select: { id: true, source: true, revokedAt: true, name: true },
     });
     if (existing && existing.source !== EventRegistrationSource.invited) {
       outcomes.push({
@@ -300,14 +304,21 @@ export async function inviteGuestsByEmail(
       registration = existing
         ? await db.eventRegistration.update({
             where: { id: existing.id },
-            // Re-inviting a revoked invite brings them back.
-            data: { invitedAt: new Date(), invitedById: actingUser.id, revokedAt: null },
+            // Re-inviting a revoked invite brings them back. A name only
+            // fills a blank — never overwrites one the guest already gave.
+            data: {
+              invitedAt: new Date(),
+              invitedById: actingUser.id,
+              revokedAt: null,
+              ...(!existing.name && address.name ? { name: address.name } : {}),
+            },
             select: { id: true, email: true },
           })
         : await db.eventRegistration.create({
             data: {
               eventId,
               email,
+              name: address.name,
               source: EventRegistrationSource.invited,
               invitedAt: new Date(),
               invitedById: actingUser.id,
