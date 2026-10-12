@@ -25,6 +25,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     const status = await getEventMeetingStatus(id, user?.id ?? null, registrationId);
+    if (status.awaitingHostApproval) {
+      return NextResponse.json({ error: "Waiting for the host to let you in." }, { status: 403 });
+    }
     if (!status.started || !status.livekitRoomName) {
       return NextResponse.json({ error: "This meeting hasn't started yet." }, { status: 409 });
     }

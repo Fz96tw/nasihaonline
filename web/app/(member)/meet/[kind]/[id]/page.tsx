@@ -252,6 +252,9 @@ export default async function MeetPage({
   const chatEndpoint =
     kind === "event" ? `/api/events/${id}/meeting/chat${ridQuery}` : `/api/inbox/meeting-requests/${id}/meeting/chat`;
   const guestNameEndpoint = kind === "event" && !user && rid ? `/api/events/${id}/meeting/guest-name${ridQuery}` : null;
+  // Private events' shareable-link guests wait for approval; the waiting
+  // room only shows the Admit/Deny card to the host/co-host.
+  const guestApprovalsEndpoint = kind === "event" && user ? `/api/events/${id}/guest-approvals` : null;
 
   return (
     <MeetingWaitingRoom
@@ -268,6 +271,7 @@ export default async function MeetPage({
       lowerHandEndpoint={lowerHandEndpoint}
       chatEndpoint={chatEndpoint}
       guestNameEndpoint={guestNameEndpoint}
+      guestApprovalsEndpoint={guestApprovalsEndpoint}
       backHref={backHref}
     />
   );

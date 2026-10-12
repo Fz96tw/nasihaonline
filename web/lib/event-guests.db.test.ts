@@ -99,9 +99,44 @@ describe("Event guests (DB-backed)", { skip }, () => {
     assert.equal(await db.eventInvitee.count({ where: { eventId } }), 1);
   });
 
-  it("never offers the shareable link on a restricted event", async () => {
-    await rejects(guests.enableGuestLink(eventId, host, { regenerate: false }), { status: 400 });
-    assert.equal((await guests.getGuestLinkState(eventId, host)).linkAvailable, false);
+  it("lets link guests on a restricted event in only after the host approves them", async () => {
+    // Off by default; the host can turn it on.
+    assert.equal((await guests.getGuestLinkState(eventId, host)).token, null);
+    const { token } = await guests.enableGuestLink(eventId, host, { regenerate: false });
+
+    const first = await guests.joinViaGuestLink(eventId, token, { name: "Lin Link", email: "lin@guest.test" });
+    const linRid = first.registrationId!;
+    await db.event.update({ where: { id: eventId }, data: { meetingStartedAt: new Date() } });
+    const waiting = await status(linRid);
+    assert.equal(waiting.awaitingHostApproval, true);
+    assert.equal(waiting.meetingUrl, null);
+
+    // Only host / co-host / admin can see and decide.
+    const member = await db.user.findUniqueOrThrow({ where: { clerkUserId: "test_guest_member" } });
+    await rejects(guests.listPendingGuests(eventId, member), { status: 403 });
+    const pending = await guests.listPendingGuests(eventId, host);
+    assert.deepEqual(
+      pending.map((guest) => guest.email),
+      ["lin@guest.test"],
+    );
+    assert.equal(
+      (await guests.getGuestLinkState(eventId, host)).guests.find((guest) => guest.email === "lin@guest.test")?.pending,
+      true,
+    );
+
+    await guests.approveGuest(eventId, host, linRid);
+    const admitted = await status(linRid);
+    assert.equal(admitted.awaitingHostApproval, false);
+    assert.equal(admitted.meetingUrl, "https://meet.example.test/abc");
+    assert.equal((await guests.listPendingGuests(eventId, host)).length, 0);
+
+    // Denying another link guest removes them.
+    const second = await guests.joinViaGuestLink(eventId, token, { name: "Dee Deny", email: "dee@guest.test" });
+    await guests.denyGuest(eventId, host, second.registrationId!);
+    await rejects(status(second.registrationId!), { status: 403 });
+
+    await guests.disableGuestLink(eventId, host);
+    await db.event.update({ where: { id: eventId }, data: { meetingStartedAt: null } });
   });
 
   it("admits an invited guest anonymously, by name, behind the Code of Conduct", async () => {
@@ -109,6 +144,7 @@ describe("Event guests (DB-backed)", { skip }, () => {
     assert.equal(first.guestName, "Jane Doe (guest)");
     assert.deepEqual(first.guestNamePrompt, { suggestedName: "Jane Doe" });
     assert.equal(first.requiresCodeOfConductAgreement, true);
+    assert.equal(first.awaitingHostApproval, false); // emailed guests never wait for approval
     const second = await status(janeRid);
     assert.equal(second.guestNamePrompt, null);
 

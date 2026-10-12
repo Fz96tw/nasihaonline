@@ -14,6 +14,7 @@ import {
 import { useHasMounted } from "@/lib/use-has-mounted";
 import { LiveKitMeetingScreen } from "@/components/calendar/livekit-meeting-screen";
 import { GuestApplyCard } from "@/components/events/guest-apply-card";
+import { PendingGuestApprovals } from "@/components/calendar/pending-guest-approvals";
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -37,6 +38,8 @@ export type MeetingWaitingRoomStatus = {
   guestNamePrompt?: { suggestedName: string | null } | null;
   /** Event-only, anonymous guest only — set once a Nasiha Conference meeting has ended (see getEventMeetingStatus). */
   guestJoinInviteUrl?: string | null;
+  /** Event-only, anonymous guest only — joined a private event's shareable link and the host hasn't let them in yet. */
+  awaitingHostApproval?: boolean;
 };
 
 /** Always hours:minutes:seconds, zero-padded — a fixed-width format reads better at large sizes than one that reflows as hours drop off. */
@@ -87,6 +90,7 @@ export function MeetingWaitingRoom({
   lowerHandEndpoint,
   chatEndpoint,
   guestNameEndpoint = null,
+  guestApprovalsEndpoint = null,
   backHref,
 }: {
   initialStatus: MeetingWaitingRoomStatus;
@@ -107,6 +111,8 @@ export function MeetingWaitingRoom({
   chatEndpoint?: string | null;
   /** POST endpoint saving an anonymous guest's display name — event guests only, null otherwise. */
   guestNameEndpoint?: string | null;
+  /** GET/POST/DELETE base for a private event's waiting link guests — passed for signed-in event viewers; only rendered for the host/co-host. */
+  guestApprovalsEndpoint?: string | null;
   backHref: string;
 }) {
   const [status, setStatus] = useState(initialStatus);
@@ -130,6 +136,12 @@ export function MeetingWaitingRoom({
   const [nameSaved, setNameSaved] = useState(false);
   const [savingName, setSavingName] = useState(false);
   const needsNameGate = !initialStatus.isOrganizer && namePrompt !== null && !nameSaved && Boolean(guestNameEndpoint);
+  // Polled, unlike the name prompt: flips to false the moment the host admits them.
+  const awaitingApproval = !status.isOrganizer && Boolean(status.awaitingHostApproval);
+  const approvals =
+    guestApprovalsEndpoint && (status.isHostOrCoHost ?? status.isOrganizer) ? (
+      <PendingGuestApprovals endpoint={guestApprovalsEndpoint} />
+    ) : null;
   const hasMounted = useHasMounted();
   const abortRef = useRef<AbortController | null>(null);
   const hasAutoOpenedRef = useRef(false);
@@ -183,6 +195,7 @@ export function MeetingWaitingRoom({
       !status.isOrganizer &&
       (!status.requiresCodeOfConductAgreement || agreedToDisclaimer) &&
       !needsNameGate &&
+      !awaitingApproval &&
       !hasAutoOpenedRef.current
     ) {
       hasAutoOpenedRef.current = true;
@@ -196,6 +209,7 @@ export function MeetingWaitingRoom({
     status.requiresCodeOfConductAgreement,
     agreedToDisclaimer,
     needsNameGate,
+    awaitingApproval,
   ]);
 
   async function handleSaveName() {
@@ -331,35 +345,38 @@ export function MeetingWaitingRoom({
   // has clicked Start — but only once needsDisclaimerGate (if applicable)
   // has been satisfied, so an open event's anonymous visitor still sees
   // the click-through gate below before ever reaching the embedded call.
-  if (status.started && status.livekitRoomName && !needsDisclaimerGate && !needsNameGate) {
+  if (status.started && status.livekitRoomName && !needsDisclaimerGate && !needsNameGate && !awaitingApproval) {
     return (
-      <LiveKitMeetingScreen
-        tokenEndpoint={tokenEndpoint}
-        recordingStartEndpoint={recordingStartEndpoint}
-        recordingStopEndpoint={recordingStopEndpoint}
-        coHostsEndpoint={coHostsEndpoint}
-        kickEndpoint={kickEndpoint}
-        lowerHandEndpoint={lowerHandEndpoint}
-        chatEndpoint={chatEndpoint}
-        title={status.title}
-        organizerName={status.organizerName}
-        hostId={status.hostId}
-        // Bug fixed 2026-08-26: defaulting to false hid the Record button
-        // for every MeetingRequest participant — that status type has no
-        // isHostOrCoHost field at all (undefined, not false), since a
-        // MeetingRequest's recording routes are deliberately left open to
-        // either party (see their route doc comments). Default to true so
-        // the missing-field case (MeetingRequest) matches that unrestricted
-        // policy; Event always supplies a real boolean here, so this
-        // fallback never applies there.
-        isHostOrCoHost={status.isHostOrCoHost ?? true}
-        // Unlike isHostOrCoHost above, kicking must stay organizer-only for
-        // a MeetingRequest (no co-host concept there) — fall back to
-        // isOrganizer (always present) rather than the unrestricted `true`
-        // used for recording.
-        canKick={status.isHostOrCoHost ?? status.isOrganizer}
-        backHref={backHref}
-      />
+      <>
+        {approvals}
+        <LiveKitMeetingScreen
+          tokenEndpoint={tokenEndpoint}
+          recordingStartEndpoint={recordingStartEndpoint}
+          recordingStopEndpoint={recordingStopEndpoint}
+          coHostsEndpoint={coHostsEndpoint}
+          kickEndpoint={kickEndpoint}
+          lowerHandEndpoint={lowerHandEndpoint}
+          chatEndpoint={chatEndpoint}
+          title={status.title}
+          organizerName={status.organizerName}
+          hostId={status.hostId}
+          // Bug fixed 2026-08-26: defaulting to false hid the Record button
+          // for every MeetingRequest participant — that status type has no
+          // isHostOrCoHost field at all (undefined, not false), since a
+          // MeetingRequest's recording routes are deliberately left open to
+          // either party (see their route doc comments). Default to true so
+          // the missing-field case (MeetingRequest) matches that unrestricted
+          // policy; Event always supplies a real boolean here, so this
+          // fallback never applies there.
+          isHostOrCoHost={status.isHostOrCoHost ?? true}
+          // Unlike isHostOrCoHost above, kicking must stay organizer-only for
+          // a MeetingRequest (no co-host concept there) — fall back to
+          // isOrganizer (always present) rather than the unrestricted `true`
+          // used for recording.
+          canKick={status.isHostOrCoHost ?? status.isOrganizer}
+          backHref={backHref}
+        />
+      </>
     );
   }
 
@@ -404,7 +421,15 @@ export function MeetingWaitingRoom({
 
       {!status.isOrganizer && hasMounted && (
         <>
-          {needsNameGate ? (
+          {awaitingApproval ? (
+            <div className="flex flex-col items-center gap-1">
+              <p className="text-sm font-medium">Waiting for the host to let you in</p>
+              <p className="text-xs text-muted-foreground">
+                You joined with a shared link, so {status.organizerName} needs to admit you. Keep this page open —
+                you&apos;ll go in automatically once they do.
+              </p>
+            </div>
+          ) : needsNameGate ? (
             <form
               className="flex w-full flex-col gap-3 rounded-lg border p-4 text-left"
               onSubmit={(event) => {
@@ -534,6 +559,7 @@ export function MeetingWaitingRoom({
           </Button>
         </div>
       )}
+      {approvals}
     </main>
   );
 }

@@ -1745,6 +1745,11 @@ model EventRegistration {
   // First time this guest opened the meeting (status/token) — drives the
   // sent-invites list's "joined" column.
   joinedAt    DateTime?
+  // Private (restricted) events only: a guest who came in through the
+  // shareable link waits for the host (or a co-host/admin) to approve them —
+  // null = still pending. Ignored for emailed guests and public events,
+  // which never need approval.
+  approvedAt  DateTime?
   // Host revoked this guest (or regenerated the link that admitted them) —
   // getEventMeetingStatus rejects the registration's rid from then on.
   revokedAt   DateTime?

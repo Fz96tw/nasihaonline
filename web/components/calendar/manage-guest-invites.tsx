@@ -24,6 +24,7 @@ interface GuestRow {
   invitedAt: string | null;
   joined: boolean;
   revoked: boolean;
+  pending: boolean;
 }
 
 interface GuestState {
@@ -172,6 +173,13 @@ export function ManageGuestInvites({ eventId, restricted = false }: { eventId: s
     });
   }
 
+  function approve(guest: GuestRow) {
+    void run(async () => {
+      await call(`/api/events/${eventId}/guest-approvals/${guest.id}`, "POST");
+      await load();
+    });
+  }
+
   function revoke(guest: GuestRow) {
     if (!window.confirm(`Remove ${guest.email}? Their link stops working right away, and they're emailed that the invitation was withdrawn (with a calendar update removing the event).`)) return;
     void run(async () => {
@@ -224,8 +232,9 @@ export function ManageGuestInvites({ eventId, restricted = false }: { eventId: s
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            You can share this same link with as many people as you&apos;d like to invite. Each person enters their
-            own name and email to join. Only share it with people you trust, since anyone who has the link can join.
+            {restricted
+              ? "You can share this same link with as many people as you'd like. Each person enters their own name and email, then waits until you (or a co-host) admit them — here, or from the waiting room or live meeting — so a forwarded link can't let anyone in on its own."
+              : "You can share this same link with as many people as you'd like to invite. Each person enters their own name and email to join. Only share it with people you trust, since anyone who has the link can join."}
           </p>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" disabled={pending} onClick={regenerate}>
@@ -323,10 +332,17 @@ export function ManageGuestInvites({ eventId, restricted = false }: { eventId: s
               <div className="flex items-center gap-2">
                 {guest.revoked ? (
                   <Badge variant="danger">Removed</Badge>
+                ) : guest.pending ? (
+                  <Badge variant="warning">Waiting for approval</Badge>
                 ) : guest.joined ? (
                   <Badge variant="success">Joined</Badge>
                 ) : (
                   <Badge variant="neutral">Not joined yet</Badge>
+                )}
+                {guest.pending && (
+                  <Button size="sm" disabled={pending} onClick={() => approve(guest)}>
+                    Admit
+                  </Button>
                 )}
                 {!guest.revoked && guest.source === "invited" && (
                   <Button size="sm" variant="ghost" disabled={pending} onClick={() => resend(guest)}>

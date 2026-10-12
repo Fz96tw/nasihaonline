@@ -9,6 +9,7 @@ import {
   buildEventInviteAttachment,
   EventError,
   eventGuestAccessExpired,
+  isEventCoHost,
   syncGoogleCalendarAttendees,
   updateEventInvitees,
 } from "@/lib/events-server";
@@ -49,6 +50,8 @@ export interface GuestInviteRow {
   invitedAt: string | null;
   joined: boolean;
   revoked: boolean;
+  /** Joined a private event's shareable link and is waiting for the host's approval. */
+  pending: boolean;
 }
 
 export interface GuestLinkState {
@@ -90,18 +93,19 @@ function isRestricted(event: { visibility: EventVisibility }) {
 
 /**
  * Whether this event may take guests at all — published, live, and either
- * public (`open`) or restricted. The shareable link (`link: true`) is
- * public-only: anyone can forward it, which a restricted event's named
- * audience rules out; a restricted event only takes guests the host names
- * by email.
+ * public (`open`) or restricted. Both email invitations and the shareable
+ * link are available on either; on a restricted event everyone who comes in
+ * through the link waits for the host's approval (see EventRegistration.
+ * approvedAt), since a forwarded link would otherwise admit strangers to a
+ * named audience. `link` only picks the error wording.
  */
 function assertGuestFeatureAllowed(event: GuestEvent | null, { link }: { link: boolean }): asserts event is GuestEvent {
   if (!event) throw new EventError(404, "Event not found.");
   if (event.cancelledAt) throw new EventError(400, "This event has been cancelled.");
-  if (link ? !event.open || isRestricted(event) : !event.open && !isRestricted(event)) {
+  if (!event.open && !isRestricted(event)) {
     throw new EventError(
       400,
-      link ? "Guest links are only available for public events." : "Guests can only be invited to public or private events.",
+      link ? "Guest links are only available for public or private events." : "Guests can only be invited to public or private events.",
     );
   }
   if (!event.publishedAt) throw new EventError(400, "Publish this event before inviting guests.");
@@ -125,15 +129,19 @@ function newToken() {
   return randomBytes(24).toString("base64url");
 }
 
-function rowOf(registration: {
-  id: string;
-  email: string;
-  name: string | null;
-  source: EventRegistrationSource;
-  invitedAt: Date | null;
-  joinedAt: Date | null;
-  revokedAt: Date | null;
-}): GuestInviteRow {
+function rowOf(
+  registration: {
+    id: string;
+    email: string;
+    name: string | null;
+    source: EventRegistrationSource;
+    invitedAt: Date | null;
+    joinedAt: Date | null;
+    revokedAt: Date | null;
+    approvedAt: Date | null;
+  },
+  restricted: boolean,
+): GuestInviteRow {
   return {
     id: registration.id,
     email: registration.email,
@@ -142,7 +150,23 @@ function rowOf(registration: {
     invitedAt: registration.invitedAt?.toISOString() ?? null,
     joined: registration.joinedAt !== null,
     revoked: registration.revokedAt !== null,
+    pending: needsHostApproval({ restricted, ...registration }),
   };
+}
+
+/** A restricted event's link guest who hasn't been let in yet. Emailed guests and public events never wait. */
+export function needsHostApproval(registration: {
+  restricted: boolean;
+  source: EventRegistrationSource;
+  approvedAt: Date | null;
+  revokedAt: Date | null;
+}): boolean {
+  return (
+    registration.restricted &&
+    registration.source === EventRegistrationSource.link &&
+    registration.approvedAt === null &&
+    registration.revokedAt === null
+  );
 }
 
 /** Host/admin view: the current link token (if enabled) and every invited/link guest. */
@@ -155,9 +179,22 @@ export async function getGuestLinkState(eventId: string, actingUser: UserModel):
   const guests = await db.eventRegistration.findMany({
     where: { eventId, source: { in: [EventRegistrationSource.invited, EventRegistrationSource.link] } },
     orderBy: { createdAt: "desc" },
-    select: { id: true, email: true, name: true, source: true, invitedAt: true, joinedAt: true, revokedAt: true },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      source: true,
+      invitedAt: true,
+      joinedAt: true,
+      revokedAt: true,
+      approvedAt: true,
+    },
   });
-  return { token: event.guestLinkToken, linkAvailable: !isRestricted(event), guests: guests.map(rowOf) };
+  return {
+    token: event.guestLinkToken,
+    linkAvailable: true,
+    guests: guests.map((guest) => rowOf(guest, isRestricted(event))),
+  };
 }
 
 /**
@@ -464,7 +501,16 @@ async function inviteMemberInstead(
 async function loadGuest(eventId: string, registrationId: string) {
   const registration = await db.eventRegistration.findUnique({
     where: { id: registrationId },
-    select: { id: true, eventId: true, email: true, name: true, source: true, revokedAt: true, inviteToJoin: true },
+    select: {
+      id: true,
+      eventId: true,
+      email: true,
+      name: true,
+      source: true,
+      revokedAt: true,
+      approvedAt: true,
+      inviteToJoin: true,
+    },
   });
   if (!registration || registration.eventId !== eventId || registration.source === EventRegistrationSource.public) {
     throw new EventError(404, "Guest not found.");
@@ -514,7 +560,14 @@ export async function revokeGuest(eventId: string, actingUser: UserModel, regist
   if (actingUser.role !== Role.admin && event.hostId !== actingUser.id) {
     throw new EventError(403, "Only the event's host or an admin can manage guest invitations.");
   }
-  const registration = await loadGuest(eventId, registrationId);
+  await withdrawGuest(event, await loadGuest(eventId, registrationId));
+}
+
+async function withdrawGuest(
+  event: GuestEvent,
+  registration: Awaited<ReturnType<typeof loadGuest>>,
+): Promise<void> {
+  const eventId = event.id;
   if (registration.revokedAt) return;
   await db.eventRegistration.update({ where: { id: registration.id }, data: { revokedAt: new Date() } });
   if (googleInvitesGuests(event)) {
@@ -617,7 +670,10 @@ export async function joinViaGuestLink(
     timezone: event.timezone,
     meetingUrl: event.meetingUrl,
     livekitRoomName: event.livekitRoomName,
-    ...buildIcsFor(event),
+    // A restricted event's link guest may still be awaiting approval, so the
+    // calendar file mustn't carry the raw meeting URL — the email's personal
+    // join link (through the waiting room) is their only way in.
+    ...buildIcsFor(isRestricted(event) ? { ...event, meetingUrl: null } : event),
   });
 
   return { created, registrationId: created ? registration.id : null };
@@ -646,4 +702,48 @@ export async function inviteExternalGuestsOnPublish(
     if (error instanceof EventError) return [error.message];
     throw error;
   }
+}
+
+/** Host, co-host or admin — the people who can let a waiting link guest in (or turn them away). */
+async function loadForApproval(eventId: string, actingUser: UserModel): Promise<GuestEvent> {
+  const event = await loadEvent(eventId);
+  if (!event) throw new EventError(404, "Event not found.");
+  const allowed =
+    actingUser.role === Role.admin || event.hostId === actingUser.id || (await isEventCoHost(eventId, actingUser.id));
+  if (!allowed) throw new EventError(403, "Only the event's host, a co-host or an admin can approve guests.");
+  return event;
+}
+
+export interface PendingGuest {
+  id: string;
+  name: string | null;
+  email: string;
+  requestedAt: string;
+}
+
+/** Link guests on a restricted event still waiting to be let in, oldest first. */
+export async function listPendingGuests(eventId: string, actingUser: UserModel): Promise<PendingGuest[]> {
+  const event = await loadForApproval(eventId, actingUser);
+  if (!isRestricted(event)) return [];
+  const rows = await db.eventRegistration.findMany({
+    where: { eventId, source: EventRegistrationSource.link, approvedAt: null, revokedAt: null },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, name: true, email: true, createdAt: true },
+  });
+  return rows.map((row) => ({ id: row.id, name: row.name, email: row.email, requestedAt: row.createdAt.toISOString() }));
+}
+
+/** Lets a waiting link guest in — their next status poll admits them. */
+export async function approveGuest(eventId: string, actingUser: UserModel, registrationId: string): Promise<void> {
+  await loadForApproval(eventId, actingUser);
+  const registration = await loadGuest(eventId, registrationId);
+  if (registration.revokedAt) throw new EventError(400, "This guest was already removed.");
+  if (registration.approvedAt) return;
+  await db.eventRegistration.update({ where: { id: registration.id }, data: { approvedAt: new Date() } });
+}
+
+/** Turns a waiting (or admitted) guest away — same as removing them from the guest list. */
+export async function denyGuest(eventId: string, actingUser: UserModel, registrationId: string): Promise<void> {
+  const event = await loadForApproval(eventId, actingUser);
+  await withdrawGuest(event, await loadGuest(eventId, registrationId));
 }

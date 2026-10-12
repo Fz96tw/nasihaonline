@@ -2424,7 +2424,15 @@ export async function resendEventNotifications(
         where: {
           eventId: event.id,
           revokedAt: null,
-          ...(isRestricted ? { source: EventRegistrationSource.invited } : {}),
+          // Emailed guests, plus link guests the host has admitted.
+          ...(isRestricted
+            ? {
+                OR: [
+                  { source: EventRegistrationSource.invited },
+                  { source: EventRegistrationSource.link, approvedAt: { not: null } },
+                ],
+              }
+            : {}),
         },
         select: { id: true, email: true, name: true },
       })
@@ -2518,12 +2526,21 @@ export async function getEventNotificationBroadcasts(eventId: string): Promise<E
  * host is excluded from the member leg — they're the sender.
  */
 async function getEventAttendeeMessageRecipients(eventId: string, hostId: string) {
+  const event = await db.event.findUnique({ where: { id: eventId }, select: { visibility: true } });
+  // A restricted event's link guests only count once the host has admitted them.
+  const notAwaitingApproval =
+    event?.visibility === EventVisibility.invited
+      ? { NOT: { source: EventRegistrationSource.link, approvedAt: null } }
+      : {};
   const [rsvps, registrations] = await Promise.all([
     db.rSVP.findMany({
       where: { eventId, status: RSVPStatus.going, userId: { not: hostId } },
       select: { user: { select: { id: true, email: true, name: true } } },
     }),
-    db.eventRegistration.findMany({ where: { eventId, revokedAt: null }, select: { id: true, email: true, name: true } }),
+    db.eventRegistration.findMany({
+      where: { eventId, revokedAt: null, ...notAwaitingApproval },
+      select: { id: true, email: true, name: true },
+    }),
   ]);
   const members = rsvps.map((rsvp) => rsvp.user);
   // A member who also registered as a guest with the same email gets one email.
@@ -2994,12 +3011,13 @@ export async function updateEvent(
         ...(timeChanged ? { rescheduledAt: new Date() } : {}),
         timezone: input.timezone,
         open: input.open,
-        guestLinkToken: await resolveGuestLinkToken(
-          tx,
-          event.id,
-          input.guestLinkEnabled && input.open && event.visibility !== EventVisibility.invited,
-          event.guestLinkToken,
-        ),
+        // A restricted event's link is managed only from its External guests
+        // panel (the edit form has no toggle for it), so an edit leaves it —
+        // and the link guests it admitted — untouched.
+        guestLinkToken:
+          event.visibility === EventVisibility.invited
+            ? event.guestLinkToken
+            : await resolveGuestLinkToken(tx, event.id, input.guestLinkEnabled && input.open, event.guestLinkToken),
         heroImageUrl,
         meetingUrl,
         googleEventId,
@@ -4691,6 +4709,8 @@ export async function getEventMeetingStatus(
   guestNamePrompt: { suggestedName: string | null } | null;
   /** Anonymous caller only, once a Nasiha Conference meeting has ended: their apply-to-join link (/join?gi=), or null if they're already a member/applicant. */
   guestJoinInviteUrl: string | null;
+  /** Anonymous caller only: they joined a private event through its shareable link and the host hasn't let them in yet — meetingUrl is withheld and the token/chat routes refuse until then. */
+  awaitingHostApproval: boolean;
 }> {
   const event = await db.event.findUnique({
     where: { id: eventId },
@@ -4726,23 +4746,35 @@ export async function getEventMeetingStatus(
   let guestName: string | null = null;
   let guestNamePrompt: { suggestedName: string | null } | null = null;
   let guestJoinInvite: string | null = null;
+  let awaitingHostApproval = false;
   if (userId === null) {
-    // Anonymous access is a registration (`rid`): any kind on an open event,
-    // only a host's email invitation on a restricted one (which has no
-    // public registration or shareable link). Everything else — a
-    // members-only event, or a restricted event without a valid invitation —
-    // is "sign in", since a member might be on its list.
+    // Anonymous access is a registration (`rid`): any kind on an open event;
+    // on a restricted one, a host's email invitation or a shareable-link
+    // join (the latter only once the host approves it — see
+    // awaitingHostApproval below). Everything else — a members-only event,
+    // or a restricted event without a valid registration — is "sign in",
+    // since a member might be on its list.
     const isRestrictedEvent = event.visibility === EventVisibility.invited;
     if (!event.open && !isRestrictedEvent) throw new EventError(403, "Sign in to view this meeting.", true);
     const registration = registrationId
       ? await db.eventRegistration.findUnique({
           where: { id: registrationId },
-          select: { eventId: true, email: true, name: true, source: true, revokedAt: true, joinedAt: true },
+          select: {
+            eventId: true,
+            email: true,
+            name: true,
+            source: true,
+            revokedAt: true,
+            joinedAt: true,
+            approvedAt: true,
+          },
         })
       : null;
     if (
       isRestrictedEvent &&
-      (!registration || registration.eventId !== eventId || registration.source !== EventRegistrationSource.invited)
+      (!registration ||
+        registration.eventId !== eventId ||
+        (registration.source !== EventRegistrationSource.invited && registration.source !== EventRegistrationSource.link))
     ) {
       throw new EventError(403, "Sign in to view this meeting.", true);
     }
@@ -4770,6 +4802,8 @@ export async function getEventMeetingStatus(
       guestNamePrompt = { suggestedName: registration.name };
     }
     guestName = guestDisplayName(registration.name);
+    awaitingHostApproval =
+      isRestrictedEvent && registration.source === EventRegistrationSource.link && !registration.approvedAt;
     // "Started, then genuinely ended" (see meetingEndedAt) — the waiting
     // room's post-meeting moment to invite a guest to apply.
     if (event.meetingEndedAt && !event.meetingStartedAt) {
@@ -4791,12 +4825,14 @@ export async function getEventMeetingStatus(
     if (rsvp?.status !== RSVPStatus.going && registrationId && (event.open || event.visibility === EventVisibility.invited)) {
       const guest = await db.eventRegistration.findUnique({
         where: { id: registrationId },
-        select: { eventId: true, source: true, revokedAt: true, joinedAt: true },
+        select: { eventId: true, source: true, revokedAt: true, joinedAt: true, approvedAt: true },
       });
       if (
         guest &&
         guest.eventId === eventId &&
-        (event.open || guest.source === EventRegistrationSource.invited) &&
+        (event.open ||
+          guest.source === EventRegistrationSource.invited ||
+          (guest.source === EventRegistrationSource.link && guest.approvedAt !== null)) &&
         !guest.revokedAt &&
         !guestAccessOver()
       ) {
@@ -4829,7 +4865,7 @@ export async function getEventMeetingStatus(
     organizerName: event.host.name ?? "NASIHA Member",
     started: event.meetingStartedAt !== null,
     startsAt: event.startsAt.toISOString(),
-    meetingUrl: event.meetingStartedAt ? event.meetingUrl : null,
+    meetingUrl: event.meetingStartedAt && !awaitingHostApproval ? event.meetingUrl : null,
     livekitRoomName: event.livekitRoomName,
     organizerMessage: event.meetingOrganizerMessage,
     organizerMessageImageUrl: getMeetingMessageImageUrl(event.meetingOrganizerMessageImageKey),
@@ -4843,6 +4879,7 @@ export async function getEventMeetingStatus(
     guestName,
     guestNamePrompt,
     guestJoinInviteUrl: guestJoinInvite,
+    awaitingHostApproval,
   };
 }
 
