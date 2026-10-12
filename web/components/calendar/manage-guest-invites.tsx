@@ -173,7 +173,7 @@ export function ManageGuestInvites({ eventId, restricted = false }: { eventId: s
   }
 
   function revoke(guest: GuestRow) {
-    if (!window.confirm(`Remove ${guest.email}? Their link stops working right away.`)) return;
+    if (!window.confirm(`Remove ${guest.email}? Their link stops working right away, and they're emailed that the invitation was withdrawn (with a calendar update removing the event).`)) return;
     void run(async () => {
       await call(`/api/events/${eventId}/guest-invites/${guest.id}`, "DELETE");
       await load();

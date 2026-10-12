@@ -4650,7 +4650,7 @@ function guestEventLink(eventId: string, visibility: EventVisibility, registrati
 }
 
 /** Whether guest (`rid`) access to this event has lapsed — see lib/event-guest-access.ts. */
-function eventGuestAccessExpired(event: { startsAt: Date; endsAt: Date | null; recurrence: RecurrenceRow | null }): boolean {
+export function eventGuestAccessExpired(event: { startsAt: Date; endsAt: Date | null; recurrence: RecurrenceRow | null }): boolean {
   let lastOccurrenceStart: Date | null = event.startsAt;
   if (event.recurrence) {
     // An open-ended series never runs out; a bounded one ends at its last

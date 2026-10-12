@@ -386,9 +386,8 @@ export async function sendEventGuestInviteEmail(params: {
     timezone: string | null;
     meetingUrl: string | null;
     livekitRoomName: string | null;
-    /** Null when Google Calendar already invites the guest (a Meet-backed private event) — attaching our own .ics too would put two entries on their calendar. */
-    icsContent: string | null;
-    icsFilename: string;
+    /** iTIP REQUEST invite for this guest; null when Google Calendar already invites them (a Meet-backed private event) — attaching ours too would put two entries on their calendar. */
+    ics: IcsAttachment | null;
   };
 }): Promise<SendResult> {
   const { to, hostName, hostEmail, note, event, joinInviteUrl } = params;
@@ -398,7 +397,7 @@ export async function sendEventGuestInviteEmail(params: {
   const joinInviteHtml = joinInviteUrl
     ? `<p>${escapeHtml(hostName)} also thinks you'd be a good fit for NASIHA, a member-driven community for sharing knowledge and peer feedback. If you're interested, <a href="${joinInviteUrl}">apply to join here</a>.</p>`
     : "";
-  const calendarLine = event.icsContent
+  const calendarLine = event.ics
     ? "We've attached a calendar invite so it's on your calendar."
     : "You'll also get a calendar invitation from Google Calendar.";
   if (!resend) {
@@ -445,15 +444,7 @@ export async function sendEventGuestInviteEmail(params: {
         ${joinInviteHtml}
         <p>— The NASIHA Team</p>
       </div>`,
-      attachments: event.icsContent
-        ? [
-            {
-              filename: event.icsFilename,
-              content: Buffer.from(event.icsContent, "utf-8"),
-              contentType: "text/calendar",
-            },
-          ]
-        : undefined,
+      attachments: event.ics ? [toEmailAttachment(event.ics)] : undefined,
     });
     if (error) {
       console.error("[email] Resend rejected guest invite email", error);

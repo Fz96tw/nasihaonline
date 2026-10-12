@@ -4,8 +4,15 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { EventVisibility, EventRegistrationSource, Role } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
-import { buildEventIcs, EventError, syncGoogleCalendarAttendees, updateEventInvitees } from "@/lib/events-server";
-import { sendEventGuestInviteEmail, sendEventRegistrationConfirmationEmail } from "@/lib/email";
+import {
+  buildEventIcs,
+  buildEventInviteAttachment,
+  EventError,
+  eventGuestAccessExpired,
+  syncGoogleCalendarAttendees,
+  updateEventInvitees,
+} from "@/lib/events-server";
+import { sendEventGuestInviteEmail, sendEventLifecycleEmail, sendEventRegistrationConfirmationEmail } from "@/lib/email";
 import { parseGuestAddress, splitGuestAddresses } from "@/lib/guest-address";
 import { guestJoinInviteUrl } from "@/lib/guest-membership";
 
@@ -68,7 +75,7 @@ const eventSelect = {
   livekitRoomName: true,
   googleEventId: true,
   guestLinkToken: true,
-  recurrence: { select: { id: true } },
+  recurrence: { select: { frequency: true, interval: true, byWeekday: true, until: true } },
 } as const;
 
 type GuestEvent = NonNullable<Awaited<ReturnType<typeof loadEvent>>>;
@@ -240,13 +247,44 @@ async function deliverInvite(
       timezone: event.timezone,
       meetingUrl: event.meetingUrl,
       livekitRoomName: event.livekitRoomName,
-      ...buildIcsFor(event),
       // A Meet-backed restricted event lists its guests on the Google
       // Calendar event (syncGoogleCalendarAttendees), and Google sends them
       // its own invite — attaching ours too would double the calendar entry.
-      ...(isRestricted(event) && event.googleEventId ? { icsContent: null } : {}),
+      ics: googleInvitesGuests(event) ? null : guestCalendarInvite(event, registration, "REQUEST"),
     },
   });
+}
+
+/** Google Calendar, not us, sends this event's guests their invite/cancellation. */
+function googleInvitesGuests(event: GuestEvent) {
+  return isRestricted(event) && event.googleEventId !== null;
+}
+
+/**
+ * A real iTIP invite (METHOD/ORGANIZER/ATTENDEE, same UID every time), so a
+ * later CANCEL for the same guest removes the entry the invitation created —
+ * a plain "add to calendar" file can't be withdrawn that way.
+ */
+function guestCalendarInvite(
+  event: GuestEvent,
+  guest: { email: string; name?: string | null },
+  method: "REQUEST" | "CANCEL",
+) {
+  return buildEventInviteAttachment(
+    {
+      id: event.id,
+      title: event.title,
+      description: event.description,
+      startsAt: event.startsAt,
+      endsAt: event.endsAt,
+      meetingUrl: event.meetingUrl,
+      livekitRoomName: event.livekitRoomName,
+      recurrence: event.recurrence,
+      recurrenceAnchor: event.startsAt,
+    },
+    method,
+    { email: guest.email, name: guest.name ?? null },
+  );
 }
 
 /**
@@ -427,7 +465,7 @@ async function inviteMemberInstead(
 async function loadGuest(eventId: string, registrationId: string) {
   const registration = await db.eventRegistration.findUnique({
     where: { id: registrationId },
-    select: { id: true, eventId: true, email: true, source: true, revokedAt: true, inviteToJoin: true },
+    select: { id: true, eventId: true, email: true, name: true, source: true, revokedAt: true, inviteToJoin: true },
   });
   if (!registration || registration.eventId !== eventId || registration.source === EventRegistrationSource.public) {
     throw new EventError(404, "Guest not found.");
@@ -478,8 +516,21 @@ export async function revokeGuest(eventId: string, actingUser: UserModel, regist
     throw new EventError(403, "Only the event's host or an admin can manage guest invitations.");
   }
   const registration = await loadGuest(eventId, registrationId);
+  if (registration.revokedAt) return;
   await db.eventRegistration.update({ where: { id: registration.id }, data: { revokedAt: new Date() } });
-  if (isRestricted(event)) await syncGoogleCalendarAttendees(eventId);
+  if (googleInvitesGuests(event)) {
+    // Taking them off the Google event makes Google send the cancellation.
+    await syncGoogleCalendarAttendees(eventId);
+    return;
+  }
+  // Nothing to withdraw from someone who can no longer attend anyway.
+  if (event.cancelledAt || eventGuestAccessExpired(event)) return;
+  const host = await db.user.findUnique({ where: { id: event.hostId }, select: { name: true } });
+  await sendEventLifecycleEmail(registration.email, registration.name ?? "there", {
+    subject: `Invitation withdrawn: ${event.title}`,
+    message: `${host?.name ?? "The host"} has removed you from "${event.title}", so your invitation and join link no longer work. We've attached a calendar update that removes it from your calendar.`,
+    ics: guestCalendarInvite(event, registration, "CANCEL"),
+  });
 }
 
 function tokensMatch(expected: string | null, provided: string): boolean {

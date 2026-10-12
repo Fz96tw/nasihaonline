@@ -195,12 +195,48 @@ describe("Event guests (DB-backed)", { skip }, () => {
     assert.equal(await db.eventRegistration.count({ where: { eventId: draft.id, source: "invited" } }), 2);
   });
 
-  it("rejects a revoked guest", async () => {
+  it("withdraws a removed guest: link rejected, one cancellation email", async () => {
     await db.event.update({
       where: { id: eventId },
       data: { startsAt: new Date(Date.now() + HOUR), endsAt: new Date(Date.now() + 2 * HOUR) },
     });
-    await guests.revokeGuest(eventId, host, janeRid);
+    // With RESEND_API_KEY unset every send is logged as skipped — count those.
+    const skipped: string[] = [];
+    const warn = console.warn;
+    console.warn = (message: unknown) => void skipped.push(String(message));
+    try {
+      await guests.revokeGuest(eventId, host, janeRid);
+      await guests.revokeGuest(eventId, host, janeRid); // already removed: no second email
+    } finally {
+      console.warn = warn;
+    }
+    assert.equal(skipped.filter((line) => line.includes("lifecycle email to jane@guest.test")).length, 1);
     await rejects(status(janeRid), { status: 403 });
+
+    // The invitation and the cancellation are the same calendar entry.
+    const event = await db.event.findUniqueOrThrow({ where: { id: eventId } });
+    const fields = { ...event, livekitRoomName: null };
+    const invite = events.buildEventInviteAttachment(fields, "REQUEST", { email: "jane@guest.test", name: null });
+    const cancel = events.buildEventInviteAttachment(fields, "CANCEL", { email: "jane@guest.test", name: null });
+    assert.match(invite.content, /METHOD:REQUEST/);
+    assert.match(cancel.content, /METHOD:CANCEL/);
+    const uid = (ics: string) => /UID:(.+)/.exec(ics)?.[1];
+    assert.equal(uid(invite.content), uid(cancel.content));
+  });
+
+  it("leaves a Meet-backed private event's removals to Google", async () => {
+    await db.event.update({ where: { id: eventId }, data: { googleEventId: "google-test" } });
+    const kim = await db.eventRegistration.create({
+      data: { eventId, email: "kim@guest.test", source: "invited", invitedById: host.id, invitedAt: new Date() },
+    });
+    const skipped: string[] = [];
+    const warn = console.warn;
+    console.warn = (message: unknown) => void skipped.push(String(message));
+    try {
+      await guests.revokeGuest(eventId, host, kim.id);
+    } finally {
+      console.warn = warn;
+    }
+    assert.equal(skipped.filter((line) => line.includes("kim@guest.test")).length, 0);
   });
 });
