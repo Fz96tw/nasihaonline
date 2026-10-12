@@ -432,7 +432,7 @@ export function MeetingWaitingRoom({
             <div className="flex w-full flex-col gap-3 rounded-lg border p-4 text-left">
               <p className="text-sm font-medium">Before you join</p>
               <p className="text-xs text-muted-foreground">
-                This is a NASIHA community meeting, open to the public. By joining, you agree to the following:
+                This is a NASIHA community meeting, and you’re joining as a guest. By joining, you agree to the following:
               </p>
               {PUBLIC_MEETING_DISCLAIMER_SECTIONS.map((section) => (
                 <div key={section.heading}>

@@ -341,7 +341,13 @@ export function EventDetail({
 
       {roster ? (
         canEdit ? (
-          <ManageInvitees eventId={event.seriesId} initialRoster={roster} />
+          // Keyed on the roster so a server refresh (e.g. an emailed address
+          // that turned out to be a member) re-seeds its local state.
+          <ManageInvitees
+            key={roster.map((member) => member.userId).join(",")}
+            eventId={event.seriesId}
+            initialRoster={roster}
+          />
         ) : (
           <div className="flex flex-col gap-2 border-t pt-6">
             <h2 className="text-sm font-semibold">Invited members ({roster.length})</h2>
@@ -408,8 +414,8 @@ export function EventDetail({
         />
       ) : null}
 
-      {canEdit && event.open && event.visibility !== EventVisibility.invited && !event.cancelled && !isPast ? (
-        <ManageGuestInvites eventId={event.seriesId} />
+      {canEdit && (event.open || event.visibility === EventVisibility.invited) && !event.cancelled && !isPast ? (
+        <ManageGuestInvites eventId={event.seriesId} restricted={event.visibility === EventVisibility.invited} />
       ) : null}
 
       {canEdit && attendeeMessages ? (

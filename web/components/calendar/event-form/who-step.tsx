@@ -3,12 +3,14 @@
 import type { UseFormReturn } from "react-hook-form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EventVisibility } from "@/lib/generated/prisma/enums";
 import type { EventCategoryOption, EventCommunityOption } from "@/lib/events";
 import type { CreateEventValues } from "@/lib/validation/event";
 import { InviteePicker } from "@/components/members/invitee-picker";
+import { MAX_INVITES_PER_REQUEST } from "@/lib/event-guest-invite-limits";
 import { CategoryCheckboxField } from "@/components/shared/category-checkbox-field";
 import { AUDIENCE_DESCRIPTIONS, AUDIENCE_LABELS, type AudienceChoice } from "./shared";
 
@@ -76,7 +78,39 @@ export function WhoStep({
                 <InviteePicker value={field.value} onChange={field.onChange} excludeUserId={currentUserId} />
               </FormControl>
               <FormDescription>
-                Each invited member gets a notification and email asking them to RSVP.
+                Each invited member gets a notification and email asking them to RSVP. Optional if you add external
+                guests below.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
+
+      {isFirstSubmission && isRestricted && (
+        <FormField
+          control={form.control}
+          name="externalGuests"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>External guests (optional)</FormLabel>
+              <FormControl>
+                <Textarea
+                  rows={3}
+                  placeholder={"guest@example.com\nJane Doe <jane@example.com>"}
+                  {...field}
+                  onChange={(event) => {
+                    field.onChange(event);
+                    // Either list satisfies "invite at least one", so re-check the member picker's error too.
+                    void form.trigger("invitedUserIds");
+                  }}
+                />
+              </FormControl>
+              <FormDescription>
+                People who aren&apos;t members, one per line. Each gets an email invitation with a personal join link
+                when you publish — no account needed. Up to {MAX_INVITES_PER_REQUEST} here; add more, resend or remove
+                guests from the event page later. A saved draft doesn&apos;t keep this list. An address that belongs to a
+                member is added to the invited members instead.
               </FormDescription>
               <FormMessage />
             </FormItem>

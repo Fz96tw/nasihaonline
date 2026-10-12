@@ -31,6 +31,7 @@ const FIELD_STEP: Record<string, EventFieldStepId> = {
   open: "who",
   guestLinkEnabled: "who",
   invitedUserIds: "who",
+  externalGuests: "who",
   communityIds: "who",
   allCommunities: "who",
   categoryIds: "who",

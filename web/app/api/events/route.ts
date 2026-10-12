@@ -4,6 +4,8 @@ import { EventError, createEvent, getPublicUpcomingEvents } from "@/lib/events-s
 import { EVENT_SUBMISSION_TIERS, canTargetAllCommunities } from "@/lib/events";
 import { createEventSchema, draftEventSchema } from "@/lib/validation/event";
 import { enqueueEventIndexSync } from "@/lib/queues/search-index-queue";
+import { inviteExternalGuestsOnPublish } from "@/lib/event-guest-invites-server";
+import { EventVisibility } from "@/lib/generated/prisma/enums";
 
 // Public, unauthenticated route (§4.6) — not listed in middleware's
 // isProtectedApiRoute, and getPublicUpcomingEvents() never selects
@@ -94,6 +96,7 @@ export async function POST(request: Request) {
     timezone: formData.get("timezone") || null,
     visibility: formData.get("visibility") || "community",
     invitedUserIds,
+    externalGuests: formData.get("externalGuests") ?? "",
     coHostUserIds,
     communityIds: formData.getAll("communityIds"),
     allCommunities: formData.get("allCommunities") === "true",
@@ -133,7 +136,11 @@ export async function POST(request: Request) {
     // Only meaningful at publish time — a draft is never indexed anyway
     // (syncEventToIndex's own eligibility gate), so skip the queue write.
     if (mode === "publish") await enqueueEventIndexSync(event.id);
-    return NextResponse.json({ id: event.id }, { status: 201 });
+    const guestInviteProblems =
+      mode === "publish" && parsed.data.visibility === EventVisibility.invited
+        ? await inviteExternalGuestsOnPublish(event.id, user, parsed.data.externalGuests)
+        : [];
+    return NextResponse.json({ id: event.id, guestInviteProblems }, { status: 201 });
   } catch (error) {
     if (error instanceof EventError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

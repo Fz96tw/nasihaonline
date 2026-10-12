@@ -10,6 +10,7 @@ import { describeRecurrence } from "@/lib/recurrence";
 import type { CreateEventValues } from "@/lib/validation/event";
 import { AUDIENCE_LABELS, type AudienceChoice, type ExistingEvent } from "./shared";
 import { EVENT_STEPS, type EventFieldStepId, type EventStepStatuses } from "./steps";
+import { splitGuestAddresses } from "@/lib/guest-address";
 
 type Issues = Record<EventFieldStepId, { path: string; message: string }[]>;
 
@@ -171,6 +172,13 @@ export function ReviewStep({
         {isFirstSubmission && isRestricted && (
           <Row label="Invited">
             {values.invitedUserIds.length > 0 ? `${values.invitedUserIds.length} member(s)` : NOT_SET}
+          </Row>
+        )}
+        {isFirstSubmission && isRestricted && (
+          <Row label="External guests">
+            {splitGuestAddresses(values.externalGuests).length > 0
+              ? `${splitGuestAddresses(values.externalGuests).length} (emailed when you publish)`
+              : "None"}
           </Row>
         )}
         <Row label="Communities">{communityNames || NOT_SET}</Row>

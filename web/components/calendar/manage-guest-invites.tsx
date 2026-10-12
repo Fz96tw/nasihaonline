@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Check, Copy, Link2, Mail, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,20 +27,28 @@ interface GuestRow {
 
 interface GuestState {
   token: string | null;
+  linkAvailable: boolean;
   guests: GuestRow[];
 }
 
 type Outcome = { email: string; status: string; message?: string };
 
+/** Nothing left to retry: the invitation went out, or the address was a member and joined the invite list. */
+function isDone(outcome: Outcome) {
+  return outcome.status === "sent" || outcome.status === "member_invited";
+}
+
 /**
- * Host/admin panel on a public (`open`) event's detail page: the private
- * guest-invite link (copy / regenerate / turn off) and email invitations to
- * non-members, with the list of who was invited or joined by link. Rendered
- * by EventDetail for `canEdit` on an upcoming, non-restricted open event;
- * all authorisation is enforced by /api/events/:id/guest-link and
+ * Host/admin panel on a public (`open`) or restricted event's detail page:
+ * email invitations to non-members, with the list of who was invited or
+ * joined by link, plus — public events only — the private guest-invite link
+ * (copy / regenerate / turn off). A restricted event never gets the
+ * shareable link, so its email invitations don't wait on one being turned
+ * on. Rendered by EventDetail for `canEdit` on an upcoming event; all
+ * authorisation is enforced by /api/events/:id/guest-link and
  * /guest-invites, so this only reflects what the server allows.
  */
-export function ManageGuestInvites({ eventId }: { eventId: string }) {
+export function ManageGuestInvites({ eventId, restricted = false }: { eventId: string; restricted?: boolean }) {
   const [state, setState] = useState<GuestState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -48,6 +57,7 @@ export function ManageGuestInvites({ eventId }: { eventId: string }) {
   const [emailsText, setEmailsText] = useState("");
   const [note, setNote] = useState("");
   const [outcomes, setOutcomes] = useState<Outcome[] | null>(null);
+  const router = useRouter();
 
   const load = useCallback(async () => {
     try {
@@ -145,8 +155,10 @@ export function ManageGuestInvites({ eventId }: { eventId: string }) {
       const results = payload.outcomes as Outcome[];
       setOutcomes(results);
       // Keep only the addresses that didn't go out, so a retry doesn't re-send the rest.
-      setEmailsText(results.filter((r) => r.status !== "sent").map((r) => r.email).join("\n"));
+      setEmailsText(results.filter((r) => !isDone(r)).map((r) => r.email).join("\n"));
       await load();
+      // A member's address joined the invited-members list instead — refresh that roster.
+      if (results.some((r) => r.status === "member_invited")) router.refresh();
     });
   }
 
@@ -178,16 +190,17 @@ export function ManageGuestInvites({ eventId }: { eventId: string }) {
   return (
     <div className="flex flex-col gap-4 border-t pt-6">
       <div>
-        <h2 className="text-sm font-semibold">Guest invitations</h2>
+        <h2 className="text-sm font-semibold">{restricted ? "External guests" : "Guest invitations"}</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Bring in someone who isn&apos;t a member without sending them through public registration — share a private
-          link, or email them an invitation.
+          {restricted
+            ? "Invite people who aren't members by email. Each guest gets a personal join link (no account needed), and the event stays hidden from everyone else."
+            : "Bring in someone who isn't a member without sending them through public registration — share a private link, or email them an invitation."}
         </p>
       </div>
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 
-      {!state.token ? (
+      {state.linkAvailable && !state.token ? (
         <div>
           <Button size="sm" variant="outline" disabled={pending} onClick={enable}>
             <Link2 className="mr-1.5 h-4 w-4" />
@@ -196,35 +209,37 @@ export function ManageGuestInvites({ eventId }: { eventId: string }) {
         </div>
       ) : (
         <>
-          <div className="flex flex-col gap-2">
-            <p className="text-sm font-medium">Private guest link</p>
-            <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 truncate rounded border bg-muted px-2 py-1.5 text-xs">{guestUrl}</code>
-              <Button size="sm" variant="outline" onClick={copyLink}>
-                {copied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
-                {copied ? "Copied" : "Copy"}
-              </Button>
+          {state.linkAvailable && (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium">Private guest link</p>
+              <div className="flex items-center gap-2">
+                <code className="min-w-0 flex-1 truncate rounded border bg-muted px-2 py-1.5 text-xs">{guestUrl}</code>
+                <Button size="sm" variant="outline" onClick={copyLink}>
+                  {copied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                You can share this same link with as many people as you&apos;d like to invite. Each person enters their
+                own name and email to join. Only share it with people you trust, since anyone who has the link can join.
+              </p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" disabled={pending} onClick={regenerate}>
+                  <RefreshCw className="mr-1.5 h-4 w-4" />
+                  Regenerate link
+                </Button>
+                <Button size="sm" variant="ghost" disabled={pending} onClick={disable}>
+                  Turn off
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                <strong className="font-medium">Regenerate link</strong> creates a brand-new link. The previous link will
+                no longer work for anyone it was shared with, and anyone who already joined through it is removed. Guests
+                you invited by email keep their access. You don&apos;t need this to share the link with more people — use
+                it only if the link has been shared more widely than you intended.
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              You can share this same link with as many people as you&apos;d like to invite. Each person enters their
-              own name and email to join. Only share it with people you trust, since anyone who has the link can join.
-            </p>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" disabled={pending} onClick={regenerate}>
-                <RefreshCw className="mr-1.5 h-4 w-4" />
-                Regenerate link
-              </Button>
-              <Button size="sm" variant="ghost" disabled={pending} onClick={disable}>
-                Turn off
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              <strong className="font-medium">Regenerate link</strong> creates a brand-new link. The previous link will
-              no longer work for anyone it was shared with, and anyone who already joined through it is removed. Guests
-              you invited by email keep their access. You don&apos;t need this to share the link with more people — use
-              it only if the link has been shared more widely than you intended.
-            </p>
-          </div>
+          )}
 
           <div className="flex flex-col gap-2">
             <label htmlFor="guest-invite-emails" className="text-sm font-medium">
@@ -267,7 +282,7 @@ export function ManageGuestInvites({ eventId }: { eventId: string }) {
             {outcomes && (
               <ul className="flex flex-col gap-0.5 text-xs">
                 {outcomes.map((outcome) => (
-                  <li key={outcome.email} className={outcome.status === "sent" ? "text-muted-foreground" : "text-destructive"}>
+                  <li key={outcome.email} className={isDone(outcome) ? "text-muted-foreground" : "text-destructive"}>
                     {outcome.email} — {outcome.status === "sent" ? "invitation sent" : outcome.message}
                   </li>
                 ))}

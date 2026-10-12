@@ -57,6 +57,7 @@ const DEFAULT_VALUES: CreateEventValues = {
   timezone: null,
   visibility: EventVisibility.community,
   invitedUserIds: [],
+  externalGuests: "",
   coHostUserIds: [],
   communityIds: [],
   allCommunities: false,
@@ -192,6 +193,8 @@ export function SubmitEventForm({
           // initiative — this form section is hidden once isFirstSubmission
           // is false, so these are never sent for a real (non-draft) edit.
           invitedUserIds: existingEvent.invitedUserIds,
+          // Never stored on a draft — guests are only emailed at publish.
+          externalGuests: "",
           coHostUserIds: existingEvent.coHostUserIds,
           // Unlike invitedUserIds/coHostUserIds above, this IS genuinely
           // editable from this form — the event's real current tags, not
@@ -408,6 +411,7 @@ export function SubmitEventForm({
       if (isFirstSubmission) {
         formData.append("visibility", values.visibility);
         formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
+        if (isRestricted && values.externalGuests.trim()) formData.append("externalGuests", values.externalGuests);
         formData.append("coHostUserIds", JSON.stringify(values.coHostUserIds));
       }
       // Unlike invitedUserIds/coHostUserIds above, genuinely editable —
@@ -436,7 +440,15 @@ export function SubmitEventForm({
               : "Something went wrong. Please try again.",
         );
       }
-      const { id } = await res.json();
+      const { id, guestInviteProblems } = (await res.json()) as { id: string; guestInviteProblems?: string[] };
+      // The event itself was published either way — just say which external
+      // guests didn't get an invitation, so the host can retry from the
+      // event page's External guests panel.
+      if (guestInviteProblems && guestInviteProblems.length > 0) {
+        window.alert(
+          `Your event was published, but some external guests weren't invited:\n\n${guestInviteProblems.join("\n")}\n\nYou can retry from the event page.`,
+        );
+      }
       if (action === "draft" && existingEvent) {
         // Stays on this page, so what was just saved becomes the new "unchanged" baseline.
         savedRef.current = { message: meetingOrganizerMessage, hero: heroImage, waitingRoomImage: meetingOrganizerMessageImage };

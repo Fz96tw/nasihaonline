@@ -384,11 +384,15 @@ export async function sendEventGuestInviteEmail(params: {
     timezone: string | null;
     meetingUrl: string | null;
     livekitRoomName: string | null;
-    icsContent: string;
+    /** Null when Google Calendar already invites the guest (a Meet-backed private event) — attaching our own .ics too would put two entries on their calendar. */
+    icsContent: string | null;
     icsFilename: string;
   };
 }): Promise<SendResult> {
   const { to, hostName, hostEmail, note, event } = params;
+  const calendarLine = event.icsContent
+    ? "We've attached a calendar invite so it's on your calendar."
+    : "You'll also get a calendar invitation from Google Calendar.";
   if (!resend) {
     const error = "RESEND_API_KEY not set";
     console.warn(`[email] ${error} — skipping guest invite email to ${to}`);
@@ -418,11 +422,11 @@ export async function sendEventGuestInviteEmail(params: {
       bcc: hostEmail,
       replyTo: hostEmail,
       subject: `${hostName} invited you: ${event.title}`,
-      text: `${hostName} has invited you to "${event.title}" on ${when}, a NASIHA community event.${noteText}\n\nWe've attached a calendar invite so it's on your calendar.\n\n${joinLine}\n\nThis link is personal to you — please don't forward it. You can reply to this email to reach ${hostName}.\n\n— The NASIHA Team`,
+      text: `${hostName} has invited you to "${event.title}" on ${when}, a NASIHA community event.${noteText}\n\n${calendarLine}\n\n${joinLine}\n\nThis link is personal to you — please don't forward it. You can reply to this email to reach ${hostName}.\n\n— The NASIHA Team`,
       html: `<div>
         <p>${safeHost} has invited you to <strong>${safeTitle}</strong> on ${safeWhen}, a NASIHA community event.</p>
         ${noteHtml}
-        <p>We've attached a calendar invite so it's on your calendar.</p>
+        <p>${calendarLine}</p>
         ${
           joinUrl
             ? `<p><a href="${joinUrl}" style="display:inline-block;padding:12px 24px;background-color:#1d4ed8;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600">Join the meeting</a></p>
@@ -432,13 +436,15 @@ export async function sendEventGuestInviteEmail(params: {
         <p>This link is personal to you — please don't forward it. You can reply to this email to reach ${safeHost}.</p>
         <p>— The NASIHA Team</p>
       </div>`,
-      attachments: [
-        {
-          filename: event.icsFilename,
-          content: Buffer.from(event.icsContent, "utf-8"),
-          contentType: "text/calendar",
-        },
-      ],
+      attachments: event.icsContent
+        ? [
+            {
+              filename: event.icsFilename,
+              content: Buffer.from(event.icsContent, "utf-8"),
+              contentType: "text/calendar",
+            },
+          ]
+        : undefined,
     });
     if (error) {
       console.error("[email] Resend rejected guest invite email", error);

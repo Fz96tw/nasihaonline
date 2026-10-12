@@ -67,7 +67,7 @@ import { createForumPost } from "@/lib/forums-server";
 import { enqueueForumThreadIndexSync } from "@/lib/queues/search-index-queue";
 import { buildRRule, buildRRuleString, describeRecurrence, expandOccurrences, type RecurrenceInput } from "@/lib/recurrence";
 import { guestAccessExpired } from "@/lib/event-guest-access";
-import { guestDisplayName } from "@/lib/guest-address";
+import { guestDisplayName, splitGuestAddresses } from "@/lib/guest-address";
 import {
   deleteEventHeroImage,
   deleteMeetingMessageImage,
@@ -2046,6 +2046,8 @@ export async function createEvent(
     heroImage: File | null;
     visibility: EventVisibility;
     invitedUserIds: string[];
+    /** Restricted events: raw "External guests" text, emailed by the route after publish — only read here for the at-least-one-invitee check. */
+    externalGuests?: string;
     /** Recording Access initiative — members granted co-host (recording start/stop, managing further co-hosts) from creation. Optional, any visibility — unlike invitedUserIds. */
     coHostUserIds: string[];
     /** Community-based-categorization initiative, objective 5 — required, multi-select. */
@@ -2143,8 +2145,11 @@ export async function createEvent(
         select: { id: true, email: true, name: true },
       })
     : [];
-  if (!isDraft && isRestricted && invitedUsers.length === 0) {
-    throw new EventError(400, "Select at least one member to invite.");
+  // External guests count too — they're emailed by the route right after
+  // this publishes (inviteExternalGuestsOnPublish), so a restricted event
+  // can be just the host and someone from outside the membership.
+  if (!isDraft && isRestricted && invitedUsers.length === 0 && splitGuestAddresses(input.externalGuests ?? "").length === 0) {
+    throw new EventError(400, "Invite at least one member or external guest.");
   }
 
   // Recording Access initiative — unlike invitedUserIds, co-hosts apply to
@@ -2410,9 +2415,15 @@ export async function resendEventNotifications(
   // reminder to. `open` can never be true for a restricted event
   // (createEvent/updateEvent both block that combination), so this is
   // naturally empty on the isRestricted branch.
-  const registrations = !isRestricted && event.open
+  // A restricted event's only registrations are the host's emailed
+  // external guests, so they're reminded alongside its invited members.
+  const registrations = isRestricted || event.open
     ? await db.eventRegistration.findMany({
-        where: { eventId: event.id, revokedAt: null },
+        where: {
+          eventId: event.id,
+          revokedAt: null,
+          ...(isRestricted ? { source: EventRegistrationSource.invited } : {}),
+        },
         select: { id: true, email: true, name: true },
       })
     : [];
@@ -2465,7 +2476,7 @@ export async function resendEventNotifications(
           timezone: event.timezone,
           meetingUrl: event.meetingUrl,
           livekitRoomName: event.livekitRoomName,
-          link: `${APP_URL}/events/${event.id}`,
+          link: guestEventLink(event.id, event.visibility, registration.id),
         }),
       ),
     );
@@ -2510,7 +2521,7 @@ async function getEventAttendeeMessageRecipients(eventId: string, hostId: string
       where: { eventId, status: RSVPStatus.going, userId: { not: hostId } },
       select: { user: { select: { id: true, email: true, name: true } } },
     }),
-    db.eventRegistration.findMany({ where: { eventId, revokedAt: null }, select: { email: true, name: true } }),
+    db.eventRegistration.findMany({ where: { eventId, revokedAt: null }, select: { id: true, email: true, name: true } }),
   ]);
   const members = rsvps.map((rsvp) => rsvp.user);
   // A member who also registered as a guest with the same email gets one email.
@@ -2570,6 +2581,7 @@ export async function messageEventAttendees(
       endsAt: true,
       timezone: true,
       hostId: true,
+      visibility: true,
       cancelledAt: true,
       publishedAt: true,
     },
@@ -2621,7 +2633,7 @@ export async function messageEventAttendees(
         eventTitle: event.title,
         startsAt: event.startsAt,
         timezone: event.timezone,
-        link: `${APP_URL}/events/${event.id}`,
+        link: guestEventLink(event.id, event.visibility, guest.id),
       }),
     ),
     // Confirmation copies — one email each, not one per attendee (the sends
@@ -3318,6 +3330,8 @@ export async function publishEventDraft(
     heroImage: File | null;
     visibility: EventVisibility;
     invitedUserIds: string[];
+    /** Restricted events: raw "External guests" text, emailed by the route after publish — only read here for the at-least-one-invitee check. */
+    externalGuests?: string;
     coHostUserIds: string[];
     communityIds: string[];
     categoryIds: string[];
@@ -3404,8 +3418,8 @@ export async function publishEventDraft(
         select: { id: true, email: true, name: true },
       })
     : [];
-  if (isRestricted && invitedUsers.length === 0) {
-    throw new EventError(400, "Select at least one member to invite.");
+  if (isRestricted && invitedUsers.length === 0 && splitGuestAddresses(input.externalGuests ?? "").length === 0) {
+    throw new EventError(400, "Invite at least one member or external guest.");
   }
 
   const coHostUsers = await db.user.findMany({
@@ -3752,15 +3766,7 @@ export async function updateEventInvitees(
   ]);
 
   if (event.googleEventId && (newInvitees.length > 0 || removeCandidates.length > 0)) {
-    const currentInvitees = await db.eventInvitee.findMany({
-      where: { eventId },
-      select: { user: { select: { email: true, name: true } } },
-    });
-    const attendees = [
-      ...(host ? [{ email: host.email, name: hostName }] : []),
-      ...currentInvitees.map((invitee) => ({ email: invitee.user.email, name: invitee.user.name ?? "Member" })),
-    ];
-    await updateMeetingCalendarEventAttendees(event.googleEventId, attendees);
+    await syncGoogleCalendarAttendees(eventId);
   }
 
   await ensureCommunityMembership(
@@ -3769,6 +3775,36 @@ export async function updateEventInvitees(
   );
 
   return { added: newInvitees.length, removed: removeCandidates.length };
+}
+
+/**
+ * Re-sends a Google-backed event's full attendee list — host, invited
+ * members and, for a restricted event, its still-active emailed guests —
+ * after any of them changes. A no-op for an event with no Google Calendar
+ * event behind it (LiveKit/manual), whose invites are our own .ics emails.
+ * Public events' guests stay off the Google event: they keep getting our
+ * own .ics invite, as before external guests on restricted events existed.
+ */
+export async function syncGoogleCalendarAttendees(eventId: string): Promise<void> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { googleEventId: true, visibility: true, host: { select: { email: true, name: true } } },
+  });
+  if (!event?.googleEventId) return;
+  const [invitees, guests] = await Promise.all([
+    db.eventInvitee.findMany({ where: { eventId }, select: { user: { select: { email: true, name: true } } } }),
+    event.visibility === EventVisibility.invited
+      ? db.eventRegistration.findMany({
+          where: { eventId, source: EventRegistrationSource.invited, revokedAt: null },
+          select: { email: true, name: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  await updateMeetingCalendarEventAttendees(event.googleEventId, [
+    { email: event.host.email, name: event.host.name ?? "A member" },
+    ...invitees.map((invitee) => ({ email: invitee.user.email, name: invitee.user.name ?? "Member" })),
+    ...guests.map((guest) => ({ email: guest.email, name: guest.name ?? "Guest" })),
+  ]);
 }
 
 /**
@@ -3808,7 +3844,7 @@ async function notifyEventAudience(
       where: { eventId, status: RSVPStatus.going },
       select: { userId: true, user: { select: { email: true, name: true } } },
     }),
-    db.eventRegistration.findMany({ where: { eventId, revokedAt: null }, select: { email: true, name: true } }),
+    db.eventRegistration.findMany({ where: { eventId, revokedAt: null }, select: { id: true, email: true, name: true } }),
   ]);
 
   // Invitees ∪ RSVP'd members, deduped by userId — a restricted-event
@@ -3857,7 +3893,13 @@ async function notifyEventAudience(
         sendEventLifecycleEmail(registration.email, registration.name ?? "there", {
           subject: notification.subject,
           message: notification.message,
-          link: `${APP_URL}/events`,
+          // A cancelled event's pages all 404, so a restricted event's guest
+          // (who has no public listing to land on) gets no link at all.
+          link: isRestricted
+            ? notification.type === NotificationType.event_cancelled
+              ? undefined
+              : guestEventLink(eventId, visibility, registration.id)
+            : `${APP_URL}/events`,
           ics: icsFor(registration, true),
         }),
       ),
@@ -4585,6 +4627,17 @@ export async function getEventIcs(
  * for *this* event or the caller is rejected — same shape as the existing
  * RSVP'd-or-host gate for a signed-in non-host below.
  */
+/**
+ * Where an email to an anonymous registrant points. A public event's page
+ * is on /events; a restricted event has no public page (it 404s there), so
+ * its emailed guests are sent to their personal meeting page instead.
+ */
+function guestEventLink(eventId: string, visibility: EventVisibility, registrationId: string): string {
+  return visibility === EventVisibility.invited
+    ? `${APP_URL}/meet/event/${eventId}?rid=${encodeURIComponent(registrationId)}`
+    : `${APP_URL}/events/${eventId}`;
+}
+
 /** Whether guest (`rid`) access to this event has lapsed — see lib/event-guest-access.ts. */
 function eventGuestAccessExpired(event: { startsAt: Date; endsAt: Date | null; recurrence: RecurrenceRow | null }): boolean {
   let lastOccurrenceStart: Date | null = event.startsAt;
@@ -4619,7 +4672,7 @@ export async function getEventMeetingStatus(
   /** The host's User.id, matching the `identity` LiveKit issues them (mintLiveKitToken) — lets the client's participant list identify which roster row is the host, distinct from `organizerName` (a display name, not an identity). */
   hostId: string;
   configured: boolean;
-  /** Open events are reachable by never-vetted anonymous registrants (no membership application, so no prior Code of Conduct agreement) — gates the actual Meet redirect on a click-through agreement. Community/invited events skip this: every attendee there is already a member who agreed once at /join. */
+  /** True for an anonymous guest (open-event registrant, or an emailed guest of an open or restricted event) — never vetted through a membership application, so no prior Code of Conduct agreement; gates the actual join on a click-through agreement. Signed-in members skip it: they already agreed once at /join. */
   requiresCodeOfConductAgreement: boolean;
   /** `"<name> (guest)"` resolved from `registrationId` for an anonymous caller — never their email, since it's what every other participant sees (LiveKit display name, chat author). Null for a signed-in caller (their own User.name is used instead, see the token route). */
   guestName: string | null;
@@ -4659,13 +4712,25 @@ export async function getEventMeetingStatus(
   let guestName: string | null = null;
   let guestNamePrompt: { suggestedName: string | null } | null = null;
   if (userId === null) {
-    if (!event.open) throw new EventError(403, "Sign in to view this meeting.", true);
+    // Anonymous access is a registration (`rid`): any kind on an open event,
+    // only a host's email invitation on a restricted one (which has no
+    // public registration or shareable link). Everything else — a
+    // members-only event, or a restricted event without a valid invitation —
+    // is "sign in", since a member might be on its list.
+    const isRestrictedEvent = event.visibility === EventVisibility.invited;
+    if (!event.open && !isRestrictedEvent) throw new EventError(403, "Sign in to view this meeting.", true);
     const registration = registrationId
       ? await db.eventRegistration.findUnique({
           where: { id: registrationId },
           select: { eventId: true, name: true, source: true, revokedAt: true, joinedAt: true },
         })
       : null;
+    if (
+      isRestrictedEvent &&
+      (!registration || registration.eventId !== eventId || registration.source !== EventRegistrationSource.invited)
+    ) {
+      throw new EventError(403, "Sign in to view this meeting.", true);
+    }
     if (!registration || registration.eventId !== eventId) {
       throw new EventError(403, "Register for this event to view the meeting.");
     }
@@ -4703,12 +4768,18 @@ export async function getEventMeetingStatus(
     // invalid/revoked — they simply fall through to the normal member rules.
     // They still join under their own member identity, not the guest's.
     let hasGuestAccess = false;
-    if (rsvp?.status !== RSVPStatus.going && registrationId && event.open) {
+    if (rsvp?.status !== RSVPStatus.going && registrationId && (event.open || event.visibility === EventVisibility.invited)) {
       const guest = await db.eventRegistration.findUnique({
         where: { id: registrationId },
-        select: { eventId: true, revokedAt: true, joinedAt: true },
+        select: { eventId: true, source: true, revokedAt: true, joinedAt: true },
       });
-      if (guest && guest.eventId === eventId && !guest.revokedAt && !guestAccessOver()) {
+      if (
+        guest &&
+        guest.eventId === eventId &&
+        (event.open || guest.source === EventRegistrationSource.invited) &&
+        !guest.revokedAt &&
+        !guestAccessOver()
+      ) {
         hasGuestAccess = true;
         if (!guest.joinedAt) {
           await db.eventRegistration.updateMany({
@@ -4746,7 +4817,9 @@ export async function getEventMeetingStatus(
     isHostOrCoHost,
     hostId: event.hostId,
     configured: event.meetingUrl !== null || event.livekitRoomName !== null,
-    requiresCodeOfConductAgreement: event.open,
+    // Anonymous guests only — every signed-in attendee is a member who
+    // already agreed at /join.
+    requiresCodeOfConductAgreement: userId === null,
     guestName,
     guestNamePrompt,
   };

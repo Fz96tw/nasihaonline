@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { EventType, EventVisibility, RecurrenceFrequency } from "@/lib/generated/prisma/enums";
+import { MAX_INVITES_PER_REQUEST } from "@/lib/event-guest-invite-limits";
+import { splitGuestAddresses } from "@/lib/guest-address";
 
 // Shared by createEventSchema and updateEventSchema below — startsAt/endsAt
 // are ISO strings (converted from the browser's datetime-local input
@@ -79,6 +81,7 @@ function requireRestrictedEventInvariants(
   data: {
     visibility: EventVisibility;
     invitedUserIds: string[];
+    externalGuests: string;
     meetLinkSource: "auto" | "manual" | "livekit";
     meetingUrl: string | null;
     open: boolean;
@@ -86,6 +89,7 @@ function requireRestrictedEventInvariants(
   ctx: z.RefinementCtx,
 ) {
   if (data.visibility !== EventVisibility.invited) return;
+  const externalGuestCount = splitGuestAddresses(data.externalGuests).length;
 
   // "Open to the public" gates the anonymous /events registration flow —
   // nonsensical for an event that's simultaneously restricted to a named
@@ -99,11 +103,20 @@ function requireRestrictedEventInvariants(
       message: "Restricted events can't be open to the public.",
     });
   }
-  if (data.invitedUserIds.length === 0) {
+  // A restricted event can be just the host and outside guests — the
+  // "meet privately with a non-member" case — so either list satisfies this.
+  if (data.invitedUserIds.length === 0 && externalGuestCount === 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["invitedUserIds"],
-      message: "Select at least one member to invite.",
+      message: "Invite at least one member or external guest.",
+    });
+  }
+  if (externalGuestCount > MAX_INVITES_PER_REQUEST) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["externalGuests"],
+      message: `You can invite up to ${MAX_INVITES_PER_REQUEST} external guests here — add more from the event page afterwards.`,
     });
   }
   if (data.meetLinkSource === "manual" && !data.meetingUrl) {
@@ -165,6 +178,10 @@ export const createEventSchema = eventFieldsSchema
   .extend({
     visibility: z.nativeEnum(EventVisibility),
     invitedUserIds: z.array(z.string()),
+    // Restricted events only: free text of email addresses (optionally
+    // `Name <email>`), split by splitGuestAddresses. Invited by email once
+    // the event is published (inviteGuestsByEmail) — never stored on a draft.
+    externalGuests: z.string().max(10_000),
     // Recording Access initiative — who besides the host can start/stop
     // LiveKit recording and manage further co-hosts. Unlike invitedUserIds,
     // valid for any visibility and always optional — no invariant enforces
@@ -212,6 +229,7 @@ export const draftEventSchema = eventFieldsSchema
   .extend({
     visibility: z.nativeEnum(EventVisibility),
     invitedUserIds: z.array(z.string()),
+    externalGuests: z.string().max(10_000),
     coHostUserIds: z.array(z.string()),
     meetLinkSource: z.enum(["auto", "manual", "livekit"]),
     recurrence: recurrenceInputSchema,

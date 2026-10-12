@@ -4,12 +4,13 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { EventVisibility, EventRegistrationSource, Role } from "@/lib/generated/prisma/enums";
 import type { UserModel } from "@/lib/generated/prisma/models/User";
-import { buildEventIcs, EventError } from "@/lib/events-server";
+import { buildEventIcs, EventError, syncGoogleCalendarAttendees, updateEventInvitees } from "@/lib/events-server";
 import { sendEventGuestInviteEmail, sendEventRegistrationConfirmationEmail } from "@/lib/email";
-import { parseGuestAddress } from "@/lib/guest-address";
+import { parseGuestAddress, splitGuestAddresses } from "@/lib/guest-address";
 
 /**
- * Private guest-invite link + invite-by-email for `open` events.
+ * Private guest-invite link + invite-by-email for `open` events, and
+ * invite-by-email (no shareable link) for restricted (`invited`) events.
  *
  * Everything an anonymous guest does after getting in still keys on an
  * EventRegistration id (`?rid=`), re-validated by getEventMeetingStatus on
@@ -45,6 +46,8 @@ export interface GuestInviteRow {
 export interface GuestLinkState {
   /** Null when the feature is off for this event. */
   token: string | null;
+  /** False for a restricted event — email invitations only, never a shareable link. */
+  linkAvailable: boolean;
   guests: GuestInviteRow[];
 }
 
@@ -62,6 +65,7 @@ const eventSelect = {
   publishedAt: true,
   meetingUrl: true,
   livekitRoomName: true,
+  googleEventId: true,
   guestLinkToken: true,
   recurrence: { select: { id: true } },
 } as const;
@@ -72,12 +76,25 @@ function loadEvent(eventId: string) {
   return db.event.findUnique({ where: { id: eventId }, select: eventSelect });
 }
 
-/** Whether this event may offer guest links/invites at all — open, public-visibility, published, live. */
-function assertGuestFeatureAllowed(event: GuestEvent | null): asserts event is GuestEvent {
+function isRestricted(event: { visibility: EventVisibility }) {
+  return event.visibility === EventVisibility.invited;
+}
+
+/**
+ * Whether this event may take guests at all — published, live, and either
+ * public (`open`) or restricted. The shareable link (`link: true`) is
+ * public-only: anyone can forward it, which a restricted event's named
+ * audience rules out; a restricted event only takes guests the host names
+ * by email.
+ */
+function assertGuestFeatureAllowed(event: GuestEvent | null, { link }: { link: boolean }): asserts event is GuestEvent {
   if (!event) throw new EventError(404, "Event not found.");
   if (event.cancelledAt) throw new EventError(400, "This event has been cancelled.");
-  if (!event.open || event.visibility === EventVisibility.invited) {
-    throw new EventError(400, "Guest links are only available for public events.");
+  if (link ? !event.open || isRestricted(event) : !event.open && !isRestricted(event)) {
+    throw new EventError(
+      400,
+      link ? "Guest links are only available for public events." : "Guests can only be invited to public or private events.",
+    );
   }
   if (!event.publishedAt) throw new EventError(400, "Publish this event before inviting guests.");
   // A recurring event's startsAt is only its anchor, so only a one-off can be "over".
@@ -86,13 +103,13 @@ function assertGuestFeatureAllowed(event: GuestEvent | null): asserts event is G
   }
 }
 
-async function loadManageable(eventId: string, actingUser: UserModel): Promise<GuestEvent> {
+async function loadManageable(eventId: string, actingUser: UserModel, { link }: { link: boolean }): Promise<GuestEvent> {
   const event = await loadEvent(eventId);
   if (!event) throw new EventError(404, "Event not found.");
   if (actingUser.role !== Role.admin && event.hostId !== actingUser.id) {
     throw new EventError(403, "Only the event's host or an admin can manage guest invitations.");
   }
-  assertGuestFeatureAllowed(event);
+  assertGuestFeatureAllowed(event, { link });
   return event;
 }
 
@@ -132,7 +149,7 @@ export async function getGuestLinkState(eventId: string, actingUser: UserModel):
     orderBy: { createdAt: "desc" },
     select: { id: true, email: true, name: true, source: true, invitedAt: true, joinedAt: true, revokedAt: true },
   });
-  return { token: event.guestLinkToken, guests: guests.map(rowOf) };
+  return { token: event.guestLinkToken, linkAvailable: !isRestricted(event), guests: guests.map(rowOf) };
 }
 
 /**
@@ -146,7 +163,7 @@ export async function enableGuestLink(
   actingUser: UserModel,
   { regenerate }: { regenerate: boolean },
 ): Promise<{ token: string }> {
-  const event = await loadManageable(eventId, actingUser);
+  const event = await loadManageable(eventId, actingUser, { link: true });
   if (event.guestLinkToken && !regenerate) return { token: event.guestLinkToken };
 
   const token = newToken();
@@ -178,7 +195,12 @@ export async function disableGuestLink(eventId: string, actingUser: UserModel): 
 
 export type GuestInviteOutcome =
   | { email: string; status: "sent" }
-  | { email: string; status: "invalid" | "duplicate" | "already_registered" | "revoked_guest" | "failed" | "limit"; message: string };
+  | { email: string; status: "member_invited"; message: string }
+  | {
+      email: string;
+      status: "invalid" | "duplicate" | "already_registered" | "revoked_guest" | "failed" | "limit" | "member_not_invitable";
+      message: string;
+    };
 
 function buildIcsFor(event: GuestEvent) {
   return {
@@ -215,6 +237,10 @@ async function deliverInvite(
       meetingUrl: event.meetingUrl,
       livekitRoomName: event.livekitRoomName,
       ...buildIcsFor(event),
+      // A Meet-backed restricted event lists its guests on the Google
+      // Calendar event (syncGoogleCalendarAttendees), and Google sends them
+      // its own invite — attaching ours too would double the calendar entry.
+      ...(isRestricted(event) && event.googleEventId ? { icsContent: null } : {}),
     },
   });
 }
@@ -232,8 +258,8 @@ export async function inviteGuestsByEmail(
   actingUser: UserModel,
   input: { emails: string[]; note?: string | null },
 ): Promise<GuestInviteOutcome[]> {
-  const event = await loadManageable(eventId, actingUser);
-  if (!event.guestLinkToken) {
+  const event = await loadManageable(eventId, actingUser, { link: false });
+  if (!isRestricted(event) && !event.guestLinkToken) {
     throw new EventError(400, "Turn on guest links for this event before inviting guests.");
   }
   if (input.emails.length === 0) throw new EventError(400, "Enter at least one email address.");
@@ -272,6 +298,21 @@ export async function inviteGuestsByEmail(
       continue;
     }
     seen.add(email);
+
+    // A restricted event's audience is its invite list — an address that
+    // belongs to a member joins that list (bell notification, member
+    // calendar, their own account in the meeting) instead of becoming an
+    // anonymous guest. Public events keep treating every address as a guest.
+    if (isRestricted(event)) {
+      const member = await db.user.findFirst({
+        where: { email: { equals: email, mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (member) {
+        outcomes.push(await inviteMemberInstead(event, actingUser, member.id, email));
+        continue;
+      }
+    }
 
     const existing = await db.eventRegistration.findFirst({
       where: { eventId, email: { equals: email, mode: "insensitive" } },
@@ -343,7 +384,36 @@ export async function inviteGuestsByEmail(
         : { email, status: "failed", message: "The email couldn't be sent. Try resending it." },
     );
   }
+  if (isRestricted(event) && outcomes.some((outcome) => outcome.status === "sent")) {
+    await syncGoogleCalendarAttendees(eventId);
+  }
   return outcomes;
+}
+
+async function inviteMemberInstead(
+  event: GuestEvent,
+  actingUser: UserModel,
+  memberId: string,
+  email: string,
+): Promise<GuestInviteOutcome> {
+  if (memberId === event.hostId) {
+    return { email, status: "member_not_invitable", message: "That's the host's own address." };
+  }
+  const already = await db.eventInvitee.findUnique({
+    where: { eventId_userId: { eventId: event.id, userId: memberId } },
+    select: { id: true },
+  });
+  if (already) return { email, status: "member_invited", message: "Already invited as a member." };
+  // updateEventInvitees applies the same Directory eligibility as the member
+  // picker and silently skips anyone outside it — surface that instead.
+  const { added } = await updateEventInvitees(event.id, actingUser, { addUserIds: [memberId], removeUserIds: [] });
+  return added > 0
+    ? { email, status: "member_invited", message: "This is a member — added to the invited members instead." }
+    : {
+        email,
+        status: "member_not_invitable",
+        message: "This address belongs to a member who can't be invited (not listed in the Directory).",
+      };
 }
 
 async function loadGuest(eventId: string, registrationId: string) {
@@ -363,7 +433,7 @@ export async function resendGuestInvite(
   actingUser: UserModel,
   registrationId: string,
 ): Promise<void> {
-  const event = await loadManageable(eventId, actingUser);
+  const event = await loadManageable(eventId, actingUser, { link: false });
   const registration = await loadGuest(eventId, registrationId);
   if (registration.source !== EventRegistrationSource.invited) {
     throw new EventError(400, "Only invited guests can be re-sent an invitation.");
@@ -401,6 +471,7 @@ export async function revokeGuest(eventId: string, actingUser: UserModel, regist
   }
   const registration = await loadGuest(eventId, registrationId);
   await db.eventRegistration.update({ where: { id: registration.id }, data: { revokedAt: new Date() } });
+  if (isRestricted(event)) await syncGoogleCalendarAttendees(eventId);
 }
 
 function tokensMatch(expected: string | null, provided: string): boolean {
@@ -418,7 +489,7 @@ async function loadForGuestLink(eventId: string, token: string) {
   const invalid = new EventError(404, "This invitation link is no longer valid.");
   if (!event || !tokensMatch(event.guestLinkToken, token)) throw invalid;
   try {
-    assertGuestFeatureAllowed(event);
+    assertGuestFeatureAllowed(event, { link: true });
   } catch {
     throw invalid;
   }
@@ -492,4 +563,29 @@ export async function joinViaGuestLink(
   });
 
   return { created, registrationId: created ? registration.id : null };
+}
+
+/**
+ * The create/publish form's "External guests" box for a restricted event —
+ * emailed once the event is actually published (a draft never stores the
+ * list). Returns one line per address that didn't go out, or the overall
+ * error, so the form can tell the host what to retry from the event page;
+ * never throws, since the event itself has already been published.
+ */
+export async function inviteExternalGuestsOnPublish(
+  eventId: string,
+  actingUser: UserModel,
+  externalGuests: string,
+): Promise<string[]> {
+  const emails = splitGuestAddresses(externalGuests);
+  if (emails.length === 0) return [];
+  try {
+    const outcomes = await inviteGuestsByEmail(eventId, actingUser, { emails });
+    return outcomes.flatMap((outcome) =>
+      outcome.status === "sent" || outcome.status === "member_invited" ? [] : [`${outcome.email} — ${outcome.message}`],
+    );
+  } catch (error) {
+    if (error instanceof EventError) return [error.message];
+    throw error;
+  }
 }

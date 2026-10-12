@@ -99,7 +99,7 @@ export const AUDIENCE_LABELS: Record<AudienceChoice, string> = {
 export const AUDIENCE_DESCRIPTIONS: Record<AudienceChoice, string> = {
   community: "Listed on /events, but only members can RSVP.",
   invited:
-    "Visible only to you and the invited members below — invisible to everyone else, including the public /events listing.",
+    "Visible only to you, the invited members and any external guests you add below — invisible to everyone else, including the public /events listing.",
   open: 'Listed on /events with a "Register" action for signed-out visitors, in addition to member RSVP.',
 };
 
