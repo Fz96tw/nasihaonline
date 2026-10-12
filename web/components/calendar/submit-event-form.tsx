@@ -193,8 +193,8 @@ export function SubmitEventForm({
           // initiative — this form section is hidden once isFirstSubmission
           // is false, so these are never sent for a real (non-draft) edit.
           invitedUserIds: existingEvent.invitedUserIds,
-          // Never stored on a draft — guests are only emailed at publish.
-          externalGuests: "",
+          // A draft keeps its typed list (emailed at publish); empty for a published event.
+          externalGuests: existingEvent.externalGuests,
           coHostUserIds: existingEvent.coHostUserIds,
           // Unlike invitedUserIds/coHostUserIds above, this IS genuinely
           // editable from this form — the event's real current tags, not

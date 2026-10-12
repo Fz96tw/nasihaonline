@@ -1304,6 +1304,10 @@ model Event {
   // migration, so there is no "grandfathered draft" the way Events had for
   // `communities`.
   publishedAt                     DateTime?
+  // Restricted-event drafts only: the form's raw "External guests" text,
+  // kept so a resumed draft still has it. Emailed (and cleared back to null)
+  // when the draft is published — never used to invite anyone before then.
+  draftExternalGuests             String?
   createdAt                       DateTime        @default(now())
   updatedAt                       DateTime        @updatedAt
   // What's New feed sort key for this event's row — starts at createdAt

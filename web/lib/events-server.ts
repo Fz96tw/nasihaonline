@@ -2259,6 +2259,7 @@ export async function createEvent(
         meetingOrganizerMessage: input.meetingOrganizerMessage,
         meetingOrganizerMessageImageKey,
         publishedAt: isDraft ? null : new Date(),
+        draftExternalGuests: isDraft && isRestricted ? input.externalGuests?.trim() || null : null,
         communities: { create: input.communityIds.map((communityId) => ({ communityId })) },
         categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
       },
@@ -2698,6 +2699,7 @@ export async function getEventForEdit(eventId: string) {
       meetingOrganizerMessage: true,
       meetingOrganizerMessageImageKey: true,
       publishedAt: true,
+      draftExternalGuests: true,
       recurrence: { select: RECURRENCE_SELECT },
       communities: { select: { communityId: true } },
       categories: { select: { categoryId: true } },
@@ -2724,6 +2726,7 @@ export async function getEventForEdit(eventId: string) {
     timezone: event.timezone,
     open: event.open,
     guestLinkEnabled: event.guestLinkToken !== null,
+    externalGuests: event.draftExternalGuests ?? "",
     meetingUrl: event.meetingUrl,
     meetLinkSource,
     heroImageUrl: getEventHeroImageUrl(event.heroImageUrl),
@@ -3132,6 +3135,8 @@ export async function saveEventDraft(
     heroImage: File | null;
     visibility: EventVisibility;
     invitedUserIds: string[];
+    /** Restricted events: raw "External guests" text, kept on the draft (Event.draftExternalGuests) until publish. */
+    externalGuests?: string;
     coHostUserIds: string[];
     communityIds: string[];
     categoryIds: string[];
@@ -3263,6 +3268,8 @@ export async function saveEventDraft(
         heroImageUrl,
         meetingUrl: input.meetingUrl,
         visibility: input.visibility,
+        draftExternalGuests:
+          input.visibility === EventVisibility.invited ? input.externalGuests?.trim() || null : null,
         deidentificationConfirmed: input.deidentificationConfirmed,
         meetingOrganizerMessage: input.meetingOrganizerMessage,
         meetingOrganizerMessageImageKey,
@@ -3500,6 +3507,9 @@ export async function publishEventDraft(
         googleEventId: provisioned.googleEventId,
         livekitRoomName: provisioned.livekitRoomName,
         visibility: input.visibility,
+        // Published now — the route emails these guests from the form's
+        // submitted text, so the stored copy is done with.
+        draftExternalGuests: null,
         deidentificationConfirmed: input.deidentificationConfirmed,
         meetingOrganizerMessage: input.meetingOrganizerMessage,
         meetingOrganizerMessageImageKey,

@@ -57,6 +57,7 @@ export default async function EditEventPage({ params }: { params: { eventId: str
           timezone: event.timezone,
           open: event.open,
           guestLinkEnabled: event.guestLinkEnabled,
+          externalGuests: event.externalGuests,
           meetingUrl: event.meetingUrl,
           meetLinkSource: event.meetLinkSource,
           heroImageUrl: event.heroImageUrl,

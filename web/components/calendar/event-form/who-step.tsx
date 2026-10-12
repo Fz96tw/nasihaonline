@@ -108,9 +108,9 @@ export function WhoStep({
               </FormControl>
               <FormDescription>
                 People who aren&apos;t members, one per line. Each gets an email invitation with a personal join link
-                when you publish — no account needed. Up to {MAX_INVITES_PER_REQUEST} here; add more, resend or remove
-                guests from the event page later. A saved draft doesn&apos;t keep this list. An address that belongs to a
-                member is added to the invited members instead.
+                when you publish — no account needed (saving a draft keeps the list without sending anything). Up to{" "}
+                {MAX_INVITES_PER_REQUEST} here; add more, resend or remove guests from the event page later. An address
+                that belongs to a member is added to the invited members instead.
               </FormDescription>
               <FormMessage />
             </FormItem>

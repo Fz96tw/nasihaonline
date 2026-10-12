@@ -156,6 +156,45 @@ describe("Event guests (DB-backed)", { skip }, () => {
     await rejects(status(janeRid), { status: 410 });
   });
 
+  it("keeps a draft's external guests until publish, then clears them", async () => {
+    const base = {
+      title: "Guest test draft",
+      description: null,
+      type: "roundtable" as const,
+      startsAt: new Date(Date.now() + 24 * HOUR).toISOString(),
+      endsAt: null,
+      open: false,
+      guestLinkEnabled: false,
+      meetingUrl: "https://meet.example.test/draft",
+      deidentificationConfirmed: false,
+      timezone: "UTC",
+      heroImage: null,
+      visibility: "invited" as const,
+      invitedUserIds: [],
+      externalGuests: "Sam Guest <sam@guest.test>",
+      coHostUserIds: [],
+      communityIds: [],
+      categoryIds: [],
+      meetLinkSource: "manual" as const,
+      meetingOrganizerMessage: null,
+      meetingOrganizerMessageImage: null,
+      recurrence: null,
+    };
+    const draft = await events.createEvent(host.id, base, "draft");
+    assert.equal((await events.getEventForEdit(draft.id))?.externalGuests, "Sam Guest <sam@guest.test>");
+    assert.equal(await db.eventRegistration.count({ where: { eventId: draft.id } }), 0);
+
+    await events.saveEventDraft(draft.id, host, { ...base, externalGuests: "sam@guest.test, kim@guest.test" });
+    assert.equal((await events.getEventForEdit(draft.id))?.externalGuests, "sam@guest.test, kim@guest.test");
+    assert.equal(await db.eventRegistration.count({ where: { eventId: draft.id } }), 0);
+
+    await events.publishEventDraft(draft.id, host, { ...base, externalGuests: "sam@guest.test, kim@guest.test" });
+    assert.equal((await events.getEventForEdit(draft.id))?.externalGuests, "");
+    // What the publish route does next (inviteExternalGuestsOnPublish).
+    await guests.inviteExternalGuestsOnPublish(draft.id, host, "sam@guest.test, kim@guest.test");
+    assert.equal(await db.eventRegistration.count({ where: { eventId: draft.id, source: "invited" } }), 2);
+  });
+
   it("rejects a revoked guest", async () => {
     await db.event.update({
       where: { id: eventId },

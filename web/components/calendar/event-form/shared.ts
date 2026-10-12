@@ -115,6 +115,8 @@ export type ExistingEvent = {
   open: boolean;
   /** Private guest-invite link is on (Event.guestLinkToken is set). */
   guestLinkEnabled: boolean;
+  /** Restricted-event draft's saved "External guests" text (Event.draftExternalGuests) — empty once published. */
+  externalGuests: string;
   meetingUrl: string | null;
   meetLinkSource: "auto" | "manual" | "livekit";
   heroImageUrl: string | null;
