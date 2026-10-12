@@ -307,8 +307,10 @@ describe("Event guests (DB-backed)", { skip }, () => {
     assert.equal(uid(invite.content), uid(cancel.content));
   });
 
-  it("leaves a Meet-backed private event's removals to Google", async () => {
-    await db.event.update({ where: { id: eventId }, data: { googleEventId: "google-test" } });
+  it("treats a legacy Google Meet event like any other: removal emails the guest", async () => {
+    // Google Meet is retired; an old row's googleEventId no longer hands
+    // invitations/cancellations off to Google.
+    await db.event.update({ where: { id: eventId }, data: { googleEventId: "legacy-google-event" } });
     const kim = await db.eventRegistration.create({
       data: { eventId, email: "kim@guest.test", source: "invited", invitedById: host.id, invitedAt: new Date() },
     });
@@ -320,6 +322,6 @@ describe("Event guests (DB-backed)", { skip }, () => {
     } finally {
       console.warn = warn;
     }
-    assert.equal(skipped.filter((line) => line.includes("kim@guest.test")).length, 0);
+    assert.equal(skipped.filter((line) => line.includes("lifecycle email to kim@guest.test")).length, 1);
   });
 });

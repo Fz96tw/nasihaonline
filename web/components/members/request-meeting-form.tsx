@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { DATETIME_LOCAL_STEP_SECONDS, snapDatetimeLocalValue } from "@/lib/datetime-input";
 import { getLocalTimeZoneAbbreviation } from "@/lib/timezone";
@@ -28,7 +27,6 @@ const formSchema = z.object({
     .min(1)
     .max(MAX_PROPOSED_TIMES),
   message: z.string().trim().max(1000).nullable(),
-  meetingPlatform: z.enum(["google_meet", "livekit"]),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -37,7 +35,6 @@ const DEFAULT_VALUES: FormValues = {
   topic: "",
   proposedTimes: [{ value: "" }],
   message: null,
-  meetingPlatform: "livekit",
 };
 
 /**
@@ -81,7 +78,6 @@ export function RequestMeetingForm({
           topic: values.topic,
           proposedTimes: values.proposedTimes.map((time) => new Date(time.value).toISOString()),
           message: values.message?.trim() ? values.message.trim() : null,
-          meetingPlatform: values.meetingPlatform,
         }),
       });
       if (!res.ok) {
@@ -184,29 +180,9 @@ export function RequestMeetingForm({
               )}
             </div>
 
-            <FormField
-              control={form.control}
-              name="meetingPlatform"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Meeting link</FormLabel>
-                  <FormControl>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="livekit">Nasiha Conference</SelectItem>
-                        <SelectItem value="google_meet">Google Meet</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormControl>
-                  <p className="text-xs text-muted-foreground">
-                    If accepted, the link is created once you&apos;ve settled on a time.
-                  </p>
-                </FormItem>
-              )}
-            />
+            <p className="text-xs text-muted-foreground">
+              If accepted, a Nasiha Conference video link is created once you&apos;ve settled on a time.
+            </p>
 
             <FormField
               control={form.control}

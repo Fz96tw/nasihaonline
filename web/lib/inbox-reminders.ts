@@ -1,5 +1,5 @@
 // No "server-only" guard: imported by scripts/worker.ts, which runs outside
-// Next's server runtime — same convention as lib/meeting-recordings-sync.ts.
+// Next's server runtime.
 import { db } from "@/lib/db";
 import { NotificationType } from "@/lib/generated/prisma/enums";
 import { sendInboxReminderEmail } from "@/lib/email";

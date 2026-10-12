@@ -39,15 +39,6 @@ import type {
 import { EVENTS_FORUM_SLUG } from "@/lib/forums";
 import { DIRECTORY_TIERS } from "@/lib/members";
 import { ensureCommunityMembership, getMemberCommunityContext, type MemberCommunityContext } from "@/lib/profile-server";
-import {
-  cancelMeetingCalendarEvent,
-  createMeetingCalendarEvent,
-  deleteMeetingRecording,
-  getMeetingRecordingDownloadUrl,
-  updateMeetingCalendarEventAttendees,
-  updateMeetingCalendarEventRecurrence,
-  updateMeetingCalendarEventTime,
-} from "@/lib/google-calendar";
 import { createLiveKitRoom, getRoomMetadata } from "@/lib/livekit";
 import { createNotification } from "@/lib/notifications-server";
 import { deleteRecordingObject } from "@/lib/recordings-storage";
@@ -109,38 +100,21 @@ function toRecurrenceInput(recurrence: RecurrenceRow): RecurrenceInput {
   };
 }
 
-function recurrenceInputsEqual(a: RecurrenceInput | null, b: RecurrenceInput | null): boolean {
-  if (a === null && b === null) return true;
-  if (a === null || b === null) return false;
-  const aWeekdays = [...a.byWeekday].sort((x, y) => x - y);
-  const bWeekdays = [...b.byWeekday].sort((x, y) => x - y);
-  return (
-    a.frequency === b.frequency &&
-    a.interval === b.interval &&
-    (a.until?.getTime() ?? null) === (b.until?.getTime() ?? null) &&
-    aWeekdays.length === bWeekdays.length &&
-    aWeekdays.every((day, index) => day === bWeekdays[index])
-  );
-}
-
 /**
  * Derives which meetLinkSource an already-created event is currently using
  * — there's no stored `meetLinkSource` column (only create-time input), so
- * this is inferred from which of the three underlying fields is populated.
- * Checked in this order since a livekit-backed event also carries a
- * googleEventId (the plain, non-Meet calendar entry
- * createLiveKitMeetingCalendarEvent creates alongside the room), so
- * googleEventId alone can't distinguish "auto" from "livekit". Shared by
- * getEventForEdit (to default the edit form's selector correctly) and
- * updateEvent (Meeting Platform Switching, to detect an actual change).
+ * this is inferred from which underlying field is populated. A legacy
+ * Google Meet event (auto-generated before Google Meet was retired; it
+ * still carries a googleEventId and its Meet meetingUrl) is just a stored
+ * link now, i.e. "manual". Shared by getEventForEdit (to default the edit
+ * form's selector correctly) and updateEvent (Meeting Platform Switching,
+ * to detect an actual change).
  */
 function deriveMeetLinkSource(event: {
   meetingUrl: string | null;
-  googleEventId: string | null;
   livekitRoomName: string | null;
-}): "auto" | "manual" | "livekit" | "none" {
+}): "manual" | "livekit" | "none" {
   if (event.livekitRoomName) return "livekit";
-  if (event.googleEventId) return "auto";
   if (event.meetingUrl) return "manual";
   return "none";
 }
@@ -1864,64 +1838,31 @@ async function emailEventBroadcast(
  * (an existing draft row being published, `existingEventId: eventId`).
  * `existingEventId` doubles as "the id this Event will actually have": when
  * null and meetLinkSource is "livekit", a fresh id is generated up front
- * (the Calendar invite needs to link to the in-app meeting page before the
- * Event row exists) and returned as `resolvedEventId` for the caller to
- * assign at insert time; when non-null (an already-existing row), that id
- * is reused as-is and `resolvedEventId` just echoes it back.
+ * (the LiveKit room is named after it before the Event row exists) and
+ * returned as `resolvedEventId` for the caller to assign at insert time;
+ * when non-null (an already-existing row), that id is reused as-is and
+ * `resolvedEventId` just echoes it back. A "manual" link is stored as typed.
  */
 async function provisionEventMeeting(input: {
-  meetLinkSource: "auto" | "manual" | "livekit";
+  meetLinkSource: "manual" | "livekit";
   meetingUrl: string | null;
   title: string;
-  startsAt: Date;
-  endsAt: Date | null;
-  description: string | null;
-  recurrenceRuleString: string | null;
-  timezone: string | null;
-  host: { email: string; name: string | null } | null;
-  hostName: string;
-  invitedUsers: { email: string; name: string | null }[];
+  hasHost: boolean;
   existingEventId: string | null;
 }): Promise<{
   meetingUrl: string | null;
-  googleEventId: string | null;
   livekitRoomName: string | null;
   resolvedEventId: string | null;
 }> {
-  let meetingUrl = input.meetingUrl;
-  let googleEventId: string | null = null;
-  let livekitRoomName: string | null = null;
   const preGeneratedEventId =
     input.existingEventId ?? (input.meetLinkSource === "livekit" ? randomUUID() : null);
-
-  if (input.meetLinkSource === "auto" && input.host) {
-    const attendees = [
-      { email: input.host.email, name: input.hostName },
-      ...input.invitedUsers.map((user) => ({ email: user.email, name: user.name ?? "Member" })),
-    ];
-    const created = await createMeetingCalendarEvent({
-      topic: input.title,
-      startsAt: input.startsAt,
-      durationMinutes: input.endsAt
-        ? Math.round((input.endsAt.getTime() - input.startsAt.getTime()) / 60_000)
-        : undefined,
-      attendees,
-      description: input.description ?? undefined,
-      recurrenceRule: input.recurrenceRuleString ?? undefined,
-      timeZone: input.timezone,
-    });
-    meetingUrl = created.meetingUrl;
-    googleEventId = created.googleEventId;
-  } else if (input.meetLinkSource === "livekit" && input.host && preGeneratedEventId) {
-    // No Google Calendar event for a LiveKit meeting: NASIHA emails its own
-    // invite (with an .ics) instead — see emailInvitedUsers and
-    // notifyEventAudience — so members don't get an "unknown sender" Google
-    // invite. Events created before this change still carry a googleEventId
-    // and keep syncing through Google (see the `googleEventId` checks below).
-    livekitRoomName = await createLiveKitRoom(preGeneratedEventId, input.title);
+  if (input.meetLinkSource === "livekit" && input.hasHost && preGeneratedEventId) {
+    // NASIHA emails its own invite (with an .ics) — see emailInvitedUsers
+    // and notifyEventAudience.
+    const livekitRoomName = await createLiveKitRoom(preGeneratedEventId, input.title);
+    return { meetingUrl: null, livekitRoomName, resolvedEventId: preGeneratedEventId };
   }
-
-  return { meetingUrl, googleEventId, livekitRoomName, resolvedEventId: preGeneratedEventId };
+  return { meetingUrl: input.meetingUrl, livekitRoomName: null, resolvedEventId: preGeneratedEventId };
 }
 
 /**
@@ -2013,9 +1954,8 @@ async function sendEventPublishEmails(params: {
  * `invited`, `invitedUserIds` becomes the event's EventInvitee list (a
  * community event ignores both `invitedUserIds` and `meetLinkSource`
  * entirely — same manual-only meetingUrl behavior as before this
- * objective). `meetLinkSource: "auto"` calls the same Google Meet
- * integration the 1:1 MeetingRequest flow uses; `"manual"` just stores
- * `input.meetingUrl` as-is, like every event before this objective did.
+ * objective). `meetLinkSource: "livekit"` creates a Nasiha Conference room;
+ * `"manual"` just stores `input.meetingUrl` as-is.
  *
  * Save as Draft initiative: `mode: "draft"` skips every completeness check
  * below (Case Discussion de-identification, restricted-visibility invitee
@@ -2055,7 +1995,7 @@ export async function createEvent(
     communityIds: string[];
     /** Optional, scoped in the UI to the chosen communities above. */
     categoryIds: string[];
-    meetLinkSource: "auto" | "manual" | "livekit";
+    meetLinkSource: "manual" | "livekit";
     /** Optional waiting-room greeting shown to attendees on /meet/event/[id] before Start (meeting-join-experience). */
     meetingOrganizerMessage: string | null;
     meetingOrganizerMessageImage: File | null;
@@ -2100,7 +2040,6 @@ export async function createEvent(
         until: recurrenceUntil,
       }
     : null;
-  const recurrenceRuleString = recurrenceInput ? buildRRuleString(recurrenceInput, startsAt) : null;
 
   // Belt-and-suspenders: createEventSchema already blocks an unconfirmed
   // Case Discussion client- and server-side, but this is the one place no
@@ -2200,14 +2139,12 @@ export async function createEvent(
     }
   }
 
-  // External network calls (Calendar/LiveKit) — kept outside the
-  // transaction below, same best-effort philosophy as
-  // createMeetingCalendarEvent's own callers. Skipped entirely for a draft
+  // External network call (LiveKit) — kept outside the transaction below,
+  // best-effort (createLiveKitRoom never throws). Skipped entirely for a draft
   // — no meeting is provisioned until it's actually published (see
   // publishEventDraft), so `meetingUrl` stays whatever manual value was
   // typed (or null) and no id is pre-generated.
   let meetingUrl = input.meetingUrl;
-  let googleEventId: string | null = null;
   let livekitRoomName: string | null = null;
   let resolvedEventId: string | null = null;
   let hostName = "A member";
@@ -2218,18 +2155,10 @@ export async function createEvent(
       meetLinkSource: input.meetLinkSource,
       meetingUrl: input.meetingUrl,
       title: input.title,
-      startsAt,
-      endsAt,
-      description: input.description,
-      recurrenceRuleString,
-      timezone: input.timezone,
-      host,
-      hostName,
-      invitedUsers,
+      hasHost: host !== null,
       existingEventId: null,
     });
     meetingUrl = provisioned.meetingUrl;
-    googleEventId = provisioned.googleEventId;
     livekitRoomName = provisioned.livekitRoomName;
     resolvedEventId = provisioned.resolvedEventId;
   }
@@ -2252,7 +2181,6 @@ export async function createEvent(
             : null,
         heroImageUrl,
         meetingUrl,
-        googleEventId,
         livekitRoomName,
         visibility: input.visibility,
         deidentificationConfirmed: input.deidentificationConfirmed,
@@ -2319,19 +2247,17 @@ export async function createEvent(
       hostName,
       startsAt,
       timezone: input.timezone,
-      icsEvent: googleEventId
-        ? undefined
-        : {
-            id: event.id,
-            title: input.title,
-            description: input.description,
-            startsAt,
-            endsAt,
-            meetingUrl,
-            livekitRoomName,
-            recurrence: recurrenceInput,
-            recurrenceAnchor: startsAt,
-          },
+      icsEvent: {
+        id: event.id,
+        title: input.title,
+        description: input.description,
+        startsAt,
+        endsAt,
+        meetingUrl,
+        livekitRoomName,
+        recurrence: recurrenceInput,
+        recurrenceAnchor: startsAt,
+      },
     });
 
     await ensureCommunityMembership(
@@ -2792,7 +2718,7 @@ export async function updateEvent(
     guestLinkEnabled: boolean;
     meetingUrl: string | null;
     /** Only meaningful when it differs from the event's current platform (derived from meetingUrl/googleEventId/livekitRoomName below) — otherwise this is just "manual" carried along unchanged, same value every edit re-submits. */
-    meetLinkSource: "auto" | "manual" | "livekit";
+    meetLinkSource: "manual" | "livekit";
     deidentificationConfirmed: boolean;
     timezone: string | null;
     heroImage: File | null;
@@ -2892,12 +2818,6 @@ export async function updateEvent(
         until: recurrenceUntil,
       }
     : null;
-  // Compared against the pre-update EventRecurrence fetched above (not the
-  // input object identity) so re-submitting the form with an unchanged
-  // repeat schedule never fires a needless Google Calendar patch below.
-  const priorRecurrence = event.recurrence ? toRecurrenceInput(event.recurrence) : null;
-  const recurrenceChanged = !recurrenceInputsEqual(recurrenceInput, priorRecurrence);
-  const recurrenceRuleString = recurrenceInput ? buildRRuleString(recurrenceInput, startsAt) : null;
 
   let heroImageUrl = event.heroImageUrl;
   if (input.heroImage) {
@@ -2924,9 +2844,8 @@ export async function updateEvent(
   }
 
   // Meeting Platform Switching — lets the host move an existing event
-  // between Nasiha Conference (LiveKit), Google Meet (auto), and a manual
-  // link after creation, mirroring createEvent's own meetLinkSource
-  // branching.
+  // between Nasiha Conference (LiveKit) and a manual link after creation,
+  // mirroring createEvent's own meetLinkSource branching.
   const currentMeetLinkSource = deriveMeetLinkSource(event);
   // "none" -> "manual" isn't a real platform switch, just a host typing a
   // link into a field that was previously empty — everything else
@@ -2938,50 +2857,14 @@ export async function updateEvent(
     !(currentMeetLinkSource === "none" && input.meetLinkSource === "manual");
 
   let meetingUrl = input.meetingUrl;
-  let googleEventId = event.googleEventId;
   let livekitRoomName = event.livekitRoomName;
 
   if (platformChanged) {
-    // Best-effort cleanup of whatever calendar event backed the old link —
-    // otherwise it lingers on every attendee's calendar as a stale invite
-    // once it's no longer the real meeting. A LiveKit room needs no
-    // equivalent cleanup call; an unused one just times out empty on its
-    // own (see createLiveKitRoom's comment).
-    if (event.googleEventId) {
-      await cancelMeetingCalendarEvent(event.googleEventId);
-    }
-
+    // A LiveKit room needs no cleanup call; an unused one just times out
+    // empty on its own (see createLiveKitRoom's comment).
     meetingUrl = null;
-    googleEventId = null;
     livekitRoomName = null;
-
-    const host = await db.user.findUnique({ where: { id: event.hostId }, select: { email: true, name: true } });
-    const hostName = host?.name ?? "A member";
-    // Same audience createEvent itself invites: host plus, for a restricted
-    // event, its current invitees — [] here for a community event, which
-    // naturally reduces the attendee list to "host only", identical to
-    // createEvent's own comment on this.
-    const attendees = host
-      ? [
-          { email: host.email, name: hostName },
-          ...event.invitees.map((invitee) => ({ email: invitee.user.email, name: invitee.user.name ?? "Member" })),
-        ]
-      : [];
-
-    if (input.meetLinkSource === "auto" && host) {
-      const created = await createMeetingCalendarEvent({
-        topic: input.title,
-        startsAt,
-        durationMinutes: endsAt ? Math.round((endsAt.getTime() - startsAt.getTime()) / 60_000) : undefined,
-        attendees,
-        description: input.description ?? undefined,
-        recurrenceRule: recurrenceRuleString ?? undefined,
-        timeZone: input.timezone,
-      });
-      meetingUrl = created.meetingUrl;
-      googleEventId = created.googleEventId;
-    } else if (input.meetLinkSource === "livekit" && host) {
-      // No Google Calendar event — see provisionEventMeeting.
+    if (input.meetLinkSource === "livekit") {
       livekitRoomName = await createLiveKitRoom(event.id, input.title);
     } else {
       meetingUrl = input.meetingUrl;
@@ -3020,8 +2903,10 @@ export async function updateEvent(
             : await resolveGuestLinkToken(tx, event.id, input.guestLinkEnabled && input.open, event.guestLinkToken),
         heroImageUrl,
         meetingUrl,
-        googleEventId,
         livekitRoomName,
+        // A legacy Google Meet event's calendar id is meaningless once it
+        // moves to another platform.
+        ...(platformChanged ? { googleEventId: null } : {}),
         deidentificationConfirmed: input.deidentificationConfirmed,
         meetingOrganizerMessage: input.meetingOrganizerMessage,
         meetingOrganizerMessageImageKey,
@@ -3069,27 +2954,6 @@ export async function updateEvent(
     await deleteMeetingMessageImage(event.meetingOrganizerMessageImageKey);
   }
 
-  // Keep the underlying Google Calendar event's time in sync so Meet-linked
-  // attendees' own calendars move too and Google emails them an updated
-  // invite — applies to any event with an auto-generated Meet link
-  // (googleEventId), not just restricted ones (see createEvent: Meet
-  // auto-generation isn't restricted-only). Best-effort, same non-fatal
-  // philosophy as every other Google call in this file. Skipped when
-  // platformChanged already created this googleEventId fresh just above,
-  // with the current startsAt/endsAt baked in from the start — patching it
-  // again here would be a redundant, harmless-but-wasteful extra API call.
-  if (timeChanged && googleEventId && !platformChanged) {
-    await updateMeetingCalendarEventTime(googleEventId, startsAt, endsAt, input.timezone);
-  }
-
-  // Keep the underlying Google Calendar event's recurrence in sync when the
-  // host changes (or adds/removes) the repeat schedule — same best-effort
-  // philosophy as the time sync above, same platformChanged skip as above
-  // (a freshly (re)created calendar event already carries the current rule).
-  if (recurrenceChanged && googleEventId && !platformChanged) {
-    await updateMeetingCalendarEventRecurrence(googleEventId, recurrenceRuleString);
-  }
-
   // Reschedule notification (Objective 03) — every visibility now notifies
   // its committed audience via notifyEventAudience (shared with
   // cancelEvent), not just restricted events.
@@ -3103,22 +2967,20 @@ export async function updateEvent(
         subject: `Rescheduled: ${input.title}`,
         message: `"${input.title}" has been rescheduled to ${when}.`,
       },
-      googleEventId
-        ? undefined
-        : {
-            method: "REQUEST",
-            event: {
-              id: event.id,
-              title: input.title,
-              description: input.description,
-              startsAt,
-              endsAt,
-              meetingUrl,
-              livekitRoomName,
-              recurrence: recurrenceInput,
-              recurrenceAnchor: startsAt,
-            },
-          },
+      {
+        method: "REQUEST",
+        event: {
+          id: event.id,
+          title: input.title,
+          description: input.description,
+          startsAt,
+          endsAt,
+          meetingUrl,
+          livekitRoomName,
+          recurrence: recurrenceInput,
+          recurrenceAnchor: startsAt,
+        },
+      },
     );
   }
 
@@ -3361,7 +3223,7 @@ export async function publishEventDraft(
     coHostUserIds: string[];
     communityIds: string[];
     categoryIds: string[];
-    meetLinkSource: "auto" | "manual" | "livekit";
+    meetLinkSource: "manual" | "livekit";
     meetingOrganizerMessage: string | null;
     meetingOrganizerMessageImage: File | null;
     recurrence: {
@@ -3423,7 +3285,6 @@ export async function publishEventDraft(
         until: recurrenceUntil,
       }
     : null;
-  const recurrenceRuleString = recurrenceInput ? buildRRuleString(recurrenceInput, startsAt) : null;
 
   if (input.type === EventType.case_discussion && !input.deidentificationConfirmed) {
     throw new EventError(400, "Case Discussion events require the de-identification confirmation.");
@@ -3490,14 +3351,7 @@ export async function publishEventDraft(
     meetLinkSource: input.meetLinkSource,
     meetingUrl: input.meetingUrl,
     title: input.title,
-    startsAt,
-    endsAt,
-    description: input.description,
-    recurrenceRuleString,
-    timezone: input.timezone,
-    host,
-    hostName,
-    invitedUsers,
+    hasHost: host !== null,
     existingEventId: event.id,
   });
 
@@ -3522,7 +3376,6 @@ export async function publishEventDraft(
             : null,
         heroImageUrl,
         meetingUrl: provisioned.meetingUrl,
-        googleEventId: provisioned.googleEventId,
         livekitRoomName: provisioned.livekitRoomName,
         visibility: input.visibility,
         // Published now — the route emails these guests from the form's
@@ -3586,19 +3439,17 @@ export async function publishEventDraft(
     hostName,
     startsAt,
     timezone: input.timezone,
-    icsEvent: provisioned.googleEventId
-      ? undefined
-      : {
-          id: updated.id,
-          title: input.title,
-          description: input.description,
-          startsAt,
-          endsAt,
-          meetingUrl: provisioned.meetingUrl,
-          livekitRoomName: provisioned.livekitRoomName,
-          recurrence: recurrenceInput,
-          recurrenceAnchor: startsAt,
-        },
+    icsEvent: {
+      id: updated.id,
+      title: input.title,
+      description: input.description,
+      startsAt,
+      endsAt,
+      meetingUrl: provisioned.meetingUrl,
+      livekitRoomName: provisioned.livekitRoomName,
+      recurrence: recurrenceInput,
+      recurrenceAnchor: startsAt,
+    },
   });
 
   await ensureCommunityMembership(
@@ -3752,25 +3603,21 @@ export async function updateEventInvitees(
     }
   });
 
-  // Best-effort, same rationale as every other email/Google call in this
-  // file — the DB rows already reflect the new invited list by this point.
-  // For an event with no Google Calendar event behind it, our own emails
-  // carry the calendar entry: an invite for a new invitee, a cancellation
-  // that removes it for a removed one. Google-backed events have Google do
-  // this itself (updateMeetingCalendarEventAttendees below).
-  const icsEvent: IcsEventFields | undefined = event.googleEventId
-    ? undefined
-    : {
-        id: eventId,
-        title: event.title,
-        description: event.description,
-        startsAt: event.startsAt,
-        endsAt: event.endsAt,
-        meetingUrl: null,
-        livekitRoomName: event.livekitRoomName,
-        recurrence: event.recurrence,
-        recurrenceAnchor: event.startsAt,
-      };
+  // Best-effort, same rationale as every other email call in this file —
+  // the DB rows already reflect the new invited list by this point. Our own
+  // emails carry the calendar entry: an invite for a new invitee, a
+  // cancellation that removes it for a removed one.
+  const icsEvent: IcsEventFields = {
+    id: eventId,
+    title: event.title,
+    description: event.description,
+    startsAt: event.startsAt,
+    endsAt: event.endsAt,
+    meetingUrl: null,
+    livekitRoomName: event.livekitRoomName,
+    recurrence: event.recurrence,
+    recurrenceAnchor: event.startsAt,
+  };
   await Promise.all([
     emailInvitedUsers(newInvitees, {
       eventId,
@@ -3794,46 +3641,12 @@ export async function updateEventInvitees(
       : Promise.resolve(),
   ]);
 
-  if (event.googleEventId && (newInvitees.length > 0 || removeCandidates.length > 0)) {
-    await syncGoogleCalendarAttendees(eventId);
-  }
-
   await ensureCommunityMembership(
     newInvitees.map((user) => user.id),
     event.communities.map((c) => c.communityId),
   );
 
   return { added: newInvitees.length, removed: removeCandidates.length };
-}
-
-/**
- * Re-sends a Google-backed event's full attendee list — host, invited
- * members and, for a restricted event, its still-active emailed guests —
- * after any of them changes. A no-op for an event with no Google Calendar
- * event behind it (LiveKit/manual), whose invites are our own .ics emails.
- * Public events' guests stay off the Google event: they keep getting our
- * own .ics invite, as before external guests on restricted events existed.
- */
-export async function syncGoogleCalendarAttendees(eventId: string): Promise<void> {
-  const event = await db.event.findUnique({
-    where: { id: eventId },
-    select: { googleEventId: true, visibility: true, host: { select: { email: true, name: true } } },
-  });
-  if (!event?.googleEventId) return;
-  const [invitees, guests] = await Promise.all([
-    db.eventInvitee.findMany({ where: { eventId }, select: { user: { select: { email: true, name: true } } } }),
-    event.visibility === EventVisibility.invited
-      ? db.eventRegistration.findMany({
-          where: { eventId, source: EventRegistrationSource.invited, revokedAt: null },
-          select: { email: true, name: true },
-        })
-      : Promise.resolve([]),
-  ]);
-  await updateMeetingCalendarEventAttendees(event.googleEventId, [
-    { email: event.host.email, name: event.host.name ?? "A member" },
-    ...invitees.map((invitee) => ({ email: invitee.user.email, name: invitee.user.name ?? "Member" })),
-    ...guests.map((guest) => ({ email: guest.email, name: guest.name ?? "Guest" })),
-  ]);
 }
 
 /**
@@ -3990,27 +3803,21 @@ export async function cancelEvent(
       subject: `Cancelled: ${event.title}`,
       message: `${actingUser.name ?? "The host"} cancelled "${event.title}".`,
     },
-    event.googleEventId
-      ? undefined
-      : {
-          method: "CANCEL",
-          event: {
-            id: eventId,
-            title: event.title,
-            description: event.description,
-            startsAt: event.startsAt,
-            endsAt: event.endsAt,
-            meetingUrl: event.meetingUrl,
-            livekitRoomName: event.livekitRoomName,
-            recurrence: event.recurrence,
-            recurrenceAnchor: event.startsAt,
-          },
-        },
+    {
+      method: "CANCEL",
+      event: {
+        id: eventId,
+        title: event.title,
+        description: event.description,
+        startsAt: event.startsAt,
+        endsAt: event.endsAt,
+        meetingUrl: event.meetingUrl,
+        livekitRoomName: event.livekitRoomName,
+        recurrence: event.recurrence,
+        recurrenceAnchor: event.startsAt,
+      },
+    },
   );
-
-  if (event.googleEventId) {
-    await cancelMeetingCalendarEvent(event.googleEventId);
-  }
 }
 
 /**
@@ -4037,9 +3844,11 @@ async function deleteAllEventRecordings(eventId: string): Promise<void> {
 
   for (const recording of recordings) {
     try {
+      // A legacy Google Meet recording's file lives in the old dedicated
+      // Google account, which NASIHA no longer connects to — dropping the row
+      // is all that can be done from here.
       if (recording.origin === RecordingOrigin.meet) {
-        if (!recording.driveFileId) continue;
-        if (!(await deleteMeetingRecording(recording.driveFileId))) continue;
+        // nothing external to delete
       } else if (recording.objectKey) {
         await deleteRecordingObject(recording.objectKey);
       } else if (!recording.failedAt) {
@@ -4053,10 +3862,11 @@ async function deleteAllEventRecordings(eventId: string): Promise<void> {
 }
 
 /**
- * Deletes one occurrence's recording (host or admin only) — removes the
- * actual Drive file via the dedicated account, and only drops the
- * EventRecording row once that succeeds, so a failed Drive delete never
- * leaves an orphaned file with no DB record pointing back to it.
+ * Deletes one occurrence's legacy Google Meet recording (host or admin
+ * only). Google Meet has been retired and NASIHA no longer connects to the
+ * Google account that holds the Drive file, so this only removes the
+ * EventRecording row (the file itself has to be cleaned up in that account
+ * by hand, if at all).
  */
 export async function deleteEventRecording(
   eventId: string,
@@ -4081,12 +3891,7 @@ export async function deleteEventRecording(
     where: { eventId, occurrenceDate, origin: RecordingOrigin.meet },
     select: { id: true, driveFileId: true },
   });
-  if (!recording?.driveFileId) throw new EventError(404, "Recording not found.");
-
-  const deleted = await deleteMeetingRecording(recording.driveFileId);
-  if (!deleted) {
-    throw new EventError(502, "Couldn't delete the recording — please try again.");
-  }
+  if (!recording) throw new EventError(404, "Recording not found.");
 
   await db.eventRecording.delete({ where: { id: recording.id } });
 }
@@ -5174,9 +4979,9 @@ export async function getEventRecordingObjectKey(
 }
 
 /**
- * Resolves the direct-download link (lib/google-calendar.ts's
- * getMeetingRecordingDownloadUrl) for one occurrence's Meet-origin
- * recording — same rsvped-or-host access gate getMemberEventById already
+ * Resolves the link for one occurrence's legacy Meet-origin recording — now
+ * just its stored Google Drive playback link (Google Meet is retired and
+ * NASIHA no longer signs in to Drive to mint direct-download links) — same rsvped-or-host access gate getMemberEventById already
  * applies to `recordingUrl`, re-derived here for the same reason
  * getEventRecordingObjectKey re-derives it rather than reusing the whole
  * event detail payload.
@@ -5218,13 +5023,10 @@ export async function getEventMeetRecordingDownloadUrl(
 
   const recording = await db.eventRecording.findFirst({
     where: { eventId, occurrenceDate, origin: RecordingOrigin.meet },
-    select: { driveFileId: true },
+    select: { recordingUrl: true },
   });
-  if (!recording?.driveFileId) throw new EventError(404, "Recording not found.");
-
-  const url = await getMeetingRecordingDownloadUrl(recording.driveFileId);
-  if (!url) throw new EventError(502, "Couldn't get a download link — please try again.");
-  return url;
+  if (!recording?.recordingUrl) throw new EventError(404, "Recording not found.");
+  return recording.recordingUrl;
 }
 
 /** Host-only: sets/edits the optional waiting-room message + image shown to attendees before Start. */

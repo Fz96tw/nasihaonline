@@ -2,7 +2,7 @@ import "server-only";
 import { AccessToken, RoomServiceClient, WebhookReceiver } from "livekit-server-sdk";
 import { db } from "@/lib/db";
 import { Role } from "@/lib/generated/prisma/enums";
-import { sendCalendarIntegrationAlertEmail } from "@/lib/email";
+import { sendMeetingIntegrationAlertEmail } from "@/lib/email";
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
@@ -16,26 +16,23 @@ export function getRoomServiceClient(): RoomServiceClient | null {
 }
 
 /**
- * Same alert mechanism as google-calendar.ts's notifyAdminsOfMeetLinkFailure
- * (reuses sendCalendarIntegrationAlertEmail directly rather than importing
- * that function, since its wording is Google/Meet-specific and would be
- * misleading for a LiveKit failure) — surfaces a room-creation failure to
- * every admin within minutes rather than it only being discovered when a
- * member notices a missing meeting link. Best-effort: must never throw.
+ * Surfaces a room-creation failure to every admin within minutes rather than
+ * it only being discovered when a member notices a missing meeting link
+ * (sendMeetingIntegrationAlertEmail). Best-effort: must never throw.
  */
 async function notifyAdminsOfLiveKitFailure(topic: string, error: unknown): Promise<void> {
   try {
     const admins = await db.user.findMany({ where: { role: Role.admin }, select: { email: true, name: true } });
     const errorMessage = error instanceof Error ? error.message : String(error);
-    await sendCalendarIntegrationAlertEmail(admins, { topic: `${topic} (LiveKit room create)`, errorMessage });
+    await sendMeetingIntegrationAlertEmail(admins, { topic, errorMessage });
   } catch (alertError) {
     console.error("[livekit] Failed to notify admins of room creation failure", alertError);
   }
 }
 
 /**
- * Creates a LiveKit room for an event/meeting, non-fatal on failure — same
- * philosophy as createMeetingCalendarEvent(): unconfigured or failing
+ * Creates a LiveKit room for an event/meeting, non-fatal on failure:
+ * unconfigured or failing
  * LiveKit credentials must never block event/meeting creation, since the
  * Event/MeetingRequest row is the source of truth. Returns null instead of
  * throwing.

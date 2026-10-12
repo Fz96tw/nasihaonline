@@ -1,13 +1,8 @@
 import "dotenv/config";
-import { Worker } from "bullmq";
+import { Queue, Worker } from "bullmq";
 import { queueConnection } from "@/lib/queues/connection";
 import { SEARCH_INDEX_QUEUE_NAME, type SearchIndexSyncJob } from "@/lib/queues/search-index-queue";
 import { SURVEY_QUEUE_NAME, type SurveyJob } from "@/lib/queues/survey-queue";
-import {
-  MEETING_RECORDING_SYNC_QUEUE_NAME,
-  type MeetingRecordingSyncJob,
-  enqueueRepeatingMeetingRecordingsSync,
-} from "@/lib/queues/meeting-recording-sync-queue";
 import {
   ensureLibraryIndexConfigured,
   ensureProfilesIndexConfigured,
@@ -42,7 +37,6 @@ import {
   enqueueRepeatingWeeklyReflectionCheck,
 } from "@/lib/queues/weekly-reflection-queue";
 import { openSurveyNow, autoCloseSurveyIfDue } from "@/lib/surveys-lifecycle";
-import { syncMeetingRecordings } from "@/lib/meeting-recordings-sync";
 import { sendInboxReminders } from "@/lib/inbox-reminders";
 import { runWeeklyDigestCheck } from "@/lib/weekly-digest-job";
 import { sendPendingDigestTeasers } from "@/lib/weekly-digest-email";
@@ -130,34 +124,18 @@ async function main() {
 
   console.log("[survey-worker] listening for jobs on", SURVEY_QUEUE_NAME);
 
-  // Meeting recordings (recording-by-default) — polls the Meet API for
-  // finished recordings on recently-past Events/MeetingRequests and attaches
-  // the Drive link once Google's made one available. Same standalone-process
-  // rationale as the workers above; registered as a repeating job rather
-  // than delayed per-meeting since a recurring Event's Meet space is shared
-  // across every occurrence, so there's no single fixed delay to schedule at
-  // creation time — a periodic sweep re-evaluates what's recently ended.
-  await enqueueRepeatingMeetingRecordingsSync();
-
-  const meetingRecordingSyncWorker = new Worker<MeetingRecordingSyncJob>(
-    MEETING_RECORDING_SYNC_QUEUE_NAME,
-    async () => {
-      await syncMeetingRecordings();
-    },
-    { connection: queueConnection },
-  );
-
-  meetingRecordingSyncWorker.on("completed", () => {
-    console.log("[meeting-recording-sync-worker] sweep completed");
-  });
-  meetingRecordingSyncWorker.on("failed", (job, error) => {
-    console.error(`[meeting-recording-sync-worker] failed job ${job?.id}:`, error);
-  });
-
-  console.log("[meeting-recording-sync-worker] listening for jobs on", MEETING_RECORDING_SYNC_QUEUE_NAME);
+  // Google Meet is retired, and with it the 15-minute Meet-recordings sweep.
+  // Earlier workers registered that sweep as a repeating job in Redis, which
+  // would keep piling up unprocessed jobs — clear the old queue (schedule and
+  // any leftover jobs) on boot. Harmless once it's gone.
+  const legacyMeetingRecordingQueue = new Queue("meeting-recording-sync", { connection: queueConnection });
+  await legacyMeetingRecordingQueue
+    .obliterate({ force: true })
+    .catch((error) => console.error("[worker] couldn't clear the retired meeting-recording-sync queue:", error));
+  await legacyMeetingRecordingQueue.close();
 
   // Unanswered inbox-message reminders — hourly sweep (lib/inbox-reminders.ts),
-  // registered as a repeating job for the same reason as the recordings sweep:
+  // registered as a repeating job rather than delayed per message:
   // there's no single moment to schedule against at message-send time that
   // survives a reply, so a periodic sweep re-evaluates what's become overdue.
   await enqueueRepeatingInboxReminderSweep();

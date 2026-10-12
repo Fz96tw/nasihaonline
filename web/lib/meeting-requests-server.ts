@@ -18,13 +18,6 @@ import type { UserModel } from "@/lib/generated/prisma/models/User";
 import type { UpcomingMeeting } from "@/lib/meeting-requests";
 import { sendMeetingRequestEmail } from "@/lib/email";
 import { buildEventInviteAttachment } from "@/lib/events-server";
-import {
-  cancelMeetingCalendarEvent,
-  createMeetingCalendarEvent,
-  deleteMeetingRecording,
-  getMeetingRecordingDownloadUrl,
-  updateMeetingCalendarEventTime,
-} from "@/lib/google-calendar";
 import { formatEventDateTime, formatEventTime } from "@/lib/format-date";
 import { createLiveKitRoom, getRoomMetadata } from "@/lib/livekit";
 import { INBOX_TIERS } from "@/lib/members";
@@ -82,7 +75,6 @@ export async function createMeetingRequest(
     topic: string;
     proposedTimes: string[];
     message: string | null;
-    meetingPlatform: MeetingPlatform;
   },
 ): Promise<MeetingRequestModel> {
   if (input.recipientId === senderId) {
@@ -106,7 +98,8 @@ export async function createMeetingRequest(
         recipientId: input.recipientId,
         topic: input.topic,
         proposedTimes,
-        meetingPlatform: input.meetingPlatform,
+        // Google Meet is retired — every meeting is Nasiha Conference.
+        meetingPlatform: MeetingPlatform.livekit,
       },
     });
     await tx.meetingRequestMessage.create({
@@ -130,14 +123,13 @@ export async function createMeetingRequest(
     link,
   });
   // The email gets a fuller note than the terse in-app Notification.message
-  // — at this pending stage there's no Meet link yet (Google only creates
-  // the event on acceptance, in resolveMeetingRequest), so this reassures
-  // the recipient it *will* be one rather than showing a link that doesn't
+  // — at this pending stage there's no meeting room yet (it's only created
+  // on acceptance, in resolveMeetingRequest), so this reassures the
+  // recipient it *will* be one rather than showing a link that doesn't
   // exist yet.
-  const platformName = input.meetingPlatform === MeetingPlatform.livekit ? "Nasiha Conference" : "Google Meet";
   await sendMeetingRequestEmail(recipient.email, recipient.name ?? "there", {
     subject: `New meeting request: ${input.topic}`,
-    message: `${notificationMessage} If you accept, a ${platformName} video link will be created automatically and emailed to you both.`,
+    message: `${notificationMessage} If you accept, a Nasiha Conference video link will be created automatically and emailed to you both.`,
     link: `${APP_URL}${link}`,
   });
 
@@ -152,20 +144,13 @@ type ResolveAction =
   | { action: "edit"; topic: string; proposedTimes: string[]; message: string | null }
   | { action: "message"; body: string };
 
-// Matches the length google-calendar.ts gave the Calendar events it used to
-// create for a meeting request.
+// Calendar length for a meeting request's invite (meetings have no end time).
 const MEETING_DURATION_MS = 30 * 60_000;
 
-/**
- * A LiveKit meeting no longer gets a Google Calendar event (Google's invite
- * arrived "from an unknown sender") — NASIHA emails both parties a calendar
- * invite, update or cancellation itself, with an .ics attached. Meet-platform
- * meetings, and LiveKit ones accepted before this change (they still have a
- * googleEventId), keep going through Google, which emails its own updates.
- */
-function usesNasihaCalendarEmails(meetingRequest: MeetingRequestModel): boolean {
-  return meetingRequest.meetingPlatform === MeetingPlatform.livekit && !meetingRequest.googleEventId;
-}
+// NASIHA emails both parties every calendar invite, update and cancellation
+// itself, with an .ics attached — there's no Google Calendar event behind a
+// meeting any more (Google Meet is retired; legacy rows' googleEventId is
+// simply ignored).
 
 async function emailMeetingCalendarEntry(
   meetingRequest: MeetingRequestModel,
@@ -255,12 +240,9 @@ async function cancelMeetingRequest(
     : `${actorName} cancelled the meeting: "${meetingRequest.topic}"`;
   const link = `/inbox?item=${meetingRequest.id}`;
 
-  // External network call — kept outside the DB transaction, same
-  // best-effort philosophy as createMeetingCalendarEvent. Only reachable
-  // for the `accepted` branch above — a still-negotiating request never had one.
-  if (meetingRequest.googleEventId) {
-    await cancelMeetingCalendarEvent(meetingRequest.googleEventId);
-  } else if (isAcceptedOrRenegotiating && usesNasihaCalendarEmails(meetingRequest)) {
+  // Only for the `accepted` branch above — a still-negotiating request
+  // never had a calendar entry.
+  if (isAcceptedOrRenegotiating) {
     await emailMeetingCalendarEntry(meetingRequest, meetingRequest.scheduledAt, "CANCEL", {
       subject: `Cancelled: ${meetingRequest.topic}`,
       message,
@@ -521,20 +503,11 @@ async function confirmMeetingReschedule(
 ): Promise<MeetingRequestModel> {
   const scheduledAt = resolveScheduledTime(meetingRequest, selectedTime);
 
-  // Best-effort, same non-fatal philosophy as createMeetingCalendarEvent —
-  // a failed/unconfigured Google call must never block confirming the new
-  // time, since MeetingRequest.scheduledAt is the source of truth.
-  if (meetingRequest.googleEventId) {
-    await updateMeetingCalendarEventTime(meetingRequest.googleEventId, scheduledAt, null);
-  }
-
   const message = `${actorName} confirmed the new time for: "${meetingRequest.topic}"`;
-  if (usesNasihaCalendarEmails(meetingRequest)) {
-    await emailMeetingCalendarEntry(meetingRequest, scheduledAt, "REQUEST", {
-      subject: `Rescheduled: ${meetingRequest.topic}`,
-      message: `${message}\n\nNew time: ${formatEventDateTime(scheduledAt)}\nJoin: ${APP_URL}/meet/request/${meetingRequest.id}`,
-    });
-  }
+  await emailMeetingCalendarEntry(meetingRequest, scheduledAt, "REQUEST", {
+    subject: `Rescheduled: ${meetingRequest.topic}`,
+    message: `${message}\n\nNew time: ${formatEventDateTime(scheduledAt)}\nJoin: ${APP_URL}/meet/request/${meetingRequest.id}`,
+  });
 
   return db.$transaction(async (tx) => {
     const updated = await tx.meetingRequest.update({
@@ -699,13 +672,9 @@ export async function resolveMeetingRequest(
     return confirmMeetingReschedule(meetingRequest, actingUserId, action.selectedTime, otherPartyId, actorName, link);
   }
 
-  const [spendRule, earnRule, createdMessage] = await Promise.all([
+  const [spendRule, earnRule] = await Promise.all([
     db.contributionRule.findUnique({ where: { activityKey: EXPERT_CONSULTATION_ACTIVITY_KEY } }),
     db.contributionRule.findUnique({ where: { activityKey: KNOWLEDGE_DISCUSSION_ACTIVITY_KEY } }),
-    db.meetingRequestMessage.findFirst({
-      where: { meetingRequestId, action: MeetingRequestMessageAction.created },
-      select: { body: true },
-    }),
   ]);
   if (!spendRule || !spendRule.active || spendRule.type !== LedgerTransactionType.spent) {
     throw new MeetingRequestError(409, "Expert Consultation rate isn't configured.");
@@ -724,31 +693,15 @@ export async function resolveMeetingRequest(
   const recipientUser = actingUserId === meetingRequest.recipientId ? actor : otherParty;
 
   // External network call — kept outside the DB transaction below, and
-  // best-effort (see google-calendar.ts): a failed/unconfigured Google/
-  // LiveKit call must never block acceptance, since the ledger rows are the
-  // source of truth for the meeting having happened. Platform was chosen by
-  // the sender at request-creation time (createMeetingRequest), not here —
-  // the id already exists by this point, unlike Event's createEvent flow,
-  // so no pre-generated id is needed for the LiveKit meeting-page link.
-  let meetingUrl: string | null = null;
-  let googleEventId: string | null = null;
+  // best-effort: a failed LiveKit call must never block acceptance, since
+  // the ledger rows are the source of truth for the meeting having
+  // happened. The id already exists by this point, unlike Event's
+  // createEvent flow, so no pre-generated id is needed for the meeting-page
+  // link. Every meeting is Nasiha Conference (a legacy pending Google Meet
+  // request becomes one on acceptance).
   let livekitRoomName: string | null = null;
-  if (senderUser && recipientUser && meetingRequest.meetingPlatform === MeetingPlatform.livekit) {
-    // No Google Calendar event — the calendar invite is emailed by NASIHA
-    // itself once the acceptance is committed (see usesNasihaCalendarEmails).
+  if (senderUser && recipientUser) {
     livekitRoomName = await createLiveKitRoom(meetingRequest.id, meetingRequest.topic);
-  } else if (senderUser && recipientUser) {
-    const created = await createMeetingCalendarEvent({
-      topic: meetingRequest.topic,
-      startsAt: scheduledAt,
-      attendees: [
-        { email: senderUser.email, name: senderUser.name ?? "there" },
-        { email: recipientUser.email, name: recipientUser.name ?? "there" },
-      ],
-      description: createdMessage?.body ?? undefined,
-    });
-    meetingUrl = created.meetingUrl;
-    googleEventId = created.googleEventId;
   }
 
   const updated = await db.$transaction(async (tx) => {
@@ -802,8 +755,7 @@ export async function resolveMeetingRequest(
         contributionLedgerId: spendLedgerEntry.id,
         recipientContributionLedgerId: earnLedgerEntry.id,
         scheduledAt,
-        meetingUrl,
-        googleEventId,
+        meetingPlatform: MeetingPlatform.livekit,
         livekitRoomName,
       },
     });
@@ -839,12 +791,7 @@ export async function resolveMeetingRequest(
     return updated;
   });
 
-  // A Meet-platform meeting sends no NASIHA email here (unlike decline/
-  // reschedule below) — Google's own calendar invite (sendUpdates: "all"
-  // above) already reaches both parties with the time and Meet link, so a
-  // second email would just be a duplicate. A LiveKit meeting has no Google
-  // event, so its calendar invite comes from NASIHA instead.
-  if (livekitRoomName && !googleEventId) {
+  if (livekitRoomName) {
     await emailMeetingCalendarEntry(updated, scheduledAt, "REQUEST", {
       subject: `Meeting confirmed: ${meetingRequest.topic}`,
       message: `${acceptedMessage}\n\nWhen: ${formatEventDateTime(scheduledAt)}\nJoin: ${APP_URL}/meet/request/${meetingRequest.id}`,
@@ -1410,17 +1357,16 @@ export async function getMeetingRequestMeetRecordingDownloadUrl(
 ): Promise<string> {
   const meetingRequest = await db.meetingRequest.findUnique({
     where: { id: meetingRequestId },
-    select: { senderId: true, recipientId: true, driveFileId: true },
+    select: { senderId: true, recipientId: true, recordingUrl: true },
   });
   if (!meetingRequest) throw new MeetingRequestError(404, "Meeting request not found.");
   if (meetingRequest.senderId !== userId && meetingRequest.recipientId !== userId) {
     throw new MeetingRequestError(403, "You're not part of this meeting.");
   }
-  if (!meetingRequest.driveFileId) throw new MeetingRequestError(404, "Recording not found.");
-
-  const url = await getMeetingRecordingDownloadUrl(meetingRequest.driveFileId);
-  if (!url) throw new MeetingRequestError(502, "Couldn't get a download link — please try again.");
-  return url;
+  // Legacy Google Meet recording: NASIHA no longer signs in to Drive to mint
+  // a direct-download link, so this is just the stored playback link.
+  if (!meetingRequest.recordingUrl) throw new MeetingRequestError(404, "Recording not found.");
+  return meetingRequest.recordingUrl;
 }
 
 /** Sender-only: sets/edits the optional waiting-room message + image shown to the recipient before Start. */
@@ -1496,11 +1442,10 @@ export async function resetMeetingRequestMeeting(meetingRequestId: string, actin
 }
 
 /**
- * Deletes the meeting's recording (sender/organizer-only, same convention as
- * start/resetMeetingRequestMeeting above). Removes the actual Drive file via
- * the dedicated account first, and only clears recordingUrl/driveFileId once
- * that succeeds — a failed Drive delete must not leave an orphaned file with
- * no DB record pointing back to it.
+ * Deletes the meeting's legacy Google Meet recording (sender/organizer-only,
+ * same convention as start/resetMeetingRequestMeeting above). Google Meet is
+ * retired and NASIHA no longer connects to the Google account holding the
+ * Drive file, so this only clears recordingUrl/driveFileId.
  */
 export async function deleteMeetingRequestRecording(meetingRequestId: string, actingUserId: string): Promise<void> {
   const meetingRequest = await db.meetingRequest.findUnique({
@@ -1511,13 +1456,8 @@ export async function deleteMeetingRequestRecording(meetingRequestId: string, ac
   if (meetingRequest.senderId !== actingUserId) {
     throw new MeetingRequestError(403, "Only the meeting organizer can delete its recording.");
   }
-  if (!meetingRequest.recordingUrl || !meetingRequest.driveFileId) {
+  if (!meetingRequest.recordingUrl && !meetingRequest.driveFileId) {
     throw new MeetingRequestError(404, "Recording not found.");
-  }
-
-  const deleted = await deleteMeetingRecording(meetingRequest.driveFileId);
-  if (!deleted) {
-    throw new MeetingRequestError(502, "Couldn't delete the recording — please try again.");
   }
 
   await db.meetingRequest.update({

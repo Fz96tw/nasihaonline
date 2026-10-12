@@ -17,7 +17,6 @@
     "reindex:announcements": "tsx scripts/reindex-announcements.ts",
     "reindex:surveys": "tsx scripts/reindex-surveys.ts",
     "reindex:review-items": "tsx scripts/reindex-review-items.ts",
-    "get:google-refresh-token": "tsx scripts/get-google-refresh-token.ts",
     "test:db": "NODE_OPTIONS='--require ./lib/test-support/stub-server-only.cjs' tsx --test --test-concurrency=1 lib/weekly-reflection.db.test.ts lib/weekly-reflection-admin.db.test.ts lib/weekly-reflection-look.db.test.ts lib/weekly-reflection-replace.db.test.ts lib/event-guests.db.test.ts"
   },
   "dependencies": {
@@ -56,7 +55,6 @@
     "date-fns": "^4.4.0",
     "date-fns-tz": "^3.2.0",
     "framer-motion": "^12.42.2",
-    "googleapis": "^173.0.0",
     "ioredis": "^5.11.1",
     "leaflet": "^1.9.4",
     "livekit-client": "^2.22.0",

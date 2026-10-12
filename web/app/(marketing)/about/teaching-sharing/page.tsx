@@ -18,7 +18,7 @@ const SECTIONS = [
   {
     eyebrow: "Where It Happens",
     title: "Events and the Knowledge Library",
-    body: "Any member can submit an event — Webinar, Workshop, Case Discussion, Student Event, Roundtable, or Lecture — to the shared Calendar; other members RSVP and attend over Zoom or Google Meet. The Knowledge Library is open to member-authored articles and case write-ups, and the Teaching & Mentorship forum is where mentorship offers and pedagogical questions live.",
+    body: "Any member can submit an event — Webinar, Workshop, Case Discussion, Student Event, Roundtable, or Lecture — to the shared Calendar; other members RSVP and attend live on Nasiha Conference, NASIHA's own video meeting space, or a link the host shares. The Knowledge Library is open to member-authored articles and case write-ups, and the Teaching & Mentorship forum is where mentorship offers and pedagogical questions live.",
   },
   {
     eyebrow: "Trust & Safety",

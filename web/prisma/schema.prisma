@@ -950,11 +950,10 @@ model MeetingRequest {
   scheduledAt                     DateTime?
   meetingUrl                      String?
   googleEventId                   String?
-  // Chosen by the sender at creation time (LiveKit Meeting Infrastructure
-  // initiative) — consulted by resolveMeetingRequest() on acceptance to
-  // decide which platform to create the room/link on. Defaults to
-  // google_meet, preserving today's only behavior for existing rows.
-  meetingPlatform                 MeetingPlatform             @default(google_meet)
+  // Always livekit for new rows now that Google Meet is retired;
+  // google_meet only survives on legacy rows (googleEventId/meetingUrl above
+  // are likewise legacy-only and no longer synced with Google).
+  meetingPlatform                 MeetingPlatform             @default(livekit)
   // Quick Video Recording & Sharing initiative — see MeetingRequestOrigin's
   // doc comment. Defaults to `directory`, preserving every existing row's
   // (and every other creation path's) actual meaning unchanged.

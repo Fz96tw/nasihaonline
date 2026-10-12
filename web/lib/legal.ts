@@ -30,14 +30,10 @@ export const PUBLIC_MEETING_CODE_OF_CONDUCT = [
 ];
 
 /**
- * Platform-specific — the host may have chosen Google Meet or LiveKit at
- * creation time (LiveKit Meeting Infrastructure initiative). The recording
- * line applies to both: Google Meet auto-records today (autoRecordingGeneration:
- * "ON", see google-calendar.ts); LiveKit's own recording (egress-to-storage)
- * is still deferred (see livekit.ts's createLiveKitRoom doc comment) but the
- * user directed this notice be shown for LiveKit now regardless, ahead of
- * that work landing (2026-08-25) — keep this comment in sync once egress
- * ships so it stops describing a stated intent as already-built.
+ * Platform-specific — the host chooses Nasiha Conference (LiveKit, which
+ * NASIHA records, chat included) or pastes a link to a meeting hosted
+ * elsewhere ("external": Zoom, Teams, Google Meet…), which NASIHA neither
+ * records nor controls, so that variant drops the recording clause.
  */
 /**
  * `isQuickRecording` (Quick Video Recording & Sharing initiative, default
@@ -50,15 +46,19 @@ export const PUBLIC_MEETING_CODE_OF_CONDUCT = [
  * hidden in quick-recording mode (livekit-meeting-screen.tsx), so its chat
  * panel isn't reachable to record anything into.
  */
-export function getPublicMeetingClosingNote(platform: "google_meet" | "livekit", isQuickRecording = false): string {
+export function getPublicMeetingClosingNote(platform: "livekit" | "external", isQuickRecording = false): string {
   const platformNote =
     platform === "livekit"
       ? "This meeting is hosted on a third-party video platform; your use of it is also subject to that platform's own Terms of Service."
-      : "This meeting is hosted on Google Meet; your use of it is also subject to Google's own Terms of Service.";
+      : "This meeting is hosted on an outside video service chosen by the host; your use of it is also subject to that service's own Terms of Service.";
   if (isQuickRecording) {
     return `Please be respectful and abide by NASIHA's Terms of Service. ${platformNote}`;
   }
-  return `The host reserves the right to remove any participant for disruptive or inappropriate behavior. Please be respectful and abide by NASIHA's Terms of Service. This meeting will be recorded, including the meeting chat, and the recording will be made available in the event's details after the meeting has ended. ${platformNote}`;
+  const recordingNote =
+    platform === "livekit"
+      ? " This meeting will be recorded, including the meeting chat, and the recording will be made available in the event's details after the meeting has ended."
+      : "";
+  return `The host reserves the right to remove any participant for disruptive or inappropriate behavior. Please be respectful and abide by NASIHA's Terms of Service.${recordingNote} ${platformNote}`;
 }
 
 // Source of truth: docs/Nasiha_Charter.md § Code of Conduct.

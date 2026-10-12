@@ -18,7 +18,7 @@ import { db } from "@/lib/db";
  * markLiveKitMeetingRequestRecordingSegmentFailed's bodies (lib/meeting-
  * requests-server.ts) instead of importing them — that module starts with
  * `import "server-only"`, which throws under plain tsx (no Next.js
- * server runtime here). Same convention as lib/meeting-recordings-sync.ts.
+ * server runtime here).
  */
 const segments = [
   {

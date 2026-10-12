@@ -231,7 +231,8 @@ export function SubmitEventForm({
     if (existingEvent) return;
     try {
       const last = window.localStorage.getItem(LAST_MEET_LINK_SOURCE_KEY);
-      if (last === "livekit" || last === "auto" || last === "manual") form.setValue("meetLinkSource", last);
+      // "auto" (Google Meet, now retired) falls back to the default, Nasiha Conference.
+      if (last === "livekit" || last === "manual") form.setValue("meetLinkSource", last);
     } catch {
       // ignore
     }

@@ -73,7 +73,7 @@ export type MeetingRequestListItem = {
   meetingUrl: string | null;
   /** Set instead of meetingUrl when the sender chose LiveKit — see MeetingRequest.livekitRoomName's schema comment. */
   livekitRoomName: string | null;
-  /** Drive playback link once Google's finished processing the meeting's recording (lib/meeting-recordings-sync.ts) — null until then. */
+  /** Legacy Google Meet recording's Drive playback link (Google Meet is retired; only old rows carry one). */
   recordingUrl: string | null;
   /** LiveKit recording segments (objective 4) — see MemberEvent.liveKitRecordingSegments for the shared rationale, including ready/failed. Each links through /api/inbox/meeting-requests/:id/recording/:recordingId. */
   liveKitRecordingSegments: {

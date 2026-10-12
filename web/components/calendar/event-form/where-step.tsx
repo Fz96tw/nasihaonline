@@ -45,10 +45,10 @@ export function WhereStep({
             <FormItem className="rounded-md border p-4">
               <FormLabel>Meeting link</FormLabel>
               <FormDescription>
-                Nasiha Conference and Google Meet both auto-generate their own meeting link — or paste your own
-                below. Nasiha Conference gives you real in-meeting host controls (admit, mute, or remove
-                participants), and lets you and any co-hosts you name below start or stop recording. Google Meet
-                does not record these meetings.
+                Nasiha Conference creates the meeting for you, with real in-meeting host controls (admit, mute, or
+                remove participants) and recording that you and any co-hosts you name below can start or stop. Or
+                paste a link to a meeting you&apos;ve set up elsewhere (Zoom, Teams, Google Meet…) — those don&apos;t
+                get NASIHA&apos;s host controls, recording or guest approval.
                 {!isFirstSubmission && (
                   <span className="mt-1 block">
                     Switching platforms here replaces the current link with a brand-new one — you&apos;ll get a
@@ -63,7 +63,6 @@ export function WhereStep({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="livekit">Nasiha Conference</SelectItem>
-                    <SelectItem value="auto">Google Meet</SelectItem>
                     <SelectItem value="manual">Paste my own link</SelectItem>
                   </SelectContent>
                 </Select>

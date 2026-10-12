@@ -109,12 +109,7 @@ export function ReviewStep({
     .filter((category) => values.categoryIds.includes(category.id))
     .map((category) => category.name)
     .join(", ");
-  const meetingPlatform =
-    values.meetLinkSource === "livekit"
-      ? "Nasiha Conference"
-      : values.meetLinkSource === "auto"
-        ? "Google Meet"
-        : "Your own link";
+  const meetingPlatform = values.meetLinkSource === "livekit" ? "Nasiha Conference" : "Your own link";
   const recurrence = values.recurrence
     ? describeRecurrence({ ...values.recurrence, until: values.recurrence.until ? new Date(values.recurrence.until) : null })
     : null;

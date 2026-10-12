@@ -82,7 +82,7 @@ function requireRestrictedEventInvariants(
     visibility: EventVisibility;
     invitedUserIds: string[];
     externalGuests: string;
-    meetLinkSource: "auto" | "manual" | "livekit";
+    meetLinkSource: "manual" | "livekit";
     meetingUrl: string | null;
     open: boolean;
   },
@@ -197,7 +197,7 @@ export const createEventSchema = eventFieldsSchema
     // valid for any visibility and always optional — no invariant enforces
     // a minimum here.
     coHostUserIds: z.array(z.string()),
-    meetLinkSource: z.enum(["auto", "manual", "livekit"]),
+    meetLinkSource: z.enum(["manual", "livekit"]),
     recurrence: recurrenceInputSchema,
   })
   .superRefine(requireDeidentificationForCaseDiscussion)
@@ -215,7 +215,7 @@ export type CreateEventValues = z.infer<typeof createEventSchema>;
  * Discussion" button on the event detail page, not a create/edit form field.
  */
 export const updateEventSchema = eventFieldsSchema
-  .extend({ meetLinkSource: z.enum(["auto", "manual", "livekit"]), recurrence: recurrenceInputSchema })
+  .extend({ meetLinkSource: z.enum(["manual", "livekit"]), recurrence: recurrenceInputSchema })
   .superRefine(requireDeidentificationForCaseDiscussion)
   .superRefine(requireRecurrenceInvariants)
   .superRefine(requireCommunityIds);
@@ -242,7 +242,7 @@ export const draftEventSchema = eventFieldsSchema
     invitedUserIds: z.array(z.string()),
     externalGuests: z.string().max(10_000),
     coHostUserIds: z.array(z.string()),
-    meetLinkSource: z.enum(["auto", "manual", "livekit"]),
+    meetLinkSource: z.enum(["manual", "livekit"]),
     recurrence: recurrenceInputSchema,
   })
   .superRefine(requireRecurrenceInvariants);

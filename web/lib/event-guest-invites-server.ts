@@ -10,7 +10,6 @@ import {
   EventError,
   eventGuestAccessExpired,
   isEventCoHost,
-  syncGoogleCalendarAttendees,
   updateEventInvitees,
 } from "@/lib/events-server";
 import { sendEventGuestInviteEmail, sendEventLifecycleEmail, sendEventRegistrationConfirmationEmail } from "@/lib/email";
@@ -76,7 +75,6 @@ const eventSelect = {
   publishedAt: true,
   meetingUrl: true,
   livekitRoomName: true,
-  googleEventId: true,
   guestLinkToken: true,
   recurrence: { select: { frequency: true, interval: true, byWeekday: true, until: true } },
 } as const;
@@ -284,17 +282,9 @@ async function deliverInvite(
       timezone: event.timezone,
       meetingUrl: event.meetingUrl,
       livekitRoomName: event.livekitRoomName,
-      // A Meet-backed restricted event lists its guests on the Google
-      // Calendar event (syncGoogleCalendarAttendees), and Google sends them
-      // its own invite — attaching ours too would double the calendar entry.
-      ics: googleInvitesGuests(event) ? null : guestCalendarInvite(event, registration, "REQUEST"),
+      ics: guestCalendarInvite(event, registration, "REQUEST"),
     },
   });
-}
-
-/** Google Calendar, not us, sends this event's guests their invite/cancellation. */
-function googleInvitesGuests(event: GuestEvent) {
-  return isRestricted(event) && event.googleEventId !== null;
 }
 
 /**
@@ -466,9 +456,6 @@ export async function inviteGuestsByEmail(
         : { email, status: "failed", message: "The email couldn't be sent. Try resending it." },
     );
   }
-  if (isRestricted(event) && outcomes.some((outcome) => outcome.status === "sent")) {
-    await syncGoogleCalendarAttendees(eventId);
-  }
   return outcomes;
 }
 
@@ -567,14 +554,8 @@ async function withdrawGuest(
   event: GuestEvent,
   registration: Awaited<ReturnType<typeof loadGuest>>,
 ): Promise<void> {
-  const eventId = event.id;
   if (registration.revokedAt) return;
   await db.eventRegistration.update({ where: { id: registration.id }, data: { revokedAt: new Date() } });
-  if (googleInvitesGuests(event)) {
-    // Taking them off the Google event makes Google send the cancellation.
-    await syncGoogleCalendarAttendees(eventId);
-    return;
-  }
   // Nothing to withdraw from someone who can no longer attend anyway.
   if (event.cancelledAt || eventGuestAccessExpired(event)) return;
   const host = await db.user.findUnique({ where: { id: event.hostId }, select: { name: true } });

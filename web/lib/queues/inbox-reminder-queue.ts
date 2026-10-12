@@ -1,5 +1,5 @@
 // No "server-only" guard: scripts/worker.ts imports this module and runs
-// outside Next's runtime — same convention as meeting-recording-sync-queue.ts.
+// outside Next's runtime — same convention as search-index-queue.ts.
 import { Queue } from "bullmq";
 import { queueConnection } from "@/lib/queues/connection";
 

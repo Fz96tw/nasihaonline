@@ -316,7 +316,7 @@ export async function sendEventRegistrationConfirmationEmail(
   // (meeting-join-experience) — same underlying access (open events stay
   // unauthenticated-readable there), but now with a countdown/host-message
   // instead of dropping straight into the video call's own lobby. The
-  // waiting-room page itself resolves Google Meet vs Nasiha Conference
+  // waiting-room page itself resolves a pasted link vs Nasiha Conference
   // (LiveKit), so this line stays platform-agnostic rather than naming one.
   // Checks both meetingUrl and livekitRoomName (not meetingUrl alone) —
   // the attached .ics's own LOCATION field (buildEventIcs) already resolves
@@ -951,10 +951,10 @@ export async function sendRsvpConfirmationEmail(
 
   const when = formatEventDateTime(event.startsAt, event.timezone);
   // Links to the in-app waiting-room page, same platform-agnostic
-  // convention as sendEventRegistrationConfirmationEmail — resolves Google
-  // Meet vs Nasiha Conference (LiveKit) itself, and previously linking
-  // straight to event.meetingUrl silently dropped the join line entirely
-  // for LiveKit events (meetingUrl is only ever set on the Google Meet path).
+  // convention as sendEventRegistrationConfirmationEmail — resolves a
+  // pasted link vs Nasiha Conference (LiveKit) itself, and previously
+  // linking straight to event.meetingUrl silently dropped the join line
+  // entirely for LiveKit events (meetingUrl is only set for pasted links).
   const joinLine = (event.meetingUrl || event.livekitRoomName)
     ? `Join the event: ${APP_URL}/meet/event/${event.id}`
     : "We'll share the joining details closer to the event.";
@@ -1186,17 +1186,15 @@ export async function sendContactMessageReplyEmail(to: string, originalSubject: 
 }
 
 /**
- * Fires whenever createMeetingCalendarEvent's Google Calendar API call fails
- * for an already-configured integration (see lib/google-calendar.ts) —
- * catches a dead/expired GOOGLE_CALENDAR_REFRESH_TOKEN (invalid_grant) within
- * minutes instead of only being discovered when a member notices a missing
- * Meet link days later, as happened before this alert existed. One email to
- * every admin rather than a per-admin loop — the recipient list is small and
- * internal, so seeing each other in `to` is expected. Best-effort like every
- * other function here: the caller already treats the underlying Google
+ * Fires whenever creating a Nasiha Conference (LiveKit) room fails (see
+ * lib/livekit.ts's notifyAdminsOfLiveKitFailure) — surfaces it within
+ * minutes instead of only when a member notices a missing meeting link. One
+ * email to every admin rather than a per-admin loop — the recipient list is
+ * small and internal, so seeing each other in `to` is expected. Best-effort
+ * like every other function here: the caller already treats the underlying
  * failure as best-effort, so this alert must not throw on top of it.
  */
-export async function sendCalendarIntegrationAlertEmail(
+export async function sendMeetingIntegrationAlertEmail(
   admins: { email: string; name: string | null }[],
   details: { topic: string; errorMessage: string },
 ) {
@@ -1206,10 +1204,10 @@ export async function sendCalendarIntegrationAlertEmail(
     await sendEmail({
       from: FROM_EMAIL,
       to: admins.map((admin) => admin.email),
-      subject: "[NASIHA] URGENT — Admin action required: Google Meet link generation failed",
-      text: `Auto-generating a Google Meet link failed for "${details.topic}".\n\nError: ${details.errorMessage}\n\nThis usually means GOOGLE_CALENDAR_REFRESH_TOKEN has expired or been revoked and needs to be re-issued (see web/scripts/get-google-refresh-token.ts). The event/meeting itself was still created successfully, just without a Meet link.`,
+      subject: "[NASIHA] URGENT — Admin action required: meeting room creation failed",
+      text: `Creating the Nasiha Conference meeting room failed for "${details.topic}".\n\nError: ${details.errorMessage}\n\nCheck that the LiveKit server is up and LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET are correct. The event/meeting itself was still created successfully, just without a meeting room.`,
     });
   } catch (error) {
-    console.error("[email] Failed to send calendar integration alert email", error);
+    console.error("[email] Failed to send meeting integration alert email", error);
   }
 }

@@ -14,9 +14,8 @@ export const createMeetingRequestSchema = z.object({
     .min(1, "Propose at least one time")
     .max(5, "Propose at most 5 times"),
   message: z.string().trim().max(1000).nullable(),
-  // Defaults to google_meet, matching the DB column's default and today's
-  // only behavior — see MeetingRequest.meetingPlatform's schema comment.
-  meetingPlatform: z.enum(["google_meet", "livekit"]).default("google_meet"),
+  // No platform choice: every meeting is Nasiha Conference now that Google
+  // Meet is retired (an old client still sending meetingPlatform is ignored).
 });
 
 export type CreateMeetingRequestValues = z.infer<typeof createMeetingRequestSchema>;

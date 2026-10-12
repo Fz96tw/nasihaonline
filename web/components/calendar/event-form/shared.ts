@@ -118,7 +118,7 @@ export type ExistingEvent = {
   /** Restricted-event draft's saved "External guests" text (Event.draftExternalGuests) — empty once published. */
   externalGuests: string;
   meetingUrl: string | null;
-  meetLinkSource: "auto" | "manual" | "livekit";
+  meetLinkSource: "manual" | "livekit";
   heroImageUrl: string | null;
   deidentificationConfirmed: boolean;
   visibility: EventVisibility;

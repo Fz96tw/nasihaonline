@@ -39,10 +39,9 @@ const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
  * organizer's local wall-clock time in their IANA timezone. A weekly
  * "every Tuesday 2pm Eastern" event keeps firing at a fixed UTC instant
  * across a DST transition, which reads as 1pm or 3pm Eastern on the far
- * side instead of a fixed 2pm. Google Calendar's own event start.dateTime
- * is also plain UTC with no timeZone field set (see google-calendar.ts),
- * so our expansion and the Google Calendar entry drift identically —
- * self-consistent, if not organizer-wall-clock-correct. Accepted v1
+ * side instead of a fixed 2pm. The .ics invites NASIHA emails carry the
+ * same UTC-anchored RRULE, so our expansion and attendees' calendar entries
+ * drift identically — self-consistent, if not organizer-wall-clock-correct. Accepted v1
  * limitation; a real fix needs a timezone-math library (luxon/date-fns-tz,
  * neither installed) and is a follow-up, not addressed here.
  */

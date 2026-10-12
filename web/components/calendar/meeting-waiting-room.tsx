@@ -477,7 +477,7 @@ export function MeetingWaitingRoom({
                 </ul>
               </div>
               <p className="text-xs text-muted-foreground">
-                {getPublicMeetingClosingNote(status.livekitRoomName ? "livekit" : "google_meet")}
+                {getPublicMeetingClosingNote(status.livekitRoomName ? "livekit" : "external")}
               </p>
               <Button type="button" onClick={() => setAgreedToDisclaimer(true)}>
                 I Agree — Join Meeting
