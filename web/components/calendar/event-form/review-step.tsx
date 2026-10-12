@@ -174,7 +174,7 @@ export function ReviewStep({
             {values.invitedUserIds.length > 0 ? `${values.invitedUserIds.length} member(s)` : NOT_SET}
           </Row>
         )}
-        {isFirstSubmission && isRestricted && (
+        {isFirstSubmission && (isRestricted || values.open) && (
           <Row label="External guests">
             {splitGuestAddresses(values.externalGuests).length > 0
               ? `${splitGuestAddresses(values.externalGuests).length} (emailed when you publish)`

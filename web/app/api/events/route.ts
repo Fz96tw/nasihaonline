@@ -137,7 +137,7 @@ export async function POST(request: Request) {
     // (syncEventToIndex's own eligibility gate), so skip the queue write.
     if (mode === "publish") await enqueueEventIndexSync(event.id);
     const guestInviteProblems =
-      mode === "publish" && parsed.data.visibility === EventVisibility.invited
+      mode === "publish" && (parsed.data.visibility === EventVisibility.invited || parsed.data.open)
         ? await inviteExternalGuestsOnPublish(event.id, user, parsed.data.externalGuests)
         : [];
     return NextResponse.json({ id: event.id, guestInviteProblems }, { status: 201 });

@@ -197,152 +197,151 @@ export function ManageGuestInvites({ eventId, restricted = false }: { eventId: s
         <p className="mt-1 text-sm text-muted-foreground">
           {restricted
             ? "Invite people who aren't members by email. Each guest gets a personal join link (no account needed), and the event stays hidden from everyone else."
-            : "Bring in someone who isn't a member without sending them through public registration — share a private link, or email them an invitation."}
+            : "Bring in someone who isn't a member without sending them through public registration — email them an invitation, or optionally share a private link."}
         </p>
       </div>
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 
-      {state.linkAvailable && !state.token ? (
+      {/* The shareable link (public events only) is optional and independent
+          of email invitations, which are always available below. */}
+      {state.linkAvailable && !state.token && (
         <div>
           <Button size="sm" variant="outline" disabled={pending} onClick={enable}>
             <Link2 className="mr-1.5 h-4 w-4" />
             Allow guests with a private link
           </Button>
         </div>
-      ) : (
-        <>
-          {state.linkAvailable && (
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium">Private guest link</p>
-              <div className="flex items-center gap-2">
-                <code className="min-w-0 flex-1 truncate rounded border bg-muted px-2 py-1.5 text-xs">{guestUrl}</code>
-                <Button size="sm" variant="outline" onClick={copyLink}>
-                  {copied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
-                  {copied ? "Copied" : "Copy"}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                You can share this same link with as many people as you&apos;d like to invite. Each person enters their
-                own name and email to join. Only share it with people you trust, since anyone who has the link can join.
-              </p>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" disabled={pending} onClick={regenerate}>
-                  <RefreshCw className="mr-1.5 h-4 w-4" />
-                  Regenerate link
-                </Button>
-                <Button size="sm" variant="ghost" disabled={pending} onClick={disable}>
-                  Turn off
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                <strong className="font-medium">Regenerate link</strong> creates a brand-new link. The previous link will
-                no longer work for anyone it was shared with, and anyone who already joined through it is removed. Guests
-                you invited by email keep their access. You don&apos;t need this to share the link with more people — use
-                it only if the link has been shared more widely than you intended.
-              </p>
-            </div>
-          )}
-
-          <div className="flex flex-col gap-2">
-            <label htmlFor="guest-invite-emails" className="text-sm font-medium">
-              Invite by email
-            </label>
-            <Textarea
-              id="guest-invite-emails"
-              rows={2}
-              placeholder={"name@example.com\nJane Doe <jane@example.com>"}
-              value={emailsText}
-              onChange={(event) => setEmailsText(event.target.value)}
-            />
-            <Textarea
-              rows={2}
-              maxLength={1000}
-              placeholder="Optional personal note"
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-            />
-            <label className="flex items-start gap-2 text-sm">
-              <Checkbox
-                className="mt-0.5"
-                checked={inviteToJoin}
-                onCheckedChange={(checked) => setInviteToJoin(checked === true)}
-              />
-              <span>
-                Also invite them to join NASIHA
-                <span className="block text-xs text-muted-foreground">
-                  Adds a short note with a link to apply for membership (skipped for anyone who&apos;s already a
-                  member or has applied). Their application still goes through the usual review.
-                </span>
-              </span>
-            </label>
-            <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-              <p>
-                Separate addresses with commas or new lines. To set how a guest is named in the meeting, write it as{" "}
-                <span className="font-mono">Jane Doe &lt;jane@example.com&gt;</span> — they can change it when they join.
-                Each guest gets their own personal join link and a
-                calendar invite, and the note (if you add one) goes to everyone in this send. You&apos;ll be BCC&apos;d
-                on every invitation, and their replies come to you.
-              </p>
-              <p>
-                Limits: up to {MAX_INVITES_PER_REQUEST} addresses at a time, {MAX_INVITES_PER_EVENT} invitations per
-                event, and {MAX_INVITES_PER_HOST_PER_DAY} per day. To re-send an invitation, use Resend next to that
-                guest below; it counts toward the daily limit.
-              </p>
-            </div>
-            <div>
-              <Button size="sm" disabled={pending} onClick={sendInvites}>
-                <Mail className="mr-1.5 h-4 w-4" />
-                {pending ? "Sending…" : "Send invitations"}
-              </Button>
-            </div>
-            {outcomes && (
-              <ul className="flex flex-col gap-0.5 text-xs">
-                {outcomes.map((outcome) => (
-                  <li key={outcome.email} className={isDone(outcome) ? "text-muted-foreground" : "text-destructive"}>
-                    {outcome.email} — {outcome.status === "sent" ? "invitation sent" : outcome.message}
-                  </li>
-                ))}
-              </ul>
-            )}
+      )}
+      {state.linkAvailable && state.token && (
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-medium">Private guest link</p>
+          <div className="flex items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded border bg-muted px-2 py-1.5 text-xs">{guestUrl}</code>
+            <Button size="sm" variant="outline" onClick={copyLink}>
+              {copied ? <Check className="mr-1.5 h-4 w-4" /> : <Copy className="mr-1.5 h-4 w-4" />}
+              {copied ? "Copied" : "Copy"}
+            </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            You can share this same link with as many people as you&apos;d like to invite. Each person enters their
+            own name and email to join. Only share it with people you trust, since anyone who has the link can join.
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" disabled={pending} onClick={regenerate}>
+              <RefreshCw className="mr-1.5 h-4 w-4" />
+              Regenerate link
+            </Button>
+            <Button size="sm" variant="ghost" disabled={pending} onClick={disable}>
+              Turn off
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            <strong className="font-medium">Regenerate link</strong> creates a brand-new link. The previous link will
+            no longer work for anyone it was shared with, and anyone who already joined through it is removed. Guests
+            you invited by email keep their access. You don&apos;t need this to share the link with more people — use
+            it only if the link has been shared more widely than you intended.
+          </p>
+        </div>
+      )}
 
-          {state.guests.length > 0 && (
-            <ul className="flex flex-col divide-y text-sm">
-              {state.guests.map((guest) => (
-                <li key={guest.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate">{guest.name ? `${guest.name} (${guest.email})` : guest.email}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {guest.source === "invited" && guest.invitedAt
-                        ? `Invited ${formatTimestamp(guest.invitedAt)}`
-                        : "Joined with the private link"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {guest.revoked ? (
-                      <Badge variant="danger">Removed</Badge>
-                    ) : guest.joined ? (
-                      <Badge variant="success">Joined</Badge>
-                    ) : (
-                      <Badge variant="neutral">Not joined yet</Badge>
-                    )}
-                    {!guest.revoked && guest.source === "invited" && (
-                      <Button size="sm" variant="ghost" disabled={pending} onClick={() => resend(guest)}>
-                        Resend
-                      </Button>
-                    )}
-                    {!guest.revoked && (
-                      <Button size="sm" variant="ghost" disabled={pending} onClick={() => revoke(guest)}>
-                        Remove
-                      </Button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
+      <div className="flex flex-col gap-2">
+        <label htmlFor="guest-invite-emails" className="text-sm font-medium">
+          Invite by email
+        </label>
+        <Textarea
+          id="guest-invite-emails"
+          rows={2}
+          placeholder={"name@example.com\nJane Doe <jane@example.com>"}
+          value={emailsText}
+          onChange={(event) => setEmailsText(event.target.value)}
+        />
+        <Textarea
+          rows={2}
+          maxLength={1000}
+          placeholder="Optional personal note"
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+        />
+        <label className="flex items-start gap-2 text-sm">
+          <Checkbox
+            className="mt-0.5"
+            checked={inviteToJoin}
+            onCheckedChange={(checked) => setInviteToJoin(checked === true)}
+          />
+          <span>
+            Also invite them to join NASIHA
+            <span className="block text-xs text-muted-foreground">
+              Adds a short note with a link to apply for membership (skipped for anyone who&apos;s already a
+              member or has applied). Their application still goes through the usual review.
+            </span>
+          </span>
+        </label>
+        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+          <p>
+            Separate addresses with commas or new lines. To set how a guest is named in the meeting, write it as{" "}
+            <span className="font-mono">Jane Doe &lt;jane@example.com&gt;</span> — they can change it when they join.
+            Each guest gets their own personal join link and a
+            calendar invite, and the note (if you add one) goes to everyone in this send. You&apos;ll be BCC&apos;d
+            on every invitation, and their replies come to you.
+          </p>
+          <p>
+            Limits: up to {MAX_INVITES_PER_REQUEST} addresses at a time, {MAX_INVITES_PER_EVENT} invitations per
+            event, and {MAX_INVITES_PER_HOST_PER_DAY} per day. To re-send an invitation, use Resend next to that
+            guest below; it counts toward the daily limit.
+          </p>
+        </div>
+        <div>
+          <Button size="sm" disabled={pending} onClick={sendInvites}>
+            <Mail className="mr-1.5 h-4 w-4" />
+            {pending ? "Sending…" : "Send invitations"}
+          </Button>
+        </div>
+        {outcomes && (
+          <ul className="flex flex-col gap-0.5 text-xs">
+            {outcomes.map((outcome) => (
+              <li key={outcome.email} className={isDone(outcome) ? "text-muted-foreground" : "text-destructive"}>
+                {outcome.email} — {outcome.status === "sent" ? "invitation sent" : outcome.message}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {state.guests.length > 0 && (
+        <ul className="flex flex-col divide-y text-sm">
+          {state.guests.map((guest) => (
+            <li key={guest.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <div className="min-w-0">
+                <p className="truncate">{guest.name ? `${guest.name} (${guest.email})` : guest.email}</p>
+                <p className="text-xs text-muted-foreground">
+                  {guest.source === "invited" && guest.invitedAt
+                    ? `Invited ${formatTimestamp(guest.invitedAt)}`
+                    : "Joined with the private link"}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {guest.revoked ? (
+                  <Badge variant="danger">Removed</Badge>
+                ) : guest.joined ? (
+                  <Badge variant="success">Joined</Badge>
+                ) : (
+                  <Badge variant="neutral">Not joined yet</Badge>
+                )}
+                {!guest.revoked && guest.source === "invited" && (
+                  <Button size="sm" variant="ghost" disabled={pending} onClick={() => resend(guest)}>
+                    Resend
+                  </Button>
+                )}
+                {!guest.revoked && (
+                  <Button size="sm" variant="ghost" disabled={pending} onClick={() => revoke(guest)}>
+                    Remove
+                  </Button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

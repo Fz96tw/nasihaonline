@@ -87,7 +87,7 @@ export function WhoStep({
         />
       )}
 
-      {isFirstSubmission && isRestricted && (
+      {isFirstSubmission && (isRestricted || isOpen) && (
         <FormField
           control={form.control}
           name="externalGuests"
@@ -101,16 +101,16 @@ export function WhoStep({
                   {...field}
                   onChange={(event) => {
                     field.onChange(event);
-                    // Either list satisfies "invite at least one", so re-check the member picker's error too.
-                    void form.trigger("invitedUserIds");
+                    // Restricted: either list satisfies "invite at least one", so re-check the member picker's error too.
+                    if (isRestricted) void form.trigger("invitedUserIds");
                   }}
                 />
               </FormControl>
               <FormDescription>
                 People who aren&apos;t members, one per line. Each gets an email invitation with a personal join link
                 when you publish — no account needed (saving a draft keeps the list without sending anything). Up to{" "}
-                {MAX_INVITES_PER_REQUEST} here; add more, resend or remove guests from the event page later. An address
-                that belongs to a member is added to the invited members instead.
+                {MAX_INVITES_PER_REQUEST} here; add more, resend or remove guests from the event page later.
+                {isRestricted && " An address that belongs to a member is added to the invited members instead."}
               </FormDescription>
               <FormMessage />
             </FormItem>

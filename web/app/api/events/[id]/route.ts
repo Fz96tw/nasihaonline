@@ -126,12 +126,12 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     // the event indexable (syncEventToIndex's own eligibility gate would
     // just delete-if-exists anyway, but skip the queue write entirely).
     if (action !== "draft") await enqueueEventIndexSync(event.id);
-    // A draft's first publish is when its restricted audience's external
+    // A draft's first publish is when its (restricted or public) external
     // guests get emailed — same as a brand-new event's (POST /api/events).
     // "publish" always parsed with createEventSchema — same soundness as the casts above.
-    const published = parsed.data as unknown as { visibility: EventVisibility; externalGuests: string };
+    const published = parsed.data as unknown as { visibility: EventVisibility; open: boolean; externalGuests: string };
     const guestInviteProblems =
-      action === "publish" && published.visibility === EventVisibility.invited
+      action === "publish" && (published.visibility === EventVisibility.invited || published.open)
         ? await inviteExternalGuestsOnPublish(event.id, user, published.externalGuests)
         : [];
     return NextResponse.json({ id: event.id, guestInviteProblems });

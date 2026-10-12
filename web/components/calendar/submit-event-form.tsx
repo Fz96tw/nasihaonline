@@ -411,7 +411,9 @@ export function SubmitEventForm({
       if (isFirstSubmission) {
         formData.append("visibility", values.visibility);
         formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
-        if (isRestricted && values.externalGuests.trim()) formData.append("externalGuests", values.externalGuests);
+        if ((isRestricted || values.open) && values.externalGuests.trim()) {
+          formData.append("externalGuests", values.externalGuests);
+        }
         formData.append("coHostUserIds", JSON.stringify(values.coHostUserIds));
       }
       // Unlike invitedUserIds/coHostUserIds above, genuinely editable —

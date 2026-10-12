@@ -2259,7 +2259,7 @@ export async function createEvent(
         meetingOrganizerMessage: input.meetingOrganizerMessage,
         meetingOrganizerMessageImageKey,
         publishedAt: isDraft ? null : new Date(),
-        draftExternalGuests: isDraft && isRestricted ? input.externalGuests?.trim() || null : null,
+        draftExternalGuests: isDraft && (isRestricted || input.open) ? input.externalGuests?.trim() || null : null,
         communities: { create: input.communityIds.map((communityId) => ({ communityId })) },
         categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
       },
@@ -3135,7 +3135,7 @@ export async function saveEventDraft(
     heroImage: File | null;
     visibility: EventVisibility;
     invitedUserIds: string[];
-    /** Restricted events: raw "External guests" text, kept on the draft (Event.draftExternalGuests) until publish. */
+    /** Restricted/public events: raw "External guests" text, kept on the draft (Event.draftExternalGuests) until publish. */
     externalGuests?: string;
     coHostUserIds: string[];
     communityIds: string[];
@@ -3269,7 +3269,7 @@ export async function saveEventDraft(
         meetingUrl: input.meetingUrl,
         visibility: input.visibility,
         draftExternalGuests:
-          input.visibility === EventVisibility.invited ? input.externalGuests?.trim() || null : null,
+          input.visibility === EventVisibility.invited || input.open ? input.externalGuests?.trim() || null : null,
         deidentificationConfirmed: input.deidentificationConfirmed,
         meetingOrganizerMessage: input.meetingOrganizerMessage,
         meetingOrganizerMessageImageKey,

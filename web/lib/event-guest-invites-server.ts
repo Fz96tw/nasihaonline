@@ -300,10 +300,9 @@ export async function inviteGuestsByEmail(
   actingUser: UserModel,
   input: { emails: string[]; note?: string | null; inviteToJoin?: boolean },
 ): Promise<GuestInviteOutcome[]> {
+  // Email invitations don't depend on the shareable link — on a public
+  // event that's a separate, optional toggle.
   const event = await loadManageable(eventId, actingUser, { link: false });
-  if (!isRestricted(event) && !event.guestLinkToken) {
-    throw new EventError(400, "Turn on guest links for this event before inviting guests.");
-  }
   if (input.emails.length === 0) throw new EventError(400, "Enter at least one email address.");
   if (input.emails.length > MAX_INVITES_PER_REQUEST) {
     throw new EventError(400, `You can invite up to ${MAX_INVITES_PER_REQUEST} people at a time.`);
@@ -625,7 +624,7 @@ export async function joinViaGuestLink(
 }
 
 /**
- * The create/publish form's "External guests" box for a restricted event —
+ * The create/publish form's "External guests" box (restricted or public event) —
  * emailed once the event is actually published (a draft never stores the
  * list). Returns one line per address that didn't go out, or the overall
  * error, so the form can tell the host what to retry from the event page;

@@ -195,6 +195,53 @@ describe("Event guests (DB-backed)", { skip }, () => {
     assert.equal(await db.eventRegistration.count({ where: { eventId: draft.id, source: "invited" } }), 2);
   });
 
+  it("emails a public event's guests without the shareable link, and keeps a public draft's list", async () => {
+    const publicEvent = await db.event.create({
+      data: {
+        title: "Guest test public event",
+        type: "webinar",
+        hostId: host.id,
+        startsAt: new Date(Date.now() + HOUR),
+        open: true,
+        meetingUrl: "https://meet.example.test/pub",
+        publishedAt: new Date(),
+      },
+    });
+    assert.equal(publicEvent.guestLinkToken, null);
+    await guests.inviteGuestsByEmail(publicEvent.id, host, { emails: ["pat@guest.test"] });
+    assert.equal(await db.eventRegistration.count({ where: { eventId: publicEvent.id, source: "invited" } }), 1);
+    assert.equal((await guests.getGuestLinkState(publicEvent.id, host)).linkAvailable, true);
+
+    const draft = await events.createEvent(
+      host.id,
+      {
+        title: "Guest test public draft",
+        description: null,
+        type: "webinar",
+        startsAt: new Date(Date.now() + 24 * HOUR).toISOString(),
+        endsAt: null,
+        open: true,
+        guestLinkEnabled: false,
+        meetingUrl: "https://meet.example.test/pubdraft",
+        deidentificationConfirmed: false,
+        timezone: "UTC",
+        heroImage: null,
+        visibility: "community",
+        invitedUserIds: [],
+        externalGuests: "lee@guest.test",
+        coHostUserIds: [],
+        communityIds: [],
+        categoryIds: [],
+        meetLinkSource: "manual",
+        meetingOrganizerMessage: null,
+        meetingOrganizerMessageImage: null,
+        recurrence: null,
+      },
+      "draft",
+    );
+    assert.equal((await events.getEventForEdit(draft.id))?.externalGuests, "lee@guest.test");
+  });
+
   it("withdraws a removed guest: link rejected, one cancellation email", async () => {
     await db.event.update({
       where: { id: eventId },

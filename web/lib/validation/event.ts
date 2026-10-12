@@ -112,18 +112,28 @@ function requireRestrictedEventInvariants(
       message: "Invite at least one member or external guest.",
     });
   }
-  if (externalGuestCount > MAX_INVITES_PER_REQUEST) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["externalGuests"],
-      message: `You can invite up to ${MAX_INVITES_PER_REQUEST} external guests here — add more from the event page afterwards.`,
-    });
-  }
   if (data.meetLinkSource === "manual" && !data.meetingUrl) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["meetingUrl"],
       message: "Enter a meeting link, or switch to auto-generate.",
+    });
+  }
+}
+
+// The create form's "External guests" box — offered for restricted and
+// public (`open`) events (members-only events have no guests); capped at one
+// invite batch, with more added from the event page afterwards.
+function requireExternalGuestLimit(
+  data: { visibility: EventVisibility; open: boolean; externalGuests: string },
+  ctx: z.RefinementCtx,
+) {
+  if (data.visibility !== EventVisibility.invited && !data.open) return;
+  if (splitGuestAddresses(data.externalGuests).length > MAX_INVITES_PER_REQUEST) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["externalGuests"],
+      message: `You can invite up to ${MAX_INVITES_PER_REQUEST} external guests here — add more from the event page afterwards.`,
     });
   }
 }
@@ -178,7 +188,7 @@ export const createEventSchema = eventFieldsSchema
   .extend({
     visibility: z.nativeEnum(EventVisibility),
     invitedUserIds: z.array(z.string()),
-    // Restricted events only: free text of email addresses (optionally
+    // Restricted and public events: free text of email addresses (optionally
     // `Name <email>`), split by splitGuestAddresses. Invited by email once
     // the event is published (inviteGuestsByEmail) — never stored on a draft.
     externalGuests: z.string().max(10_000),
@@ -192,6 +202,7 @@ export const createEventSchema = eventFieldsSchema
   })
   .superRefine(requireDeidentificationForCaseDiscussion)
   .superRefine(requireRestrictedEventInvariants)
+  .superRefine(requireExternalGuestLimit)
   .superRefine(requireRecurrenceInvariants)
   .superRefine(requireCommunityIds);
 
