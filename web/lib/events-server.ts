@@ -65,6 +65,7 @@ import { getBroadcastEmailSettings } from "@/lib/settings";
 import { createForumPost } from "@/lib/forums-server";
 import { enqueueForumThreadIndexSync } from "@/lib/queues/search-index-queue";
 import { buildRRule, buildRRuleString, describeRecurrence, expandOccurrences, type RecurrenceInput } from "@/lib/recurrence";
+import { guestAccessExpired } from "@/lib/event-guest-access";
 import {
   deleteEventHeroImage,
   deleteMeetingMessageImage,
@@ -1692,7 +1693,7 @@ async function resolveGuestLinkToken(
 
 export class EventError extends Error {
   constructor(
-    public readonly status: 400 | 403 | 404 | 409 | 502,
+    public readonly status: 400 | 403 | 404 | 409 | 410 | 502,
     message: string,
     /** True only for the specific 403 that means "sign in would let you through" (a non-open event's anonymous caller) — distinguishes that case from getEventMeetingStatus's other anonymous 403 ("register for this event"), which signing in does nothing to fix, so the /meet page must not auto-redirect there the same way. */
     public readonly requiresSignIn: boolean = false,
@@ -4582,6 +4583,20 @@ export async function getEventIcs(
  * for *this* event or the caller is rejected — same shape as the existing
  * RSVP'd-or-host gate for a signed-in non-host below.
  */
+/** Whether guest (`rid`) access to this event has lapsed — see lib/event-guest-access.ts. */
+function eventGuestAccessExpired(event: { startsAt: Date; endsAt: Date | null; recurrence: RecurrenceRow | null }): boolean {
+  let lastOccurrenceStart: Date | null = event.startsAt;
+  if (event.recurrence) {
+    // An open-ended series never runs out; a bounded one ends at its last
+    // rule date on or before `until` (the anchor if the rule yields none).
+    lastOccurrenceStart = event.recurrence.until
+      ? (buildRRule(toRecurrenceInput(event.recurrence), event.startsAt).before(event.recurrence.until, true) ??
+        event.startsAt)
+      : null;
+  }
+  return guestAccessExpired({ startsAt: event.startsAt, endsAt: event.endsAt, lastOccurrenceStart });
+}
+
 export async function getEventMeetingStatus(
   eventId: string,
   userId: string | null,
@@ -4614,6 +4629,8 @@ export async function getEventMeetingStatus(
       hostId: true,
       host: { select: { name: true } },
       startsAt: true,
+      endsAt: true,
+      recurrence: { select: RECURRENCE_SELECT },
       meetingUrl: true,
       livekitRoomName: true,
       meetingStartedAt: true,
@@ -4626,6 +4643,11 @@ export async function getEventMeetingStatus(
     },
   });
   if (!event || event.cancelledAt) throw new EventError(404, "Event not found.");
+  // Guest links (`rid`) stop admitting anyone once the event — or a
+  // recurring series' final occurrence — is over. Without this a Meet-backed
+  // event (whose meetingStartedAt is never cleared) would keep handing its
+  // meetingUrl to every old registration indefinitely.
+  const guestAccessOver = () => eventGuestAccessExpired(event);
 
   const isHost = userId !== null && event.hostId === userId;
   const isHostOrCoHost = isHost || (userId !== null && (await isEventCoHost(eventId, userId)));
@@ -4648,6 +4670,7 @@ export async function getEventMeetingStatus(
     if (registration.revokedAt) {
       throw new EventError(403, "Your access to this event has been removed by the host.");
     }
+    if (guestAccessOver()) throw new EventError(410, "This event has ended.");
     // First time this guest reaches the meeting — drives the host's "joined"
     // column. Only written once (the status route is polled every ~5s).
     if (!registration.joinedAt) {
@@ -4677,7 +4700,7 @@ export async function getEventMeetingStatus(
         where: { id: registrationId },
         select: { eventId: true, revokedAt: true, joinedAt: true },
       });
-      if (guest && guest.eventId === eventId && !guest.revokedAt) {
+      if (guest && guest.eventId === eventId && !guest.revokedAt && !guestAccessOver()) {
         hasGuestAccess = true;
         if (!guest.joinedAt) {
           await db.eventRegistration.updateMany({

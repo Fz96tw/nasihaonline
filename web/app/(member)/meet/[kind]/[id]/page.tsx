@@ -83,6 +83,7 @@ export default async function MeetPage({
 
   let status: MeetingWaitingRoomStatus | null = null;
   let deniedMessage: string | null = null;
+  let deniedStatus: number | null = null;
   try {
     status =
       kind === "event"
@@ -99,6 +100,7 @@ export default async function MeetPage({
       }
       if (error.status === 404) notFound();
       deniedMessage = error.message;
+      deniedStatus = error.status;
     } else {
       throw error;
     }
@@ -115,8 +117,9 @@ export default async function MeetPage({
         <p className="text-muted-foreground">{deniedMessage}</p>
         {/* The only anonymous-caller 403 that reaches this card (rather than
             redirecting to /sign-in above) is getEventMeetingStatus's
-            "register for this event" case — give a direct path to fix it. */}
-        {kind === "event" && !user && (
+            "register for this event" case — give a direct path to fix it.
+            Not for a 410 (event over), where registering can't help. */}
+        {kind === "event" && !user && deniedStatus !== 410 && (
           <Button asChild>
             <a href={`/events/${id}`}>Register for this event</a>
           </Button>
