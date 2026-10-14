@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { getCsrfToken } from "@/lib/csrf-client";
-import { DATETIME_LOCAL_STEP_SECONDS, snapDatetimeLocalValue } from "@/lib/datetime-input";
+import { DateTimeInput } from "@/components/shared/date-time-input";
 import { getLocalTimeZoneAbbreviation } from "@/lib/timezone";
 import { useHasMounted } from "@/lib/use-has-mounted";
 
@@ -138,15 +138,7 @@ export function RequestMeetingForm({
                     <FormItem>
                       <div className="flex items-center gap-2">
                         <FormControl>
-                          <Input
-                            type="datetime-local"
-                            step={DATETIME_LOCAL_STEP_SECONDS}
-                            {...field}
-                            onBlur={(event) => {
-                              field.onChange(snapDatetimeLocalValue(event.target.value));
-                              field.onBlur();
-                            }}
-                          />
+                          <DateTimeInput {...field} />
                         </FormControl>
                         {fields.length > 1 && (
                           <Button

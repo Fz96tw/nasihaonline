@@ -10,7 +10,7 @@ import { FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessa
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RecurrenceFrequency } from "@/lib/generated/prisma/enums";
 import type { CreateEventValues } from "@/lib/validation/event";
-import { DATETIME_LOCAL_STEP_SECONDS, snapDatetimeLocalValue } from "@/lib/datetime-input";
+import { DateTimeInput } from "@/components/shared/date-time-input";
 import { AdvancedOptions } from "@/components/shared/wizard/advanced-options";
 import { describeRecurrence } from "@/lib/recurrence";
 import { IANA_TIMEZONES, WEEKDAY_LABELS, defaultUntilIso, endFollowingStart, isCompleteLocalValue, toggleWeekday } from "./shared";
@@ -57,19 +57,11 @@ export function WhenStep({
             <FormItem>
               <FormLabel>Starts</FormLabel>
               <FormControl>
-                <Input
-                  type="datetime-local"
-                  step={DATETIME_LOCAL_STEP_SECONDS}
+                <DateTimeInput
                   {...field}
-                  onChange={(event) => {
-                    field.onChange(event);
-                    moveEndWithStart(event.target.value);
-                  }}
-                  onBlur={(event) => {
-                    const snapped = snapDatetimeLocalValue(event.target.value);
-                    field.onChange(snapped);
-                    moveEndWithStart(snapped);
-                    field.onBlur();
+                  onChange={(value) => {
+                    field.onChange(value);
+                    moveEndWithStart(value);
                   }}
                 />
               </FormControl>
@@ -85,18 +77,15 @@ export function WhenStep({
             <FormItem>
               <FormLabel>Ends (optional)</FormLabel>
               <FormControl>
-                <Input
-                  type="datetime-local"
-                  step={DATETIME_LOCAL_STEP_SECONDS}
+                <DateTimeInput
+                  ref={field.ref}
+                  name={field.name}
                   value={field.value ?? ""}
-                  onChange={(e) => {
+                  onChange={(value) => {
                     endsAutoFilledRef.current = false;
-                    field.onChange(e.target.value.length > 0 ? e.target.value : null);
+                    field.onChange(value.length > 0 ? value : null);
                   }}
-                  onBlur={(e) => {
-                    if (e.target.value) field.onChange(snapDatetimeLocalValue(e.target.value));
-                    field.onBlur();
-                  }}
+                  onBlur={field.onBlur}
                 />
               </FormControl>
               <FormMessage />
