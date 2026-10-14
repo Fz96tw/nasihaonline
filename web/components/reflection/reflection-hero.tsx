@@ -8,7 +8,8 @@ export function ReflectionHero({
 }) {
   return (
     <ReflectionBackdrop imageUrl={reflection.imageUrl} showWholeImage className="rounded-xl">
-      <div className="px-6 py-10 sm:px-10 sm:py-14">
+      {/* Quote sits at the bottom of the image, where the scrim is darkest. */}
+      <div className="flex h-full flex-col justify-end px-6 py-10 sm:px-10 sm:py-14">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/80">Weekly Reflection</p>
         <blockquote className="mt-4 text-3xl font-semibold leading-snug [text-shadow:0_2px_12px_rgba(0,0,0,.6)] sm:text-4xl">
           &ldquo;{reflection.quote}&rdquo;
