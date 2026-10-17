@@ -23,10 +23,10 @@ import { REFLECTION_BODY_TEMPLATE_MAX, REFLECTION_TITLE_TEMPLATE_MAX, reflection
 import type { ReflectionQuoteDto } from "@/lib/weekly-reflection-config";
 
 const FALLBACK_SAMPLE = {
-  text: "No act of kindness, no matter how small, is ever wasted.",
-  author: "Aesop",
-  source: null,
-  prompt: "Share a small kindness someone showed you that stayed with you.",
+  text: "While we teach, we learn.",
+  author: "Seneca",
+  source: "Letters to Lucilius",
+  prompt: "What did you learn by explaining something to someone else?",
 };
 
 /**

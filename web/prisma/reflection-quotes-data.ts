@@ -1,10 +1,13 @@
 // Curated Weekly Reflection pool (seeded by prisma/seed.ts, keyed on `text`).
-// Selection rules: general wisdom on kindness, resilience, community,
-// learning and purpose; secular framing; and only quotes with a documented
-// attribution — widely circulated but misattributed lines (the "Einstein /
-// Gandhi / Twain said it" kind) are deliberately left out. Proverbs are
-// credited to their tradition. To retire an entry, set active=false in the
-// database (admin UI) rather than deleting it here: the seed would recreate it.
+// Theme: learning and growth, drawn from traditions around the world rather
+// than mostly Western ones. Selection rules: secular framing; gender-neutral
+// wording (older translations that say "man"/"he" are rendered neutrally);
+// and only quotes with a documented attribution — widely circulated but
+// misattributed lines (the "Einstein / Gandhi / Twain said it" kind) are
+// deliberately left out. Proverbs are credited to their tradition. To retire
+// an entry, set active=false in the database (admin UI) rather than deleting
+// it here: the seed would recreate it. (The earlier general-wisdom pool was
+// retired wholesale by the 20261016120000_retire_reflection_quotes migration.)
 
 export type ReflectionQuoteSeed = {
   text: string;
@@ -14,274 +17,158 @@ export type ReflectionQuoteSeed = {
 };
 
 export const REFLECTION_QUOTES: ReflectionQuoteSeed[] = [
-  // Kindness & compassion
+  // Curiosity & asking questions
   {
-    text: "No act of kindness, no matter how small, is ever wasted.",
-    author: "Aesop",
-    prompt: "Share a small kindness someone showed you that stayed with you.",
+    text: "Your life has a limit, but knowledge has none.",
+    author: "Zhuangzi",
+    source: "Zhuangzi",
+    prompt: "What would you study if time were no limit?",
   },
   {
-    text: "In the long run, the sharpest weapon of all is a kind and gentle spirit.",
-    author: "Anne Frank",
-    prompt: "When has gentleness accomplished something that force could not?",
+    text: "To ask is a moment's shame; not to ask is a lifetime's shame.",
+    author: "Japanese proverb",
+    prompt: "When did asking a \"silly\" question pay off for you?",
   },
   {
-    text: "Whoever is happy will make others happy too.",
-    author: "Anne Frank",
-    source: "The Diary of a Young Girl",
-    prompt: "Think of someone whose good mood lifted a room. What did they do?",
+    text: "Wonder is the feeling of a philosopher, and philosophy begins in wonder.",
+    author: "Socrates",
+    source: "Plato, Theaetetus",
+    prompt: "What has made you curious lately?",
   },
   {
-    text: "How wonderful it is that nobody need wait a single moment before starting to improve the world.",
-    author: "Anne Frank",
-    source: "The Diary of a Young Girl",
-    prompt: "What is one small thing you could do this week to make things a little better for someone?",
-  },
-  {
-    text: "Wherever there is a human being, there is an opportunity for a kindness.",
-    author: "Seneca",
-    prompt: "Where did you notice an opportunity for kindness this week, and did you take it?",
-  },
-  {
-    text: "No one is useless in this world who lightens the burden of it to any one else.",
-    author: "Charles Dickens",
-    source: "Our Mutual Friend",
-    prompt: "Who has lightened a burden for you? How did it change your day?",
-  },
-  {
-    text: "Be kind, for everyone you meet is fighting a hard battle.",
-    author: "Ian Maclaren",
-    prompt: "How do you remind yourself to extend patience to people when you don't know their story?",
-  },
-  {
-    text: "Life's most persistent and urgent question is, 'What are you doing for others?'",
-    author: "Martin Luther King Jr.",
-    prompt: "What are you doing for others right now, and what would you like to do more of?",
+    text: "I think it's much more interesting to live not knowing than to have answers which might be wrong.",
+    author: "Richard Feynman",
+    source: "BBC Horizon, 1981",
+    prompt: "What question are you happy to leave open for now?",
   },
 
-  // Resilience & perseverance
+  // Learning from others
   {
-    text: "It does not matter how slowly you go as long as you do not stop.",
+    text: "When three people walk together, one of them can surely be my teacher.",
     author: "Confucius",
-    prompt: "What are you making slow but steady progress on? What keeps you going?",
+    source: "Analects",
+    prompt: "What did you learn this week from someone you didn't expect to learn from?",
   },
   {
-    text: "Fall seven times, stand up eight.",
-    author: "Japanese proverb",
-    prompt: "Share a time you got back up after a setback. What helped?",
+    text: "Teachers open the door, but you must enter by yourself.",
+    author: "Chinese proverb",
+    prompt: "Who opened a door for you, and what did you do once you walked through?",
   },
   {
-    text: "A smooth sea never made a skilled sailor.",
-    author: "Proverb",
-    prompt: "What difficult stretch taught you something you couldn't have learned any other way?",
+    text: "Wisdom is like a baobab tree; no one person can embrace it alone.",
+    author: "West African proverb",
+    prompt: "What have you understood better because others shared their view?",
   },
   {
-    text: "Although the world is full of suffering, it is also full of the overcoming of it.",
-    author: "Helen Keller",
-    prompt: "Where have you seen someone overcome something hard? What did you take from it?",
+    text: "No one teaches another, nor is anyone self-taught. People teach each other, mediated by the world.",
+    author: "Paulo Freire",
+    source: "Pedagogy of the Oppressed",
+    prompt: "What have you learned together with others that you couldn't have learned alone?",
   },
   {
-    text: "Hope is the thing with feathers that perches in the soul.",
-    author: "Emily Dickinson",
-    prompt: "What gives you hope when things feel uncertain?",
-  },
-  {
-    text: "I learned that courage was not the absence of fear, but the triumph over it.",
-    author: "Nelson Mandela",
-    source: "Long Walk to Freedom",
-    prompt: "Describe a time you did something while afraid. What got you through?",
-  },
-  {
-    text: "You gain strength, courage, and confidence by every experience in which you really stop to look fear in the face.",
-    author: "Eleanor Roosevelt",
-    source: "You Learn by Living",
-    prompt: "What did facing something you feared teach you about yourself?",
-  },
-  {
-    text: "The only thing we have to fear is fear itself.",
-    author: "Franklin D. Roosevelt",
-    source: "First Inaugural Address, 1933",
-    prompt: "Has fear of something ever turned out to be worse than the thing itself?",
-  },
-  {
-    text: "We suffer more often in imagination than in reality.",
+    text: "While we teach, we learn.",
     author: "Seneca",
     source: "Letters to Lucilius",
-    prompt: "Share a time a worry turned out to be bigger in your head than in real life.",
+    prompt: "What did you learn by explaining something to someone else?",
   },
   {
-    text: "Nobody can go back and start a new beginning, but anyone can start today and make a new ending.",
-    author: "Maria Robinson",
-    prompt: "What new ending would you like to start working toward today?",
-  },
-  {
-    text: "Life can only be understood backwards; but it must be lived forwards.",
-    author: "Søren Kierkegaard",
-    prompt: "What looks different to you now than it did while you were living through it?",
+    text: "One child, one teacher, one book, one pen can change the world.",
+    author: "Malala Yousafzai",
+    source: "UN address, 2013",
+    prompt: "Who was the teacher or mentor who changed your path?",
   },
 
-  // Community & working together
+  // Learning by doing & from mistakes
   {
-    text: "Alone we can do so little; together we can do so much.",
-    author: "Helen Keller",
-    prompt: "Share something you accomplished with the help of others that you couldn't have done alone.",
+    text: "Even monkeys fall from trees.",
+    author: "Japanese proverb",
+    prompt: "Share a mistake you made in something you're good at, and what it taught you.",
   },
   {
-    text: "If you want to go fast, go alone. If you want to go far, go together.",
-    author: "African proverb",
-    prompt: "When has working with others taken you further than you could have gone on your own?",
+    text: "For the things we have to learn before we can do them, we learn by doing them.",
+    author: "Aristotle",
+    source: "Nicomachean Ethics",
+    prompt: "What skill did you only learn by jumping in and doing it?",
   },
   {
-    text: "It takes a village to raise a child.",
-    author: "African proverb",
-    prompt: "Who has been part of your village? How would you like to be part of someone else's?",
+    text: "One who gains knowledge and does not practise it is like one who ploughs a field and leaves it unsown.",
+    author: "Saadi",
+    source: "Gulistan",
+    prompt: "What is something you know you should put into practice but haven't yet?",
   },
   {
-    text: "Talent wins games, but teamwork and intelligence win championships.",
-    author: "Michael Jordan",
-    source: "I Can't Accept Not Trying",
-    prompt: "What makes a team you've been part of work well?",
+    text: "Wherever you turn back from a loss, it is a gain.",
+    author: "Turkish proverb",
+    prompt: "When did changing course, even late, turn out to be the right call?",
   },
   {
-    text: "A problem shared is a problem halved.",
-    author: "Proverb",
-    prompt: "When did sharing a problem with someone make it feel lighter?",
-  },
-  {
-    text: "Injustice anywhere is a threat to justice everywhere.",
-    author: "Martin Luther King Jr.",
-    source: "Letter from Birmingham Jail",
-    prompt: "What does it mean to you to look out for people beyond your own circle?",
-  },
-  {
-    text: "The time is always right to do what is right.",
-    author: "Martin Luther King Jr.",
-    prompt: "Share a time you did the right thing even though the timing wasn't convenient.",
-  },
-  {
-    text: "What you do makes a difference, and you have to decide what kind of difference you want to make.",
-    author: "Jane Goodall",
-    prompt: "What kind of difference do you want to make, and where are you starting?",
+    text: "It is not wrong to go back for that which you have forgotten.",
+    author: "Akan proverb (Sankofa)",
+    prompt: "What is something from your past you'd like to go back and learn again?",
   },
 
-  // Learning & curiosity
+  // Humility & an open mind
   {
-    text: "Only the educated are free.",
+    text: "Knowledge gives humility.",
+    author: "Hitopadesha",
+    prompt: "How has learning more about something made you humbler about it?",
+  },
+  {
+    text: "It is impossible to begin to learn what one thinks one already knows.",
     author: "Epictetus",
     source: "Discourses",
-    prompt: "What did you learn that changed how you see things, or gave you more choices?",
+    prompt: "What did you have to unlearn before you could learn it properly?",
   },
   {
-    text: "Education is the most powerful weapon which you can use to change the world.",
-    author: "Nelson Mandela",
-    prompt: "Who taught you something that changed your path? What did they do well?",
-  },
-  {
-    text: "The important thing is not to stop questioning.",
-    author: "Albert Einstein",
-    source: "LIFE magazine, 1955",
-    prompt: "What are you curious about right now?",
-  },
-  {
-    text: "Imagination is more important than knowledge.",
-    author: "Albert Einstein",
-    source: "The Saturday Evening Post, 1929",
-    prompt: "When has imagination helped you solve something that facts alone couldn't?",
-  },
-  {
-    text: "If I have seen further, it is by standing on the shoulders of giants.",
-    author: "Isaac Newton",
-    prompt: "Whose shoulders have you stood on? Who would you like to thank?",
-  },
-  {
-    text: "Learning never exhausts the mind.",
-    author: "Leonardo da Vinci",
-    prompt: "What is something you've started learning recently, and what is keeping you at it?",
-  },
-  {
-    text: "The more that you read, the more things you will know. The more that you learn, the more places you'll go.",
-    author: "Dr. Seuss",
-    source: "I Can Read With My Eyes Shut!",
-    prompt: "What is a book, article or conversation that took you somewhere new?",
-  },
-  {
-    text: "To know what you know and what you do not know, that is true knowledge.",
-    author: "Confucius",
-    prompt: "What is something you've realized you don't know yet, and how do you plan to find out?",
-  },
-  {
-    text: "I am among those who think that science has great beauty.",
-    author: "Marie Curie",
-    prompt: "What is something that fills you with curiosity or wonder?",
+    text: "In the beginner's mind there are many possibilities, but in the expert's there are few.",
+    author: "Shunryu Suzuki",
+    source: "Zen Mind, Beginner's Mind",
+    prompt: "What would you see differently if you came to it as a beginner again?",
   },
 
-  // Purpose, action & self-knowledge
+  // Lifelong learning & growth
   {
-    text: "The journey of a thousand miles begins with a single step.",
-    author: "Lao Tzu",
-    source: "Tao Te Ching",
-    prompt: "What is one first step you could take this week toward something that matters to you?",
+    text: "Learning should never cease.",
+    author: "Xunzi",
+    source: "Encouraging Learning",
+    prompt: "What are you learning right now, formally or informally?",
   },
   {
-    text: "Knowing others is intelligence; knowing yourself is true wisdom.",
-    author: "Lao Tzu",
-    source: "Tao Te Ching",
-    prompt: "What is something you've learned about yourself in the past year?",
+    text: "In sandy soil, when deep you delve, you reach the springs below; the more you learn, the freer streams of wisdom flow.",
+    author: "Thiruvalluvar",
+    source: "Tirukkural",
+    prompt: "What subject have you gone deep on, and what did you find there?",
   },
   {
-    text: "The unexamined life is not worth living.",
-    author: "Socrates",
-    prompt: "How do you make time to reflect on how things are going?",
+    text: "The highest education is that which does not merely give us information but makes our life in harmony with all existence.",
+    author: "Rabindranath Tagore",
+    source: "Personality",
+    prompt: "What have you learned that changed how you live, not just what you know?",
   },
   {
-    text: "It is not that we have a short time to live, but that we waste a lot of it.",
-    author: "Seneca",
-    source: "On the Shortness of Life",
-    prompt: "What is one thing you want to spend more of your time on?",
+    text: "Seek after learning for the sake of your wellbeing.",
+    author: "Māori whakataukī",
+    prompt: "How does learning something new affect how you feel?",
   },
   {
-    text: "The curious paradox is that when I accept myself just as I am, then I can change.",
-    author: "Carl Rogers",
-    source: "On Becoming a Person",
-    prompt: "Has accepting something about yourself ever made change easier?",
+    text: "Whoever is not taught by their mother will be taught by the world.",
+    author: "Swahili proverb",
+    prompt: "What is a lesson life taught you the hard way?",
   },
   {
-    text: "Not all those who wander are lost.",
-    author: "J.R.R. Tolkien",
-    source: "The Fellowship of the Ring",
-    prompt: "Share a detour in your path that turned out to be valuable.",
+    text: "Educate, agitate, organise.",
+    author: "B. R. Ambedkar",
+    prompt: "How has learning helped you stand up for yourself or for others?",
   },
   {
-    text: "It is our choices that show what we truly are, far more than our abilities.",
-    author: "J.K. Rowling",
-    source: "Harry Potter and the Chamber of Secrets",
-    prompt: "What is a choice you made that you're proud of?",
+    text: "Education is the great engine of personal development.",
+    author: "Nelson Mandela",
+    source: "Long Walk to Freedom",
+    prompt: "How has education, of any kind, changed the course of your life?",
   },
   {
-    text: "Do what you feel in your heart to be right, for you'll be criticized anyway.",
-    author: "Eleanor Roosevelt",
-    prompt: "How do you decide when to follow your own judgment despite what others think?",
-  },
-  {
-    text: "The only way to do great work is to love what you do.",
-    author: "Steve Jobs",
-    source: "Stanford commencement address, 2005",
-    prompt: "What work or activity makes you lose track of time?",
-  },
-  {
-    text: "Well done is better than well said.",
-    author: "Benjamin Franklin",
-    source: "Poor Richard's Almanack",
-    prompt: "Share an example of someone whose actions spoke louder than their words.",
-  },
-  {
-    text: "Genius is one percent inspiration, ninety-nine percent perspiration.",
-    author: "Thomas Edison",
-    prompt: "What has taken far more effort than you expected, and was it worth it?",
-  },
-  {
-    text: "The best time to plant a tree was twenty years ago. The second best time is now.",
-    author: "Proverb",
-    prompt: "What is something you wish you'd started sooner, and what would starting it today look like?",
+    text: "Do the best you can until you know better. Then when you know better, do better.",
+    author: "Maya Angelou",
+    prompt: "What do you now do differently because you learned better?",
   },
 ];

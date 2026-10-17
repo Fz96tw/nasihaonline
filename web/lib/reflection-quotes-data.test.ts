@@ -8,8 +8,8 @@ const RELIGIOUS_OR_SCRIPTURE = /\b(quran|qur'an|koran|hadith|sunnah|bible|gospel
 const MEDICAL_ONLY = /\b(patient|clinical|clinician|physician|doctor|nurse|diagnos\w*|surgery|surgeon|hospital|medicine|medical)\b/i;
 
 describe("REFLECTION_QUOTES seed data", () => {
-  it("holds about 50 quotes", () => {
-    assert.ok(REFLECTION_QUOTES.length >= 40 && REFLECTION_QUOTES.length <= 60, `got ${REFLECTION_QUOTES.length}`);
+  it("holds about six months of quotes", () => {
+    assert.ok(REFLECTION_QUOTES.length >= 20 && REFLECTION_QUOTES.length <= 60, `got ${REFLECTION_QUOTES.length}`);
   });
 
   it("gives every quote text, attribution and a reflection prompt", () => {
@@ -23,6 +23,12 @@ describe("REFLECTION_QUOTES seed data", () => {
   it("has no duplicate quote text (the seed's upsert key)", () => {
     const texts = REFLECTION_QUOTES.map((quote) => quote.text);
     assert.equal(new Set(texts).size, texts.length);
+  });
+
+  it("uses gender-neutral wording", () => {
+    for (const quote of REFLECTION_QUOTES) {
+      assert.doesNotMatch(`${quote.text} ${quote.prompt}`, /\b(man|men|he|him|his)\b/i, quote.text);
+    }
   });
 
   it("has no religious/scripture framing or medical-only framing in quote, attribution or prompt", () => {
