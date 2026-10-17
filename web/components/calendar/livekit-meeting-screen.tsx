@@ -13,6 +13,7 @@ import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/compo
 import { PresenterOverlayControl } from "@/components/calendar/presenter-overlay-control";
 import { OverlayGuestControl } from "@/components/calendar/overlay-guest-control";
 import { ShareStage } from "@/components/calendar/share-stage";
+import { BackgroundControl } from "@/components/calendar/background-control";
 import { ReactionsControl, ReactionsOverlay, useReactions } from "@/components/calendar/reactions";
 import { RaiseHandControl, RaisedHandsQueue, playHandChime, useRaisedHands } from "@/components/calendar/raise-hand";
 
@@ -1203,12 +1204,15 @@ export function LiveKitMeetingScreen({
         <ShareStage
           overlayIds={overlayIds}
           barExtra={
-            raiseHandEnabled ? (
-              <>
-                <RaiseHandControl room={room} raised={ownHandRaised} onError={pushToast} inControlBar />
-                <ReactionsControl send={reactions.send} />
-              </>
-            ) : undefined
+            <>
+              {raiseHandEnabled && (
+                <>
+                  <RaiseHandControl room={room} raised={ownHandRaised} onError={pushToast} inControlBar />
+                  <ReactionsControl send={reactions.send} />
+                </>
+              )}
+              <BackgroundControl onError={pushToast} />
+            </>
           }
         />
       </LiveKitRoom>
