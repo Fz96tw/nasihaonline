@@ -1,5 +1,6 @@
 import { getContributionSummary } from "@/lib/contributions-server";
 import { StatCard } from "@/components/dashboard/stat-card";
+import { hoursDecimals } from "@/lib/contributions";
 
 // Live confirmed balance from the Contribution Ledger, replacing the
 // zero-state placeholder now that 3.1-3.5 have landed (PRD §10 Phase 3).
@@ -10,7 +11,7 @@ export async function HoursBalanceStat({ userId }: { userId: string }) {
     <StatCard
       label="Hours balance"
       numericValue={balance}
-      decimals={balance % 1 === 0 ? 0 : 1}
+      decimals={hoursDecimals(balance)}
       sublabel="Knowledge Hours"
       href="/contributions"
       linkLabel="View history"

@@ -72,9 +72,19 @@ export type ContributionPendingEntry = {
   reviewItem: { id: string; title: string } | null;
 };
 
-/** Trims a trailing ".0" so whole-hour balances read as e.g. "3" rather than "3.0". */
+/**
+ * Up to 2 decimals (matching the ledger's Decimal(5, 2) storage and the
+ * admin adjustment's 0.25 step) with trailing zeros trimmed — "3", "1.5",
+ * "0.25" — so displayed amounts always add up to the displayed balance.
+ * The single hours formatter for the app, digests included.
+ */
 export function formatHours(hours: number): string {
-  return `${hours % 1 === 0 ? hours : hours.toFixed(1)}`;
+  return hours.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
+/** formatHours' decimal count (0–2), for the animated CountUp stats that take a fixed `decimals`. */
+export function hoursDecimals(hours: number): number {
+  return formatHours(hours).split(".")[1]?.length ?? 0;
 }
 
 export const LEDGER_STATUS_LABELS: Record<LedgerStatus, string> = {

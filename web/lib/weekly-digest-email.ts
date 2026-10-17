@@ -7,6 +7,7 @@ import { Role } from "@/lib/generated/prisma/enums";
 import { getWeeklyDigestSettings } from "@/lib/settings";
 import { sendWeeklyDigestTeaserEmail, type WeeklyDigestTeaserEmail } from "@/lib/email";
 import type { WeeklyDigest } from "@/lib/weekly-digest-compose";
+import { formatHours } from "@/lib/contributions";
 
 type Highlights = WeeklyDigest["highlights"];
 
@@ -41,7 +42,7 @@ export function highlightLines(h: Highlights): string[] {
   if (h.peerReviewsStarted > 0) lines.push(plural(h.peerReviewsStarted, "peer review started", "peer reviews started"));
   if (h.replies > 0) lines.push(plural(h.replies, "reply across the community", "replies across the community"));
   if (h.knowledgeHoursThisWeek > 0) {
-    lines.push(`${Number(h.knowledgeHoursThisWeek.toFixed(1)).toLocaleString("en-US")} Knowledge Hours earned`);
+    lines.push(`${formatHours(h.knowledgeHoursThisWeek)} Knowledge Hours earned`);
   }
   return lines;
 }

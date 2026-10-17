@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LogContributionDialog } from "@/components/contributions/log-contribution-dialog";
 import {
+  formatHours,
   LEDGER_STATUS_BADGE_VARIANT,
   LEDGER_STATUS_LABELS,
   transactionItemTypeLabel,
@@ -25,8 +26,7 @@ function formatMeetingTime(iso: string): string {
 
 function formatSignedHours(hours: number): string {
   const sign = hours > 0 ? "+" : "";
-  const rounded = Math.abs(hours) % 1 === 0 ? Math.abs(hours) : Math.abs(hours).toFixed(1);
-  return `${sign}${hours < 0 ? "-" : ""}${rounded}`;
+  return `${sign}${formatHours(hours)}`;
 }
 
 /**

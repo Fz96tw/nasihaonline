@@ -2,6 +2,7 @@
 // digest generator (lib/weekly-digest-server.ts gathers the data), kept
 // separate so the privacy/omission rules can be exercised without a database.
 import type { WeeklyDigestSettings } from "@/lib/weekly-digest-config";
+import { formatHours } from "@/lib/contributions";
 import { periodWording } from "@/lib/weekly-digest-schedule";
 
 type Listed = { id: string; title: string };
@@ -103,10 +104,6 @@ export function renderDigestBody(content: DigestContent, baseUrl: string): strin
 
 function plural(count: number, one: string, many: string) {
   return count === 1 ? one : many;
-}
-
-function formatHours(hours: number) {
-  return Number(hours.toFixed(1)).toLocaleString("en-US");
 }
 
 function formatDay(date: Date, timeZone: string) {

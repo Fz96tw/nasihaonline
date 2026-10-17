@@ -1,5 +1,6 @@
 import { getContributionSummary } from "@/lib/contributions-server";
 import { StatCard } from "@/components/dashboard/stat-card";
+import { hoursDecimals } from "@/lib/contributions";
 
 // Live confirmed lifetime-earned total from the Contribution Ledger,
 // replacing the zero-state placeholder now that 3.1-3.5 have landed (PRD §10 Phase 3).
@@ -10,7 +11,7 @@ export async function LifetimeEarnedStat({ userId }: { userId: string }) {
     <StatCard
       label="Lifetime earned"
       numericValue={lifetimeEarned}
-      decimals={lifetimeEarned % 1 === 0 ? 0 : 1}
+      decimals={hoursDecimals(lifetimeEarned)}
       sublabel="Knowledge Hours"
       href="/contributions"
       linkLabel="View history"
