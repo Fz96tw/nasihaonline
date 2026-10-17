@@ -45,7 +45,7 @@ export function CounterpartPicker({
   const selected = members.find((member) => member.id === value) ?? null;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover modal open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           type="button"

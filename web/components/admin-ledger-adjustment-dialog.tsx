@@ -140,7 +140,10 @@ export function AdminLedgerAdjustmentDialog({ users }: { users: AdjustableUser[]
                 return (
                   <FormItem>
                     <FormLabel>Member</FormLabel>
-                    <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+                    {/* `modal`: the portaled list sits outside DialogContent, so without
+                        its own scroll lock the Dialog's swallows wheel/touch scrolling and
+                        only the first few members are reachable. */}
+                    <Popover modal open={pickerOpen} onOpenChange={setPickerOpen}>
                       <PopoverTrigger asChild>
                         <FormControl>
                           <Button
