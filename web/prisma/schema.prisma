@@ -1090,6 +1090,10 @@ enum NotificationType {
   // disappears from their "awaiting your confirmation" dashboard widget
   // with no explanation of what happened to it.
   contribution_resolved_by_admin
+  // Sent to the member when an admin posts a manual ledger adjustment
+  // (createLedgerAdjustment) — the admin's required reason is included
+  // verbatim, so the dialog warns that it's member-visible.
+  contribution_adjusted
   blog_comment
   forum_reply_mention
   // Explicit @Name tag (§4.8/§4.13) — distinct from forum_reply_mention

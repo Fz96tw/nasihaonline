@@ -29,6 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -260,6 +261,10 @@ export function AdminLedgerAdjustmentDialog({ users }: { users: AdjustableUser[]
                   <FormControl>
                     <Textarea rows={3} value={field.value} onChange={(event) => field.onChange(event.target.value)} />
                   </FormControl>
+                  <FormDescription>
+                    Visible to the member: it&apos;s included in the notification they receive and shown in
+                    their contribution history.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

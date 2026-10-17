@@ -515,6 +515,26 @@ export async function createLedgerAdjustment(
       tx,
     );
 
+    // Otherwise the member's balance just changes with no explanation —
+    // bell only, matching resolveContribution's notifications. The reason
+    // goes in verbatim (the dialog warns the admin it's member-visible);
+    // skipped when an admin adjusts their own balance.
+    if (targetUserId !== admin.id) {
+      const amount = `${formatHours(Math.abs(hours))} Knowledge Hours`;
+      await createNotification(
+        {
+          recipientId: targetUserId,
+          type: NotificationType.contribution_adjusted,
+          message:
+            hours > 0
+              ? `An admin added ${amount} to your balance: ${trimmedReason}`
+              : `An admin removed ${amount} from your balance: ${trimmedReason}`,
+          link: "/contributions",
+        },
+        tx,
+      );
+    }
+
     return entry;
   });
 }

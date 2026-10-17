@@ -190,7 +190,7 @@ This is the platform's differentiating mechanic. system-design.md's generic "Con
 | Research resource / case discussion request | 0.5 |
 | Attend webinar | Always free (not a spend event) |
 
-**Transaction types:** `earned`, `spent`, `adjusted` (adjusted = admin correction, must require admin role + reason note for audit). **No `transferred` type** — the Charter explicitly prohibits Knowledge Hours being "transferred, gifted, or sold between members"; an earlier draft of this PRD included a `transferred` type that directly conflicted with this rule and has been removed. Nothing in the data model should allow one member's balance to be moved to another member's balance outside the normal earn/spend/admin-adjust flows.
+**Transaction types:** `earned`, `spent`, `adjusted` (adjusted = admin correction, must require admin role + reason note for audit; the reason is member-visible — the member gets a bell notification quoting it, and it shows in their contribution history). **No `transferred` type** — the Charter explicitly prohibits Knowledge Hours being "transferred, gifted, or sold between members"; an earlier draft of this PRD included a `transferred` type that directly conflicted with this rule and has been removed. Nothing in the data model should allow one member's balance to be moved to another member's balance outside the normal earn/spend/admin-adjust flows.
 
 **How entries get posted (hybrid model — resolves the ambiguity left open in earlier drafts):**
 
