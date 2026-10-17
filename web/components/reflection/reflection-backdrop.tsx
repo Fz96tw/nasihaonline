@@ -37,10 +37,21 @@ export function ReflectionBackdrop({
 
   // A server-rendered <img> can fail before React attaches onError, which then
   // never fires — so also check once mounted whether it already failed (same
-  // approach as components/ui/avatar.tsx).
+  // approach as components/ui/avatar.tsx). Unlike the avatar, this <img> is lazy, and Safari reports a
+  // lazy image whose load is still deferred (offscreen, e.g. the feed panel below the fold on iPad) as
+  // `complete` with no pixels, so that alone isn't proof of failure; confirm with a probe load first.
   useEffect(() => {
     const img = imgRef.current;
-    if (imageUrl && img && img.complete && img.naturalWidth === 0) setBrokenUrl(imageUrl);
+    if (!imageUrl || !img || !img.complete || img.naturalWidth !== 0) return;
+    let cancelled = false;
+    const probe = new Image();
+    probe.onerror = () => {
+      if (!cancelled) setBrokenUrl(imageUrl);
+    };
+    probe.src = imageUrl;
+    return () => {
+      cancelled = true;
+    };
   }, [imageUrl]);
 
   return (
