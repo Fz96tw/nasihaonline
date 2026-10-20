@@ -40,7 +40,7 @@ export type FeedItem = {
   author: { id: string | null; name: string | null; avatarUrl: string | null; titleSpecialty: string | null; countryRegion: string | null };
   /** Events, blog posts, announcements, and surveys carry a hero image; library items get one only for recorded lectures (YouTube thumbnail) — null otherwise. Forum threads always carry the same static default (/images/forum-thread.jpg), rendered by FeedRow as a small left-side thumbnail rather than the full-width image used by other types. */
   imageUrl: string | null;
-  /** Only library items with a YouTube link and no uploaded hero image carry this — FeedRow renders imageUrl (the video's thumbnail) as a click-to-play facade that swaps in this embed. Undefined for every other row. */
+  /** Library items with a YouTube link and no uploaded hero image carry this — FeedRow renders imageUrl (the video's thumbnail) as a click-to-play facade that swaps in this embed. Forum threads carry it when the previewed post links a YouTube video — FeedRow shows it as its own player, or as the first carousel slide ahead of any bodyImageUrls. Undefined for every other row. */
   youtubeEmbedUrl?: string;
   /** Paired with youtubeEmbedUrl — the poster image FeedRow shows until the player autoplays. Only set alongside it. */
   youtubeThumbnailUrl?: string;

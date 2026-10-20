@@ -490,8 +490,15 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
               <FeedYoutubePlayer thumbnailUrl={item.youtubeThumbnailUrl!} embedUrl={item.youtubeEmbedUrl!} />
             )}
             {isForumThread && item.bodyImageUrl && (
+              // The post's YouTube video (if any) leads, so it's the slide
+              // that autoplays; the pasted images follow.
               <FeedImageCarousel
-                slides={(item.bodyImageUrls?.length ? item.bodyImageUrls : [item.bodyImageUrl]).map((url) => ({ kind: "image" as const, url }))}
+                slides={[
+                  ...(item.youtubeEmbedUrl && item.youtubeThumbnailUrl
+                    ? [{ kind: "video" as const, thumbnailUrl: item.youtubeThumbnailUrl, embedUrl: item.youtubeEmbedUrl }]
+                    : []),
+                  ...(item.bodyImageUrls?.length ? item.bodyImageUrls : [item.bodyImageUrl]).map((url) => ({ kind: "image" as const, url })),
+                ]}
               />
             )}
             {item.stats && (

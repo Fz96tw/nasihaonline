@@ -1177,8 +1177,8 @@ export async function getFeedPage(params: {
           bodyImageUrl,
           bodyImageUrls: bodyImageUrls.length ? bodyImageUrls : undefined,
           // A YouTube link in that same post previews as an inline player —
-          // but only when there's no pasted image, which wins the one slot.
-          ...(!bodyImageUrl && youtubeLink
+          // alongside any pasted images, as the carousel's first slide.
+          ...(youtubeLink
             ? {
                 youtubeEmbedUrl: youtubeEmbedUrl(youtubeLink) ?? undefined,
                 youtubeThumbnailUrl: youtubeThumbnailUrl(youtubeLink) ?? undefined,
@@ -1227,8 +1227,6 @@ export async function getFeedPage(params: {
       if (ownRow[0] && threadImages?.length) {
         ownRow[0].bodyImageUrl = threadImages[0];
         ownRow[0].bodyImageUrls = threadImages;
-        delete ownRow[0].youtubeEmbedUrl;
-        delete ownRow[0].youtubeThumbnailUrl;
       }
       const reply = authorIds
         ? (followedPost?.isReply ? followedPost.post : null)
