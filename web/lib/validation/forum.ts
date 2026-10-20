@@ -81,19 +81,26 @@ export const updateForumPostSchema = z.object({
 export type UpdateForumPostValues = z.infer<typeof updateForumPostSchema>;
 
 /**
- * PATCH /api/forums/threads/:threadId body shape — title + audience edit
- * for a standalone thread. Reuses requireRestrictedThreadInvariants exactly
- * as createForumThreadSchema does. When the thread is already `invited` and
+ * PATCH /api/forums/threads/:threadId body shape — title, audience,
+ * destination forum ("Post to"/"Category") and Topics edit for a standalone
+ * thread. Reuses requireRestrictedThreadInvariants exactly as
+ * createForumThreadSchema does. When the thread is already `invited` and
  * staying `invited`, the client pre-fills invitedUserIds with the thread's
  * current roster purely to satisfy this invariant — updateForumThread
  * ignores the field entirely in that case (roster changes keep going
- * through the existing PATCH .../invitees endpoint).
+ * through the existing PATCH .../invitees endpoint). Like create, whether
+ * deidentificationConfirmed is required depends on the destination forum,
+ * so that gate lives in updateForumThread (only on a move into Clinical
+ * Discussions).
  */
 export const updateForumThreadSchema = z
   .object({
     title: z.string().trim().min(1, "Title is required").max(200),
     visibility: z.nativeEnum(ForumThreadVisibility),
     invitedUserIds: z.array(z.string()),
+    forumId: z.string().trim().min(1),
+    categoryIds: z.array(z.string()),
+    deidentificationConfirmed: z.boolean(),
   })
   .superRefine(requireRestrictedThreadInvariants);
 

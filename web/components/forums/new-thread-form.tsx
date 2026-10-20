@@ -15,13 +15,12 @@ import { getCsrfToken } from "@/lib/csrf-client";
 import { InviteePicker } from "@/components/members/invitee-picker";
 import { ForumThreadVisibility } from "@/lib/generated/prisma/enums";
 import { usePasteImageUpload } from "@/lib/use-paste-image-upload";
-import { CategoryCheckboxField } from "@/components/shared/category-checkbox-field";
 import type { KnowledgeCategoryOption } from "@/lib/library";
 import { hasVideoToken } from "@/lib/linkify";
 import { QuickRecordingPicker, type QuickRecordingListItem } from "@/components/quick-recording-picker";
-import { cn } from "@/lib/utils";
 import { clearLocalDraft, readLocalDraft, writeLocalDraft } from "@/lib/local-draft";
-import { CLINICAL_DISCUSSIONS_SLUG, groupForumsByCommunity, type ForumCategory } from "@/lib/forums";
+import { CLINICAL_DISCUSSIONS_SLUG, type ForumCategory } from "@/lib/forums";
+import { ThreadDestinationPicker, ThreadTopicsCheckboxes } from "@/components/forums/thread-classification-fields";
 
 const DEFAULT_VALUES: CreateForumThreadValues = {
   title: "",
@@ -46,30 +45,6 @@ const BODY_PLACEHOLDER = [
  * called at a real component's top level rather than inside FormField's
  * render-prop callback.
  */
-function ChoiceChip({
-  selected,
-  onClick,
-  children,
-}: {
-  selected: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onClick}
-      className={cn(
-        "rounded-full border px-3 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        selected ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted/60",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
 function ThreadBodyField({
   field,
   onImageUploadStateChange,
@@ -172,21 +147,7 @@ export function NewThreadForm({
   const requireDeidentification = forumSlug === CLINICAL_DISCUSSIONS_SLUG;
   const isPost = variant === "post";
   const noun = isPost ? "post" : "thread";
-  const { general: generalForums, groups: communityForumGroups } = groupForumsByCommunity(forums, communities);
-  // "Post to" audience chips: Everyone (community-less forums) or a
-  // community. Derived from the selected forum so the two chip rows can't
-  // drift apart.
-  const audienceId = selectedForum.communityId;
-  const categoryOptions = audienceId === null ? generalForums : (communityForumGroups.find((g) => g.community.id === audienceId)?.forums ?? []);
-  const audienceName = audienceId === null ? null : (communities.find((c) => c.id === audienceId)?.name ?? null);
-  function selectAudience(nextAudienceId: string | null) {
-    const options =
-      nextAudienceId === null ? generalForums : (communityForumGroups.find((g) => g.community.id === nextAudienceId)?.forums ?? []);
-    // Prefer General when switching back to Everyone; otherwise the
-    // audience's first forum.
-    const next = options.find((forum) => forum.slug === "general") ?? options[0];
-    if (next) selectForum(next.id);
-  }
+  const audienceName = communityId === null ? null : (communities.find((c) => c.id === communityId)?.name ?? null);
   function selectForum(nextForumId: string) {
     setForumId(nextForumId);
     // Tags belong to a community, so a prior selection may not apply to the
@@ -197,12 +158,6 @@ export function NewThreadForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
-  // Communities aren't a submitted field here (a thread's forum, not a
-  // community list, is the required top-level classification — see
-  // createForumThreadSchema) so this is local UI state, not a form field.
-  // Pre-checking the member's own communities preserves the old behavior of
-  // surfacing their categories without extra clicks.
-  const [selectedCommunityIds, setSelectedCommunityIds] = useState<string[]>(myCommunityIds);
 
   const form = useForm<CreateForumThreadValues>({
     resolver: zodResolver(createForumThreadSchema),
@@ -304,42 +259,7 @@ export function NewThreadForm({
         )}
 
         {isPost && (
-          <div className="flex flex-col gap-4 rounded-md border p-4">
-            <div className="flex flex-col gap-2">
-              <span className="text-sm font-medium">Post to</span>
-              <div className="flex flex-wrap gap-2">
-                {generalForums.length > 0 && (
-                  <ChoiceChip selected={audienceId === null} onClick={() => selectAudience(null)}>
-                    Everyone
-                  </ChoiceChip>
-                )}
-                {communityForumGroups.map((group) => (
-                  <ChoiceChip
-                    key={group.community.id}
-                    selected={audienceId === group.community.id}
-                    onClick={() => selectAudience(group.community.id)}
-                  >
-                    {group.community.name}
-                  </ChoiceChip>
-                ))}
-              </div>
-            </div>
-            {categoryOptions.length > 1 && (
-              <div className="flex flex-col gap-2">
-                <span className="text-sm font-medium">Category</span>
-                <div className="flex flex-wrap gap-2">
-                  {categoryOptions.map((forum) => (
-                    <ChoiceChip key={forum.id} selected={forum.id === forumId} onClick={() => selectForum(forum.id)}>
-                      {forum.name}
-                    </ChoiceChip>
-                  ))}
-                </div>
-                {selectedForum.description && (
-                  <p className="text-xs text-muted-foreground">{selectedForum.description}</p>
-                )}
-              </div>
-            )}
-          </div>
+          <ThreadDestinationPicker forums={forums} communities={communities} forumId={forumId} onSelectForum={selectForum} />
         )}
 
         <FormField
@@ -425,62 +345,14 @@ export function NewThreadForm({
           render={({ field }) => (
             <FormItem>
               <FormLabel>{isPost ? "Tags (optional)" : "Topics (optional)"}</FormLabel>
-              {communityId ? (
-                // This forum already belongs to a single community, so
-                // asking the member to pick a community again (via the
-                // Accordion CategoryCheckboxField normally uses) would be
-                // redundant — scope straight to that community's
-                // categories as a flat checkbox list.
-                <div className="flex flex-wrap gap-4 rounded-md border p-3">
-                  {categories
-                    .filter((category) => category.communityId === communityId)
-                    .map((category) => (
-                      <label key={category.id} className="flex items-center gap-2 text-sm">
-                        <Checkbox
-                          checked={field.value.includes(category.id)}
-                          onCheckedChange={() =>
-                            field.onChange(
-                              field.value.includes(category.id)
-                                ? field.value.filter((id) => id !== category.id)
-                                : [...field.value, category.id],
-                            )
-                          }
-                        />
-                        {category.name}
-                      </label>
-                    ))}
-                </div>
-              ) : (
-                // No fixed community (a general forum) — let the member pick
-                // which top-level communities they're posting about first,
-                // then only show categories for the communities selected.
-                // Same two-step shape as SubmitResourceForm/SubmitEventForm.
-                <div className="flex flex-col gap-3">
-                  <div className="flex flex-wrap gap-4 rounded-md border p-3">
-                    {communities.map((community) => (
-                      <label key={community.id} className="flex items-center gap-2 text-sm">
-                        <Checkbox
-                          checked={selectedCommunityIds.includes(community.id)}
-                          onCheckedChange={(checked) =>
-                            setSelectedCommunityIds((prev) =>
-                              checked ? [...prev, community.id] : prev.filter((id) => id !== community.id),
-                            )
-                          }
-                        />
-                        {community.name}
-                      </label>
-                    ))}
-                  </div>
-                  {selectedCommunityIds.length > 0 && (
-                    <CategoryCheckboxField
-                      categories={categories.filter((category) => selectedCommunityIds.includes(category.communityId))}
-                      communities={communities.filter((community) => selectedCommunityIds.includes(community.id))}
-                      value={field.value}
-                      onChange={field.onChange}
-                    />
-                  )}
-                </div>
-              )}
+              <ThreadTopicsCheckboxes
+                categories={categories}
+                communities={communities}
+                forumCommunityId={communityId}
+                initialCommunityIds={myCommunityIds}
+                value={field.value}
+                onChange={field.onChange}
+              />
               <FormMessage />
             </FormItem>
           )}

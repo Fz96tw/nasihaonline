@@ -870,7 +870,8 @@ export async function createForumThread(
 
 /**
  * PATCH /api/forums/threads/:threadId — the author or a moderator/admin
- * editing a standalone thread's title and/or audience. Only ever valid for
+ * editing a standalone thread's title, audience, destination forum and/or
+ * Topics. Only ever valid for
  * a standalone, member-initiated thread — a thread carrying an
  * eventId/knowledgeItemId has its title fully owned by
  * events-server.ts/library-server.ts (renamed via their own updateMany
@@ -898,12 +899,25 @@ export async function createForumThread(
  *                             model doc comment and
  *                             updateForumThreadInvitees's own doc comment
  *                             already state.
+ *
+ * Moving forums ("Post to"/"Category"): the destination goes through the
+ * same active + community-access gate as createForumThread (as the acting
+ * user, so a moderator can move anywhere), and a move into Clinical
+ * Discussions needs the same de-identification confirmation, recorded on
+ * the opening post. Topics are replaced wholesale, same as create.
  */
 export async function updateForumThread(
   threadId: string,
   actingUserId: string,
   isPrivileged: boolean,
-  input: { title: string; visibility: ForumThreadVisibility; invitedUserIds: string[] },
+  input: {
+    title: string;
+    visibility: ForumThreadVisibility;
+    invitedUserIds: string[];
+    forumId: string;
+    categoryIds: string[];
+    deidentificationConfirmed: boolean;
+  },
 ): Promise<{ id: string }> {
   const thread = await db.forumThread.findUnique({
     where: { id: threadId },
@@ -915,7 +929,10 @@ export async function updateForumThread(
       eventId: true,
       knowledgeItemId: true,
       removed: true,
+      forumId: true,
       forum: { select: { slug: true, category: { select: { communityId: true } } } },
+      invitees: { select: { userId: true } },
+      posts: { select: { id: true }, orderBy: { createdAt: "asc" }, take: 1 },
     },
   });
   if (!thread) throw new ForumError(404, "Thread not found.");
@@ -928,6 +945,32 @@ export async function updateForumThread(
   }
   if (thread.visibility === ForumThreadVisibility.invited && input.visibility === ForumThreadVisibility.community) {
     throw new ForumError(400, "A restricted thread can't be switched back to Everyone.");
+  }
+
+  const isMoving = input.forumId !== thread.forumId;
+  let forum = thread.forum;
+  if (isMoving) {
+    const target = await db.forum.findUnique({
+      where: { id: input.forumId },
+      select: { slug: true, active: true, category: { select: { communityId: true } } },
+    });
+    // Same "Forum not found" 404 for an inaccessible forum as
+    // createForumThread; the Events/Library forums only ever hold their
+    // own linked threads.
+    const member = await getMemberCommunityContext(actingUserId);
+    if (
+      !target ||
+      !target.active ||
+      target.slug === EVENTS_FORUM_SLUG ||
+      target.slug === LIBRARY_FORUM_SLUG ||
+      !isForumAccessibleToMember(target, member, isPrivileged)
+    ) {
+      throw new ForumError(404, "Forum not found.");
+    }
+    if (target.slug === CLINICAL_DISCUSSIONS_SLUG && !input.deidentificationConfirmed) {
+      throw new ForumError(400, "You must confirm all patient information has been de-identified.");
+    }
+    forum = target;
   }
 
   const isNewlyRestricted =
@@ -957,16 +1000,22 @@ export async function updateForumThread(
       where: { id: threadId },
       data: {
         title: input.title,
+        ...(isMoving ? { forumId: input.forumId } : {}),
+        categories: { deleteMany: {}, create: input.categoryIds.map((categoryId) => ({ categoryId })) },
         ...(isNewlyRestricted
           ? { visibility: ForumThreadVisibility.invited, invitees: { create: invitees.map((u) => ({ userId: u.id })) } }
           : {}),
       },
     });
 
+    if (isMoving && forum.slug === CLINICAL_DISCUSSIONS_SLUG && thread.posts[0]) {
+      await tx.forumPost.update({ where: { id: thread.posts[0].id }, data: { deidentificationConfirmed: true } });
+    }
+
     if (isNewlyRestricted) {
       await notifyThreadInvitees(tx, {
         threadId,
-        forumSlug: thread.forum.slug,
+        forumSlug: forum.slug,
         title: input.title,
         authorName,
         userIds: invitees.map((u) => u.id),
@@ -974,11 +1023,16 @@ export async function updateForumThread(
     }
   });
 
-  if (isNewlyRestricted) {
-    const forumCommunityId = thread.forum.category?.communityId;
+  // Same auto-join as createForumThread: a newly invited member, or (on a
+  // move into a community's forum) the author and every existing invitee,
+  // becomes a member of the forum's community.
+  const forumCommunityId = forum.category?.communityId;
+  if (forumCommunityId && (isNewlyRestricted || isMoving)) {
     await ensureCommunityMembership(
-      invitees.map((u) => u.id),
-      forumCommunityId ? [forumCommunityId] : [],
+      isMoving
+        ? [thread.authorId, ...thread.invitees.map((i) => i.userId), ...invitees.map((u) => u.id)]
+        : invitees.map((u) => u.id),
+      [forumCommunityId],
     );
   }
 
