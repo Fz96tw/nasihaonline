@@ -1,7 +1,7 @@
 /**
  * Extracts a YouTube video id from any of the URL shapes a member might
  * paste into "Submit Resource" (watch?v=, youtu.be/, already an /embed/
- * link).
+ * link, a /shorts/ or /live/ link).
  */
 export function extractYoutubeVideoId(rawUrl: string): string | null {
   try {
@@ -9,8 +9,9 @@ export function extractYoutubeVideoId(rawUrl: string): string | null {
     if (url.hostname.includes("youtu.be")) {
       return url.pathname.slice(1) || null;
     }
-    if (url.pathname.startsWith("/embed/")) {
-      return url.pathname.replace("/embed/", "") || null;
+    const pathId = url.pathname.match(/^\/(?:embed|shorts|live)\/([^/]+)/);
+    if (pathId) {
+      return pathId[1];
     }
     return url.searchParams.get("v");
   } catch {
