@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { Room } from "livekit-client";
+import { ConnectionState, RoomEvent, type Room } from "livekit-client";
 
 /**
  * "Away" presence (Nasiha Conference). Set while this participant's meeting
@@ -15,40 +15,75 @@ import type { Room } from "livekit-client";
  */
 export const AWAY_ATTR = "away";
 
+/** Wait before retrying an away update that failed (e.g. timed out mid-reconnect). */
+const AWAY_RETRY_MS = 2_000;
+
 /**
  * Keeps the local participant's away attribute in sync with page
  * visibility. `watching` (the meeting pop-out is open — see
  * components/calendar/meeting-pip.tsx) overrides a hidden page: someone
  * following the meeting in a floating window isn't away, and on desktop
- * their camera is still live. Best-effort: a phone may freeze the page right
- * after `visibilitychange`, so the update is fire-and-forget rather than
- * awaited.
+ * their camera is still live.
+ *
+ * Converges on the attribute LiveKit actually holds rather than trusting
+ * what was last sent, one update at a time, retrying after a failure and
+ * re-checking whenever the connection comes back. Trusting the last send
+ * left members stuck as Away (reported 2026-10-21): returning while the
+ * connection was briefly reconnecting skipped the clear entirely, and
+ * setAttributes "times out" whenever a later update overtakes it (it waits
+ * up to 5s to see its own value echoed back), so a quick switch away and
+ * back could record a clear that never landed.
  */
 export function useAwayPresence(room: Room | null, watching = false) {
-  // Last value sent for this room — kept across effect re-runs so a change of `watching` alone doesn't resend.
-  const sentRef = useRef<{ room: Room | null; value: string }>({ room: null, value: "" });
+  const watchingRef = useRef(watching);
+  watchingRef.current = watching;
+  const syncRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     if (!room) return;
     const activeRoom = room;
-    if (sentRef.current.room !== activeRoom) sentRef.current = { room: activeRoom, value: "" };
+    let inFlight = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let disposed = false;
 
     function sync() {
-      if (activeRoom.state !== "connected") return;
-      const next = document.visibilityState === "hidden" && !watching ? "1" : "";
-      if (next === sentRef.current.value) return;
-      sentRef.current.value = next;
+      if (disposed || inFlight || activeRoom.state !== ConnectionState.Connected) return;
+      const wanted = document.visibilityState === "hidden" && !watchingRef.current ? "1" : "";
+      if ((activeRoom.localParticipant.attributes[AWAY_ATTR] ?? "") === wanted) return;
+      inFlight = true;
+      clearTimeout(retryTimer);
       // An empty string deletes the attribute.
-      activeRoom.localParticipant.setAttributes({ [AWAY_ATTR]: next }).catch((error) => {
-        sentRef.current.value = "";
-        console.warn("[presence] Failed to update away status", error);
-      });
+      activeRoom.localParticipant.setAttributes({ [AWAY_ATTR]: wanted }).then(
+        () => {
+          inFlight = false;
+          sync();
+        },
+        (error) => {
+          inFlight = false;
+          console.warn("[presence] Failed to update away status", error);
+          retryTimer = setTimeout(sync, AWAY_RETRY_MS);
+        },
+      );
     }
 
+    syncRef.current = sync;
     sync();
     document.addEventListener("visibilitychange", sync);
-    return () => document.removeEventListener("visibilitychange", sync);
-  }, [room, watching]);
+    activeRoom.on(RoomEvent.ConnectionStateChanged, sync);
+    activeRoom.on(RoomEvent.ParticipantAttributesChanged, sync);
+    return () => {
+      disposed = true;
+      clearTimeout(retryTimer);
+      syncRef.current = () => {};
+      document.removeEventListener("visibilitychange", sync);
+      activeRoom.off(RoomEvent.ConnectionStateChanged, sync);
+      activeRoom.off(RoomEvent.ParticipantAttributesChanged, sync);
+    };
+  }, [room]);
+
+  useEffect(() => {
+    syncRef.current();
+  }, [watching]);
 }
 
 /**
