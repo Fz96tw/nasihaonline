@@ -151,8 +151,11 @@ function PipWindowView({ trackRef, onLeave }: { trackRef: TrackReferenceOrPlaceh
   );
 }
 
-/** Pop out (and, on phones, Full screen) buttons for the meeting's bottom control bar. */
-export function MeetingPipControl() {
+/**
+ * Pop out (and, on phones, Full screen) buttons for the meeting's bottom control bar. `onOpenChange` reports
+ * whether a pop-out is open, so the viewer isn't shown as Away while watching it (see useAwayPresence).
+ */
+export function MeetingPipControl({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
   const room = useRoomContext();
   const support = usePipSupport();
   const featured = useFeaturedTrack();
@@ -281,8 +284,15 @@ export function MeetingPipControl() {
     }
   }
 
-  const canPip = !!support && (support.documentPip || (support.videoPip && !!featuredVideo));
   const pipOpen = !!pipWindow || videoPipOpen;
+  const onOpenChangeRef = useRef(onOpenChange);
+  onOpenChangeRef.current = onOpenChange;
+  useEffect(() => {
+    onOpenChangeRef.current?.(pipOpen);
+  }, [pipOpen]);
+  useEffect(() => () => onOpenChangeRef.current?.(false), []);
+
+  const canPip = !!support && (support.documentPip || (support.videoPip && !!featuredVideo));
   const showFullscreen = !!support && support.coarsePointer && support.fullscreen && !!featuredVideo;
 
   return (

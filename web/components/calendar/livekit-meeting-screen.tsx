@@ -1137,7 +1137,9 @@ export function LiveKitMeetingScreen({
 
   usePreventScreenShareSelfMirror();
   useScreenWakeLock();
-  useAwayPresence(room);
+  // A pop-out open means the viewer is still following the meeting, even with this page in the background.
+  const [pipOpen, setPipOpen] = useState(false);
+  useAwayPresence(room, pipOpen);
 
   const raiseHandEnabled = !isQuickRecording && !!lowerHandEndpoint;
   // Only the host/co-host is told when someone else raises a hand — everyone else just sees the badge.
@@ -1527,7 +1529,7 @@ export function LiveKitMeetingScreen({
                 </>
               )}
               <BackgroundControl onError={pushToast} />
-              {!isQuickRecording && <MeetingPipControl />}
+              {!isQuickRecording && <MeetingPipControl onOpenChange={setPipOpen} />}
             </>
           }
         />
