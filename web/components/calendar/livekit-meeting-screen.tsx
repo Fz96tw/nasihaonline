@@ -1047,6 +1047,19 @@ export function LiveKitMeetingScreen({
     return () => clearTimeout(timer);
   }, [secondsRemaining, recordingStopEndpoint]);
 
+  // The page behind this full-screen call stays scrollable otherwise, and a swipe on the call scrolls it —
+  // which is what makes a mobile browser's address bar slide in and out over the control bar.
+  useEffect(() => {
+    const html = document.documentElement;
+    const previous = [html.style.overflow, document.body.style.overflow, html.style.overscrollBehavior];
+    html.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    html.style.overscrollBehavior = "none";
+    return () => {
+      [html.style.overflow, document.body.style.overflow, html.style.overscrollBehavior] = previous;
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     async function fetchToken() {
@@ -1124,7 +1137,10 @@ export function LiveKitMeetingScreen({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] bg-background">
+    // h-dvh rather than inset-0's bottom edge: mobile browsers with a bottom address bar (DuckDuckGo's default)
+    // can slide it back over the page — e.g. after the camera permission prompt — without resizing a fixed
+    // inset-0 box, hiding the control bar's bottom row behind it (reported 2026-10-21). dvh tracks the bar.
+    <div className="fixed inset-x-0 top-0 z-[60] h-dvh bg-background">
       <MeetingBanner title={title} organizerName={organizerName} />
       <DisclaimerReminderFlash isQuickRecording={isQuickRecording} />
       <ParticipantActivityToasts toasts={toasts} />

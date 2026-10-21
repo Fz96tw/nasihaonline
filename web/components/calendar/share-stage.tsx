@@ -38,6 +38,13 @@ const COMPACT_BAR_WITH_CHAT_QUERY = "(max-width: 1719px)";
  */
 export const BAR_CLEARANCE_VAR = "--nasiha-control-bar-clearance";
 
+/**
+ * LiveKit sizes the stage as `100% - --lk-control-bar-height` (one 69px row). Our bar wraps to two rows in
+ * portrait, so instead the stage takes whatever height the bar leaves, and the bar can never be pushed below
+ * the screen.
+ */
+const STAGE_FILL_STYLE = { height: "auto", flex: "1 1 0", minHeight: 0 } as const;
+
 function useMediaQuery(query: string): boolean {
   return useSyncExternalStore(
     (onChange) => {
@@ -107,7 +114,7 @@ export function ShareStage({ overlayIds, barExtra }: { overlayIds: string[]; bar
   let stage;
   if (screenShares.length > 0 && cameras.length > 0) {
     stage = (
-      <div className="lk-focus-layout-wrapper">
+      <div className="lk-focus-layout-wrapper" style={STAGE_FILL_STYLE}>
         <FocusLayoutContainer>
           <CarouselLayout tracks={cameras}>
             <HandAwareTile />
@@ -118,7 +125,7 @@ export function ShareStage({ overlayIds, barExtra }: { overlayIds: string[]; bar
     );
   } else {
     stage = (
-      <div className="lk-grid-layout-wrapper">
+      <div className="lk-grid-layout-wrapper" style={STAGE_FILL_STYLE}>
         <GridLayout tracks={[...screenShares, ...cameras]}>
           <HandAwareTile />
         </GridLayout>
