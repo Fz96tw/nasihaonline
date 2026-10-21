@@ -5,7 +5,7 @@ import { Hand } from "lucide-react";
 import { RoomEvent, Track, type Participant, type Room } from "livekit-client";
 import { ParticipantTile, useMaybeTrackRefContext, useParticipantAttribute } from "@livekit/components-react";
 import { getCsrfToken } from "@/lib/csrf-client";
-import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/components/calendar/livekit-control-styles";
+import { BAR_LABEL_CLASS, LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/components/calendar/livekit-control-styles";
 
 /**
  * Raise hand (Nasiha Conference). The signal is two LiveKit participant
@@ -184,7 +184,7 @@ export function RaiseHandControl({
       }
     >
       <Hand className={`h-4 w-4 ${raised ? "text-yellow-400" : ""}`} />
-      <span className="hidden sm:inline">{raised ? "Lower hand" : "Raise hand"}</span>
+      <span className={inControlBar ? BAR_LABEL_CLASS : "hidden sm:inline"}>{raised ? "Lower hand" : "Raise hand"}</span>
     </button>
   );
 }

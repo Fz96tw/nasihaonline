@@ -18,3 +18,9 @@ export const LK_BUTTON_CLASS =
 export const LK_BUTTON_ACTIVE_CLASS = "bg-[#373737] hover:bg-[#373737]";
 /** Matches `--lk-border-color: rgba(255,255,255,.1)` — for dropdown panels and badges in the meeting overlays, same dark-theme-consistency rationale as LK_BUTTON_CLASS. */
 export const LK_PANEL_CLASS = "border-white/10 bg-[#1d1d1d] text-white";
+/**
+ * Marker class for the text label on our own bottom-control-bar buttons (Raise hand, React, Background).
+ * ShareStage hides it whenever it switches LiveKit's ControlBar to icon-only, so both halves of the bar
+ * collapse at the same width — see ShareStage's COMPACT_BAR_QUERY.
+ */
+export const BAR_LABEL_CLASS = "nasiha-bar-label";

@@ -14,7 +14,7 @@ import {
   encodeReaction,
   parseReaction,
 } from "@/lib/reactions";
-import { LK_PANEL_CLASS } from "@/components/calendar/livekit-control-styles";
+import { BAR_LABEL_CLASS, LK_PANEL_CLASS } from "@/components/calendar/livekit-control-styles";
 
 export type FloatingReaction = { id: string; emoji: string; name: string; left: number };
 
@@ -146,7 +146,7 @@ export function ReactionsControl({ send }: { send: (emoji: string) => Promise<bo
         onClick={() => setOpen((v) => !v)}
       >
         <Smile className="h-4 w-4" />
-        <span className="hidden sm:inline">React</span>
+        <span className={BAR_LABEL_CLASS}>React</span>
       </button>
     </div>
   );

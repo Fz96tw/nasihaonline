@@ -12,7 +12,7 @@ import { getPublicMeetingClosingNote } from "@/lib/legal";
 import { LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/components/calendar/livekit-control-styles";
 import { PresenterOverlayControl } from "@/components/calendar/presenter-overlay-control";
 import { OverlayGuestControl } from "@/components/calendar/overlay-guest-control";
-import { ShareStage } from "@/components/calendar/share-stage";
+import { BAR_CLEARANCE_VAR, ShareStage } from "@/components/calendar/share-stage";
 import { BackgroundControl } from "@/components/calendar/background-control";
 import { ReactionsControl, ReactionsOverlay, useReactions } from "@/components/calendar/reactions";
 import { RaiseHandControl, RaisedHandsQueue, playHandChime, useRaisedHands } from "@/components/calendar/raise-hand";
@@ -799,13 +799,10 @@ function TopLeftOverlay({ children }: { children: ReactNode }) {
  * toggle/panel, is hidden entirely here (see the `<LiveKitRoom>`
  * className above).
  *
- * LiveKit's control bar is a fixed single row that never wraps at any
- * viewport width — confirmed via `@livekit/components-styles`'
- * control-bar.css (`display:flex`, no `flex-wrap`, `max-height:
- * var(--lk-control-bar-height)`, 69px in the default theme) — so 69px is
- * hardcoded below rather than read from that CSS variable, which wouldn't
- * cascade here anyway (this overlay is a sibling of `<LiveKitRoom>`, which
- * is where the theme scopes it).
+ * The offset comes from ShareStage's BAR_CLEARANCE_VAR, the bar row's measured
+ * distance from the bottom of the screen: one 69px row (`--lk-control-bar-height` in the default theme) on
+ * most screens, but two in portrait, where the full icon-only bar is wider
+ * than the phone and wraps. 69px is the fallback before the first measure.
  *
  * Row count is achieved purely by flex-direction, not duplicated markup:
  * below `sm` the outer wrapper is `flex-row` (countdown + button row sit
@@ -848,7 +845,7 @@ function QuickRecordingOverlay({
   return (
     <div
       className="pointer-events-none absolute right-4 z-50 flex flex-row flex-wrap items-center justify-end gap-2 sm:flex-col sm:items-end"
-      style={{ bottom: "calc(69px + 0.5rem)" }}
+      style={{ bottom: `calc(var(${BAR_CLEARANCE_VAR}, 69px) + 0.5rem)` }}
     >
       {recording && secondsRemaining !== null && <RecordingCountdown secondsRemaining={secondsRemaining} />}
       <div {...fade} className={`pointer-events-none flex items-center gap-2 transition-opacity duration-500 ${active ? "opacity-100" : "opacity-30"}`}>

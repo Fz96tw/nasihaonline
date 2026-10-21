@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ImageOff, ImagePlus, Sparkles, Trash2, Upload } from "lucide-react";
 import { LocalVideoTrack, RoomEvent, Track, type Room } from "livekit-client";
 import { useRoomContext } from "@livekit/components-react";
-import { LK_PANEL_CLASS } from "@/components/calendar/livekit-control-styles";
+import { BAR_LABEL_CLASS, LK_PANEL_CLASS } from "@/components/calendar/livekit-control-styles";
 import {
   BACKGROUND_CHOICE_STORAGE_KEY,
   CUSTOM_BACKGROUND_MAX_EDGE,
@@ -408,7 +408,7 @@ export function BackgroundControl({ onError }: { onError: (message: string) => v
         }}
       >
         <Sparkles className="h-4 w-4" />
-        <span className="hidden sm:inline">Background</span>
+        <span className={BAR_LABEL_CLASS}>Background</span>
       </button>
     </div>
   );
