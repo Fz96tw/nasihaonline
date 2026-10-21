@@ -5,6 +5,7 @@ import { Hand } from "lucide-react";
 import { RoomEvent, Track, type Participant, type Room } from "livekit-client";
 import { ParticipantTile, useMaybeTrackRefContext, useParticipantAttribute } from "@livekit/components-react";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { AWAY_ATTR } from "@/components/calendar/meeting-presence";
 import { BAR_LABEL_CLASS, LK_BUTTON_ACTIVE_CLASS, LK_BUTTON_CLASS, LK_PANEL_CLASS } from "@/components/calendar/livekit-control-styles";
 
 /**
@@ -297,16 +298,36 @@ const HAND_TILE_CLASS =
   "data-[hand-raised=true]:after:px-2 data-[hand-raised=true]:after:py-1 data-[hand-raised=true]:after:text-2xl " +
   "data-[hand-raised=true]:after:leading-none data-[hand-raised=true]:after:content-['✋']";
 
+/**
+ * "Away" label centered on the tile — see components/calendar/meeting-presence.ts. Not a corner: the ✋ badge has
+ * the top-right, LiveKit's name/mic row the bottom, and the meeting's title banner sits over the top edge of
+ * whichever tiles are in the middle of the screen.
+ */
+const AWAY_TILE_CLASS =
+  "data-[away=true]:before:absolute data-[away=true]:before:left-1/2 data-[away=true]:before:top-1/2 " +
+  "data-[away=true]:before:z-10 data-[away=true]:before:-translate-x-1/2 data-[away=true]:before:-translate-y-1/2 " +
+  "data-[away=true]:before:rounded-full data-[away=true]:before:bg-black/70 data-[away=true]:before:px-3 " +
+  "data-[away=true]:before:py-1 data-[away=true]:before:text-sm data-[away=true]:before:font-medium " +
+  "data-[away=true]:before:text-white data-[away=true]:before:content-['Away']";
+
 function HandTile({ participant, isCamera }: { participant: Participant; isCamera: boolean }) {
   const raised = useParticipantAttribute(HAND_RAISED_ATTR, { participant }) === "1";
-  return <ParticipantTile data-hand-raised={raised && isCamera ? "true" : undefined} className={HAND_TILE_CLASS} />;
+  const away = useParticipantAttribute(AWAY_ATTR, { participant }) === "1";
+  return (
+    <ParticipantTile
+      data-hand-raised={raised && isCamera ? "true" : undefined}
+      data-away={away && isCamera ? "true" : undefined}
+      className={`${HAND_TILE_CLASS} ${AWAY_TILE_CLASS}`}
+    />
+  );
 }
 
 /**
  * Drop-in for `<ParticipantTile />` inside GridLayout/CarouselLayout (they
  * supply the per-track context this reads): same tile, plus a ✋ badge and
- * yellow ring on a camera tile whose participant has a hand up. The badge is
- * a CSS pseudo-element keyed off a data attribute because ParticipantTile's
+ * yellow ring on a camera tile whose participant has a hand up, and an
+ * "Away" label while their meeting page is in the background. The badges are
+ * CSS pseudo-elements keyed off data attributes because ParticipantTile's
  * children replace its default contents rather than add to them.
  */
 export function HandAwareTile() {

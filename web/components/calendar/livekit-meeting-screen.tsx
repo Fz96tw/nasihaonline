@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { LogOut, RotateCcw, Users, X } from "lucide-react";
-import { RoomEvent, VideoPreset, VideoPresets, type RemoteParticipant, type Room } from "livekit-client";
-import { LiveKitRoom, useChat, useParticipants, useRoomContext } from "@livekit/components-react";
+import { ConnectionState, DisconnectReason, RoomEvent, VideoPreset, VideoPresets, type RemoteParticipant, type Room } from "livekit-client";
+import { LiveKitRoom, useChat, useConnectionState, useLocalParticipant, useParticipants, useRoomContext } from "@livekit/components-react";
 import "@livekit/components-styles";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { getPublicMeetingClosingNote } from "@/lib/legal";
@@ -16,6 +16,7 @@ import { BAR_CLEARANCE_VAR, ShareStage } from "@/components/calendar/share-stage
 import { BackgroundControl } from "@/components/calendar/background-control";
 import { ReactionsControl, ReactionsOverlay, useReactions } from "@/components/calendar/reactions";
 import { RaiseHandControl, RaisedHandsQueue, playHandChime, useRaisedHands } from "@/components/calendar/raise-hand";
+import { AWAY_ATTR, useAwayPresence, useScreenWakeLock } from "@/components/calendar/meeting-presence";
 
 /**
  * Title/host banner pinned to the top of the call — per-viewer local state
@@ -174,6 +175,8 @@ type ParticipantSummary = {
   isCoHost: boolean;
   /** Raise hand is up — read from the participant's `handRaised` attribute (components/calendar/raise-hand.tsx). */
   handRaised: boolean;
+  /** Their meeting page is in the background — read from the participant's `away` attribute (components/calendar/meeting-presence.ts). */
+  away: boolean;
 };
 
 /**
@@ -206,6 +209,7 @@ function ParticipantsListener({
         isHost: hostId !== undefined && p.identity === hostId,
         isCoHost: coHostUserIds.includes(p.identity),
         handRaised: p.attributes?.handRaised === "1",
+        away: p.attributes?.[AWAY_ATTR] === "1",
       })),
     );
   }, [participants, hostId, coHostUserIds, onChange]);
@@ -222,24 +226,54 @@ function ParticipantsListener({
  * "invisible when nested inside LiveKitRoom" bug). RoomEvent.ParticipantConnected/
  * Disconnected only fire for *remote* participants, which is correct here:
  * nobody needs to be told they themselves joined.
+ *
+ * "Left" is held for LEAVE_TOAST_GRACE_MS: a phone that drops out while its
+ * meeting page is in the background rejoins as soon as it's back (see
+ * LiveKitMeetingScreen's rejoin handling), and announcing every such blip as
+ * a left/joined pair would spam everyone else. A rejoin within the window
+ * cancels the pending "left" and is itself silent.
  */
+const LEAVE_TOAST_GRACE_MS = 30_000;
+
 function ParticipantActivityListener({ onEvent }: { onEvent: (message: string) => void }) {
   const room = useRoomContext();
+  // A ref, not an effect dependency: the caller passes a fresh function every render, and re-running the
+  // effect would clear the pending "left" timers below.
+  const onEventRef = useRef(onEvent);
+  onEventRef.current = onEvent;
 
   useEffect(() => {
+    const onEvent = (message: string) => onEventRef.current(message);
+    const pendingLeaves = new Map<string, ReturnType<typeof setTimeout>>();
+
     function onConnected(participant: RemoteParticipant) {
+      const pending = pendingLeaves.get(participant.identity);
+      if (pending) {
+        clearTimeout(pending);
+        pendingLeaves.delete(participant.identity);
+        return;
+      }
       onEvent(`${participant.name || participant.identity} joined`);
     }
     function onDisconnected(participant: RemoteParticipant) {
-      onEvent(`${participant.name || participant.identity} left`);
+      const message = `${participant.name || participant.identity} left`;
+      clearTimeout(pendingLeaves.get(participant.identity));
+      pendingLeaves.set(
+        participant.identity,
+        setTimeout(() => {
+          pendingLeaves.delete(participant.identity);
+          onEvent(message);
+        }, LEAVE_TOAST_GRACE_MS),
+      );
     }
     room.on(RoomEvent.ParticipantConnected, onConnected);
     room.on(RoomEvent.ParticipantDisconnected, onDisconnected);
     return () => {
       room.off(RoomEvent.ParticipantConnected, onConnected);
       room.off(RoomEvent.ParticipantDisconnected, onDisconnected);
+      pendingLeaves.forEach((timer) => clearTimeout(timer));
     };
-  }, [room, onEvent]);
+  }, [room]);
 
   return null;
 }
@@ -641,6 +675,9 @@ function ParticipantRow({
         {participant.isLocal && <span className="text-white/50"> (You)</span>}
       </span>
       <span className="flex shrink-0 items-center gap-2">
+        {participant.away && (
+          <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white/70">Away</span>
+        )}
         {participant.handRaised && (
           <span role="img" aria-label="Hand raised" title="Hand raised" className="text-base leading-none">
             ✋
@@ -861,6 +898,105 @@ function QuickRecordingOverlay({
   );
 }
 
+/**
+ * Disconnects that end the meeting for this viewer — they navigate back to
+ * the event page exactly as before. Anything else (a dropped signal
+ * connection, a timeout, a server restart, or a phone freezing the page
+ * while it's in the background) is rejoined instead. DUPLICATE_IDENTITY is
+ * the same person opening the meeting in another tab or device; rejoining
+ * from here would just kick that one out in turn.
+ */
+const FINAL_DISCONNECT_REASONS = new Set<DisconnectReason>([
+  DisconnectReason.CLIENT_INITIATED,
+  DisconnectReason.PARTICIPANT_REMOVED,
+  DisconnectReason.ROOM_DELETED,
+  DisconnectReason.ROOM_CLOSED,
+  DisconnectReason.DUPLICATE_IDENTITY,
+  DisconnectReason.USER_REJECTED,
+]);
+
+/**
+ * After the page comes back to the foreground, how long LiveKit's own reconnect gets before we rejoin instead.
+ * A phone that froze the page for a minute has usually been dropped by the server already, so LiveKit's resume
+ * attempts can't succeed — but its retry loop takes ~50s to give up, all of it spent on a "Reconnecting" notice.
+ */
+const STUCK_RECONNECT_MS = 5_000;
+
+/** Wait before each retry after a failed rejoin; once these run out the viewer gets a Try again button. */
+const REJOIN_RETRY_DELAYS_MS = [2_000, 4_000, 8_000, 15_000];
+
+/**
+ * idle: connected (or connecting for the first time). waiting: dropped, waiting for the page to be visible and
+ * online (and for any retry delay). connecting: fetching a fresh token and connecting a new room. failed: gave up.
+ */
+type RejoinState = "idle" | "waiting" | "connecting" | "failed";
+
+type LocalMedia = { microphone: boolean; camera: boolean };
+
+/**
+ * Headless (inside <LiveKitRoom>, same pattern as ParticipantsListener) — reports whether the viewer's mic and
+ * camera are on while connected, so they can be turned back on after a rejoin, and does that turning-back-on
+ * once this room connects when `restore` is set. The parent only keeps reports made while the page is visible:
+ * a phone stops the camera (iOS usually the mic too) as soon as the page goes to the background, and that must
+ * not be mistaken for the viewer switching them off.
+ */
+function LocalMediaListener({
+  restore,
+  onChange,
+  onError,
+}: {
+  restore: LocalMedia | null;
+  onChange: (media: LocalMedia) => void;
+  onError: (message: string) => void;
+}) {
+  const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
+  const connectionState = useConnectionState();
+  const restoredRef = useRef(false);
+
+  useEffect(() => {
+    if (connectionState === ConnectionState.Connected) onChange({ microphone: isMicrophoneEnabled, camera: isCameraEnabled });
+  }, [connectionState, isMicrophoneEnabled, isCameraEnabled, onChange]);
+
+  useEffect(() => {
+    if (connectionState !== ConnectionState.Connected || !restore || restoredRef.current) return;
+    restoredRef.current = true;
+    if (restore.microphone) {
+      localParticipant.setMicrophoneEnabled(true).catch(() => onError("Couldn't turn your microphone back on."));
+    }
+    if (restore.camera) {
+      localParticipant.setCameraEnabled(true).catch(() => onError("Couldn't turn your camera back on."));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionState, restore]);
+
+  return null;
+}
+
+/** Covers the call while it's being rejoined — the old room is gone, so without this the screen would just go blank. */
+function RejoinOverlay({ failed, onRetry, onLeave }: { failed: boolean; onRetry: () => void; onLeave: () => void }) {
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div role="status" aria-live="polite" className={`w-full max-w-sm rounded-lg border p-6 text-center shadow-lg ${LK_PANEL_CLASS}`}>
+        <p className="font-semibold">{failed ? "Couldn't reconnect to the meeting" : "Reconnecting…"}</p>
+        <p className="mt-1 text-sm text-white/70">
+          {failed ? "Check your connection, then try again." : "Your connection dropped. You'll be back in the meeting in a moment."}
+        </p>
+        <div className="mt-4 flex justify-center gap-2">
+          {failed && (
+            <button type="button" onClick={onRetry} className={`${LK_BUTTON_CLASS} ${LK_BUTTON_ACTIVE_CLASS}`}>
+              Try again
+            </button>
+          )}
+          <button type="button" onClick={onLeave} className={`${LK_BUTTON_CLASS} border border-white/10`}>
+            <LogOut className="h-4 w-4" />
+            Leave
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** The visible toast stack — a sibling of <LiveKitRoom>, not nested inside it (see ParticipantActivityListener). */
 function ParticipantActivityToasts({ toasts }: { toasts: Toast[] }) {
   if (toasts.length === 0) return null;
@@ -976,6 +1112,19 @@ export function LiveKitMeetingScreen({
   // Identities whose camera is on the presenter overlay; their camera tiles are hidden (see ShareStage).
   const [overlayIds, setOverlayIds] = useState<string[]>([]);
   const [handAnnouncement, setHandAnnouncement] = useState("");
+  const [rejoin, setRejoin] = useState<RejoinState>("idle");
+  // Read by LiveKit's event callbacks, which can fire between a state update and the re-render that follows it.
+  const rejoinRef = useRef<RejoinState>("idle");
+  const rejoinFailuresRef = useRef(0);
+  // Bumped on each rejoin to mount a fresh <LiveKitRoom> (and Room) rather than reuse the disconnected one.
+  const [roomKey, setRoomKey] = useState(0);
+  const roomRef = useRef<Room | null>(null);
+  // Last mic/camera state seen while visible and connected, and the one to restore after the current rejoin.
+  const mediaSnapshotRef = useRef<LocalMedia>({ microphone: false, camera: false });
+  const [restoreMedia, setRestoreMedia] = useState<LocalMedia | null>(null);
+  const handleLocalMedia = useCallback((media: LocalMedia) => {
+    if (document.visibilityState === "visible") mediaSnapshotRef.current = media;
+  }, []);
   const wasRecordingRef = useRef(false);
   // Set right before calling the discard endpoint (handleReset), checked
   // instead of firing onRecordingStopped in the recording-transition effect
@@ -986,6 +1135,8 @@ export function LiveKitMeetingScreen({
   const isQuickRecording = maxRecordingSeconds !== undefined;
 
   usePreventScreenShareSelfMirror();
+  useScreenWakeLock();
+  useAwayPresence(room);
 
   const raiseHandEnabled = !isQuickRecording && !!lowerHandEndpoint;
   // Only the host/co-host is told when someone else raises a hand — everyone else just sees the badge.
@@ -1082,6 +1233,140 @@ export function LiveKitMeetingScreen({
     };
   }, [tokenEndpoint]);
 
+  function updateRejoin(next: RejoinState) {
+    rejoinRef.current = next;
+    setRejoin(next);
+  }
+
+  function handleRoomReady(next: Room) {
+    roomRef.current = next;
+    setRoom(next);
+  }
+
+  /**
+   * Replaces the old `onDisconnected={() => router.replace(backHref)}`, which sent the viewer back to the event
+   * page on *any* disconnect — including a phone freezing the page while it was in the background, where
+   * LiveKit's own reconnect can't succeed (reported 2026-10-21). Only FINAL_DISCONNECT_REASONS still do that.
+   */
+  function handleDisconnected(reason?: DisconnectReason) {
+    if (reason !== undefined && FINAL_DISCONNECT_REASONS.has(reason)) {
+      router.replace(backHref);
+      return;
+    }
+    // Only this screen disconnects a room itself, so a client-initiated disconnect mid-rejoin is the old,
+    // already-dropped room being cleaned up — not the viewer leaving (they leave via the overlay's button).
+    if (rejoinRef.current !== "idle" && reason === DisconnectReason.CLIENT_INITIATED) return;
+    if (rejoinRef.current === "connecting") {
+      handleRejoinFailed();
+      return;
+    }
+    if (rejoinRef.current !== "idle") return;
+    startRejoin();
+  }
+
+  function startRejoin() {
+    setRestoreMedia(mediaSnapshotRef.current);
+    rejoinFailuresRef.current = 0;
+    updateRejoin("waiting");
+  }
+
+  // Back in the foreground but LiveKit is still trying to resume the old session: give it STUCK_RECONNECT_MS,
+  // then abandon it and rejoin. The old room is unmounted (and so disconnected) by the remount.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    function onVisibilityChange() {
+      clearTimeout(timer);
+      if (document.visibilityState !== "visible") return;
+      timer = setTimeout(() => {
+        const state = roomRef.current?.state;
+        const stuck = state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting;
+        if (stuck && rejoinRef.current === "idle") startRejoin();
+      }, STUCK_RECONNECT_MS);
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleRejoinFailed() {
+    if (rejoinRef.current !== "connecting") return;
+    rejoinFailuresRef.current += 1;
+    updateRejoin(rejoinFailuresRef.current > REJOIN_RETRY_DELAYS_MS.length ? "failed" : "waiting");
+  }
+
+  // Stable on purpose: <LiveKitRoom> re-runs its connect effect whenever its onError prop changes identity.
+  const handleRoomError = useCallback((err: Error) => {
+    if (rejoinRef.current !== "connecting") return;
+    console.warn("[livekit] Rejoin connect failed", err);
+    handleRejoinFailed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleConnected() {
+    if (rejoinRef.current === "idle") return;
+    rejoinFailuresRef.current = 0;
+    updateRejoin("idle");
+  }
+
+  // Dropped: wait out any retry delay, then for the page to be visible and online — a phone can't reconnect
+  // while it has the page frozen in the background, so there's no point trying before the viewer is back.
+  useEffect(() => {
+    if (rejoin !== "waiting") return;
+    let delayElapsed = false;
+    function tryStart() {
+      if (delayElapsed && document.visibilityState === "visible" && navigator.onLine) updateRejoin("connecting");
+    }
+    const failures = rejoinFailuresRef.current;
+    const timer = setTimeout(
+      () => {
+        delayElapsed = true;
+        tryStart();
+      },
+      failures === 0 ? 0 : REJOIN_RETRY_DELAYS_MS[failures - 1],
+    );
+    document.addEventListener("visibilitychange", tryStart);
+    window.addEventListener("online", tryStart);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", tryStart);
+      window.removeEventListener("online", tryStart);
+    };
+  }, [rejoin]);
+
+  // A fresh token re-checks that the meeting is still joinable: a 4xx (meeting ended or reset, access revoked)
+  // sends the viewer back like a normal leave, while a network error or 5xx is retried. The new room's
+  // Connected event (handleConnected) or a failure (handleRejoinFailed) moves things on from here.
+  useEffect(() => {
+    if (rejoin !== "connecting") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const csrfToken = await getCsrfToken();
+        const res = await fetch(tokenEndpoint, { method: "POST", headers: { "x-csrf-token": csrfToken } });
+        if (cancelled) return;
+        if (res.status >= 400 && res.status < 500) {
+          router.replace(backHref);
+          return;
+        }
+        if (!res.ok) throw new Error(`token POST failed: ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setCredentials(data);
+        setRoomKey((key) => key + 1);
+      } catch (err) {
+        console.warn("[livekit] Rejoin attempt failed", err);
+        if (!cancelled) handleRejoinFailed();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rejoin, tokenEndpoint]);
+
   function pushToast(message: string) {
     const id = crypto.randomUUID();
     setToasts((prev) => [...prev, { id, message }]);
@@ -1144,6 +1429,16 @@ export function LiveKitMeetingScreen({
       <MeetingBanner title={title} organizerName={organizerName} />
       <DisclaimerReminderFlash isQuickRecording={isQuickRecording} />
       <ParticipantActivityToasts toasts={toasts} />
+      {rejoin !== "idle" && (
+        <RejoinOverlay
+          failed={rejoin === "failed"}
+          onRetry={() => {
+            rejoinFailuresRef.current = 0;
+            updateRejoin("waiting");
+          }}
+          onLeave={() => router.replace(backHref)}
+        />
+      )}
       {raiseHandEnabled && <ReactionsOverlay floats={reactions.floats} />}
       {isQuickRecording ? (
         <QuickRecordingOverlay
@@ -1191,6 +1486,7 @@ export function LiveKitMeetingScreen({
         />
       )}
       <LiveKitRoom
+        key={roomKey}
         token={credentials.token}
         serverUrl={credentials.serverUrl}
         connect
@@ -1202,18 +1498,22 @@ export function LiveKitMeetingScreen({
         // both replaced by this mode's own Exit button / removed entirely
         // (Chat has no replacement — see the objective's rationale).
         className={isQuickRecording ? "[&_.lk-chat-toggle]:hidden [&_.lk-disconnect-button]:hidden" : undefined}
-        // replace, not push — the meeting page (this same URL) is already
-        // the current history entry; pushing on top of it left it reachable
-        // via the browser Back button, which would land back on a still-
-        // `started` meeting and immediately reconnect (reported 2026-08-25).
-        onDisconnected={() => router.replace(backHref)}
+        // Leaving uses replace, not push — the meeting page (this same URL)
+        // is already the current history entry; pushing on top of it left it
+        // reachable via the browser Back button, which would land back on a
+        // still-`started` meeting and immediately reconnect (reported
+        // 2026-08-25). Transient drops are rejoined — see handleDisconnected.
+        onDisconnected={handleDisconnected}
+        onConnected={handleConnected}
+        onError={handleRoomError}
       >
         <ParticipantActivityListener onEvent={pushToast} />
         <RecordingStateListener onChange={setRecording} onToast={pushToast} />
         <CoHostStateListener onChange={setCoHostUserIds} />
         <ChatCaptureListener chatEndpoint={chatEndpoint} />
         <ParticipantsListener hostId={hostId} coHostUserIds={coHostUserIds} onChange={setParticipants} />
-        <RoomExitBridge onRoomReady={setRoom} />
+        <RoomExitBridge onRoomReady={handleRoomReady} />
+        <LocalMediaListener restore={restoreMedia} onChange={handleLocalMedia} onError={pushToast} />
         <ShareStage
           overlayIds={overlayIds}
           barExtra={
