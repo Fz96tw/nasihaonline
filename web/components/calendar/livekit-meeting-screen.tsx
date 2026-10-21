@@ -17,6 +17,7 @@ import { BackgroundControl } from "@/components/calendar/background-control";
 import { ReactionsControl, ReactionsOverlay, useReactions } from "@/components/calendar/reactions";
 import { RaiseHandControl, RaisedHandsQueue, playHandChime, useRaisedHands } from "@/components/calendar/raise-hand";
 import { AWAY_ATTR, useAwayPresence, useScreenWakeLock } from "@/components/calendar/meeting-presence";
+import { MeetingPipControl, MeetingPipTip } from "@/components/calendar/meeting-pip";
 
 /**
  * Title/host banner pinned to the top of the call — per-viewer local state
@@ -1440,6 +1441,7 @@ export function LiveKitMeetingScreen({
         />
       )}
       {raiseHandEnabled && <ReactionsOverlay floats={reactions.floats} />}
+      {!isQuickRecording && <MeetingPipTip />}
       {isQuickRecording ? (
         <QuickRecordingOverlay
           recording={recording}
@@ -1525,6 +1527,7 @@ export function LiveKitMeetingScreen({
                 </>
               )}
               <BackgroundControl onError={pushToast} />
+              {!isQuickRecording && <MeetingPipControl />}
             </>
           }
         />

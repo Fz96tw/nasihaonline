@@ -117,7 +117,7 @@ type DocumentPictureInPicture = {
   requestWindow(options?: { width?: number; height?: number }): Promise<Window>;
 };
 
-function documentPictureInPicture(): DocumentPictureInPicture | undefined {
+export function documentPictureInPicture(): DocumentPictureInPicture | undefined {
   return (window as unknown as { documentPictureInPicture?: DocumentPictureInPicture }).documentPictureInPicture;
 }
 
@@ -134,7 +134,7 @@ const PIP_PANEL_HEIGHT = 420;
  * resolve there too. Same-origin sheets are copied rule by rule; any
  * sheet whose rules can't be read (cross-origin) is linked instead.
  */
-function copyStyleSheets(target: Window) {
+export function copyStyleSheets(target: Window) {
   for (const sheet of Array.from(document.styleSheets)) {
     try {
       const style = target.document.createElement("style");
