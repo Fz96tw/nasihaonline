@@ -36,7 +36,7 @@ import {
   KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
 } from "@/lib/forums-server";
 import { formatEventDateTime } from "@/lib/format-date";
-import { communityVisibilityWhere, getMemberCommunityContext } from "@/lib/events-server";
+import { communityVisibilityWhere, getMemberCommunityContext, hasEventEnded } from "@/lib/events-server";
 import { getInboxList } from "@/lib/inbox-server";
 import { matchesInboxSearch } from "@/lib/inbox";
 import { digestContentOf, type DigestContent } from "@/lib/weekly-digest-compose";
@@ -512,6 +512,8 @@ export async function getFeedPage(params: {
         createdAt: true,
         publishedAt: true,
         startsAt: true,
+        endsAt: true,
+        recurrence: { select: { until: true } },
         timezone: true,
         rescheduledAt: true,
         heroImageUrl: true,
@@ -928,6 +930,8 @@ export async function getFeedPage(params: {
         // event matched the query, so a search hit shows the actual
         // (highlightable) description instead — the viewer is already
         // authorized to see it, same as clicking through would show them.
+        // So is an event that's already over (hasEventEnded) — there's
+        // nothing left to RSVP to, e.g. for an invitee added afterward.
         //
         // Deliberately never swapped for a reply's excerpt/author — same
         // fix as the library branch below (see its own comment): a reply
@@ -935,7 +939,7 @@ export async function getFeedPage(params: {
         // not bumped by activity — see eventWhere). A reply still surfaces,
         // but as replyRow below, which always reflects just the latest
         // reply, not a growing trail of one row per historical reply.
-        excerpt: event.visibility === EventVisibility.invited && !query && event.hostId !== viewerId
+        excerpt: event.visibility === EventVisibility.invited && !query && event.hostId !== viewerId && !hasEventEnded(event)
           ? `${event.host.name ?? "The host"} has requested your attendance. Please RSVP.`
           : event.description
             ? excerptOf(event.description)

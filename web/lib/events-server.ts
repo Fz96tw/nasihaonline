@@ -200,6 +200,21 @@ function recurringSeriesStillActiveOrUpcoming(now: Date): Prisma.EventWhereInput
   };
 }
 
+/**
+ * Whether an event (the whole series, for a recurring one) is over — a
+ * one-off once its end (or, with no end, its start) has passed; a recurring
+ * series only once its `until` has, an unbounded one never. Same series
+ * notion as recurringSeriesStillActiveOrUpcoming above. Drives the
+ * invited-member copy: there's nothing left to RSVP to once this is true.
+ */
+export function hasEventEnded(
+  event: { startsAt: Date; endsAt: Date | null; recurrence: { until: Date | null } | null },
+  now = new Date(),
+): boolean {
+  if (event.recurrence) return !!event.recurrence.until && event.recurrence.until < now;
+  return (event.endsAt ?? event.startsAt) < now;
+}
+
 // ===== Community-based-categorization initiative, objective 5 — event visibility gating =====
 
 // Re-exported so existing importers (feed-server.ts) keep working —
@@ -1684,15 +1699,18 @@ export class EventError extends Error {
  * (Objective 01), reused by both createEvent and updateEventInvitees
  * (Objective 03) rather than duplicated — takes a transaction client so
  * callers can post it alongside the EventInvitee rows in the same
- * transaction.
+ * transaction. `hasEnded` (an invitee added after the event is over, see
+ * hasEventEnded) swaps the RSVP ask for "shared with you" copy.
  */
 async function notifyInvitedUsers(
   tx: Prisma.TransactionClient,
-  params: { eventId: string; title: string; hostName: string; userIds: string[] },
+  params: { eventId: string; title: string; hostName: string; userIds: string[]; hasEnded?: boolean },
 ): Promise<void> {
   if (params.userIds.length === 0) return;
   const link = `/calendar/${params.eventId}`;
-  const message = `${params.hostName} has requested your attendance at "${params.title}". Please RSVP.`;
+  const message = params.hasEnded
+    ? `${params.hostName} shared the past event "${params.title}" and its discussion with you.`
+    : `${params.hostName} has requested your attendance at "${params.title}". Please RSVP.`;
   await tx.notification.createMany({
     data: params.userIds.map((userId) => ({
       recipientId: userId,
@@ -1717,6 +1735,8 @@ async function emailInvitedUsers(
     timezone: string | null;
     /** Set for an event with no Google Calendar event behind it, so each invitee's email carries an .ics invite of its own. */
     icsEvent?: IcsEventFields;
+    /** Same as notifyInvitedUsers' — "shared with you" copy, and no .ics (a calendar invite for an event that's already over is noise). */
+    hasEnded?: boolean;
   },
 ): Promise<void> {
   if (users.length === 0) return;
@@ -1729,10 +1749,11 @@ async function emailInvitedUsers(
         startsAt: params.startsAt,
         timezone: params.timezone,
         link,
+        hasEnded: params.hasEnded,
         // An invitee who hasn't RSVP'd yet doesn't get a manual meeting URL
         // (same gate as the public listing/.ics download) — the in-app
         // LiveKit page link is always safe, it does its own access check.
-        ics: params.icsEvent
+        ics: params.icsEvent && !params.hasEnded
           ? buildEventInviteAttachment({ ...params.icsEvent, meetingUrl: null }, "REQUEST", user)
           : undefined,
       }),
@@ -3570,6 +3591,9 @@ export async function updateEventInvitees(
   ]);
   const alreadyInvitedIds = new Set(alreadyInvited.map((row) => row.userId));
   const newInvitees = addCandidates.filter((user) => !alreadyInvitedIds.has(user.id));
+  // Adding someone after the event is over shares its page and discussion
+  // with them rather than asking for an RSVP — see notifyInvitedUsers.
+  const hasEnded = hasEventEnded(event);
 
   await db.$transaction(async (tx) => {
     if (newInvitees.length > 0) {
@@ -3581,6 +3605,7 @@ export async function updateEventInvitees(
         title: event.title,
         hostName,
         userIds: newInvitees.map((user) => user.id),
+        hasEnded,
       });
     }
 
@@ -3626,6 +3651,7 @@ export async function updateEventInvitees(
       startsAt: event.startsAt,
       timezone: event.timezone,
       icsEvent,
+      hasEnded,
     }),
     removeCandidates.length > 0
       ? Promise.allSettled(

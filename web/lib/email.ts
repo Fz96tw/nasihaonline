@@ -844,6 +844,8 @@ export async function sendEventInviteEmail(
     link: string;
     /** Calendar invite for this recipient — set only for events not backed by a Google Calendar event (Google emails its own invite for those). */
     ics?: IcsAttachment;
+    /** An invitee added after the event was over — "shared with you" copy instead of an RSVP ask. */
+    hasEnded?: boolean;
   },
 ) {
   if (!resend) {
@@ -857,8 +859,10 @@ export async function sendEventInviteEmail(
     await sendEmail({
       from: FROM_EMAIL,
       to,
-      subject: `You're invited: ${event.title}`,
-      text: `Hi ${name},\n\n${event.hostName} has requested your attendance at "${event.title}" on ${when}. Please RSVP.\n\nView details and RSVP here:\n${event.link}\n\n— The NASIHA Team`,
+      subject: event.hasEnded ? `Shared with you: ${event.title}` : `You're invited: ${event.title}`,
+      text: event.hasEnded
+        ? `Hi ${name},\n\n${event.hostName} shared the past event "${event.title}" (held ${when}) and its discussion with you.\n\nView the event and join the discussion here:\n${event.link}\n\n— The NASIHA Team`
+        : `Hi ${name},\n\n${event.hostName} has requested your attendance at "${event.title}" on ${when}. Please RSVP.\n\nView details and RSVP here:\n${event.link}\n\n— The NASIHA Team`,
       ...(event.ics ? { attachments: [toEmailAttachment(event.ics)] } : {}),
     });
   } catch (error) {
