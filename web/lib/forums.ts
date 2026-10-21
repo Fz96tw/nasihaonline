@@ -146,6 +146,8 @@ export type ForumThreadDetail = {
   invitees: ForumThreadRosterMember[];
   /** False for a thread linked to an Event or Knowledge Library item (inherited visibility) — its title/audience are managed automatically and can't be edited via /forums/[category]/[threadId]/edit. */
   isEditable: boolean;
+  /** The member ids this thread's `@`-tags may resolve to (author/host + invitees) for a restricted thread or an invite-only event's thread — null when anyone can be tagged. */
+  mentionAllowedIds: string[] | null;
   /** Optional "Topics" (community-based-categorization initiative, objective 6) — empty for most threads. */
   categories: { id: string; name: string; slug: string }[];
   /** Only a Weekly Reflection thread: the hero banner's image (null = gradient) and the quote snapshot taken when it was posted. */

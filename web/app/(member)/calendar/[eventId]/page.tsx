@@ -129,7 +129,13 @@ export default async function EventDetailPage({
   const thread = event.forumThreadId
     ? await getForumThreadDetail(EVENTS_FORUM_SLUG, event.forumThreadId, user.id, isPrivileged)
     : null;
-  const mentionableMembers = thread ? await getMentionableMembers() : [];
+  // An invite-only event's tags are narrowed to its host + invitees, same as
+  // createForumPost's server-side narrowing (see getThreadMentionAllowedIds).
+  const mentionAllowedIds = thread?.mentionAllowedIds ?? null;
+  const allMentionableMembers = thread ? await getMentionableMembers() : [];
+  const mentionableMembers = mentionAllowedIds
+    ? allMentionableMembers.filter((member) => mentionAllowedIds.includes(member.id))
+    : allMentionableMembers;
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
@@ -183,6 +189,7 @@ export default async function EventDetailPage({
             posts={thread.posts.slice(1)}
             requireDeidentification={false}
             mentionableMembers={mentionableMembers}
+            allowedMemberIds={mentionAllowedIds ?? undefined}
             currentUserId={user.id}
             isPrivileged={user.role === Role.admin || user.role === Role.moderator}
             highlightQuery={q}

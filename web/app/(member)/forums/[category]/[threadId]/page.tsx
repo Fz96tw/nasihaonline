@@ -62,9 +62,8 @@ export default async function ForumThreadPage({
   // resolved mention (or an autocomplete suggestion) for someone who could
   // never actually open the thread would leak its existence.
   const allMentionableMembers = await getMentionableMembers();
-  const restrictedMemberIds = isRestricted
-    ? [thread.authorId, ...thread.invitees.map((invitee) => invitee.userId)]
-    : null;
+  // Also covers an invite-only event's discussion thread (host + invitees).
+  const restrictedMemberIds = thread.mentionAllowedIds;
   const mentionableMembers = restrictedMemberIds
     ? allMentionableMembers.filter((member) => restrictedMemberIds.includes(member.id))
     : allMentionableMembers;

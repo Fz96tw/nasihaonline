@@ -209,6 +209,25 @@ function isOwnThreadVisible(thread: OwnThreadAccess, viewerId: string | undefine
   return thread.authorId === viewerId || thread.invitees.some((invitee) => invitee.userId === viewerId);
 }
 
+// The member ids a restricted thread's `@`-tags may resolve to — its author
+// + invitees for a member-initiated restricted thread, or the host +
+// invitees for an invite-only event's discussion thread (whose own
+// visibility always stays `community`, see OwnThreadAccess above) — or null
+// when anyone can be tagged. A mention notification (or resolved "@Name"
+// tag, or autocomplete suggestion) for someone outside this list would leak
+// the thread's existence to a member who can never actually open it.
+function getThreadMentionAllowedIds(
+  thread: { event: EventThreadAccess } & Pick<OwnThreadAccess, "visibility" | "authorId" | "invitees">,
+): string[] | null {
+  if (thread.visibility === ForumThreadVisibility.invited) {
+    return [thread.authorId, ...thread.invitees.map((invitee) => invitee.userId)];
+  }
+  if (thread.event?.visibility === EventVisibility.invited) {
+    return [thread.event.hostId, ...thread.event.invitees.map((invitee) => invitee.userId)];
+  }
+  return null;
+}
+
 // Community-based-categorization initiative, objective 6 — a forum with
 // categoryId set (one of the new, seeded-one-per-KnowledgeCategory forums,
 // e.g. "Health-tech") is accessible only to members of that category's
@@ -492,6 +511,7 @@ export async function getForumThreadDetail(
     visibility: thread.visibility,
     invitees,
     isEditable: !thread.eventId && !thread.knowledgeItemId,
+    mentionAllowedIds: getThreadMentionAllowedIds(thread),
     categories: thread.categories.map((c) => c.category),
     reflection: thread.reflectionPost?.quoteText
       ? {
@@ -1185,17 +1205,13 @@ export async function createForumPost(
     }
   }
 
-  // A restricted thread's `@`-tag candidates are narrowed to its author and
-  // invitees — a mention notification linking to a 404 (or to a resolved
-  // "@Name" tag rendered for someone who can never actually open the
-  // thread) would otherwise leak the thread's existence to a non-invitee.
+  // A restricted thread's (or invite-only event's) `@`-tag candidates are
+  // narrowed to the members who can open it — see getThreadMentionAllowedIds.
   const mentionableMembers = await getMentionableMembers();
-  const mentionCandidates =
-    thread.visibility === ForumThreadVisibility.invited
-      ? mentionableMembers.filter(
-          (member) => member.id === thread.authorId || thread.invitees.some((invitee) => invitee.userId === member.id),
-        )
-      : mentionableMembers;
+  const mentionAllowedIds = getThreadMentionAllowedIds(thread);
+  const mentionCandidates = mentionAllowedIds
+    ? mentionableMembers.filter((member) => mentionAllowedIds.includes(member.id))
+    : mentionableMembers;
   // Organizational accounts (e.g. the Weekly Reflection author, which owns
   // its thread and so is otherwise a "participant" of every reply) have no
   // inbox or deliverable address — never notify them.
