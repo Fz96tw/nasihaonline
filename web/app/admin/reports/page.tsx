@@ -90,6 +90,13 @@ export default async function AdminReportsPage() {
             value={pct(community.studentTraineeRepresentationPct)}
             sublabel="Share of tiered members on the Student tier"
           />
+          <StatCard
+            label="Community membership"
+            value="By community"
+            sublabel="Members per community, ranked, with member lists"
+            href="/admin/reports/communities"
+            linkLabel="View breakdown"
+          />
         </div>
       </section>
 
