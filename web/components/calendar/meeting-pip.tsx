@@ -177,25 +177,24 @@ export function MeetingPipControl({ onOpenChange }: { onOpenChange?: (open: bool
     };
   }, [featuredVideo]);
 
+  // Any video on the page in PiP counts, not just ours: browsers also offer their own picture-in-picture control
+  // on each participant's tile, and a member watching that isn't away either. Captured on the document because the
+  // events fire on whichever <video> it is. (Firefox's own PiP doesn't use this API, so it goes unseen.)
   useEffect(() => {
-    const element = videoRef.current;
-    if (!element) return;
-    const onLeavePip = () => setVideoPipOpen(false);
-    const onEnterPip = () => setVideoPipOpen(true);
-    element.addEventListener("leavepictureinpicture", onLeavePip);
-    element.addEventListener("enterpictureinpicture", onEnterPip);
+    const sync = () => setVideoPipOpen(!!document.pictureInPictureElement);
+    document.addEventListener("enterpictureinpicture", sync, true);
+    document.addEventListener("leavepictureinpicture", sync, true);
     return () => {
-      element.removeEventListener("leavepictureinpicture", onLeavePip);
-      element.removeEventListener("enterpictureinpicture", onEnterPip);
+      document.removeEventListener("enterpictureinpicture", sync, true);
+      document.removeEventListener("leavepictureinpicture", sync, true);
     };
   }, []);
 
   // Leaving the meeting (or a rejoin remounting the room) takes any floating window with it.
   useEffect(() => {
-    const element = videoRef.current;
     return () => {
       pipWindowRef.current?.close();
-      if (element && document.pictureInPictureElement === element) document.exitPictureInPicture().catch(() => {});
+      if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {});
     };
   }, []);
 
