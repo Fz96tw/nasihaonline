@@ -62,6 +62,9 @@ export const reflectionNextQuoteSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("skip") }),
   z.object({ action: z.literal("swap"), quoteId: z.string().min(1) }),
   z.object({ action: z.literal("clear") }),
+  // The background image: pick a file from the images folder, or go back to the rotation.
+  z.object({ action: z.literal("image"), file: z.string().min(1).max(255) }),
+  z.object({ action: z.literal("clear-image") }),
 ]);
 
 // `override` = add another thread this week; `replace` = post a new one and hide the earlier one. Not both.

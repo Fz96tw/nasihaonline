@@ -15,22 +15,31 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ReflectionHero } from "@/components/reflection/reflection-hero";
 import { getCsrfToken } from "@/lib/csrf-client";
-import type { ReflectionNextDto, ReflectionQuoteDto } from "@/lib/weekly-reflection-config";
+import { cn } from "@/lib/utils";
+import type { ReflectionImageDto, ReflectionNextDto, ReflectionNextImageDto, ReflectionQuoteDto } from "@/lib/weekly-reflection-config";
 
 type Outcome = { kind: "info" | "error"; text: string; href?: string };
 
 /**
- * Preview of the quote that will be posted next, with Skip / Swap, plus
- * "Post now". The preview comes from the same resolver the poster uses, so it
- * is exactly what the next post will contain.
+ * Preview of the quote that will be posted next, over the background image it
+ * will get, with Skip / Swap, an image picker, plus "Post now". Quote and image
+ * come from the same resolvers the poster uses, so the preview is exactly what
+ * the next post will look like.
  */
 export function WeeklyReflectionNext({
   next,
+  attribution,
+  nextImage,
+  images,
   activeQuotes,
   postedThisWeek,
 }: {
   next: ReflectionNextDto;
+  attribution: string;
+  nextImage: ReflectionNextImageDto;
+  images: ReflectionImageDto[];
   activeQuotes: ReflectionQuoteDto[];
   postedThisWeek: boolean;
 }) {
@@ -60,6 +69,20 @@ export function WeeklyReflectionNext({
       router.refresh();
     } catch {
       setOutcome({ kind: "error", text: "Couldn't update the next quote. Please try again." });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function imageAction(file: string | null) {
+    setBusy(file ? `image:${file}` : "clear-image");
+    setOutcome(null);
+    try {
+      const res = await send("/api/admin/weekly-reflection/next", file ? { action: "image", file } : { action: "clear-image" });
+      if (!res.ok) throw new Error();
+      router.refresh();
+    } catch {
+      setOutcome({ kind: "error", text: "Couldn't change the background image. Please try again." });
     } finally {
       setBusy(null);
     }
@@ -118,14 +141,13 @@ export function WeeklyReflectionNext({
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {next ? (
-          <div className="flex flex-col gap-2 rounded-md border p-4">
-            <p className="text-base">&ldquo;{next.quote.text}&rdquo;</p>
-            <p className="text-sm text-muted-foreground">
-              &mdash; {next.quote.author}
-              {next.quote.source ? `, ${next.quote.source}` : ""}
-            </p>
+          <div className="flex flex-col gap-3">
+            <ReflectionHero reflection={{ imageUrl: nextImage?.url ?? null, quote: next.quote.text, attribution }} />
             <p className="text-sm">{next.quote.prompt}</p>
-            {next.via === "override" && <Badge className="w-fit">Chosen by an admin</Badge>}
+            <div className="flex flex-wrap gap-2">
+              {next.via === "override" && <Badge className="w-fit">Quote chosen by an admin</Badge>}
+              {nextImage?.via === "override" && <Badge className="w-fit">Image chosen by an admin</Badge>}
+            </div>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">There are no active quotes, so nothing can be posted. Add or reactivate one below.</p>
@@ -157,6 +179,58 @@ export function WeeklyReflectionNext({
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">Skipping moves a quote to the back of the line without counting it as posted.</p>
+
+        <div className="flex flex-col gap-3 border-t pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium">Background image</p>
+              <p className="text-xs text-muted-foreground">
+                {images.length === 0
+                  ? "There are no images in public/images/weeklyreflection/, so the post uses the plain gradient."
+                  : nextImage?.via === "override"
+                    ? "You picked this image for the next post. After it posts, the rotation takes over again."
+                    : "Normally the image used least recently comes next. Pick another to use it for the next post only."}
+              </p>
+            </div>
+            {nextImage?.via === "override" && (
+              <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => imageAction(null)}>
+                {busy === "clear-image" ? "Resetting…" : "Use image rotation"}
+              </Button>
+            )}
+          </div>
+          {images.length > 0 && (
+            <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+              {images.map((image) => {
+                const selected = image.file === nextImage?.file;
+                return (
+                  <li key={image.file}>
+                    <button
+                      type="button"
+                      aria-pressed={selected}
+                      aria-label={selected ? `${image.file} (next)` : `Use ${image.file} for the next post`}
+                      title={image.file}
+                      disabled={selected || busy !== null}
+                      onClick={() => imageAction(image.file)}
+                      className={cn(
+                        "relative block aspect-[4/3] w-full overflow-hidden rounded-md ring-offset-2 ring-offset-background transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                        selected ? "ring-2 ring-primary" : "opacity-80 hover:opacity-100 disabled:cursor-not-allowed",
+                        busy === `image:${image.file}` && "animate-pulse",
+                      )}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element -- static file from public/, same as ReflectionBackdrop */}
+                      <img src={image.url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                      {selected && (
+                        <span className="absolute bottom-1 left-1 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground">
+                          Next
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
 
         <div className="flex flex-col gap-2 border-t pt-4">
           <div>

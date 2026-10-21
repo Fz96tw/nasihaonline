@@ -143,6 +143,32 @@ describe("Weekly Reflection image look (DB-backed)", { skip }, () => {
     assert.equal(plainDetail?.reflection, null);
   });
 
+  it("uses an admin's picked image for one post, then the rotation resumes", async () => {
+    const { pickNextImage } = await import("@/lib/weekly-reflection-admin");
+    const { resolveNextReflectionImage } = await import("@/lib/reflection-images-server");
+    const listImages = async () => files;
+    // W04 used sky.jpg, so the rotation would pick water.png next.
+    assert.deepEqual(await resolveNextReflectionImage(listImages), { file: "water.png", via: "rotation" });
+    await pickNextImage(viewerId, "sky.jpg", listImages);
+    assert.deepEqual(await resolveNextReflectionImage(listImages), { file: "sky.jpg", via: "override" });
+
+    await post(utc(2032, 3, 1), options());
+    assert.equal((await reflectionPost("2032-W10")).imageFile, "sky.jpg");
+    const settings = await db.siteSettings.findUniqueOrThrow({ where: { id: 1 } });
+    assert.equal(settings.weeklyReflectionNextImageFile, null, "the pick is consumed by the post");
+    await post(utc(2032, 3, 8), options());
+    assert.equal((await reflectionPost("2032-W11")).imageFile, "water.png");
+  });
+
+  it("refuses to pick a file that isn't in the folder, and ignores a pick whose file was removed", async () => {
+    const { pickNextImage } = await import("@/lib/weekly-reflection-admin");
+    const { resolveNextReflectionImage } = await import("@/lib/reflection-images-server");
+    await assert.rejects(pickNextImage(viewerId, "nope.jpg", async () => files), { status: 404 });
+    await pickNextImage(viewerId, "water.png", async () => files);
+    assert.equal((await resolveNextReflectionImage(async () => ["sky.jpg"]))?.via, "rotation");
+    await db.siteSettings.update({ where: { id: 1 }, data: { weeklyReflectionNextImageFile: null } });
+  });
+
   it("URL-encodes an image file name with spaces", async () => {
     const result = await post(utc(2032, 2, 2), options(async () => ["my sky #1.jpg"]));
     assert.equal(result.status, "posted");

@@ -353,10 +353,14 @@ model SiteSettings {
   // pool. Day/hour are UTC, read fresh on every worker tick so changes apply
   // without a redeploy. `NextQuoteId` is the admin's "swap" override — used (and
   // cleared) by the next post in preference to the normal rotation.
+  // `NextImageFile` is the same for the background image: a file name in
+  // public/images/weeklyreflection/, used (and cleared) by the next post in
+  // preference to the least-recently-used rotation while that file still exists.
   weeklyReflectionEnabled          Boolean        @default(false)
   weeklyReflectionDayOfWeek        Int            @default(1) // 0 = Sunday … 6 = Saturday
   weeklyReflectionHour             Int            @default(9) // 0–23, UTC
   weeklyReflectionNextQuoteId      String?
+  weeklyReflectionNextImageFile    String?
   // Editable wording of the weekly post (/admin/weekly-reflection/message).
   // {placeholders} are filled by lib/reflection-template.ts; these defaults
   // are the same text as DEFAULT_TITLE_TEMPLATE / DEFAULT_BODY_TEMPLATE there

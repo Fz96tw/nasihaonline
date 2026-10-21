@@ -5,6 +5,7 @@
 // transaction as the change it documents.
 import { db } from "@/lib/db";
 import { recordAdminAction } from "@/lib/audit-server";
+import { listReflectionImageFiles } from "@/lib/reflection-images-server";
 import { skipNextReflectionQuote } from "@/lib/reflection-quotes-server";
 import { isoWeekKey } from "@/lib/reflection-schedule";
 import { postWeeklyReflection, type WeeklyReflectionResult } from "@/lib/weekly-reflection-post";
@@ -172,6 +173,38 @@ export async function clearNextQuoteOverride(actorId: string): Promise<void> {
       update: { weeklyReflectionNextQuoteId: null },
     });
     await recordAdminAction({ actorId, action: "weekly_reflection.next_cleared", entityType: "SiteSettings" }, tx);
+  });
+}
+
+/** Make `file` (a name in public/images/weeklyreflection/) the next post's background instead of the rotation. */
+export async function pickNextImage(
+  actorId: string,
+  file: string,
+  listImages: () => Promise<string[]> = listReflectionImageFiles,
+): Promise<void> {
+  if (!(await listImages()).includes(file)) throw new ReflectionAdminError(404, "That image isn't in the images folder.");
+  await db.$transaction(async (tx) => {
+    await tx.siteSettings.upsert({
+      where: { id: SETTINGS_ROW_ID },
+      create: { id: SETTINGS_ROW_ID, weeklyReflectionNextImageFile: file },
+      update: { weeklyReflectionNextImageFile: file },
+    });
+    await recordAdminAction(
+      { actorId, action: "weekly_reflection.next_image_picked", entityType: "SiteSettings", metadata: { file } },
+      tx,
+    );
+  });
+}
+
+/** Drop an image pick so the least-recently-used rotation decides again. */
+export async function clearNextImageOverride(actorId: string): Promise<void> {
+  await db.$transaction(async (tx) => {
+    await tx.siteSettings.upsert({
+      where: { id: SETTINGS_ROW_ID },
+      create: { id: SETTINGS_ROW_ID },
+      update: { weeklyReflectionNextImageFile: null },
+    });
+    await recordAdminAction({ actorId, action: "weekly_reflection.next_image_cleared", entityType: "SiteSettings" }, tx);
   });
 }
 

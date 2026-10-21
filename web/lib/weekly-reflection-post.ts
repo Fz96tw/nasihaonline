@@ -13,8 +13,7 @@ import {
   renderReflectionTemplate,
 } from "@/lib/reflection-template";
 import { getWeeklyReflectionMessage } from "@/lib/settings";
-import { pickNextImage } from "@/lib/reflection-images";
-import { listReflectionImageFiles } from "@/lib/reflection-images-server";
+import { listReflectionImageFiles, resolveNextReflectionImage } from "@/lib/reflection-images-server";
 import { reflectionMessageSchema } from "@/lib/validation/weekly-reflection";
 import { findWeeklyReflectionUser } from "@/lib/system-user";
 import { enqueueForumThreadIndexSync } from "@/lib/queues/search-index-queue";
@@ -130,18 +129,12 @@ export async function postWeeklyReflection(
   const values = buildReflectionValues(quote, weekStart);
   const body = renderReflectionTemplate(bodyTemplate, values);
 
-  // The post's look is fixed now: the least recently used background image
-  // (null when the folder is empty, which just means the gradient look) and a
-  // snapshot of the quote, so later pool edits never change an existing post.
-  const imageHistory = new Map<string, Date>();
-  for (const row of await db.reflectionPost.findMany({
-    where: { imageFile: { not: null } },
-    select: { imageFile: true, postedAt: true },
-    orderBy: { postedAt: "asc" },
-  })) {
-    if (row.imageFile) imageHistory.set(row.imageFile, row.postedAt);
-  }
-  const imageFile = pickNextImage(await listImages(), imageHistory);
+  // The post's look is fixed now: the admin's picked image or else the least
+  // recently used one (null when the folder is empty, which just means the
+  // gradient look) and a snapshot of the quote, so later pool edits never
+  // change an existing post.
+  const nextImage = await resolveNextReflectionImage(listImages);
+  const imageFile = nextImage?.file ?? null;
 
   let threadId: string;
   let replacedThreadId: string | undefined;
@@ -200,6 +193,13 @@ export async function postWeeklyReflection(
         where: { id: 1, weeklyReflectionNextQuoteId: quote.id },
         data: { weeklyReflectionNextQuoteId: null },
       });
+      // Likewise the admin's picked image.
+      if (nextImage?.via === "override") {
+        await tx.siteSettings.updateMany({
+          where: { id: 1, weeklyReflectionNextImageFile: nextImage.file },
+          data: { weeklyReflectionNextImageFile: null },
+        });
+      }
       return thread.id;
     });
   } catch (error) {
