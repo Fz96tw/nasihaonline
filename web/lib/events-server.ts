@@ -4287,6 +4287,7 @@ export async function registerForEvent(
       endsAt: event.endsAt,
       meetingUrl: event.meetingUrl,
       livekitRoomName: event.livekitRoomName,
+      registrationId: registration.id,
     }),
     icsFilename: `${event.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "event"}.ics`,
   };
@@ -4331,10 +4332,20 @@ export function buildEventIcs(event: {
    * REQUEST/CANCEL updates or removes the entry an earlier one created.
    */
   invite?: { method: "REQUEST" | "CANCEL"; attendee: { email: string; name: string | null } };
+  /**
+   * Set for an .ics going to an external (non-member) guest: the join link
+   * becomes their personal `?rid=` waiting-room link, same as their email's —
+   * without it an anonymous guest opening the calendar entry is sent to sign in.
+   */
+  registrationId?: string | null;
 }): string {
   const start = formatIcsDate(event.startsAt);
   const end = formatIcsDate(event.endsAt ?? new Date(event.startsAt.getTime() + 60 * 60 * 1000));
-  const joinUrl = event.meetingUrl ?? (event.livekitRoomName ? `${APP_URL}/meet/event/${event.id}` : null);
+  const joinUrl = event.registrationId
+    ? event.meetingUrl || event.livekitRoomName
+      ? `${APP_URL}/meet/event/${event.id}?rid=${encodeURIComponent(event.registrationId)}`
+      : null
+    : event.meetingUrl ?? (event.livekitRoomName ? `${APP_URL}/meet/event/${event.id}` : null);
   const descriptionParts = [event.description, joinUrl ? `Join: ${joinUrl}` : null].filter(
     (part): part is string => Boolean(part),
   );

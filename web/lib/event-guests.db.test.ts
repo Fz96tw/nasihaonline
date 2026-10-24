@@ -305,6 +305,15 @@ describe("Event guests (DB-backed)", { skip }, () => {
     assert.match(cancel.content, /METHOD:CANCEL/);
     const uid = (ics: string) => /UID:(.+)/.exec(ics)?.[1];
     assert.equal(uid(invite.content), uid(cancel.content));
+
+    // A guest's calendar entry carries their personal join link, not the
+    // bare meeting page (which would send an anonymous guest to sign in).
+    const guestInvite = events.buildEventInviteAttachment(
+      { ...event, livekitRoomName: "room", registrationId: janeRid },
+      "REQUEST",
+      { email: "jane@guest.test", name: null },
+    );
+    assert.match(guestInvite.content.replace(/\r\n /g, ""), new RegExp(`LOCATION:.*/meet/event/${eventId}\\?rid=${janeRid}`));
   });
 
   it("treats a legacy Google Meet event like any other: removal emails the guest", async () => {

@@ -245,7 +245,7 @@ export type GuestInviteOutcome =
       message: string;
     };
 
-function buildIcsFor(event: GuestEvent) {
+function buildIcsFor(event: GuestEvent, registrationId: string) {
   return {
     icsContent: buildEventIcs({
       id: event.id,
@@ -255,6 +255,7 @@ function buildIcsFor(event: GuestEvent) {
       endsAt: event.endsAt,
       meetingUrl: event.meetingUrl,
       livekitRoomName: event.livekitRoomName,
+      registrationId,
     }),
     icsFilename: `${event.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "event"}.ics`,
   };
@@ -294,7 +295,7 @@ async function deliverInvite(
  */
 function guestCalendarInvite(
   event: GuestEvent,
-  guest: { email: string; name?: string | null },
+  guest: { id: string; email: string; name?: string | null },
   method: "REQUEST" | "CANCEL",
 ) {
   return buildEventInviteAttachment(
@@ -308,6 +309,7 @@ function guestCalendarInvite(
       livekitRoomName: event.livekitRoomName,
       recurrence: event.recurrence,
       recurrenceAnchor: event.startsAt,
+      registrationId: guest.id,
     },
     method,
     { email: guest.email, name: guest.name ?? null },
@@ -651,10 +653,10 @@ export async function joinViaGuestLink(
     timezone: event.timezone,
     meetingUrl: event.meetingUrl,
     livekitRoomName: event.livekitRoomName,
-    // A restricted event's link guest may still be awaiting approval, so the
-    // calendar file mustn't carry the raw meeting URL — the email's personal
-    // join link (through the waiting room) is their only way in.
-    ...buildIcsFor(isRestricted(event) ? { ...event, meetingUrl: null } : event),
+    // The calendar file carries the same personal waiting-room link as the
+    // email, never the raw meeting URL — a restricted event's link guest may
+    // still be awaiting approval, and the waiting room enforces that.
+    ...buildIcsFor(event, registration.id),
   });
 
   return { created, registrationId: created ? registration.id : null };
