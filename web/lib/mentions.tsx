@@ -48,6 +48,20 @@ export function findMentionedMembers(body: string, candidates: MentionCandidate[
 }
 
 /**
+ * The subset of `candidates` actually tagged in any of `bodies` — what a
+ * signed-out reader's page gets instead of the full member list, so
+ * rendering "@Name" tags doesn't ship every member's name and id to the
+ * public client payload.
+ */
+export function mentionCandidatesUsedIn(bodies: string[], candidates: MentionCandidate[]): MentionCandidate[] {
+  const used = new Map<string, MentionCandidate>();
+  for (const body of bodies) {
+    for (const candidate of findMentionedMembers(body, candidates)) used.set(candidate.id, candidate);
+  }
+  return Array.from(used.values());
+}
+
+/**
  * Renders `body` with matched `@Full Name` mentions as a styled tag and
  * everything else run through linkifyText, same "plain text in, rich nodes
  * out" contract as linkifyText itself. `highlightQuery` is forwarded to

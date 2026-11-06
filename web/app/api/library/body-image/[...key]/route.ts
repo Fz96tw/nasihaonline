@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { Readable } from "node:stream";
-import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
+import { AuthError, authErrorResponse, getOptionalUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getAttachmentObject } from "@/lib/storage";
 import { canViewPastedImage } from "@/lib/pasted-images-server";
@@ -15,7 +15,8 @@ import { canViewPastedImage } from "@/lib/pasted-images-server";
 export async function GET(_request: Request, { params }: { params: { key: string[] } }) {
   let user;
   try {
-    user = await requireUser();
+    // null = signed-out reader; canViewPastedImage applies the public rule.
+    user = await getOptionalUser();
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
     throw error;
@@ -41,7 +42,7 @@ export async function GET(_request: Request, { params }: { params: { key: string
   return new NextResponse(Readable.toWeb(object.stream as Readable) as ReadableStream, {
     headers: {
       "Content-Type": object.contentType,
-      "Cache-Control": "private, max-age=31536000, immutable",
+      "Cache-Control": user ? "private, max-age=31536000, immutable" : "private, max-age=3600",
     },
   });
 }

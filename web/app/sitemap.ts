@@ -1,11 +1,17 @@
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/site";
+import { getPublicKnowledgeItemSitemapEntries } from "@/lib/library-server";
+import { getPublicForumThreadSitemapEntries } from "@/lib/forums-server";
 
-// Static public routes only, for now — content behind the membership wall
-// stays gated per the public-content decision (objective 5 in seo-foundation
-// is still pending; the interim call is to leave existing gated content as
-// is). Dynamic entries (e.g. per-event pages) can be appended here once a
-// route is deliberately made public.
+// Built per request (the DB isn't reachable during the Docker image build),
+// like the (member) route group's own force-dynamic.
+export const dynamic = "force-dynamic";
+
+// Static public routes, plus every publicly readable Library item and forum
+// thread detail page (SEO objective 789ae42a, 2026-11-06 decision: those
+// detail pages are open to the web; the browse pages stay members-only).
+// The eligibility rule lives in PUBLIC_KNOWLEDGE_ITEM_WHERE /
+// PUBLIC_FORUM_THREAD_WHERE, shared with the pages themselves.
 const STATIC_ROUTES: Array<{
   path: string;
   changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
@@ -26,13 +32,42 @@ const STATIC_ROUTES: Array<{
   { path: "/privacy", changeFrequency: "yearly", priority: 0.3 },
 ];
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const lastModified = new Date();
 
-  return STATIC_ROUTES.map(({ path, changeFrequency, priority }) => ({
+  const staticEntries: MetadataRoute.Sitemap = STATIC_ROUTES.map(({ path, changeFrequency, priority }) => ({
     url: `${SITE_URL}${path}`,
     lastModified,
     changeFrequency,
     priority,
   }));
+
+  // A DB hiccup degrades to the static sitemap rather than a 500, which
+  // would make search engines drop the whole file.
+  const [libraryItems, forumThreads] = await Promise.all([
+    getPublicKnowledgeItemSitemapEntries().catch((error) => {
+      console.error("[sitemap] Failed to load public library items", error);
+      return [];
+    }),
+    getPublicForumThreadSitemapEntries().catch((error) => {
+      console.error("[sitemap] Failed to load public forum threads", error);
+      return [];
+    }),
+  ]);
+
+  return [
+    ...staticEntries,
+    ...libraryItems.map((item) => ({
+      url: `${SITE_URL}/library/${item.id}`,
+      lastModified: item.lastModified,
+      changeFrequency: "monthly" as const,
+      priority: 0.6,
+    })),
+    ...forumThreads.map((thread) => ({
+      url: `${SITE_URL}/forums/${thread.forumSlug}/${thread.id}`,
+      lastModified: thread.lastModified,
+      changeFrequency: "weekly" as const,
+      priority: 0.5,
+    })),
+  ];
 }

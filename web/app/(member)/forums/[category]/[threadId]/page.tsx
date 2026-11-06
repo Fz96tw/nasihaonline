@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { Lock, Pin } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getForumThreadDetail } from "@/lib/forums-server";
@@ -17,7 +17,8 @@ import { Avatar } from "@/components/ui/avatar";
 import { HighlightText } from "@/components/highlight-text";
 import { RestrictedAccessNotice } from "@/components/restricted-access-notice";
 import { ReflectionHero } from "@/components/reflection/reflection-hero";
-import { CLINICAL_DISCUSSIONS_SLUG, getForumThreadAudienceBadge } from "@/lib/forums";
+import { CLINICAL_DISCUSSIONS_SLUG, flattenForumPostBodies, getForumThreadAudienceBadge } from "@/lib/forums";
+import { mentionCandidatesUsedIn } from "@/lib/mentions";
 import { FEED_TYPE_LABELS } from "@/lib/feed";
 import { ForumThreadVisibility, Role } from "@/lib/generated/prisma/enums";
 
@@ -28,11 +29,43 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const user = await getSessionUser();
   const isPrivileged = user?.role === Role.moderator || user?.role === Role.admin;
-  const thread = user ? await getForumThreadDetail(params.category, params.threadId, user.id, isPrivileged) : null;
-  return { title: thread ? `${thread.title} — Forums` : "Thread not found" };
+  // Signed-out (undefined viewer) gets the public-only gate, so a crawler
+  // sees real metadata for exactly the threads it can read.
+  const thread = await getForumThreadDetail(params.category, params.threadId, user?.id, isPrivileged);
+  if (!thread) return { title: "Thread not found", robots: { index: false } };
+  const opening = thread.posts[0]?.removed ? "" : (thread.posts[0]?.body ?? "");
+  const description = metaDescription(opening || `A discussion in the NASIHA ${thread.forum.name} forum.`);
+  const path = `/forums/${thread.forum.slug}/${thread.id}`;
+  return {
+    title: `${thread.title} — ${thread.forum.name} Forum`,
+    description,
+    alternates: { canonical: path },
+    openGraph: { type: "article", url: path, title: thread.title, description },
+    // A restricted thread renders for its invitees, but must never be indexed.
+    ...(thread.visibility === ForumThreadVisibility.invited || thread.forum.slug === CLINICAL_DISCUSSIONS_SLUG
+      ? { robots: { index: false } }
+      : {}),
+  };
 }
 
-/** /forums/[category]/[threadId] (§4.13) — thread detail with threaded replies. */
+const META_DESCRIPTION_MAX = 160;
+
+function metaDescription(text: string): string {
+  // Strip pasted-image/video markdown tokens and URLs before collapsing whitespace.
+  const flat = text
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return flat.length > META_DESCRIPTION_MAX ? `${flat.slice(0, META_DESCRIPTION_MAX - 1).trimEnd()}…` : flat;
+}
+
+/**
+ * /forums/[category]/[threadId] (§4.13) — thread detail with threaded
+ * replies. Public, read-only, for a signed-out reader when the thread
+ * passes PUBLIC_FORUM_THREAD_WHERE (SEO objective 789ae42a — never Clinical
+ * Discussions or a restricted thread); 404 otherwise.
+ */
 export default async function ForumThreadPage({
   params,
   searchParams,
@@ -41,16 +74,15 @@ export default async function ForumThreadPage({
   searchParams: { q?: string };
 }) {
   const user = await getSessionUser();
-  if (!user) redirect("/sign-in");
   const q = searchParams.q?.trim() || undefined;
 
-  const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
-  const thread = await getForumThreadDetail(params.category, params.threadId, user.id, isPrivileged);
+  const isPrivileged = user?.role === Role.moderator || user?.role === Role.admin;
+  const thread = await getForumThreadDetail(params.category, params.threadId, user?.id, isPrivileged);
   if (!thread) notFound();
 
   const isRestricted = thread.visibility === ForumThreadVisibility.invited;
-  const isAuthor = user.id === thread.authorId;
-  const isInvitee = thread.invitees.some((invitee) => invitee.userId === user.id);
+  const isAuthor = !!user && user.id === thread.authorId;
+  const isInvitee = !!user && thread.invitees.some((invitee) => invitee.userId === user.id);
   const isPrivilegedOverride = isPrivileged && isRestricted && !isAuthor && !isInvitee;
   const canManageInvitees = isRestricted && (isAuthor || isPrivileged);
   const audienceBadge = getForumThreadAudienceBadge(thread);
@@ -66,14 +98,17 @@ export default async function ForumThreadPage({
   const restrictedMemberIds = thread.mentionAllowedIds;
   const mentionableMembers = restrictedMemberIds
     ? allMentionableMembers.filter((member) => restrictedMemberIds.includes(member.id))
-    : allMentionableMembers;
+    : user
+      ? allMentionableMembers
+      : // A signed-out page only ships the members actually tagged in the thread.
+        mentionCandidatesUsedIn(flattenForumPostBodies(thread.posts), allMentionableMembers);
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
-      <BackLink fallbackHref={`/forums/${thread.forum.slug}`} />
+      <BackLink fallbackHref={user ? `/forums/${thread.forum.slug}` : "/"} />
       <SavedBanner />
 
-      {isPrivilegedOverride && (
+      {isPrivilegedOverride && user && (
         <RestrictedAccessNotice role={user.role} ownerName={thread.authorName ?? "the author"} />
       )}
 
@@ -83,9 +118,13 @@ export default async function ForumThreadPage({
         <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           <span>{FEED_TYPE_LABELS.forum_thread}</span>
           <span aria-hidden="true">·</span>
-          <Link href={`/forums/${thread.forum.slug}`} className="hover:text-foreground hover:underline">
-            {thread.forum.name}
-          </Link>
+          {user ? (
+            <Link href={`/forums/${thread.forum.slug}`} className="hover:text-foreground hover:underline">
+              {thread.forum.name}
+            </Link>
+          ) : (
+            <span>{thread.forum.name}</span>
+          )}
         </p>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -109,11 +148,20 @@ export default async function ForumThreadPage({
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
             Started by {thread.authorName ?? "A member"} in{" "}
-            <Link href={`/forums/${thread.forum.slug}`} className="font-medium text-foreground hover:underline">
-              {thread.forum.name}
-            </Link>
+            {user ? (
+              <Link href={`/forums/${thread.forum.slug}`} className="font-medium text-foreground hover:underline">
+                {thread.forum.name}
+              </Link>
+            ) : (
+              <span className="font-medium text-foreground">{thread.forum.name}</span>
+            )}
           </p>
-          <ThreadViewCounter threadId={thread.id} initialViews={thread.viewCount} commentCount={thread.replyCount} />
+          <ThreadViewCounter
+            threadId={thread.id}
+            initialViews={thread.viewCount}
+            commentCount={thread.replyCount}
+            record={!!user}
+          />
         </div>
       </div>
 
@@ -123,12 +171,13 @@ export default async function ForumThreadPage({
         requireDeidentification={thread.forum.slug === CLINICAL_DISCUSSIONS_SLUG}
         mentionableMembers={mentionableMembers}
         allowedMemberIds={restrictedMemberIds ?? undefined}
-        currentUserId={user.id}
+        currentUserId={user?.id ?? null}
         isPrivileged={isPrivileged}
         highlightQuery={q}
       />
 
       {isRestricted &&
+        user &&
         (canManageInvitees ? (
           <ManageThreadInvitees threadId={thread.id} initialRoster={thread.invitees} />
         ) : (

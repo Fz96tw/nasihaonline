@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { Readable } from "node:stream";
-import { AuthError, authErrorResponse, requireUser } from "@/lib/auth";
+import { AuthError, authErrorResponse, getOptionalUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getKnowledgeDocumentObject, getKnowledgeDocumentObjectRange } from "@/lib/storage";
 import { parseByteRange } from "@/lib/http-range";
 import { KnowledgeStatus } from "@/lib/generated/prisma/enums";
+import { isKnowledgeItemPubliclyReadable } from "@/lib/library-server";
 
 /**
  * Streams a Knowledge Library document from MinIO through our own origin —
@@ -18,7 +19,9 @@ import { KnowledgeStatus } from "@/lib/generated/prisma/enums";
 export async function GET(request: Request, { params }: { params: { key: string[] } }) {
   let user;
   try {
-    user = await requireUser();
+    // null = signed-out reader (public Library detail pages, SEO objective
+    // 789ae42a) — only gets attachments of publicly readable items.
+    user = await getOptionalUser();
   } catch (error) {
     if (error instanceof AuthError) return authErrorResponse(error);
     throw error;
@@ -27,19 +30,20 @@ export async function GET(request: Request, { params }: { params: { key: string[
   const objectKey = params.key.join("/");
   const attachment = await db.knowledgeAttachment.findFirst({
     where: { objectKey },
-    select: { fileName: true, knowledgeItem: { select: { status: true, contributorId: true } } },
+    select: { fileName: true, knowledgeItem: { select: { status: true, visibility: true, contributorId: true } } },
   });
   if (!attachment) {
     return new NextResponse(null, { status: 404 });
   }
 
   const { status, contributorId } = attachment.knowledgeItem;
-  const canView =
-    status === KnowledgeStatus.published ||
-    status === KnowledgeStatus.flagged ||
-    contributorId === user.id ||
-    user.role === "moderator" ||
-    user.role === "admin";
+  const canView = user
+    ? status === KnowledgeStatus.published ||
+      status === KnowledgeStatus.flagged ||
+      contributorId === user.id ||
+      user.role === "moderator" ||
+      user.role === "admin"
+    : isKnowledgeItemPubliclyReadable(attachment.knowledgeItem);
   if (!canView) {
     return new NextResponse(null, { status: 404 });
   }

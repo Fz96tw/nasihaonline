@@ -103,6 +103,22 @@ export async function requireUser(): Promise<UserModel> {
 }
 
 /**
+ * requireUser for routes that also serve signed-out readers (public Library
+ * items / forum threads): returns null instead of throwing when there's no
+ * session, but still throws AuthError(403) for a suspended member — a
+ * suspended account must not quietly fall back to anonymous access to
+ * whatever the public can see plus nothing else; it stays blocked.
+ */
+export async function getOptionalUser(): Promise<UserModel | null> {
+  try {
+    return await requireUser();
+  } catch (error) {
+    if (error instanceof AuthError && error.status === 401) return null;
+    throw error;
+  }
+}
+
+/**
  * Throws AuthError(401) if unauthenticated, AuthError(403) if authenticated
  * but the user's role isn't in `roles`.
  */

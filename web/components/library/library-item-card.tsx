@@ -27,7 +27,16 @@ function formatDate(iso: string) {
  * to /library/[id] (§4.9) rather than opening a preview modal — the full
  * preview, discussion link, etc. all live on that detail page now.
  */
-export function LibraryItemCard({ item, canEdit }: { item: LibraryCardData; canEdit: boolean }) {
+export function LibraryItemCard({
+  item,
+  canEdit,
+  canFlag = true,
+}: {
+  item: LibraryCardData;
+  canEdit: boolean;
+  /** false for a signed-out reader (public detail page's "More by" tab) — flagging is member-only. */
+  canFlag?: boolean;
+}) {
   const Icon = CONTENT_TYPE_ICONS[item.contentType] ?? BookOpen;
   // A custom hero image always wins; a recorded_lecture with none set falls
   // back to its video's YouTube thumbnail as the default cover.
@@ -93,7 +102,7 @@ export function LibraryItemCard({ item, canEdit }: { item: LibraryCardData; canE
                 <Link href={`/library/${item.id}/edit`}>Edit</Link>
               </Button>
             )}
-            {item.status === KnowledgeStatus.published && <LibraryFlagButton itemId={item.id} initialFlagged={false} />}
+            {canFlag && item.status === KnowledgeStatus.published && <LibraryFlagButton itemId={item.id} initialFlagged={false} />}
           </div>
         </div>
         <div className="flex items-center justify-end gap-3 text-xs text-muted-foreground">

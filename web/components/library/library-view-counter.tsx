@@ -10,10 +10,20 @@ import { getCsrfToken } from "@/lib/csrf-client";
  * this visit was recorded; on mount we POST the view and swap in the fresh
  * total from the response.
  */
-export function LibraryViewCounter({ itemId, initialViews }: { itemId: string; initialViews: number }) {
+export function LibraryViewCounter({
+  itemId,
+  initialViews,
+  record = true,
+}: {
+  itemId: string;
+  initialViews: number;
+  /** false for a signed-out reader — the view route is member-only, and its 401 would trip SessionExpiryGuard's redirect to /sign-in. */
+  record?: boolean;
+}) {
   const [views, setViews] = useState(initialViews);
 
   useEffect(() => {
+    if (!record) return;
     let cancelled = false;
 
     (async () => {
@@ -34,7 +44,7 @@ export function LibraryViewCounter({ itemId, initialViews }: { itemId: string; i
     return () => {
       cancelled = true;
     };
-  }, [itemId]);
+  }, [itemId, record]);
 
   return (
     <span className="flex items-center gap-1 text-xs text-muted-foreground" title="Unique visitors">

@@ -163,7 +163,8 @@ function PostNode({
   requireDeidentification: boolean;
   mentionableMembers: MentionCandidate[];
   allowedMemberIds?: string[];
-  currentUserId: string;
+  /** null = signed-out reader: render read-only (no reply/edit/delete/flag/follow, no profile links). */
+  currentUserId: string | null;
   isPrivileged: boolean;
   onPosted: () => void;
   /** Active search query when arriving from a search result (see lib/feed.ts's withFeedRef) — highlights every match in this post's body. */
@@ -183,7 +184,8 @@ function PostNode({
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const authorName = post.authorName ?? "NASIHA Member";
-  const canEdit = !post.removed && (post.authorId === currentUserId || isPrivileged);
+  const readOnly = currentUserId === null;
+  const canEdit = !readOnly && !post.removed && (post.authorId === currentUserId || isPrivileged);
 
   async function handleSaveEdit() {
     if (!editBody.trim()) return;
@@ -263,7 +265,7 @@ function PostNode({
       <div className="rounded-[10px] border bg-muted/40 p-3">
         <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            {post.authorProfile ? (
+            {post.authorProfile && !readOnly ? (
               <Link
                 href={`/members/${post.authorProfile.id}`}
                 aria-label={`View ${authorName}'s profile`}
@@ -280,7 +282,7 @@ function PostNode({
             )}
             {post.removed && <Badge variant="neutral">Removed</Badge>}
             {!post.removed && flagged && <Badge variant="danger">Flagged</Badge>}
-            {!post.removed && post.authorProfile && post.authorId !== currentUserId && (
+            {!readOnly && !post.removed && post.authorProfile && post.authorId !== currentUserId && (
               <FollowMemberButton memberId={post.authorProfile.id} memberName={authorName} variant="nudge" />
             )}
           </span>
@@ -321,6 +323,7 @@ function PostNode({
             {renderTextWithMentions(post.body, mentionableMembers, highlightQuery, 2)}
           </p>
         )}
+        {!readOnly && (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
           <button
             type="button"
@@ -364,6 +367,7 @@ function PostNode({
             </button>
           )}
         </div>
+        )}
         {deleteError && <p className="mt-1 text-xs text-destructive">{deleteError}</p>}
         {flagError && <p className="mt-1 text-xs text-destructive">{flagError}</p>}
         <FlagContentDialog
@@ -432,7 +436,8 @@ export function ForumThreadView({
   mentionableMembers: MentionCandidate[];
   /** Member-Initiated Restricted Forum Threads (§4.13/§11.16) — narrows every reply composer's `@`-mention autocomplete to the thread's author + invitees; omit for an unrestricted (community) thread. */
   allowedMemberIds?: string[];
-  currentUserId: string;
+  /** null = signed-out reader (public thread pages): read-only, with a join/sign-in prompt instead of the reply composer. */
+  currentUserId: string | null;
   isPrivileged: boolean;
   /** Active search query when arriving from a search result (see lib/feed.ts's withFeedRef) — highlights every match across every post's body. */
   highlightQuery?: string;
@@ -456,16 +461,32 @@ export function ForumThreadView({
         />
       ))}
 
-      <div className="mt-4 border-t pt-6">
-        <h2 className="mb-3 text-lg font-semibold">Post a Reply</h2>
-        <ReplyForm
-          threadId={threadId}
-          parentId={null}
-          requireDeidentification={requireDeidentification}
-          allowedMemberIds={allowedMemberIds}
-          onPosted={() => router.refresh()}
-        />
-      </div>
+      {currentUserId === null ? (
+        <div className="mt-4 rounded-[10px] border bg-muted/40 p-4 text-sm">
+          <p className="mb-2 font-medium text-foreground">Join the conversation</p>
+          <p className="text-muted-foreground">
+            <Link href="/join" className="font-medium text-primary hover:underline">
+              Apply to become a NASIHA member
+            </Link>{" "}
+            to reply, or{" "}
+            <Link href="/sign-in" className="font-medium text-primary hover:underline">
+              sign in
+            </Link>{" "}
+            if you already are one.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-4 border-t pt-6">
+          <h2 className="mb-3 text-lg font-semibold">Post a Reply</h2>
+          <ReplyForm
+            threadId={threadId}
+            parentId={null}
+            requireDeidentification={requireDeidentification}
+            allowedMemberIds={allowedMemberIds}
+            onPosted={() => router.refresh()}
+          />
+        </div>
+      )}
     </section>
   );
 }

@@ -13,14 +13,18 @@ export function ThreadViewCounter({
   threadId,
   initialViews,
   commentCount,
+  record = true,
 }: {
   threadId: string;
   initialViews: number;
   commentCount: number;
+  /** false for a signed-out reader — the view route is member-only, and its 401 would trip SessionExpiryGuard's redirect to /sign-in. */
+  record?: boolean;
 }) {
   const [views, setViews] = useState(initialViews);
 
   useEffect(() => {
+    if (!record) return;
     let cancelled = false;
 
     (async () => {
@@ -41,7 +45,7 @@ export function ThreadViewCounter({
     return () => {
       cancelled = true;
     };
-  }, [threadId]);
+  }, [threadId, record]);
 
   return (
     <div className="flex items-center gap-4 text-sm text-muted-foreground">

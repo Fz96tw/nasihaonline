@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import {
   getKnowledgeItemRoster,
@@ -11,7 +11,8 @@ import { MessageMemberButton } from "@/components/members/message-member-button"
 import { FollowMemberButton } from "@/components/members/follow-member-button";
 import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-server";
 import { getForumThreadDetail } from "@/lib/forums-server";
-import { LIBRARY_FORUM_SLUG } from "@/lib/forums";
+import { flattenForumPostBodies, LIBRARY_FORUM_SLUG } from "@/lib/forums";
+import { mentionCandidatesUsedIn } from "@/lib/mentions";
 import { CONTENT_TYPE_LABELS, LEVEL_LABELS, postedAt } from "@/lib/library";
 import { FEED_TYPE_LABELS } from "@/lib/feed";
 import { youtubeEmbedUrl, youtubeThumbnailUrl } from "@/lib/youtube";
@@ -39,15 +40,46 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 }
 
+const META_DESCRIPTION_MAX = 160;
+
+function metaDescription(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > META_DESCRIPTION_MAX ? `${flat.slice(0, META_DESCRIPTION_MAX - 1).trimEnd()}…` : flat;
+}
+
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const user = await getSessionUser();
   const isPrivileged = user?.role === Role.moderator || user?.role === Role.admin;
-  const item = user ? await getPublishedKnowledgeItemById(params.id, user.id, isPrivileged) : null;
-  return { title: item ? `${item.title} — Knowledge Library` : "Resource not found" };
+  // Signed-out (null) gets the public-only gate, so a crawler sees real
+  // metadata for exactly the items it can read and "not found" otherwise.
+  const item = await getPublishedKnowledgeItemById(params.id, user?.id ?? null, isPrivileged);
+  if (!item) return { title: "Resource not found", robots: { index: false } };
+  const description = metaDescription(item.description);
+  const path = `/library/${item.id}`;
+  return {
+    title: `${item.title} — Knowledge Library`,
+    description,
+    alternates: { canonical: path },
+    openGraph: {
+      type: "article",
+      url: path,
+      title: item.title,
+      description,
+      ...(item.heroImageUrl ? { images: [{ url: item.heroImageUrl, alt: item.title }] } : {}),
+    },
+    // Members-only items (restricted/flagged) render for the right members
+    // but must never be indexed if a crawler somehow reaches one signed in.
+    ...(item.visibility === KnowledgeVisibility.public && item.status === KnowledgeStatus.published
+      ? {}
+      : { robots: { index: false } }),
+  };
 }
 
 /**
- * /library/[id] (§4.9) — member-only detail page, replacing the browse
+ * /library/[id] (§4.9) — detail page, public for signed-out readers when
+ * the item passes PUBLIC_KNOWLEDGE_ITEM_WHERE (SEO objective 789ae42a;
+ * they get a read-only view), members-gated otherwise; replacing the browse
+ * grid's old preview modal. Originally member-only detail page, replacing the browse
  * grid's old preview modal. Published/flagged only — pending_review and
  * rejected items 404 here, even for their own contributor (they use
  * /library/[id]/edit to see those). Mirrors /blog/[slug]'s depth (author
@@ -63,24 +95,28 @@ export default async function LibraryItemDetailPage({
   searchParams: { q?: string };
 }) {
   const user = await getSessionUser();
-  if (!user) redirect("/sign-in");
+  // null = signed-out reader (or crawler): public items only, read-only.
+  const viewerId = user?.id ?? null;
 
-  const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
-  const item = await getPublishedKnowledgeItemById(params.id, user.id, isPrivileged);
+  const isPrivileged = user?.role === Role.moderator || user?.role === Role.admin;
+  const item = await getPublishedKnowledgeItemById(params.id, viewerId, isPrivileged);
   if (!item) notFound();
   const q = searchParams.q?.trim() || undefined;
 
   const authorProfile = await getDirectoryMemberById(item.contributor.id);
-  const canEdit = user.id === item.contributor.id || isPrivileged;
+  const canEdit = !!user && (user.id === item.contributor.id || isPrivileged);
   const isRestricted = item.visibility === KnowledgeVisibility.restricted;
-  const roster = isRestricted ? await getKnowledgeItemRoster(item.id) : null;
-  const isInvited = roster?.some((member) => member.userId === user.id) ?? false;
-  const isPrivilegedOverride = isPrivileged && isRestricted && item.contributor.id !== user.id && !isInvited;
+  const roster = isRestricted && user ? await getKnowledgeItemRoster(item.id) : null;
+  const isInvited = roster?.some((member) => member.userId === user?.id) ?? false;
+  const isPrivilegedOverride = !!user && isPrivileged && isRestricted && item.contributor.id !== user.id && !isInvited;
 
   const thread = item.forumThreadId
-    ? await getForumThreadDetail(LIBRARY_FORUM_SLUG, item.forumThreadId, user.id, isPrivileged)
+    ? await getForumThreadDetail(LIBRARY_FORUM_SLUG, item.forumThreadId, viewerId ?? undefined, isPrivileged)
     : null;
-  const mentionableMembers = thread ? await getMentionableMembers() : [];
+  const allMentionableMembers = thread ? await getMentionableMembers() : [];
+  // A signed-out page only ships the members actually tagged in the thread.
+  const mentionableMembers =
+    thread && !user ? mentionCandidatesUsedIn(flattenForumPostBodies(thread.posts), allMentionableMembers) : allMentionableMembers;
 
   // "More by this author" — same visibility gate as the author's profile
   // Library tab (published/flagged only; restricted only if the viewer is
@@ -89,7 +125,7 @@ export default async function LibraryItemDetailPage({
   // unlinked, and "View all" would have nowhere to go. Fetches one past the
   // cap to know whether a "View all" link is warranted.
   const moreByFetched = authorProfile
-    ? await getPublishedKnowledgeItemsByContributor(item.contributor.id, user.id, isPrivileged, {
+    ? await getPublishedKnowledgeItemsByContributor(item.contributor.id, viewerId, isPrivileged, {
         excludeId: item.id,
         limit: MORE_BY_LIMIT + 1,
       })
@@ -116,7 +152,7 @@ export default async function LibraryItemDetailPage({
       posts={thread.posts.slice(1)}
       requireDeidentification={false}
       mentionableMembers={mentionableMembers}
-      currentUserId={user.id}
+      currentUserId={viewerId}
       isPrivileged={isPrivileged}
       highlightQuery={q}
     />
@@ -127,10 +163,10 @@ export default async function LibraryItemDetailPage({
       <div className="flex flex-col gap-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {moreBy.map((other) => (
-            <LibraryItemCard key={other.id} item={other} canEdit={canEdit} />
+            <LibraryItemCard key={other.id} item={other} canEdit={canEdit} canFlag={!!user} />
           ))}
         </div>
-        {moreByFetched.length > MORE_BY_LIMIT && (
+        {user && moreByFetched.length > MORE_BY_LIMIT && (
           <Link href={`/members/${authorProfile.id}`} className="text-sm font-medium text-primary hover:underline">
             View all by {authorName}
           </Link>
@@ -140,10 +176,10 @@ export default async function LibraryItemDetailPage({
 
   return (
     <main className="mx-auto max-w-3xl px-8 py-16">
-      <BackLink fallbackHref="/library" className="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline" />
+      <BackLink fallbackHref={user ? "/library" : "/"} className="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline" />
       <SavedBanner />
 
-      {isPrivilegedOverride && (
+      {isPrivilegedOverride && user && (
         <RestrictedAccessNotice role={user.role} ownerName={item.contributor.name ?? "the contributor"} />
       )}
 
@@ -176,7 +212,7 @@ export default async function LibraryItemDetailPage({
 
       <div className="mb-8 flex items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          {authorProfile ? (
+          {authorProfile && user ? (
             <Link
               href={`/members/${authorProfile.id}`}
               aria-label={`View ${item.contributor.name ?? "this member"}'s profile`}
@@ -197,14 +233,14 @@ export default async function LibraryItemDetailPage({
               </div>
             </div>
           )}
-          {authorProfile && item.contributor.id !== user.id && (
+          {authorProfile && user && item.contributor.id !== user.id && (
             <>
               <MessageMemberButton memberId={authorProfile.id} memberName={item.contributor.name ?? "this member"} />
               <FollowMemberButton memberId={authorProfile.id} memberName={item.contributor.name ?? "this member"} />
             </>
           )}
         </div>
-        <LibraryViewCounter itemId={item.id} initialViews={item.viewCount} />
+        <LibraryViewCounter itemId={item.id} initialViews={item.viewCount} record={!!user} />
       </div>
 
       {item.contentType !== KnowledgeContentType.blog_post && !item.body?.trim() && (
@@ -237,9 +273,26 @@ export default async function LibraryItemDetailPage({
             redirectTo="/library/mine"
           />
         )}
-        {item.status === KnowledgeStatus.published && <LibraryFlagButton itemId={item.id} initialFlagged={false} />}
-        {!item.forumThreadId && <LibraryDiscussionLink itemId={item.id} initialThreadId={item.forumThreadId} />}
+        {user && item.status === KnowledgeStatus.published && <LibraryFlagButton itemId={item.id} initialFlagged={false} />}
+        {user && !item.forumThreadId && <LibraryDiscussionLink itemId={item.id} initialThreadId={item.forumThreadId} />}
       </div>
+
+      {!user && (
+        <div className="mt-8 rounded-[10px] border bg-muted/40 p-4 text-sm">
+          <p className="mb-1 font-medium text-foreground">Shared in the NASIHA Knowledge Library</p>
+          <p className="text-muted-foreground">
+            NASIHA members share resources, teach, and give each other feedback.{" "}
+            <Link href="/join" className="font-medium text-primary hover:underline">
+              Apply to become a member
+            </Link>{" "}
+            to browse the full library and join the discussion, or{" "}
+            <Link href="/sign-in" className="font-medium text-primary hover:underline">
+              sign in
+            </Link>
+            .
+          </p>
+        </div>
+      )}
 
       {roster ? (
         canEdit ? (

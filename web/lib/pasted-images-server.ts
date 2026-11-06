@@ -9,8 +9,9 @@ import {
   KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
   OWN_THREAD_ACCESS_SELECT,
   FORUM_COMMUNITY_ACCESS_SELECT,
+  isForumThreadPubliclyReadable,
 } from "@/lib/forums-server";
-import { canViewKnowledgeItem } from "@/lib/library-server";
+import { canViewKnowledgeItem, isKnowledgeItemPubliclyReadable } from "@/lib/library-server";
 import { getMemberCommunityContext } from "@/lib/profile-server";
 
 export class TooManyPastedImagesError extends Error {}
@@ -159,6 +160,34 @@ function isPrivilegedUser(user: UserModel): boolean {
 }
 
 /**
+ * Signed-out reader (SEO objective 789ae42a): a pasted image is public
+ * only when the content it's embedded in is publicly readable — a forum
+ * post in a PUBLIC_FORUM_THREAD_WHERE thread, or a Library item passing
+ * isKnowledgeItemPubliclyReadable. Inbox images and unlinked (draft)
+ * images are never public.
+ */
+async function canPublicViewPastedImage(image: PastedImageAccessRecord): Promise<boolean> {
+  if (image.ownerType === PastedImageOwnerType.forum_post) {
+    if (!image.forumPostId) return false;
+    const post = await db.forumPost.findUnique({
+      where: { id: image.forumPostId },
+      select: { threadId: true, removed: true },
+    });
+    if (!post || post.removed) return false;
+    return isForumThreadPubliclyReadable(post.threadId);
+  }
+  if (image.ownerType === PastedImageOwnerType.library_item) {
+    if (!image.knowledgeItemId) return false;
+    const item = await db.knowledgeItem.findUnique({
+      where: { id: image.knowledgeItemId },
+      select: { status: true, visibility: true },
+    });
+    return !!item && isKnowledgeItemPubliclyReadable(item);
+  }
+  return false;
+}
+
+/**
  * Whether `actingUser` may view a pasted image — dispatches by ownerType
  * and re-runs the exact visibility rule the owning content's own read path
  * already applies (forum thread visibility via isThreadVisible, Inbox
@@ -167,7 +196,8 @@ function isPrivilegedUser(user: UserModel): boolean {
  * (uploaded but not yet saved into any body, e.g. an abandoned draft) is
  * visible only to its uploader.
  */
-export async function canViewPastedImage(image: PastedImageAccessRecord, actingUser: UserModel): Promise<boolean> {
+export async function canViewPastedImage(image: PastedImageAccessRecord, actingUser: UserModel | null): Promise<boolean> {
+  if (!actingUser) return canPublicViewPastedImage(image);
   if (image.ownerType === PastedImageOwnerType.forum_post) {
     if (!image.forumPostId) return image.uploaderId === actingUser.id;
     const post = await db.forumPost.findUnique({

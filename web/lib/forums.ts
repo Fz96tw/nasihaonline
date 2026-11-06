@@ -153,3 +153,8 @@ export type ForumThreadDetail = {
   /** Only a Weekly Reflection thread: the hero banner's image (null = gradient) and the quote snapshot taken when it was posted. */
   reflection: { imageUrl: string | null; quote: string; attribution: string } | null;
 };
+
+/** Every post body in a reply tree, depth-first — e.g. for mentionCandidatesUsedIn. */
+export function flattenForumPostBodies(posts: ForumPostNode[]): string[] {
+  return posts.flatMap((post) => [post.body, ...flattenForumPostBodies(post.replies)]);
+}

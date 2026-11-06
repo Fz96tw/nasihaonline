@@ -929,6 +929,35 @@ export async function getPublishedKnowledgeItems(params: {
 }
 
 /**
+ * Public (signed-out / crawler) readability of a Library item (SEO
+ * objective 789ae42a — detail pages open to the web; the /library browse
+ * page stays members-only). Stricter than the member gate: `published`
+ * only (a `flagged` item is under moderator review and stays members-only
+ * until resolved) and `public` visibility only (a restricted item is never
+ * shown outside its invite list). Every signed-out read path — the detail
+ * page, its attachment/body-image proxies, and the sitemap — goes through
+ * this one filter so they can't drift apart.
+ */
+export const PUBLIC_KNOWLEDGE_ITEM_WHERE = {
+  status: KnowledgeStatus.published,
+  visibility: KnowledgeVisibility.public,
+} satisfies Prisma.KnowledgeItemWhereInput;
+
+export function isKnowledgeItemPubliclyReadable(item: { status: KnowledgeStatus; visibility: KnowledgeVisibility }): boolean {
+  return item.status === KnowledgeStatus.published && item.visibility === KnowledgeVisibility.public;
+}
+
+/** sitemap.xml's Library entries — every publicly readable item, newest first. */
+export async function getPublicKnowledgeItemSitemapEntries(): Promise<{ id: string; lastModified: Date }[]> {
+  const items = await db.knowledgeItem.findMany({
+    where: PUBLIC_KNOWLEDGE_ITEM_WHERE,
+    select: { id: true, updatedAt: true },
+    orderBy: { updatedAt: "desc" },
+  });
+  return items.map((item) => ({ id: item.id, lastModified: item.updatedAt }));
+}
+
+/**
  * /library/[id] (§4.9) — the detail page's data load. Published/flagged
  * only, same visibility gate as getPublishedKnowledgeItems — a
  * pending_review/rejected item 404s here too, even for its own
@@ -939,21 +968,26 @@ export async function getPublishedKnowledgeItems(params: {
  */
 export async function getPublishedKnowledgeItemById(
   id: string,
-  userId: string,
+  /** null = signed-out visitor/crawler — gets only PUBLIC_KNOWLEDGE_ITEM_WHERE items. */
+  userId: string | null,
   isPrivileged: boolean,
 ): Promise<KnowledgeItemDetail | null> {
   const item = await db.knowledgeItem.findFirst({
     where: {
       id,
-      status: { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] },
-      ...(isPrivileged
-        ? {}
+      ...(userId === null
+        ? PUBLIC_KNOWLEDGE_ITEM_WHERE
         : {
-            OR: [
-              { visibility: KnowledgeVisibility.public },
-              { contributorId: userId },
-              { invitees: { some: { userId } } },
-            ],
+            status: { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] },
+            ...(isPrivileged
+              ? {}
+              : {
+                  OR: [
+                    { visibility: KnowledgeVisibility.public },
+                    { contributorId: userId },
+                    { invitees: { some: { userId } } },
+                  ],
+                }),
           }),
     },
     select: {
@@ -1321,7 +1355,8 @@ export async function startKnowledgeItemDiscussion(
  */
 export async function getPublishedKnowledgeItemsByContributor(
   contributorId: string,
-  viewerId: string,
+  /** null = signed-out visitor/crawler — gets only PUBLIC_KNOWLEDGE_ITEM_WHERE items. */
+  viewerId: string | null,
   isPrivileged: boolean,
   options: { excludeId?: string; limit?: number } = {},
 ): Promise<LibraryCard[]> {
@@ -1329,15 +1364,19 @@ export async function getPublishedKnowledgeItemsByContributor(
     where: {
       contributorId,
       ...(options.excludeId ? { id: { not: options.excludeId } } : {}),
-      status: { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] },
-      ...(isPrivileged
-        ? {}
+      ...(viewerId === null
+        ? PUBLIC_KNOWLEDGE_ITEM_WHERE
         : {
-            OR: [
-              { visibility: KnowledgeVisibility.public },
-              { contributorId: viewerId },
-              { invitees: { some: { userId: viewerId } } },
-            ],
+            status: { in: [KnowledgeStatus.published, KnowledgeStatus.flagged] },
+            ...(isPrivileged
+              ? {}
+              : {
+                  OR: [
+                    { visibility: KnowledgeVisibility.public },
+                    { contributorId: viewerId },
+                    { invitees: { some: { userId: viewerId } } },
+                  ],
+                }),
           }),
     },
     select: LIBRARY_CARD_SELECT,

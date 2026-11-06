@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import {
   EventVisibility,
   ForumThreadVisibility,
+  KnowledgeStatus,
   KnowledgeVisibility,
   NotificationType,
   PastedImageOwnerType,
@@ -279,6 +280,52 @@ export function isThreadVisible(
   );
 }
 
+/**
+ * Public (signed-out / crawler) readability of a forum thread (SEO
+ * objective 789ae42a — thread detail pages open to the web; /forums and
+ * /forums/[category] browse pages stay members-only). The anonymous
+ * equivalent of isThreadVisible, expressed as a Prisma filter so the detail
+ * page, the pasted-image proxy and the sitemap all share one rule:
+ * - not removed, in an active forum
+ * - never the Clinical Discussions forum (product decision: stays members-only)
+ * - never a community-gated forum (categoryId set) — those are hidden even
+ *   from members outside the community, so they stay members-only too
+ * - never a member-initiated restricted (`invited`) thread
+ * - an event thread only when its event isn't invite-only
+ * - a Library discussion thread only when its item is itself publicly
+ *   readable (published + public — see PUBLIC_KNOWLEDGE_ITEM_WHERE)
+ */
+export const PUBLIC_FORUM_THREAD_WHERE = {
+  removed: false,
+  visibility: ForumThreadVisibility.community,
+  forum: { active: true, categoryId: null, slug: { not: CLINICAL_DISCUSSIONS_SLUG } },
+  AND: [
+    { OR: [{ eventId: null }, { event: { is: { visibility: EventVisibility.community } } }] },
+    {
+      OR: [
+        { knowledgeItemId: null },
+        { knowledgeItem: { is: { status: KnowledgeStatus.published, visibility: KnowledgeVisibility.public } } },
+      ],
+    },
+  ],
+} satisfies Prisma.ForumThreadWhereInput;
+
+export async function isForumThreadPubliclyReadable(threadId: string): Promise<boolean> {
+  return (await db.forumThread.count({ where: { id: threadId, ...PUBLIC_FORUM_THREAD_WHERE } })) > 0;
+}
+
+/** sitemap.xml's forum entries — every publicly readable thread, most recently active first. */
+export async function getPublicForumThreadSitemapEntries(): Promise<
+  { id: string; forumSlug: string; lastModified: Date }[]
+> {
+  const threads = await db.forumThread.findMany({
+    where: PUBLIC_FORUM_THREAD_WHERE,
+    select: { id: true, lastActivityAt: true, forum: { select: { slug: true } } },
+    orderBy: { lastActivityAt: "desc" },
+  });
+  return threads.map((thread) => ({ id: thread.id, forumSlug: thread.forum.slug, lastModified: thread.lastActivityAt }));
+}
+
 const THREAD_LIST_SELECT = {
   id: true,
   title: true,
@@ -457,6 +504,11 @@ export async function getForumThreadDetail(
   if (!thread || thread.forum.slug !== forumSlug) return null;
   const member = await getMemberCommunityContext(viewerId ?? null);
   if (!isThreadVisible(thread, viewerId, isPrivileged, member)) return null;
+  // Signed-out reader: isThreadVisible above already rejects every
+  // restricted case for a missing viewerId, but the public rule is
+  // stricter still (Clinical Discussions, inactive forums, unpublished
+  // Library items) — re-check against the shared filter.
+  if (!viewerId && !(await isForumThreadPubliclyReadable(thread.id))) return null;
 
   const authorProfiles = await getDirectoryMembersByIds(Array.from(new Set(thread.posts.map((post) => post.authorId))));
 
