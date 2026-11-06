@@ -53,12 +53,11 @@ const ALLOWED_PUBLIC_MEDIA_PATHS = [
   "/api/forums/post-image/",
 ];
 
-// AI-crawler allow/disallow follows objective 2's own documented fallback
-// ("typical stance: allow the live-search bots, disallow the training-only
-// bots") because objective 5 — the product/leadership decision spike on
-// AI/LLM use — hasn't landed yet. Revisit once that decision doc exists.
-const AI_LIVE_SEARCH_AGENTS = ["OAI-SearchBot", "PerplexityBot"];
-const AI_TRAINING_AGENTS = ["GPTBot", "ClaudeBot", "anthropic-ai", "Google-Extended", "CCBot", "Bytespider"];
+// AI crawlers — both live-search (OAI-SearchBot, PerplexityBot) and
+// training (GPTBot, ClaudeBot, Google-Extended, CCBot, …) — get exactly
+// the same rules as every other crawler via the `*` group: the 2026-11-06
+// decision (objective bd5ab015) is to allow AI training on public content.
+// No per-agent groups, since a named group would replace (not extend) `*`.
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -68,15 +67,6 @@ export default function robots(): MetadataRoute.Robots {
         allow: ALLOWED_PUBLIC_MEDIA_PATHS,
         disallow: DISALLOWED_PATHS,
       },
-      ...AI_LIVE_SEARCH_AGENTS.map((userAgent) => ({
-        userAgent,
-        allow: ALLOWED_PUBLIC_MEDIA_PATHS,
-        disallow: DISALLOWED_PATHS,
-      })),
-      ...AI_TRAINING_AGENTS.map((userAgent) => ({
-        userAgent,
-        disallow: "/",
-      })),
     ],
     sitemap: `${SITE_URL}/sitemap.xml`,
   };

@@ -288,8 +288,9 @@ export function isThreadVisible(
  * page, the pasted-image proxy and the sitemap all share one rule:
  * - not removed, in an active forum
  * - never the Clinical Discussions forum (product decision: stays members-only)
- * - never a community-gated forum (categoryId set) — those are hidden even
- *   from members outside the community, so they stay members-only too
+ * - community-gated forums (categoryId set) ARE included (follow-up
+ *   objective bd5ab015) — public to the web even though a signed-in member
+ *   outside that community still can't open them (isForumAccessibleToMember)
  * - never a member-initiated restricted (`invited`) thread
  * - an event thread only when its event isn't invite-only
  * - a Library discussion thread only when its item is itself publicly
@@ -298,7 +299,7 @@ export function isThreadVisible(
 export const PUBLIC_FORUM_THREAD_WHERE = {
   removed: false,
   visibility: ForumThreadVisibility.community,
-  forum: { active: true, categoryId: null, slug: { not: CLINICAL_DISCUSSIONS_SLUG } },
+  forum: { active: true, slug: { not: CLINICAL_DISCUSSIONS_SLUG } },
   AND: [
     { OR: [{ eventId: null }, { event: { is: { visibility: EventVisibility.community } } }] },
     {
@@ -502,13 +503,17 @@ export async function getForumThreadDetail(
     },
   });
   if (!thread || thread.forum.slug !== forumSlug) return null;
-  const member = await getMemberCommunityContext(viewerId ?? null);
-  if (!isThreadVisible(thread, viewerId, isPrivileged, member)) return null;
-  // Signed-out reader: isThreadVisible above already rejects every
-  // restricted case for a missing viewerId, but the public rule is
-  // stricter still (Clinical Discussions, inactive forums, unpublished
-  // Library items) — re-check against the shared filter.
-  if (!viewerId && !(await isForumThreadPubliclyReadable(thread.id))) return null;
+  if (viewerId) {
+    const member = await getMemberCommunityContext(viewerId);
+    if (!isThreadVisible(thread, viewerId, isPrivileged, member)) return null;
+  } else if (!(await isForumThreadPubliclyReadable(thread.id))) {
+    // Signed-out reader: judged only by the shared public filter, which
+    // covers every restriction isThreadVisible applies to a missing viewer
+    // (removed, invited, invite-only event, restricted Library item) plus
+    // its own (Clinical Discussions, inactive forums, unpublished items) —
+    // but not the per-community member gate, which has no meaning here.
+    return null;
+  }
 
   const authorProfiles = await getDirectoryMembersByIds(Array.from(new Set(thread.posts.map((post) => post.authorId))));
 

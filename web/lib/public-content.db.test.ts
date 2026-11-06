@@ -97,16 +97,18 @@ describe("Public library items and forum threads (DB-backed)", { skip }, () => {
     assert.equal((await library.getPublishedKnowledgeItemById(items.flagged, authorId, false))?.id, items.flagged);
   });
 
-  it("[AC:789ae42a:ac_2] a signed-out reader gets a community thread with its posts", async () => {
+  it("[AC:789ae42a:ac_2] [AC:bd5ab015:ac_1] a signed-out reader gets community and community-gated threads with their posts", async () => {
     const detail = await forums.getForumThreadDetail(threads.community.slug, threads.community.id, undefined, false);
     assert.equal(detail?.id, threads.community.id);
+    const gated = await forums.getForumThreadDetail(threads.gated.slug, threads.gated.id, undefined, false);
+    assert.equal(gated?.id, threads.gated.id);
     assert.equal(detail?.posts.length, 1);
     const libraryThread = await forums.getForumThreadDetail("library-discussions", threads.publicItemDiscussion.id, undefined, false);
     assert.equal(libraryThread?.id, threads.publicItemDiscussion.id);
   });
 
-  it("[AC:789ae42a:ac_3] invited, removed, clinical, community-gated and restricted-item threads are hidden from signed-out readers", async () => {
-    for (const key of ["invited", "removed", "clinical", "gated", "restrictedItemDiscussion"]) {
+  it("[AC:789ae42a:ac_3] [AC:bd5ab015:ac_2] invited, removed, clinical and restricted-item threads are hidden from signed-out readers", async () => {
+    for (const key of ["invited", "removed", "clinical", "restrictedItemDiscussion"]) {
       const { id, slug } = threads[key];
       assert.equal(await forums.getForumThreadDetail(slug, id, undefined, false), null, key);
     }
@@ -115,7 +117,7 @@ describe("Public library items and forum threads (DB-backed)", { skip }, () => {
     assert.equal(clinical?.id, threads.clinical.id);
   });
 
-  it("[AC:789ae42a:ac_6] sitemap entries list exactly the publicly readable items and threads", async () => {
+  it("[AC:789ae42a:ac_6] [AC:bd5ab015:ac_1] sitemap entries list exactly the publicly readable items and threads", async () => {
     const itemIds = new Set((await library.getPublicKnowledgeItemSitemapEntries()).map((entry) => entry.id));
     assert.ok(itemIds.has(items.public));
     for (const key of ["restricted", "flagged", "pending"]) assert.ok(!itemIds.has(items[key]), key);
@@ -123,7 +125,8 @@ describe("Public library items and forum threads (DB-backed)", { skip }, () => {
     const threadIds = new Set((await forums.getPublicForumThreadSitemapEntries()).map((entry) => entry.id));
     assert.ok(threadIds.has(threads.community.id));
     assert.ok(threadIds.has(threads.publicItemDiscussion.id));
-    for (const key of ["invited", "removed", "clinical", "gated", "restrictedItemDiscussion"]) {
+    assert.ok(threadIds.has(threads.gated.id));
+    for (const key of ["invited", "removed", "clinical", "restrictedItemDiscussion"]) {
       assert.ok(!threadIds.has(threads[key].id), key);
     }
   });
