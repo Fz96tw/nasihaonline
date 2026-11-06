@@ -25,6 +25,9 @@ describe("Public library items and forum threads (DB-backed)", { skip }, () => {
   const items: Record<string, string> = {};
   const threads: Record<string, { id: string; slug: string }> = {};
   let publicPostId: string;
+  let gatedPostId: string;
+  let outsiderId: string;
+  let insiderId: string;
   let clinicalPostId: string;
 
   before(async () => {
@@ -79,7 +82,35 @@ describe("Public library items and forum threads (DB-backed)", { skip }, () => {
     await thread("invited", general, { visibility: "invited" });
     await thread("removed", general, { removed: true });
     clinicalPostId = (await thread("clinical", clinical)).posts[0].id;
-    await thread("gated", gated);
+    gatedPostId = (await thread("gated", gated)).posts[0].id;
+    // An invite-only thread in the gated forum: never public, even to members.
+    await thread("gatedInvited", gated, { visibility: "invited" });
+
+    const stamp = Date.now();
+    outsiderId = (
+      await db.user.create({
+        data: {
+          clerkUserId: `test_public_outsider_${stamp}`,
+          email: `public-outsider-${stamp}@example.test`,
+          name: "Olu Outsider",
+          role: "member",
+          tier: "active",
+          profile: { create: { followsAllCommunities: false } },
+        },
+      })
+    ).id;
+    insiderId = (
+      await db.user.create({
+        data: {
+          clerkUserId: `test_public_insider_${stamp}`,
+          email: `public-insider-${stamp}@example.test`,
+          name: "Ina Insider",
+          role: "member",
+          tier: "active",
+          profile: { create: { followsAllCommunities: false, communities: { create: [{ communityId: community.id }] } } },
+        },
+      })
+    ).id;
     await thread("publicItemDiscussion", libraryForum, { knowledgeItemId: items.public });
     await thread("restrictedItemDiscussion", libraryForum, { knowledgeItemId: items.restricted });
   });
@@ -144,5 +175,30 @@ describe("Public library items and forum threads (DB-backed)", { skip }, () => {
     assert.equal(await canViewPastedImage(image({ knowledgeItemId: items.public }, "library_item"), null), true);
     assert.equal(await canViewPastedImage(image({ knowledgeItemId: items.restricted }, "library_item"), null), false);
     assert.equal(await canViewPastedImage(image({}, "forum_post"), null), false, "unlinked draft image");
+  });
+
+  it("[AC:412202d3:ac_1] [AC:412202d3:ac_4] a member outside a community reads its public threads read-only; insiders still participate", async () => {
+    const outsider = await forums.getForumThreadDetail(threads.gated.slug, threads.gated.id, outsiderId, false);
+    assert.equal(outsider?.id, threads.gated.id);
+    assert.equal(outsider?.canParticipate, false);
+    assert.ok(outsider?.communityName?.startsWith("Test community"));
+
+    const insider = await forums.getForumThreadDetail(threads.gated.slug, threads.gated.id, insiderId, false);
+    assert.equal(insider?.canParticipate, true);
+
+    // Non-public threads stay hidden from the outsider.
+    assert.equal(await forums.getForumThreadDetail(threads.gatedInvited.slug, threads.gatedInvited.id, outsiderId, false), null);
+
+    // Replying is still refused server-side.
+    await assert.rejects(
+      forums.createForumPost(threads.gated.id, outsiderId, { body: "hello", parentId: null, deidentificationConfirmed: false }),
+      (error: { status?: number }) => error.status === 404,
+    );
+  });
+
+  it("[AC:412202d3:ac_3] pasted images in a public community thread load for an outsider member", async () => {
+    const outsider = await db.user.findUniqueOrThrow({ where: { id: outsiderId } });
+    const image = { uploaderId: authorId, ownerType: "forum_post" as const, forumPostId: gatedPostId, inboxMessageId: null, knowledgeItemId: null };
+    assert.equal(await canViewPastedImage(image, outsider), true);
   });
 });

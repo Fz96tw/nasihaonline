@@ -152,6 +152,15 @@ export type ForumThreadDetail = {
   categories: { id: string; name: string; slug: string }[];
   /** Only a Weekly Reflection thread: the hero banner's image (null = gradient) and the quote snapshot taken when it was posted. */
   reflection: { imageUrl: string | null; quote: string; attribution: string } | null;
+  /**
+   * False when the viewer can only read this thread because it's publicly
+   * readable — a signed-out visitor, or a signed-in member outside a
+   * community-gated forum's community. The page renders it read-only; the
+   * reply/flag/edit routes still enforce isThreadVisible on their own.
+   */
+  canParticipate: boolean;
+  /** The forum's community name, for a community-gated forum; null otherwise. */
+  communityName: string | null;
 };
 
 /** Every post body in a reply tree, depth-first — e.g. for mentionCandidatesUsedIn. */

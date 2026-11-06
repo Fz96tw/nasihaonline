@@ -136,7 +136,7 @@ export default async function ForumThreadPage({
             </h1>
             {isRestricted && <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>}
           </div>
-          {thread.isEditable && (isAuthor || isPrivileged) && (
+          {thread.canParticipate && thread.isEditable && (isAuthor || isPrivileged) && (
             <div className="flex items-center gap-1">
               <Button asChild variant="ghost" size="sm">
                 <Link href={`/forums/${thread.forum.slug}/${thread.id}/edit`}>Edit</Link>
@@ -160,7 +160,7 @@ export default async function ForumThreadPage({
             threadId={thread.id}
             initialViews={thread.viewCount}
             commentCount={thread.replyCount}
-            record={!!user}
+            record={thread.canParticipate}
           />
         </div>
       </div>
@@ -172,6 +172,8 @@ export default async function ForumThreadPage({
         mentionableMembers={mentionableMembers}
         allowedMemberIds={restrictedMemberIds ?? undefined}
         currentUserId={user?.id ?? null}
+        canParticipate={thread.canParticipate}
+        communityName={thread.communityName}
         isPrivileged={isPrivileged}
         highlightQuery={q}
       />

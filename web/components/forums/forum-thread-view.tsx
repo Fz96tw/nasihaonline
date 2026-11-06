@@ -155,6 +155,7 @@ function PostNode({
   allowedMemberIds,
   currentUserId,
   isPrivileged,
+  readOnly,
   onPosted,
   highlightQuery,
 }: {
@@ -163,9 +164,11 @@ function PostNode({
   requireDeidentification: boolean;
   mentionableMembers: MentionCandidate[];
   allowedMemberIds?: string[];
-  /** null = signed-out reader: render read-only (no reply/edit/delete/flag/follow, no profile links). */
+  /** null = signed-out reader (also implies readOnly; no follow buttons, no profile links). */
   currentUserId: string | null;
   isPrivileged: boolean;
+  /** No reply/edit/delete/flag controls — a signed-out reader, or a member reading a public thread outside its community. */
+  readOnly: boolean;
   onPosted: () => void;
   /** Active search query when arriving from a search result (see lib/feed.ts's withFeedRef) — highlights every match in this post's body. */
   highlightQuery?: string;
@@ -184,7 +187,7 @@ function PostNode({
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const authorName = post.authorName ?? "NASIHA Member";
-  const readOnly = currentUserId === null;
+  const signedOut = currentUserId === null;
   const canEdit = !readOnly && !post.removed && (post.authorId === currentUserId || isPrivileged);
 
   async function handleSaveEdit() {
@@ -265,7 +268,7 @@ function PostNode({
       <div className="rounded-[10px] border bg-muted/40 p-3">
         <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            {post.authorProfile && !readOnly ? (
+            {post.authorProfile && !signedOut ? (
               <Link
                 href={`/members/${post.authorProfile.id}`}
                 aria-label={`View ${authorName}'s profile`}
@@ -282,7 +285,7 @@ function PostNode({
             )}
             {post.removed && <Badge variant="neutral">Removed</Badge>}
             {!post.removed && flagged && <Badge variant="danger">Flagged</Badge>}
-            {!readOnly && !post.removed && post.authorProfile && post.authorId !== currentUserId && (
+            {!signedOut && !post.removed && post.authorProfile && post.authorId !== currentUserId && (
               <FollowMemberButton memberId={post.authorProfile.id} memberName={authorName} variant="nudge" />
             )}
           </span>
@@ -409,6 +412,7 @@ function PostNode({
               allowedMemberIds={allowedMemberIds}
               currentUserId={currentUserId}
               isPrivileged={isPrivileged}
+              readOnly={readOnly}
               onPosted={onPosted}
               highlightQuery={highlightQuery}
             />
@@ -428,6 +432,8 @@ export function ForumThreadView({
   allowedMemberIds,
   currentUserId,
   isPrivileged,
+  canParticipate = true,
+  communityName = null,
   highlightQuery,
 }: {
   threadId: string;
@@ -439,6 +445,10 @@ export function ForumThreadView({
   /** null = signed-out reader (public thread pages): read-only, with a join/sign-in prompt instead of the reply composer. */
   currentUserId: string | null;
   isPrivileged: boolean;
+  /** ForumThreadDetail.canParticipate — false renders read-only, with a join-the-community prompt for a signed-in member. */
+  canParticipate?: boolean;
+  /** ForumThreadDetail.communityName, named in that prompt. */
+  communityName?: string | null;
   /** Active search query when arriving from a search result (see lib/feed.ts's withFeedRef) — highlights every match across every post's body. */
   highlightQuery?: string;
 }) {
@@ -456,6 +466,7 @@ export function ForumThreadView({
           allowedMemberIds={allowedMemberIds}
           currentUserId={currentUserId}
           isPrivileged={isPrivileged}
+          readOnly={currentUserId === null || !canParticipate}
           onPosted={() => router.refresh()}
           highlightQuery={highlightQuery}
         />
@@ -473,6 +484,17 @@ export function ForumThreadView({
               sign in
             </Link>{" "}
             if you already are one.
+          </p>
+        </div>
+      ) : !canParticipate ? (
+        <div className="mt-4 rounded-[10px] border bg-muted/40 p-4 text-sm">
+          <p className="mb-2 font-medium text-foreground">Want to reply?</p>
+          <p className="text-muted-foreground">
+            This discussion belongs to the {communityName ?? "forum's"} community.{" "}
+            <Link href="/my-communities" className="font-medium text-primary hover:underline">
+              Join {communityName ? `the ${communityName} community` : "its community"}
+            </Link>{" "}
+            to reply and follow its conversations.
           </p>
         </div>
       ) : (

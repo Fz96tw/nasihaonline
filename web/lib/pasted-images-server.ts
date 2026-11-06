@@ -215,7 +215,12 @@ export async function canViewPastedImage(image: PastedImageAccessRecord, actingU
     });
     if (!post) return false;
     const member = await getMemberCommunityContext(actingUser.id);
-    return isThreadVisible(post.thread, actingUser.id, isPrivilegedUser(actingUser), member);
+    // A member outside a community-gated forum's community can still read
+    // its publicly readable threads (objective 412202d3), images included.
+    return (
+      isThreadVisible(post.thread, actingUser.id, isPrivilegedUser(actingUser), member) ||
+      (await canPublicViewPastedImage(image))
+    );
   }
 
   if (image.ownerType === PastedImageOwnerType.inbox_message) {

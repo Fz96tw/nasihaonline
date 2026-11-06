@@ -470,7 +470,14 @@ export async function getForumThreadDetail(
       authorId: true,
       createdAt: true,
       author: { select: { name: true } },
-      forum: { select: { id: true, name: true, slug: true, category: { select: { communityId: true } } } },
+      forum: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          category: { select: { communityId: true, community: { select: { name: true } } } },
+        },
+      },
       event: EVENT_THREAD_ACCESS_SELECT,
       knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
       eventId: true,
@@ -503,17 +510,16 @@ export async function getForumThreadDetail(
     },
   });
   if (!thread || thread.forum.slug !== forumSlug) return null;
-  if (viewerId) {
-    const member = await getMemberCommunityContext(viewerId);
-    if (!isThreadVisible(thread, viewerId, isPrivileged, member)) return null;
-  } else if (!(await isForumThreadPubliclyReadable(thread.id))) {
-    // Signed-out reader: judged only by the shared public filter, which
-    // covers every restriction isThreadVisible applies to a missing viewer
-    // (removed, invited, invite-only event, restricted Library item) plus
-    // its own (Clinical Discussions, inactive forums, unpublished items) —
-    // but not the per-community member gate, which has no meaning here.
-    return null;
-  }
+  // A member who passes isThreadVisible participates normally. Anyone else
+  // — a signed-out reader, or a member outside a community-gated forum's
+  // community (objective 412202d3) — may still read a thread that passes the
+  // shared public filter, read-only. That filter covers every restriction
+  // isThreadVisible applies beyond the community gate (removed, invited,
+  // invite-only event, restricted Library item) plus its own (Clinical
+  // Discussions, inactive forums, unpublished items).
+  const member = viewerId ? await getMemberCommunityContext(viewerId) : null;
+  const canParticipate = !!viewerId && isThreadVisible(thread, viewerId, isPrivileged, member);
+  if (!canParticipate && !(await isForumThreadPubliclyReadable(thread.id))) return null;
 
   const authorProfiles = await getDirectoryMembersByIds(Array.from(new Set(thread.posts.map((post) => post.authorId))));
 
@@ -577,6 +583,8 @@ export async function getForumThreadDetail(
           attribution: thread.reflectionPost.quoteAttribution ?? "",
         }
       : null,
+    canParticipate,
+    communityName: thread.forum.category?.community.name ?? null,
   };
 }
 

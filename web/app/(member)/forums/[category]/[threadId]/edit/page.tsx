@@ -25,6 +25,8 @@ export default async function EditForumThreadPage({
   const isPrivileged = user.role === Role.moderator || user.role === Role.admin;
   const thread = await getForumThreadDetail(params.category, params.threadId, user.id, isPrivileged);
   if (!thread) notFound();
+  // Read-only public access (e.g. outside the forum's community) never edits.
+  if (!thread.canParticipate) notFound();
   if (!thread.isEditable) notFound();
 
   const isAuthor = user.id === thread.authorId;
