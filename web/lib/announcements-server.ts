@@ -45,6 +45,8 @@ export async function createAndSendAnnouncement(
     sendEmail: boolean;
     /** Set only by the welcome-new-member send (lib/welcome-announcement.ts) — renders as a tier badge after the name in the title. */
     welcomeTier?: Tier | null;
+    /** Set only by the welcome-new-member send — the member being welcomed, who is left out of the bell/email fan-out (and the feed) for their own post. */
+    welcomeSubjectId?: string | null;
   },
 ): Promise<{ id: string }> {
   let heroImageUrl: string | null = input.templateHeroImageUrl ?? null;
@@ -63,6 +65,7 @@ export async function createAndSendAnnouncement(
       sendEmail: input.sendEmail,
       sentAt: new Date(),
       welcomeTier: input.welcomeTier ?? null,
+      welcomeSubjectId: input.welcomeSubjectId ?? null,
     },
   });
 
@@ -73,6 +76,7 @@ export async function createAndSendAnnouncement(
     heroImageUrl,
     notifyInApp: input.notifyInApp,
     sendEmail: input.sendEmail,
+    welcomeSubjectId: input.welcomeSubjectId ?? null,
   });
 
   return { id: announcement.id };
@@ -85,6 +89,7 @@ type DeliverableAnnouncement = {
   heroImageUrl: string | null;
   notifyInApp: boolean;
   sendEmail: boolean;
+  welcomeSubjectId?: string | null;
 };
 
 /**
@@ -104,7 +109,11 @@ async function deliverAnnouncement(announcement: DeliverableAnnouncement): Promi
 
   if (announcement.notifyInApp || shouldEmail) {
     const recipients = await db.user.findMany({
-      where: { role: { in: [Role.member, Role.moderator, Role.admin] }, tier: { not: null } },
+      where: {
+        role: { in: [Role.member, Role.moderator, Role.admin] },
+        tier: { not: null },
+        ...(announcement.welcomeSubjectId ? { id: { not: announcement.welcomeSubjectId } } : {}),
+      },
       select: { id: true, email: true, name: true },
     });
 

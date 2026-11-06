@@ -130,6 +130,7 @@ model User {
   adminActionLogs            AdminActionLog[]         @relation("AdminActionLogActor")
   notificationPreferences    NotificationPreference[]
   announcementsAuthored      Announcement[]           @relation("AnnouncementAuthor")
+  welcomeAnnouncements       Announcement[]           @relation("AnnouncementWelcomeSubject")
   announcementsRetracted     Announcement[]           @relation("AnnouncementRetractedBy")
   surveysAuthored            Survey[]                 @relation("SurveyAuthor")
   surveysClosed              Survey[]                 @relation("SurveyClosedBy")
@@ -2754,6 +2755,11 @@ model Announcement {
   // tier badge after the member's name in the title — null for every other
   // Announcement.
   welcomeTier   Tier?
+  // Set only on the welcome-new-member Announcement: the member being
+  // welcomed. The copy is addressed to everyone else ("say hello to X"), so
+  // this member is left out of the feed, bell and email for their own post.
+  welcomeSubjectId String?
+  welcomeSubject   User?   @relation("AnnouncementWelcomeSubject", fields: [welcomeSubjectId], references: [id], onDelete: SetNull)
   // Set only on a weekly-digest Announcement: the scheduled fire time of the
   // week it summarizes. Unique, so the database itself refuses a second
   // digest for the same week even if two workers race.

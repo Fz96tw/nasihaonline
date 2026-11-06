@@ -443,6 +443,10 @@ export async function getFeedPage(params: {
     sentAt: { not: null },
     retractedAt: null,
     showInFeed: true,
+    // A welcome-new-member post is addressed to everyone else, so it's left
+    // out of the welcomed member's own feed. The explicit `null` branch keeps
+    // every other Announcement (a bare `not` would drop NULL rows in SQL).
+    ...(viewerId ? { OR: [{ welcomeSubjectId: null }, { welcomeSubjectId: { not: viewerId } }] } : {}),
     ...(before ? { sentAt: { lt: before } } : {}),
     ...(announcementHitIds ? { id: { in: announcementHitIds } } : {}),
   };

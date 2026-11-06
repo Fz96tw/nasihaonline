@@ -59,5 +59,6 @@ export async function sendWelcomeAnnouncement(newUser: UserModel): Promise<void>
     notifyInApp: settings.welcomeAnnouncementNotify,
     sendEmail: settings.welcomeAnnouncementEmail,
     welcomeTier: newUser.tier,
+    welcomeSubjectId: newUser.id,
   });
 }
