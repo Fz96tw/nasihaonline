@@ -37,8 +37,9 @@ type DisplayMediaStreamOptionsWithSelfBrowserSurface = DisplayMediaStreamOptions
 };
 
 /**
- * Webcam is shown small (sidebar strip under the "speaker" layout — see
- * livekit-egress.ts) so there's little value in LiveKit's 720p/3-simulcast-
+ * Webcam is shown small (sidebar strip under the "speaker" layout used while
+ * someone shares, or a half-width-or-smaller tile in the 720p "grid" layout
+ * otherwise — see livekit-egress.ts) so there's little value in LiveKit's 720p/3-simulcast-
  * layer default; capping capture at 480p with a single simulcast layer cuts
  * per-participant encode and SFU forwarding cost without touching screen
  * share, which keeps its own (larger) default resolution.

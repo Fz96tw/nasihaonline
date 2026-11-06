@@ -6,7 +6,9 @@ import {
   EgressStatus,
   EncodingOptions,
   S3Upload,
+  TrackSource,
 } from "livekit-server-sdk";
+import { getRoomServiceClient } from "@/lib/livekit";
 import { getRecordingsS3Config } from "@/lib/recordings-storage";
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
@@ -71,13 +73,15 @@ export async function startEgress(roomName: string): Promise<StartEgressResult> 
     },
   });
 
+  const layout = await recordingLayoutFor(roomName);
+
   async function attempt(): Promise<StartEgressResult> {
     try {
       const info = await egressClient!.startRoomCompositeEgress(roomName, output, {
-        // Match the live meeting's VideoConference layout (screen share as the
-        // large focus tile, other participants in a small sidebar strip)
-        // instead of LiveKit's default "grid" template's equally-sized cells.
-        layout: "speaker",
+        // See recordingLayoutFor — "speaker" while someone is sharing, "grid"
+        // otherwise; kept in sync for the rest of the recording by
+        // syncRecordingLayout from the LiveKit webhook.
+        layout,
         // Resolution stays at LiveKit's 720p default deliberately — this is
         // a composite frame containing the screen share, so shrinking it
         // would blur shared text/slides/code, not just the webcam strip.
@@ -105,7 +109,74 @@ export async function startEgress(roomName: string): Promise<StartEgressResult> 
   return attempt();
 }
 
-/** Stops an in-progress egress — the resulting file, if any, arrives via the egress_ended webhook, not this call's return value. */
+/**
+ * Which LiveKit recording template layout a room should use right now.
+ *
+ * - Someone sharing → "speaker": the share is the large focus tile and the
+ *   cameras sit in a small strip, matching the live meeting's VideoConference
+ *   view.
+ * - Nobody sharing → "grid": equal tiles. The "speaker" template puts
+ *   whoever is talking in the large tile when there's no share, so a
+ *   webcam-only recording kept swapping the two people around every time the
+ *   conversation changed hands (member complaint, 2026-11-06). The grid
+ *   matches what everyone in the meeting actually sees with no share.
+ *
+ * `ignore` excludes a track or participant that the webhook says is going
+ * away but may still be listed by the room service for a moment.
+ */
+export type RecordingLayout = "speaker" | "grid";
+
+export async function recordingLayoutFor(
+  roomName: string,
+  ignore: { trackSid?: string; identity?: string } = {},
+): Promise<RecordingLayout> {
+  const roomService = getRoomServiceClient();
+  if (!roomService) return "grid";
+  try {
+    const participants = await roomService.listParticipants(roomName);
+    const sharing = participants.some(
+      (participant) =>
+        participant.identity !== ignore.identity &&
+        participant.tracks.some((track) => track.source === TrackSource.SCREEN_SHARE && track.sid !== ignore.trackSid),
+    );
+    return sharing ? "speaker" : "grid";
+  } catch (error) {
+    console.error(`[livekit-egress] Failed to read tracks for room ${roomName}; defaulting recording layout to grid`, error);
+    return "grid";
+  }
+}
+
+/**
+ * Moves every in-progress room-composite recording of a room onto the layout
+ * the room needs now (see recordingLayoutFor). Called from the LiveKit webhook
+ * when a screen share starts or stops, or when someone leaves. Best effort:
+ * a failure only leaves the recording on its previous layout.
+ */
+export async function syncRecordingLayout(
+  roomName: string,
+  ignore: { trackSid?: string; identity?: string } = {},
+): Promise<void> {
+  const egressClient = getEgressClient();
+  if (!egressClient) return;
+  try {
+    const active = (await egressClient.listEgress({ roomName, active: true })).filter(
+      (info) => info.request.case === "roomComposite",
+    );
+    if (active.length === 0) return;
+    const layout = await recordingLayoutFor(roomName, ignore);
+    await Promise.all(
+      active.map(async (info) => {
+        if (info.request.case === "roomComposite" && info.request.value.layout === layout) return;
+        await egressClient.updateLayout(info.egressId, layout);
+        console.log(`[livekit-egress] Recording ${info.egressId} in room ${roomName} switched to "${layout}" layout`);
+      }),
+    );
+  } catch (error) {
+    console.error(`[livekit-egress] Failed to sync recording layout for room ${roomName}`, error);
+  }
+}
+
+/** Stops an in-progress egress —the resulting file, if any, arrives via the egress_ended webhook, not this call's return value. */
 export async function stopEgress(egressId: string): Promise<boolean> {
   const egressClient = getEgressClient();
   if (!egressClient) return false;

@@ -1,6 +1,7 @@
-import { EgressStatus } from "livekit-server-sdk";
+import { EgressStatus, TrackSource } from "livekit-server-sdk";
 import { NextResponse, type NextRequest } from "next/server";
 import { resetMeetingOnRoomEmpty, verifyLiveKitWebhook } from "@/lib/livekit";
+import { syncRecordingLayout } from "@/lib/livekit-egress";
 import {
   attachLiveKitEventRecordingSegment,
   finalizeEventChatTranscript,
@@ -63,6 +64,21 @@ export async function POST(request: NextRequest) {
 
   if (event.event === "egress_ended") {
     await handleEgressEnded(event.egressInfo);
+  }
+
+  // Keep any running recording's layout in step with screen sharing ("speaker"
+  // while someone shares, "grid" otherwise — see recordingLayoutFor). A sharer
+  // who leaves may not produce a track_unpublished, so participant_left is
+  // checked too; syncRecordingLayout is a no-op for rooms with no recording.
+  const roomName = event.room?.name;
+  if (roomName) {
+    if (event.event === "track_published" && event.track?.source === TrackSource.SCREEN_SHARE) {
+      await syncRecordingLayout(roomName);
+    } else if (event.event === "track_unpublished" && event.track?.source === TrackSource.SCREEN_SHARE) {
+      await syncRecordingLayout(roomName, { trackSid: event.track.sid });
+    } else if (event.event === "participant_left" && event.participant?.identity) {
+      await syncRecordingLayout(roomName, { identity: event.participant.identity });
+    }
   }
 
   return NextResponse.json({ received: true });
