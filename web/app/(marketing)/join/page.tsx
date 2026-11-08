@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { JsonLd } from "@/components/json-ld";
+import { buildBreadcrumbJsonLd } from "@/lib/json-ld";
 import { getAdmissionPhase } from "@/lib/settings";
 import { JoinForm } from "@/components/join-form";
 import { TierPreviewStrip } from "@/components/join/tier-preview-strip";
@@ -11,6 +13,11 @@ export const metadata: Metadata = buildMetadata({
     "Apply for free membership in NASIHA, a professional community for sharing knowledge, curating research, teaching, mentoring, and giving peer feedback.",
   path: "/join",
 });
+
+const BREADCRUMB_JSON_LD = buildBreadcrumbJsonLd([
+  { name: "Home", path: "/" },
+  { name: "Apply to Join", path: "/join" },
+]);
 
 // getAdmissionPhase() gates whether this page shows the open sign-up form
 // or a closed/waitlist state — real, business-meaningful content. Freezing
@@ -30,6 +37,7 @@ export default async function JoinPage({ searchParams }: { searchParams: Promise
 
   return (
     <main className="min-h-screen">
+      <JsonLd data={BREADCRUMB_JSON_LD} />
       <TierPreviewStrip />
       <JoinForm phase={phase} guestPrefill={guestPrefill} guestInvite={guestPrefill ? gi : undefined} />
     </main>

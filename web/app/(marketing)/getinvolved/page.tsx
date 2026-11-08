@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { JsonLd } from "@/components/json-ld";
+import { buildBreadcrumbJsonLd } from "@/lib/json-ld";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { GetInvolvedTabs } from "@/components/getinvolved/get-involved-tabs";
 import { getAdmissionPhase } from "@/lib/settings";
@@ -11,6 +13,11 @@ export const metadata: Metadata = buildMetadata({
     "Ways to get involved with NASIHA: become a member, volunteer your expertise, mentor peers, host an event, or support our fee-free knowledge community.",
   path: "/getinvolved",
 });
+
+const BREADCRUMB_JSON_LD = buildBreadcrumbJsonLd([
+  { name: "Home", path: "/" },
+  { name: "Get Involved", path: "/getinvolved" },
+]);
 
 // Explicit, not just relying on Next's automatic dynamic-API detection: a
 // Docker build with no database reachable during the image build step
@@ -28,6 +35,7 @@ export default async function GetInvolvedPage({
 
   return (
     <main className="min-h-screen">
+      <JsonLd data={BREADCRUMB_JSON_LD} />
       <section className="relative overflow-hidden px-8 py-20 text-center text-primary-foreground">
         <ParallaxHeroImage
           src="/images/getinvolved-new.jpg"

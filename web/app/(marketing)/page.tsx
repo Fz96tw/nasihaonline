@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { JsonLd } from "@/components/json-ld";
+import { buildWebSiteJsonLd } from "@/lib/json-ld";
 import { HeroSection } from "@/components/home/hero-section";
 import { WhatWeDoSection } from "@/components/home/what-we-do-section";
 import { CommunitiesSection, CommunitiesSectionSkeleton } from "@/components/home/communities-section";
@@ -17,6 +19,7 @@ export const metadata: Metadata = buildMetadata({
 export default function Home() {
   return (
     <main>
+      <JsonLd data={buildWebSiteJsonLd()} />
       <HeroSection />
       <WhatWeDoSection />
       <Suspense fallback={<CommunitiesSectionSkeleton />}>

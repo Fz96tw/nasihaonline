@@ -11,6 +11,14 @@ export const SITE_SHORT_NAME = "NASIHA";
 export const SITE_DESCRIPTION =
   "NASIHA is a member-driven community where professionals share knowledge, curate research, teach, and exchange peer feedback across many fields of expertise.";
 export const BRAND_COLOR = "#2563eb";
+/**
+ * NASIHA's official profiles elsewhere (LinkedIn page, YouTube channel, …),
+ * emitted as the Organization JSON-LD's `sameAs` so search engines and AI
+ * answer engines can tie them to this site's entity. Only add URLs NASIHA
+ * itself controls. Empty until those are confirmed — `sameAs` is omitted
+ * entirely while it is (SEO objective 6).
+ */
+export const SITE_SAME_AS: string[] = [];
 // Same env var / default as lib/email.ts's CONTACT_EMAIL — duplicated
 // rather than imported so the Organization JSON-LD builder (used from the
 // root layout, a server component rendered on every request) doesn't pull

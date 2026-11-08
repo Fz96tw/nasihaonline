@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { JsonLd } from "@/components/json-ld";
+import { buildBreadcrumbJsonLd } from "@/lib/json-ld";
 import Link from "next/link";
 import { buildMetadata } from "@/lib/seo";
 
@@ -8,6 +10,11 @@ export const metadata: Metadata = buildMetadata({
     "Read how NASIHA collects, uses, and protects member data, what it never sells or shares, and how to view, export, correct, or delete your information.",
   path: "/privacy",
 });
+
+const BREADCRUMB_JSON_LD = buildBreadcrumbJsonLd([
+  { name: "Home", path: "/" },
+  { name: "Privacy Policy", path: "/privacy" },
+]);
 
 const SECTIONS = [
   {
@@ -50,6 +57,7 @@ const SECTIONS = [
 export default function PrivacyPolicyPage() {
   return (
     <main className="min-h-screen px-8 py-16">
+      <JsonLd data={BREADCRUMB_JSON_LD} />
       <div className="mx-auto flex max-w-[760px] flex-col gap-10">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Privacy Policy</h1>

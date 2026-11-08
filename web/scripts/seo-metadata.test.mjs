@@ -116,3 +116,85 @@ test("[AC:1dcd5d79:ac_2] /join's tier card titles are not headings", async () =>
   const texts = headings(await page("/join")).map((h) => h.text);
   for (const name of names) assert.ok(!texts.includes(name), `"${name}" is still a heading`);
 });
+
+// ---- Structured data (SEO objective 6, 352239aa) ----
+
+function jsonLd(html) {
+  return [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)].map((m) => JSON.parse(m[1]));
+}
+const ofType = (blocks, type) => blocks.filter((b) => b["@type"] === type);
+
+test("[AC:352239aa:ac_1] the homepage outputs a WebSite node published by the Organization", async () => {
+  const blocks = jsonLd(await page("/"));
+  const [site] = ofType(blocks, "WebSite");
+  assert.ok(site, "no WebSite JSON-LD on /");
+  assert.equal(site["@context"], "https://schema.org");
+  assert.equal(site.name, "NASIHA");
+  assert.match(site.url, /^https?:\/\//);
+  const [org] = ofType(blocks, "Organization");
+  assert.ok(org?.["@id"], "Organization needs an @id");
+  assert.deepEqual(site.publisher, { "@id": org["@id"] });
+  assert.equal(site.potentialAction, undefined, "no SearchAction while search is members-only");
+});
+
+test("[AC:352239aa:ac_2] Organization sameAs is either absent or a non-empty list of https URLs", async () => {
+  const [org] = ofType(jsonLd(await page("/")), "Organization");
+  assert.ok(org, "no Organization JSON-LD");
+  if ("sameAs" in org) {
+    assert.ok(Array.isArray(org.sameAs) && org.sameAs.length > 0, "sameAs must not be empty when present");
+    for (const url of org.sameAs) assert.match(url, /^https:\/\//);
+  }
+});
+
+const TOP_LEVEL = ROUTES.filter((path) => path !== "/");
+
+test("[AC:352239aa:ac_3] every top-level public page has a BreadcrumbList ending at itself", async () => {
+  for (const path of TOP_LEVEL) {
+    const crumbs = ofType(jsonLd(await page(path)), "BreadcrumbList");
+    assert.equal(crumbs.length, 1, `${path}: expected one BreadcrumbList`);
+    const items = crumbs[0].itemListElement;
+    assert.ok(items.length >= 2, `${path}: needs Home + page`);
+    items.forEach((item, index) => {
+      assert.equal(item["@type"], "ListItem", path);
+      assert.equal(item.position, index + 1, path);
+      assert.ok(item.name, `${path}: crumb ${index + 1} has no name`);
+      assert.match(item.item, /^https?:\/\//, path);
+    });
+    assert.equal(new URL(items[0].item).pathname, "/", `${path}: first crumb should be Home`);
+    assert.equal(new URL(items.at(-1).item).pathname, path, `${path}: last crumb should be the page`);
+  }
+});
+
+test("[AC:352239aa:ac_4] /our-team has one Person per displayed team member", async () => {
+  const html = await page("/our-team");
+  const people = ofType(jsonLd(html), "Person");
+  const [org] = ofType(jsonLd(html), "Organization");
+  // TeamMemberCard renders each member's name as <div class="mb-1 text-base font-bold">.
+  const body = html.slice(html.indexOf("<main"));
+  const cardNames = [...body.matchAll(/<div class="mb-1 text-base font-bold">(.*?)<\/div>/gs)].map((m) => decode(m[1].trim()));
+  assert.ok(cardNames.length > 0, "no team cards rendered");
+  assert.deepEqual(people.map((p) => p.name), cardNames);
+  for (const person of people) {
+    assert.ok(person.jobTitle, `${person.name}: jobTitle`);
+    assert.deepEqual(person.worksFor, { "@id": org["@id"] });
+  }
+});
+
+test("[AC:352239aa:ac_5] all JSON-LD on public pages parses and carries Google's required properties", async () => {
+  for (const path of ROUTES) {
+    const blocks = jsonLd(await page(path));
+    assert.ok(blocks.length > 0, `${path}: no JSON-LD`);
+    for (const block of blocks) {
+      assert.equal(block["@context"], "https://schema.org", `${path}: ${block["@type"]} @context`);
+      assert.ok(block["@type"], `${path}: missing @type`);
+      if (block["@type"] === "Organization") {
+        assert.ok(block.name && block.url && block.logo, `${path}: Organization name/url/logo`);
+      }
+      if (block["@type"] === "Person") assert.ok(block.name, `${path}: Person name`);
+    }
+    // Every @id reference resolves to a node on the same page.
+    const ids = new Set(blocks.map((b) => b["@id"]).filter(Boolean));
+    const refs = JSON.stringify(blocks).match(/\{"@id":"[^"]+"\}/g) ?? [];
+    for (const ref of refs) assert.ok(ids.has(JSON.parse(ref)["@id"]), `${path}: dangling ${ref}`);
+  }
+});

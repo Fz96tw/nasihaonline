@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { JsonLd } from "@/components/json-ld";
+import { buildBreadcrumbJsonLd } from "@/lib/json-ld";
 import { getSessionUser } from "@/lib/auth";
 import { ContactForm } from "@/components/contact-form";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
@@ -10,6 +12,11 @@ export const metadata: Metadata = buildMetadata({
     "Contact the NASIHA team with questions about membership, applications, events, volunteering, donations, partnerships, or using the community platform.",
   path: "/contact",
 });
+
+const BREADCRUMB_JSON_LD = buildBreadcrumbJsonLd([
+  { name: "Home", path: "/" },
+  { name: "Contact", path: "/contact" },
+]);
 
 /**
  * Public, unauthenticated — getSessionUser() is only used to prefill
@@ -26,6 +33,7 @@ export default async function ContactPage() {
 
   return (
     <main className="min-h-screen">
+      <JsonLd data={BREADCRUMB_JSON_LD} />
       <section className="relative overflow-hidden px-8 py-16 text-center text-primary-foreground">
         <ParallaxHeroImage src="/images/contact.jpg" priority objectPosition="object-[center_60%]" />
         <div className="absolute inset-0 -z-10 bg-[rgba(10,20,70,.4)]" />

@@ -7,7 +7,7 @@ import { CommunityCategoryFilter } from "@/components/shared/community-category-
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Reveal } from "@/components/home/reveal";
 import { buildMetadata } from "@/lib/seo";
-import { buildEventJsonLd } from "@/lib/json-ld";
+import { buildBreadcrumbJsonLd, buildEventJsonLd } from "@/lib/json-ld";
 import { JsonLd } from "@/components/json-ld";
 
 export const metadata: Metadata = buildMetadata({
@@ -16,6 +16,11 @@ export const metadata: Metadata = buildMetadata({
     "Browse upcoming NASIHA events: free webinars, workshops, lectures, roundtables, and case discussions hosted by member experts across many fields.",
   path: "/events",
 });
+
+const BREADCRUMB_JSON_LD = buildBreadcrumbJsonLd([
+  { name: "Home", path: "/" },
+  { name: "Events", path: "/events" },
+]);
 
 export default async function EventsPage({
   searchParams,
@@ -57,6 +62,7 @@ export default async function EventsPage({
 
   return (
     <main className="min-h-screen">
+      <JsonLd data={BREADCRUMB_JSON_LD} />
       <JsonLd data={publicEvents.map(buildEventJsonLd)} />
       <section className="relative overflow-hidden px-8 py-16 text-center text-primary-foreground">
         <ParallaxHeroImage src="/images/events.jpg" priority />

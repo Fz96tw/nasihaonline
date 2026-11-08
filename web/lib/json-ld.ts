@@ -1,9 +1,17 @@
-import { SITE_URL, SITE_DESCRIPTION, CONTACT_EMAIL } from "@/lib/site";
+import { SITE_URL, SITE_DESCRIPTION, CONTACT_EMAIL, SITE_SAME_AS } from "@/lib/site";
 
-export function buildOrganizationJsonLd() {
+/**
+ * Stable node id for the site-wide Organization (rendered by the root
+ * layout on every page), so WebSite.publisher and Person.worksFor can
+ * reference the same entity instead of restating it.
+ */
+export const ORGANIZATION_ID = `${SITE_URL}/#organization`;
+
+export function buildOrganizationJsonLd(sameAs: string[] = SITE_SAME_AS) {
   return {
     "@context": "https://schema.org",
     "@type": "Organization",
+    "@id": ORGANIZATION_ID,
     name: "NASIHA",
     url: SITE_URL,
     logo: `${SITE_URL}/icon.png`,
@@ -14,6 +22,48 @@ export function buildOrganizationJsonLd() {
       contactType: "customer support",
       url: `${SITE_URL}/contact`,
     },
+    ...(sameAs.length > 0 ? { sameAs } : {}),
+  };
+}
+
+/**
+ * Homepage-only WebSite node. No potentialAction/SearchAction: site search
+ * is members-only, and Google only uses a SearchAction whose target URL a
+ * signed-out visitor can actually load.
+ */
+export function buildWebSiteJsonLd() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": `${SITE_URL}/#website`,
+    name: "NASIHA",
+    url: SITE_URL,
+    description: SITE_DESCRIPTION,
+    inLanguage: "en",
+    publisher: { "@id": ORGANIZATION_ID },
+  };
+}
+
+/**
+ * One /our-team member. No `image`: TeamMember.photoUrl is served through
+ * short-lived signed URLs, which would leave crawlers holding a dead link.
+ */
+export function buildPersonJsonLd(member: {
+  name: string;
+  title: string;
+  bio: string;
+  affiliation: string | null;
+}) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    name: member.name,
+    jobTitle: member.title,
+    ...(member.bio.trim() ? { description: member.bio.trim() } : {}),
+    ...(member.affiliation?.trim()
+      ? { affiliation: { "@type": "Organization", name: member.affiliation.trim() } }
+      : {}),
+    worksFor: { "@id": ORGANIZATION_ID },
   };
 }
 

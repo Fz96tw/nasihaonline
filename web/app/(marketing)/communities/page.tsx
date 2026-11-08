@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { JsonLd } from "@/components/json-ld";
+import { buildBreadcrumbJsonLd } from "@/lib/json-ld";
 import Link from "next/link";
 import { buildMetadata } from "@/lib/seo";
 import { getAllCommunities } from "@/lib/profile-server";
@@ -14,6 +16,11 @@ export const metadata: Metadata = buildMetadata({
     "Explore NASIHA communities in Healthcare, Sciences, Technology, Business & Finance, Education & Career, and Humanities, each with its own forums.",
   path: "/communities",
 });
+
+const BREADCRUMB_JSON_LD = buildBreadcrumbJsonLd([
+  { name: "Home", path: "/" },
+  { name: "Communities", path: "/communities" },
+]);
 
 // Real DB-backed content (the actual community/category list) — freezing
 // it at build time would show a stale or empty (Docker build has no DB
@@ -40,6 +47,7 @@ export default async function CommunitiesPage() {
 
   return (
     <main className="min-h-screen">
+      <JsonLd data={BREADCRUMB_JSON_LD} />
       <section className="relative overflow-hidden px-8 py-16 text-center text-primary-foreground">
         <ParallaxHeroImage src="/images/mycommunities.jpg" priority />
         <div className="absolute inset-0 -z-10 bg-[rgba(10,20,70,.4)]" />

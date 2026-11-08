@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { JsonLd } from "@/components/json-ld";
+import { buildBreadcrumbJsonLd, buildPersonJsonLd } from "@/lib/json-ld";
 import { db } from "@/lib/db";
 import { withSignedPhotoUrls } from "@/lib/team-server";
 import { TeamMemberCard } from "@/components/team/team-member-card";
@@ -12,6 +14,11 @@ export const metadata: Metadata = buildMetadata({
     "Meet the board members and volunteers who run NASIHA, the nonprofit, member-driven community for professional knowledge sharing and expert networking.",
   path: "/our-team",
 });
+
+const BREADCRUMB_JSON_LD = buildBreadcrumbJsonLd([
+  { name: "Home", path: "/" },
+  { name: "Our Team", path: "/our-team" },
+]);
 
 // Real DB-backed content (the actual team roster) — freezing it at build
 // time would show a stale or empty (Docker build has no DB access) team
@@ -28,6 +35,9 @@ export default async function OurTeamPage() {
 
   return (
     <main className="min-h-screen">
+      <JsonLd data={BREADCRUMB_JSON_LD} />
+      {/* Same active-member query the cards below render, so the markup can't list anyone the page doesn't show. */}
+      <JsonLd data={members.map(buildPersonJsonLd)} />
       <section className="relative overflow-hidden px-8 py-16 text-center text-primary-foreground">
         <ParallaxHeroImage src="/images/ourteam2.jpg" priority />
         <div className="absolute inset-0 -z-10 bg-[rgba(10,20,70,.4)]" />

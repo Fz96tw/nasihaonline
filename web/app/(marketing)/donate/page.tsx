@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { JsonLd } from "@/components/json-ld";
+import { buildBreadcrumbJsonLd } from "@/lib/json-ld";
 import { getSessionUser } from "@/lib/auth";
 import { DonateForm } from "@/components/donate-form";
 import { DonateInfoBlurb } from "@/components/donate-info-blurb";
@@ -11,6 +13,11 @@ export const metadata: Metadata = buildMetadata({
     "Make a tax-deductible donation to NASIHA, a 501(c)(3) nonprofit, and help keep professional knowledge sharing, mentoring, and peer review fee-free.",
   path: "/donate",
 });
+
+const BREADCRUMB_JSON_LD = buildBreadcrumbJsonLd([
+  { name: "Home", path: "/" },
+  { name: "Donate", path: "/donate" },
+]);
 
 /**
  * Public, unauthenticated (PRD §4.14 AC1) — getSessionUser() is only used
@@ -43,6 +50,7 @@ export default async function DonatePage({
 
   return (
     <main className="min-h-screen">
+      <JsonLd data={BREADCRUMB_JSON_LD} />
       <section className="relative overflow-hidden px-8 py-16 text-center text-primary-foreground">
         <ParallaxHeroImage src="/images/donate2.jpg" priority objectPosition="object-[center_45%]" />
         <div className="absolute inset-0 -z-10 bg-[rgba(10,20,70,.4)]" />
