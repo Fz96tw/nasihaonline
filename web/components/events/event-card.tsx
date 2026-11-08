@@ -101,13 +101,13 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
               <Lock className="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-label="Restricted event" />
             )}
             {event.title}
-            {event.isRecurring && (
-              // Each session of a recurring event is its own card with the
-              // same title — this keeps their headings distinct (SEO
-              // objective 4). A fixed timeZone keeps SSR and hydration in
-              // agreement; the visible, viewer-local date is the line below.
-              <span className="sr-only">, {formatEventDayForHeading(event.startsAt)}</span>
-            )}
+            {/* Sessions of a recurring event, and separately created events
+                that reuse a title (e.g. a weekly "Knowledge Exchange Hour"
+                set up one by one), would otherwise give identical headings
+                in a row, so every card's heading carries its date (SEO
+                objective 4). A fixed timeZone keeps SSR and hydration in
+                agreement; the visible, viewer-local date is the line below. */}
+            <span className="sr-only">, {formatEventDayForHeading(event.startsAt)}</span>
           </CardTitle>
           <p className="text-sm text-muted-foreground">
             {hasMounted ? formatEventDate(event.startsAt) : null}
