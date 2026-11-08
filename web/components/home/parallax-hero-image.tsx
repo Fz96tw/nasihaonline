@@ -31,7 +31,10 @@ export function ParallaxHeroImage({
   );
 
   return (
-    <div ref={sectionRef} className="absolute inset-0 -z-20 overflow-hidden">
+    // Background behind a section's own heading text: decorative by default
+    // (alt="" + aria-hidden), per SEO/a11y objective 5. Pass `alt` only if a
+    // hero ever carries information its heading doesn't.
+    <div ref={sectionRef} className="absolute inset-0 -z-20 overflow-hidden" aria-hidden={alt ? undefined : true}>
       <motion.div
         style={{ y, top: -PARALLAX_RANGE * 2, bottom: -PARALLAX_RANGE * 2 }}
         className="absolute inset-x-0"

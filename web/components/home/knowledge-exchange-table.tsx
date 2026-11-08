@@ -98,7 +98,8 @@ function WorkflowAccordion({ items }: { items: WorkflowItem[] }) {
     <Accordion type="single" collapsible>
       {items.map((item) => (
         <AccordionItem key={item.label} value={item.label}>
-          <AccordionTrigger className="text-left text-base font-semibold hover:no-underline">
+          {/* h5: these sit under the h4 "Earn by Teaching"/"Spend to Learn" (SEO objective 4). */}
+          <AccordionTrigger headingAs="h5" className="text-left text-base font-semibold hover:no-underline">
             <span className="flex items-center gap-2">
               <item.icon className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
               <span>

@@ -12,6 +12,16 @@ import { RegisterBlurb, RegisterButton } from "@/components/events/register-butt
 import { EVENT_TYPE_LABELS, getEventAudienceBadge, type EventWithRsvp } from "@/lib/events";
 import { EventVisibility } from "@/lib/generated/prisma/enums";
 import { useHasMounted } from "@/lib/use-has-mounted";
+import { DEFAULT_EVENT_TIME_ZONE } from "@/lib/format-date";
+
+function formatEventDayForHeading(startsAt: string): string {
+  return new Date(startsAt).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: DEFAULT_EVENT_TIME_ZONE,
+  });
+}
 
 // timeZoneName: "short" (e.g. "EDT") — no explicit `timeZone` above means
 // this already converts to the viewer's own browser zone; the
@@ -91,6 +101,13 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
               <Lock className="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-label="Restricted event" />
             )}
             {event.title}
+            {event.isRecurring && (
+              // Each session of a recurring event is its own card with the
+              // same title — this keeps their headings distinct (SEO
+              // objective 4). A fixed timeZone keeps SSR and hydration in
+              // agreement; the visible, viewer-local date is the line below.
+              <span className="sr-only">, {formatEventDayForHeading(event.startsAt)}</span>
+            )}
           </CardTitle>
           <p className="text-sm text-muted-foreground">
             {hasMounted ? formatEventDate(event.startsAt) : null}

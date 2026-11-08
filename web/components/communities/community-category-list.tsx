@@ -10,6 +10,7 @@ export interface CommunityWithCategories {
   name: string;
   description: string | null;
   image: string;
+  imageAlt: string;
   categories: { id: string; name: string; slug: string }[];
 }
 
@@ -115,12 +116,13 @@ function CommunityRow({ community, isReversed }: { community: CommunityWithCateg
         variants={imageVariants}
         className="relative h-[90px] w-full shrink-0 overflow-hidden rounded-xl sm:h-[200px] sm:w-[280px]"
       >
-        <Image src={community.image} alt="" fill sizes="(min-width: 640px) 280px, 100vw" className="object-cover" />
+        <Image src={community.image} alt={community.imageAlt} fill sizes="(min-width: 640px) 280px, 100vw" className="object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/5 to-transparent" />
       </motion.div>
       <motion.div variants={textVariants} className="flex flex-1 flex-col gap-3">
         <div>
-          <h3 className="text-2xl font-bold">{community.name}</h3>
+          {/* h2: the page goes h1 (hero) → one section per community (SEO objective 4). */}
+          <h2 className="text-2xl font-bold">{community.name}</h2>
           <p className="mt-1 text-lg leading-[1.7] text-muted-foreground">
             {community.description ?? "No description yet."}
           </p>

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getAllCommunities } from "@/lib/profile-server";
 import { CommunityAccordionStack } from "@/components/communities/community-accordion-stack";
-import { COMMUNITY_IMAGES, COMMUNITY_FALLBACK_IMAGE } from "@/lib/community-images";
+import { getCommunityImage } from "@/lib/community-images";
 
 // Matches the section's own layout shape so the swap-in doesn't shift
 // layout — same rationale as HeroStatsSkeleton in hero-section.tsx.
@@ -52,7 +52,7 @@ export async function CommunitiesSection() {
             id: community.id,
             name: community.name,
             description: community.description,
-            image: COMMUNITY_IMAGES[community.name] ?? COMMUNITY_FALLBACK_IMAGE,
+            ...getCommunityImage(community.name),
           }))}
         />
         <Reveal className="mt-10 text-center">

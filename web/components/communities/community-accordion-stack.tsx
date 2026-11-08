@@ -9,6 +9,7 @@ export interface CommunityAccordionTile {
   name: string;
   description: string | null;
   image: string;
+  imageAlt: string;
 }
 
 export function CommunityAccordionStack({ communities }: { communities: CommunityAccordionTile[] }) {
@@ -58,6 +59,11 @@ export function CommunityAccordionStack({ communities }: { communities: Communit
             key={community.id}
             type="button"
             aria-expanded={isActive}
+            // The button's content repeats the name (collapsed + expanded
+            // labels) and now an image alt, so name it explicitly and
+            // attach the description as supporting text instead.
+            aria-label={community.name}
+            aria-describedby={`community-desc-${community.id}`}
             onMouseEnter={() => scheduleActive(community.id)}
             onFocus={() => setActiveId(community.id)}
             onClick={() => setActiveId(isActive ? null : community.id)}
@@ -69,7 +75,7 @@ export function CommunityAccordionStack({ communities }: { communities: Communit
           >
             <Image
               src={community.image}
-              alt=""
+              alt={community.imageAlt}
               fill
               sizes="(min-width: 640px) 300px, 100vw"
               className="object-cover"
@@ -96,7 +102,10 @@ export function CommunityAccordionStack({ communities }: { communities: Communit
               <p className="text-2xl font-bold text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)]">
                 {community.name}
               </p>
-              <p className="mt-1 max-w-[280px] text-lg leading-[1.7] text-white/90 sm:max-w-[320px]">
+              <p
+                id={`community-desc-${community.id}`}
+                className="mt-1 max-w-[280px] text-lg leading-[1.7] text-white/90 sm:max-w-[320px]"
+              >
                 {community.description ?? "No description yet."}
               </p>
             </div>

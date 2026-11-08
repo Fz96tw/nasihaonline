@@ -104,6 +104,8 @@ export default async function EventsPage({
           </p>
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Outline only (h1 → h2 → event-card h3s); the grid speaks for itself visually. */}
+            <h2 className="sr-only">Upcoming events</h2>
             {events.map((event, index) => (
               <Reveal key={event.id} index={index} hover className="h-full">
                 <EventCard event={event} isSignedIn={isSignedIn} />

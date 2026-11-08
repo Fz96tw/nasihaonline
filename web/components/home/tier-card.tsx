@@ -16,7 +16,7 @@ export function TierCard({
   index: number;
   compact?: boolean;
   /**
-   * Render the tier name as h3 (front) / h4 (back). Pass false where the
+   * Render the front face's tier name as an h3. Pass false where the
    * cards sit above the page's H1 — /join's preview strip — so the heading
    * outline still opens with that H1 (SEO objective 3). Same classes
    * either way, so it's purely semantic.
@@ -24,8 +24,10 @@ export function TierCard({
   asHeadings?: boolean;
 }) {
   const [flipped, setFlipped] = useState(false);
+  // Only the front face's name is ever a heading: the back face repeats the
+  // same name, and two identical headings in a row is an outline bug (SEO
+  // objective 4). Same classes either way.
   const FrontTitle = asHeadings ? "h3" : "p";
-  const BackTitle = asHeadings ? "h4" : "p";
 
   function toggle() {
     setFlipped((current) => !current);
@@ -96,14 +98,14 @@ export function TierCard({
           </div>
 
           <div className={cn(faceClasses, tier.gradient, "[transform:rotateY(180deg)]")}>
-            <BackTitle
+            <p
               className={cn(
                 "relative font-semibold text-primary-foreground",
                 compact ? "text-xs" : "text-base",
               )}
             >
               {tier.name}
-            </BackTitle>
+            </p>
             {!compact && (
               <p className="relative mt-2 text-sm leading-snug text-primary-foreground/90">
                 {tier.description}

@@ -8,7 +8,7 @@ import { getKnowledgeCategories } from "@/lib/library-server";
 import { Button } from "@/components/ui/button";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { CommunityCategoryList } from "@/components/communities/community-category-list";
-import { COMMUNITY_IMAGES, COMMUNITY_FALLBACK_IMAGE } from "@/lib/community-images";
+import { getCommunityImage } from "@/lib/community-images";
 
 export const metadata: Metadata = buildMetadata({
   title: "Professional Communities — Healthcare to Tech | NASIHA",
@@ -41,7 +41,7 @@ export default async function CommunitiesPage() {
     id: community.id,
     name: community.name,
     description: community.description,
-    image: COMMUNITY_IMAGES[community.name] ?? COMMUNITY_FALLBACK_IMAGE,
+    ...getCommunityImage(community.name),
     categories: categories.filter((category) => category.communityId === community.id),
   }));
 

@@ -198,3 +198,96 @@ test("[AC:352239aa:ac_5] all JSON-LD on public pages parses and carries Google's
     for (const ref of refs) assert.ok(ids.has(JSON.parse(ref)["@id"]), `${path}: dangling ${ref}`);
   }
 });
+
+// ---- Heading outline (SEO objective 4, 8e5162ca) ----
+
+test("[AC:8e5162ca:ac_1] no public page has two consecutive headings with identical text", async () => {
+  for (const path of ROUTES) {
+    const hs = headings(await page(path));
+    hs.slice(1).forEach((h, i) => {
+      assert.notEqual(h.text, hs[i].text, `${path}: "${h.text}" repeated (h${hs[i].level} then h${h.level})`);
+    });
+  }
+});
+
+test("[AC:8e5162ca:ac_2] no public page skips a heading level", async () => {
+  for (const path of ROUTES) {
+    const hs = headings(await page(path));
+    assert.equal(hs[0]?.level, 1, `${path}: outline should open with h1`);
+    hs.slice(1).forEach((h, i) => {
+      assert.ok(h.level <= hs[i].level + 1, `${path}: h${hs[i].level} "${hs[i].text}" → h${h.level} "${h.text}"`);
+    });
+  }
+});
+
+test("[AC:8e5162ca:ac_3] /getinvolved's Knowledge Exchange headings nest under their section", async () => {
+  const hs = headings(await page("/getinvolved"));
+  const at = (text) => hs.findIndex((h) => h.text.startsWith(text));
+  const section = hs[at("How the Knowledge Exchange Works")];
+  for (const group of ["Earn by Teaching", "Spend to Learn"]) {
+    const i = at(group);
+    assert.ok(i > 0, `missing "${group}"`);
+    assert.equal(hs[i].level, section.level + 1, `"${group}" should sit one level under "${section.text}"`);
+    // Every entry until the next heading at the group's level or above is nested one deeper.
+    for (let j = i + 1; j < hs.length && hs[j].level > hs[i].level; j++) {
+      assert.equal(hs[j].level, hs[i].level + 1, `"${hs[j].text}" under "${group}"`);
+    }
+    assert.ok(hs[i + 1]?.level === hs[i].level + 1, `"${group}" has no entries under it`);
+  }
+});
+
+// ---- Image alt text (SEO/a11y objective 5, e26090d8) ----
+
+function images(html) {
+  const body = html.slice(html.indexOf("<body"));
+  return [...body.matchAll(/<img\b[^>]*>/g)].map((m) => {
+    const tag = m[0];
+    const attr = (name) => {
+      const v = tag.match(new RegExp(`\\b${name}="([^"]*)"`));
+      return v ? decode(v[1]) : null;
+    };
+    const rawSrc = attr("src") ?? "";
+    const src = decodeURIComponent(rawSrc.replace(/^\/_next\/image\?url=/, "").split("&")[0]);
+    // Is this <img> inside an aria-hidden wrapper? Walk back to the nearest unclosed div.
+    const before = body.slice(0, m.index);
+    const lastHiddenOpen = before.lastIndexOf('aria-hidden="true"');
+    const hiddenWrapper = lastHiddenOpen !== -1 && !/<\/div>\s*<\/div>\s*<\/div>/.test(before.slice(lastHiddenOpen));
+    return { src, alt: attr("alt"), hiddenWrapper };
+  });
+}
+const COMMUNITY_SRC = /\/images\/(Healthcare|science|business-finance|technology|education-career|humanities|arts-culture|nature-outdoor)\.jpg$/;
+const GENERIC_ALT = /^(image|photo|picture|img|banner|hero|graphic|nasiha community)$/i;
+
+test("[AC:e26090d8:ac_1] community images on / and /communities have descriptive alt text", async () => {
+  for (const path of ["/", "/communities"]) {
+    const community = images(await page(path)).filter((img) => COMMUNITY_SRC.test(img.src));
+    assert.equal(community.length, 8, `${path}: expected 8 community images, found ${community.length}`);
+    for (const img of community) {
+      assert.ok(img.alt && img.alt.trim().split(/\s+/).length >= 4, `${path}: ${img.src} alt "${img.alt}" isn't descriptive`);
+    }
+    assert.equal(new Set(community.map((img) => img.alt)).size, 8, `${path}: community alts should be distinct`);
+  }
+});
+
+test("[AC:e26090d8:ac_2] page hero images are explicitly decorative or described", async () => {
+  // /join and /privacy carry no images at all.
+  for (const path of ROUTES.filter((p) => p !== "/join" && p !== "/privacy")) {
+    const [hero] = images(await page(path));
+    assert.ok(hero, `${path}: no hero image`);
+    if (hero.alt === "") assert.ok(hero.hiddenWrapper, `${path}: decorative hero ${hero.src} should sit in an aria-hidden wrapper`);
+    else assert.ok(hero.alt && hero.alt.split(/\s+/).length >= 3, `${path}: hero alt "${hero.alt}"`);
+  }
+});
+
+test("[AC:e26090d8:ac_3] no alt text on public pages is a filename or generic placeholder", async () => {
+  for (const path of ROUTES) {
+    for (const img of images(await page(path))) {
+      if (img.alt === null) assert.fail(`${path}: ${img.src} has no alt attribute`);
+      if (img.alt === "") continue;
+      assert.ok(!GENERIC_ALT.test(img.alt.trim()), `${path}: generic alt "${img.alt}"`);
+      assert.ok(!/\.(jpe?g|png|webp|gif|svg)\b/i.test(img.alt), `${path}: filename-like alt "${img.alt}"`);
+      const base = img.src.split("/").pop().replace(/\.\w+$/, "").toLowerCase();
+      assert.notEqual(img.alt.trim().toLowerCase(), base, `${path}: alt equals filename "${img.alt}"`);
+    }
+  }
+});

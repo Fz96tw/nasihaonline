@@ -93,7 +93,7 @@ export default function AboutPage() {
             <div className="relative mb-8 h-[340px] w-full overflow-hidden rounded-xl shadow-lg">
               <Image
                 src="/images/174733785_orig.jpg"
-                alt="NASIHA community"
+                alt="Open book with a magnifying glass whose shadow forms a heart on the page"
                 fill
                 className="object-cover"
               />
