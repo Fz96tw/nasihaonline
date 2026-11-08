@@ -42,7 +42,12 @@ export async function generateMetadata({
     alternates: { canonical: path },
     openGraph: { type: "article", url: path, title: thread.title, description },
     // A restricted thread renders for its invitees, but must never be indexed.
-    ...(thread.visibility === ForumThreadVisibility.invited || thread.forum.slug === CLINICAL_DISCUSSIONS_SLUG
+    // Nor, until it has a reply, an auto-created event/Library discussion
+    // thread — the same isIndexableForumThread rule that keeps it out of
+    // sitemap.xml.
+    ...(thread.visibility === ForumThreadVisibility.invited ||
+    thread.forum.slug === CLINICAL_DISCUSSIONS_SLUG ||
+    !thread.isIndexable
       ? { robots: { index: false } }
       : {}),
   };

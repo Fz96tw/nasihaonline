@@ -161,6 +161,8 @@ export type ForumThreadDetail = {
   canParticipate: boolean;
   /** The forum's community name, for a community-gated forum; null otherwise. */
   communityName: string | null;
+  /** isIndexableForumThread's verdict — false sends robots noindex (and it's left out of sitemap.xml). */
+  isIndexable: boolean;
 };
 
 /** Every post body in a reply tree, depth-first — e.g. for mentionCandidatesUsedIn. */

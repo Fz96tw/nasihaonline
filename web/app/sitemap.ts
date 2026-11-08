@@ -7,8 +7,8 @@ import { getPublicForumThreadSitemapEntries } from "@/lib/forums-server";
 // like the (member) route group's own force-dynamic.
 export const dynamic = "force-dynamic";
 
-// Static public routes, plus every publicly readable Library item and forum
-// thread detail page (SEO objective 789ae42a, 2026-11-06 decision: those
+// Static public routes, plus every publicly readable Library item and
+// (indexable — see isIndexableForumThread) forum thread detail page (SEO objective 789ae42a, 2026-11-06 decision: those
 // detail pages are open to the web; the browse pages stay members-only).
 // The eligibility rule lives in PUBLIC_KNOWLEDGE_ITEM_WHERE /
 // PUBLIC_FORUM_THREAD_WHERE, shared with the pages themselves.
@@ -33,11 +33,13 @@ const STATIC_ROUTES: Array<{
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const lastModified = new Date();
-
+  // No lastModified on static routes: there's no real edit date to report,
+  // and stamping each request's time made every fetch claim all 13 pages
+  // just changed — which teaches Google to ignore lastmod sitemap-wide,
+  // including the genuine dates on the item/thread entries below
+  // (objective 441369e6).
   const staticEntries: MetadataRoute.Sitemap = STATIC_ROUTES.map(({ path, changeFrequency, priority }) => ({
     url: `${SITE_URL}${path}`,
-    lastModified,
     changeFrequency,
     priority,
   }));

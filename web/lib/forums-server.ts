@@ -19,6 +19,7 @@ import { getSystemUserIds } from "@/lib/system-user";
 import { reflectionImageUrl } from "@/lib/reflection-images";
 import { DIRECTORY_TIERS } from "@/lib/members";
 import { CLINICAL_DISCUSSIONS_SLUG, EVENTS_FORUM_SLUG, LIBRARY_FORUM_SLUG } from "@/lib/forums";
+import { isIndexableForumThread } from "@/lib/forum-indexing";
 import { ensureCommunityMembership, getMemberCommunityContext, type MemberCommunityContext } from "@/lib/profile-server";
 import { countPastedImageReferences, linkPastedImages, MAX_PASTED_IMAGES_PER_BODY } from "@/lib/pasted-images-server";
 import { countSharedRecordingTargets, linkSharedRecording, unlinkSharedRecordings } from "@/lib/quick-recordings-server";
@@ -315,16 +316,30 @@ export async function isForumThreadPubliclyReadable(threadId: string): Promise<b
   return (await db.forumThread.count({ where: { id: threadId, ...PUBLIC_FORUM_THREAD_WHERE } })) > 0;
 }
 
-/** sitemap.xml's forum entries — every publicly readable thread, most recently active first. */
+/**
+ * sitemap.xml's forum entries — every publicly readable thread that's also
+ * worth indexing (isIndexableForumThread: an auto-created event/Library
+ * discussion thread waits for its first visible reply), most recently
+ * active first.
+ */
 export async function getPublicForumThreadSitemapEntries(): Promise<
   { id: string; forumSlug: string; lastModified: Date }[]
 > {
   const threads = await db.forumThread.findMany({
     where: PUBLIC_FORUM_THREAD_WHERE,
-    select: { id: true, lastActivityAt: true, forum: { select: { slug: true } } },
+    select: {
+      id: true,
+      lastActivityAt: true,
+      eventId: true,
+      knowledgeItemId: true,
+      forum: { select: { slug: true } },
+      _count: { select: { posts: { where: { removed: false } } } },
+    },
     orderBy: { lastActivityAt: "desc" },
   });
-  return threads.map((thread) => ({ id: thread.id, forumSlug: thread.forum.slug, lastModified: thread.lastActivityAt }));
+  return threads
+    .filter((thread) => isIndexableForumThread({ ...thread, visiblePostCount: thread._count.posts }))
+    .map((thread) => ({ id: thread.id, forumSlug: thread.forum.slug, lastModified: thread.lastActivityAt }));
 }
 
 const THREAD_LIST_SELECT = {
@@ -585,6 +600,11 @@ export async function getForumThreadDetail(
       : null,
     canParticipate,
     communityName: thread.forum.category?.community.name ?? null,
+    isIndexable: isIndexableForumThread({
+      eventId: thread.eventId,
+      knowledgeItemId: thread.knowledgeItemId,
+      visiblePostCount: thread.posts.filter((post) => !post.removed).length,
+    }),
   };
 }
 

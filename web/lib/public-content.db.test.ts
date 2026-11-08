@@ -113,6 +113,29 @@ describe("Public library items and forum threads (DB-backed)", { skip }, () => {
     ).id;
     await thread("publicItemDiscussion", libraryForum, { knowledgeItemId: items.public });
     await thread("restrictedItemDiscussion", libraryForum, { knowledgeItemId: items.restricted });
+
+    // Auto-created discussion threads (objective 441369e6): the placeholder
+    // opening post alone isn't indexable; one visible reply makes it so.
+    const eventsForum = await forum("events");
+    const event = async (key: string) =>
+      (
+        await db.event.create({
+          data: {
+            title: `Event ${key}`,
+            type: "roundtable",
+            hostId: authorId,
+            startsAt: new Date(Date.now() + 3_600_000),
+            endsAt: new Date(Date.now() + 7_200_000),
+            visibility: "community",
+            publishedAt: new Date(),
+          },
+        })
+      ).id;
+    await thread("eventNoReply", eventsForum, { eventId: await event("noReply") });
+    const replied = await thread("eventReplied", eventsForum, { eventId: await event("replied") });
+    await db.forumPost.create({ data: { threadId: replied.id, authorId, body: "A real reply" } });
+    const removedReply = await thread("eventRemovedReply", eventsForum, { eventId: await event("removedReply") });
+    await db.forumPost.create({ data: { threadId: removedReply.id, authorId, body: "Gone", removed: true } });
   });
 
   it("[AC:789ae42a:ac_1] a signed-out reader gets a published public library item", async () => {
@@ -155,10 +178,33 @@ describe("Public library items and forum threads (DB-backed)", { skip }, () => {
 
     const threadIds = new Set((await forums.getPublicForumThreadSitemapEntries()).map((entry) => entry.id));
     assert.ok(threadIds.has(threads.community.id));
-    assert.ok(threadIds.has(threads.publicItemDiscussion.id));
     assert.ok(threadIds.has(threads.gated.id));
     for (const key of ["invited", "removed", "clinical", "restrictedItemDiscussion"]) {
       assert.ok(!threadIds.has(threads[key].id), key);
+    }
+  });
+
+  it("[AC:441369e6:ac_1] sitemap omits auto-created event/library threads with no visible reply", async () => {
+    const threadIds = new Set((await forums.getPublicForumThreadSitemapEntries()).map((entry) => entry.id));
+    for (const key of ["publicItemDiscussion", "eventNoReply", "eventRemovedReply"]) {
+      assert.ok(!threadIds.has(threads[key].id), key);
+    }
+  });
+
+  it("[AC:441369e6:ac_2] an unreplied auto-created thread stays publicly readable but is marked not indexable", async () => {
+    for (const key of ["publicItemDiscussion", "eventNoReply", "eventRemovedReply"]) {
+      const detail = await forums.getForumThreadDetail(threads[key].slug, threads[key].id, undefined);
+      assert.ok(detail, `${key} should be readable signed-out`);
+      assert.equal(detail.isIndexable, false, key);
+    }
+  });
+
+  it("[AC:441369e6:ac_3] standalone threads and replied auto-created threads stay in the sitemap and indexable", async () => {
+    const threadIds = new Set((await forums.getPublicForumThreadSitemapEntries()).map((entry) => entry.id));
+    for (const key of ["community", "eventReplied"]) {
+      assert.ok(threadIds.has(threads[key].id), key);
+      const detail = await forums.getForumThreadDetail(threads[key].slug, threads[key].id, undefined);
+      assert.equal(detail?.isIndexable, true, key);
     }
   });
 
