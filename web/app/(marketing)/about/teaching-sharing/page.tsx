@@ -3,9 +3,9 @@ import { ActivityDetailPage } from "@/components/about/activity-detail";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Teaching & Sharing",
+  title: "Teaching, Mentoring & Knowledge Sharing — NASIHA",
   description:
-    "How NASIHA members teach, present, and share practical knowledge with their peers through the community platform.",
+    "See how NASIHA members teach for free: hosting webinars, workshops, lectures, and case discussions, publishing articles, and mentoring their peers.",
   path: "/about/teaching-sharing",
 });
 

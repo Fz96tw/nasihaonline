@@ -7,9 +7,9 @@ import { Reveal } from "@/components/home/reveal";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Our Team",
+  title: "Our Team — The Board & Volunteers Behind NASIHA",
   description:
-    "Meet the team and board members behind NASIHA, the member-driven knowledge-sharing community.",
+    "Meet the board members and volunteers who run NASIHA, the nonprofit, member-driven community for professional knowledge sharing and expert networking.",
   path: "/our-team",
 });
 

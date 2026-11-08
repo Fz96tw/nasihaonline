@@ -5,9 +5,9 @@ import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Contact",
+  title: "Contact NASIHA — Membership, Events & Partnerships",
   description:
-    "Get in touch with the NASIHA team with questions about membership, events, or the community platform.",
+    "Contact the NASIHA team with questions about membership, applications, events, volunteering, donations, partnerships, or using the community platform.",
   path: "/contact",
 });
 

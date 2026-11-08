@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { buildMetadata } from "@/lib/seo";
 import { getAllCommunities } from "@/lib/profile-server";
 import { getKnowledgeCategories } from "@/lib/library-server";
 import { Button } from "@/components/ui/button";
@@ -7,9 +8,12 @@ import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { CommunityCategoryList } from "@/components/communities/community-category-list";
 import { COMMUNITY_IMAGES, COMMUNITY_FALLBACK_IMAGE } from "@/lib/community-images";
 
-export const metadata: Metadata = {
-  title: "Communities — NASIHA",
-};
+export const metadata: Metadata = buildMetadata({
+  title: "Professional Communities — Healthcare to Tech | NASIHA",
+  description:
+    "Explore NASIHA communities in Healthcare, Sciences, Technology, Business & Finance, Education & Career, and Humanities, each with its own forums.",
+  path: "/communities",
+});
 
 // Real DB-backed content (the actual community/category list) — freezing
 // it at build time would show a stale or empty (Docker build has no DB

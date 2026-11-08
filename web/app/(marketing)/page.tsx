@@ -7,13 +7,10 @@ import { MembershipTiersSection } from "@/components/home/membership-tiers-secti
 import { CtaBanner } from "@/components/home/cta-banner";
 import { buildMetadata } from "@/lib/seo";
 
-// No `title` key here on purpose — the home page keeps the root layout's
-// `title.default` rather than running through the title template, so
-// buildMetadata is called without one (its openGraph/twitter titles then
-// fall back to the layout's own og:title/twitter:title).
 export const metadata: Metadata = buildMetadata({
+  title: "NASIHA — Professional Knowledge Sharing & Expert Network",
   description:
-    "Join NASIHA, a member-driven community for knowledge sharing, research curation, teaching, and peer feedback among professionals across many fields.",
+    "NASIHA is a fee-free professional community where experts share knowledge, curate research, teach, mentor, and give peer feedback across many fields.",
   path: "/",
 });
 

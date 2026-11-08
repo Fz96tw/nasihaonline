@@ -10,9 +10,9 @@ import { buildBreadcrumbJsonLd } from "@/lib/json-ld";
 import { JsonLd } from "@/components/json-ld";
 
 export const metadata: Metadata = buildMetadata({
-  title: "About",
+  title: "About NASIHA — A Member-Driven Knowledge-Sharing Community",
   description:
-    "Learn what NASIHA is, the values behind it, and how our member-driven community approaches knowledge sharing, research curation, teaching, and peer review.",
+    "Learn what NASIHA is, the values behind it, and how members from every field share knowledge, curate research, teach, and give peer review for free.",
   path: "/about",
 });
 

@@ -11,9 +11,9 @@ import { buildEventJsonLd } from "@/lib/json-ld";
 import { JsonLd } from "@/components/json-ld";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Events",
+  title: "Events — Webinars, Workshops & Expert Talks | NASIHA",
   description:
-    "Browse upcoming NASIHA community events — talks, workshops, and peer sessions open to members.",
+    "Browse upcoming NASIHA events: free webinars, workshops, lectures, roundtables, and case discussions hosted by member experts across many fields.",
   path: "/events",
 });
 

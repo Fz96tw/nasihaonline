@@ -3,9 +3,9 @@ import { ActivityDetailPage } from "@/components/about/activity-detail";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Peer Review & Feedback",
+  title: "Peer Review & Expert Feedback on Your Work — NASIHA",
   description:
-    "How NASIHA members give and receive structured peer review and feedback on each other's work.",
+    "Get structured peer review on papers, projects, and write-ups from NASIHA experts, with threaded feedback, volunteer reviewers, and 1:1 consultations.",
   path: "/about/peer-review-feedback",
 });
 

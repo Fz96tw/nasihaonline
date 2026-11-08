@@ -6,9 +6,9 @@ import { buildMetadata } from "@/lib/seo";
 import { getGuestJoinPrefill } from "@/lib/guest-membership";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Apply to Join",
+  title: "Apply to Join NASIHA — Free Professional Membership",
   description:
-    "Apply to join NASIHA, a member-driven community for professionals who want to share knowledge, teach, and exchange peer feedback.",
+    "Apply for free membership in NASIHA, a professional community for sharing knowledge, curating research, teaching, mentoring, and giving peer feedback.",
   path: "/join",
 });
 

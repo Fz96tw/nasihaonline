@@ -6,9 +6,9 @@ import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Donate",
+  title: "Donate to NASIHA — Support Free Knowledge Sharing",
   description:
-    "Support NASIHA with a donation and help sustain a member-driven community for knowledge sharing and peer learning.",
+    "Make a tax-deductible donation to NASIHA, a 501(c)(3) nonprofit, and help keep professional knowledge sharing, mentoring, and peer review fee-free.",
   path: "/donate",
 });
 

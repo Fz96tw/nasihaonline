@@ -3,8 +3,9 @@ import Link from "next/link";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Privacy Policy",
-  description: "How NASIHA collects, uses, and protects your personal information.",
+  title: "Privacy Policy — How NASIHA Protects Your Data",
+  description:
+    "Read how NASIHA collects, uses, and protects member data, what it never sells or shares, and how to view, export, correct, or delete your information.",
   path: "/privacy",
 });
 

@@ -13,7 +13,7 @@ export function TierPreviewStrip() {
         </p>
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {MEMBERSHIP_TIERS.map((tier, index) => (
-            <TierCard key={tier.name} tier={tier} index={index} compact />
+            <TierCard key={tier.name} tier={tier} index={index} compact asHeadings={false} />
           ))}
         </div>
       </div>

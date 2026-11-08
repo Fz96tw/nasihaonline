@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { SITE_TITLE } from "@/lib/site";
 
 /**
  * Per-page metadata for the public marketing pages. Next.js does not feed
@@ -18,29 +17,30 @@ export function buildMetadata({
   description,
   path,
 }: {
-  title?: string;
+  /**
+   * The complete document title, "NASIHA" included — applied as
+   * `title.absolute`, so the root layout's "%s — NASIHA" template is
+   * bypassed and can't double the brand name. Written per page for search
+   * results (SEO objective 2: 45–60 chars, one "NASIHA", a descriptive
+   * keyword); og:title/twitter:title reuse it verbatim so they never drift.
+   */
+  title: string;
   description: string;
   path: string;
 }): Metadata {
-  // Home page passes no `title` (keeps the layout's title.default rather
-  // than running through the title template) — its openGraph/twitter title
-  // falls back to the site title so og:title doesn't just disappear once
-  // this page-level openGraph object replaces the layout's.
-  const ogTitle = title ? `${title} — NASIHA` : SITE_TITLE;
-
   return {
-    ...(title ? { title } : {}),
+    title: { absolute: title },
     description,
     alternates: { canonical: path },
     openGraph: {
-      title: ogTitle,
+      title,
       description,
       url: path,
       images: [{ url: "/opengraph-image.png", width: 1200, height: 630 }],
     },
     twitter: {
       card: "summary_large_image",
-      title: ogTitle,
+      title,
       description,
       images: ["/twitter-image.png"],
     },

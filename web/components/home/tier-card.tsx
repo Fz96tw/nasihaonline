@@ -10,12 +10,22 @@ export function TierCard({
   tier,
   index,
   compact = false,
+  asHeadings = true,
 }: {
   tier: MembershipTier;
   index: number;
   compact?: boolean;
+  /**
+   * Render the tier name as h3 (front) / h4 (back). Pass false where the
+   * cards sit above the page's H1 — /join's preview strip — so the heading
+   * outline still opens with that H1 (SEO objective 3). Same classes
+   * either way, so it's purely semantic.
+   */
+  asHeadings?: boolean;
 }) {
   const [flipped, setFlipped] = useState(false);
+  const FrontTitle = asHeadings ? "h3" : "p";
+  const BackTitle = asHeadings ? "h4" : "p";
 
   function toggle() {
     setFlipped((current) => !current);
@@ -59,14 +69,14 @@ export function TierCard({
               )}
             />
             <div className="relative">
-              <h3
+              <FrontTitle
                 className={cn(
                   "font-semibold text-primary-foreground",
                   compact ? "text-base" : "text-2xl",
                 )}
               >
                 {tier.name}
-              </h3>
+              </FrontTitle>
               {compact ? (
                 <p className="mt-1 text-xs leading-relaxed text-primary-foreground/90">
                   {tier.tagline}
@@ -86,14 +96,14 @@ export function TierCard({
           </div>
 
           <div className={cn(faceClasses, tier.gradient, "[transform:rotateY(180deg)]")}>
-            <h4
+            <BackTitle
               className={cn(
                 "relative font-semibold text-primary-foreground",
                 compact ? "text-xs" : "text-base",
               )}
             >
               {tier.name}
-            </h4>
+            </BackTitle>
             {!compact && (
               <p className="relative mt-2 text-sm leading-snug text-primary-foreground/90">
                 {tier.description}

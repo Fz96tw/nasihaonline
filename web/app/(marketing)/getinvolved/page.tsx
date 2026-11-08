@@ -6,9 +6,9 @@ import { getSessionUser } from "@/lib/auth";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Get Involved",
+  title: "Get Involved — Volunteer, Mentor & Support NASIHA",
   description:
-    "Ways to get involved with NASIHA — become a member, volunteer your expertise, mentor peers, or support the community.",
+    "Ways to get involved with NASIHA: become a member, volunteer your expertise, mentor peers, host an event, or support our fee-free knowledge community.",
   path: "/getinvolved",
 });
 

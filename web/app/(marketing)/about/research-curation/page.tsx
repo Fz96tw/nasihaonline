@@ -3,9 +3,9 @@ import { ActivityDetailPage } from "@/components/about/activity-detail";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
-  title: "Research & Curation",
+  title: "Research Curation & Knowledge Library — NASIHA",
   description:
-    "How NASIHA members curate and share trustworthy research and reference material with the wider community.",
+    "See how NASIHA members find, annotate, and tag trustworthy research, guidelines, and lectures for a searchable Knowledge Library reviewed by stewards.",
   path: "/about/research-curation",
 });
 
