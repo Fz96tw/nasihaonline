@@ -290,7 +290,7 @@ export function DonateForm({
                 </span>
               </label>
               {field.value && (
-                <ul className="ml-8 mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                <ul className="ml-8 mt-2 list-disc space-y-1 pl-4 text-muted-foreground">
                   {CODE_OF_CONDUCT_PRINCIPLES.map((principle) => (
                     <li key={principle}>{principle}</li>
                   ))}

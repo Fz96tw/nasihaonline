@@ -139,7 +139,7 @@ export function JoinForm({
               &ldquo;{guestPrefill.eventTitle}&rdquo; — we&rsquo;ve filled in what we already know.
             </p>
           )}
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="mt-2 text-muted-foreground">
             Just a few details to get your application started — you&rsquo;ll fill in the rest
             of your profile (career stage, interests, expertise, and more) after you&rsquo;re
             approved and sign in for the first time.
@@ -273,7 +273,7 @@ export function JoinForm({
                   ))}
                 </SelectContent>
               </Select>
-              <FormDescription>
+              <FormDescription className="text-base">
                 Just a preference to help the Board — it doesn&rsquo;t guarantee that tier.
               </FormDescription>
               <FormMessage />
@@ -345,7 +345,7 @@ export function JoinForm({
             <FormItem>
               <div className="rounded-[10px] border p-4">
                 <p className="text-sm font-medium">Code of Conduct</p>
-                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-muted-foreground">
                   {CODE_OF_CONDUCT_PRINCIPLES.map((principle) => (
                     <li key={principle}>{principle}</li>
                   ))}

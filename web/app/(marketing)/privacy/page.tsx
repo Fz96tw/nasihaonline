@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { JsonLd } from "@/components/json-ld";
 import { buildBreadcrumbJsonLd } from "@/lib/json-ld";
-import Link from "next/link";
+import { GatedLink } from "@/components/gated-link";
 import { buildMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildMetadata({
@@ -80,11 +80,12 @@ export default function PrivacyPolicyPage() {
 
         <div className="rounded-[10px] border bg-primary/5 p-6">
           <p className="mb-2 font-bold text-primary">Questions or Requests</p>
-          <p className="text-sm leading-[1.7] text-muted-foreground">
+          <p className="leading-[1.7] text-muted-foreground">
             Members can request access, correction, export, or deletion of their data from{" "}
-            <Link href="/settings" className="underline underline-offset-2">
+            {/* Visitors and crawlers go to sign-in, not the members-only /settings (SEO objective cb64a262). */}
+            <GatedLink href="/settings" publicHref="/sign-in" className="underline underline-offset-2">
               Settings
-            </Link>
+            </GatedLink>
             . For any other question, contact us at{" "}
             <a href="mailto:info@nasihaforyou.org" className="underline underline-offset-2">
               info@nasihaforyou.org

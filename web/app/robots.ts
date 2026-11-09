@@ -37,7 +37,10 @@ const DISALLOWED_PATHS = [
   "/surveys",
   "/welcome",
   "/accept-invite",
-  "/sign-in",
+  // Not /sign-in: every public page links to it, and it carries its own
+  // `noindex, nofollow`, which crawlers can only read if they may fetch it.
+  // Disallowing it left a disallowed link on every page and let Google index
+  // the bare URL with no snippet (SEO objective cb64a262).
   "/account-suspended",
 ];
 

@@ -47,7 +47,7 @@ export function TierCard({
         aria-label={`${tier.name}: show ${flipped ? "overview" : "access details"}`}
         className={cn(
           "h-full cursor-pointer [perspective:1200px]",
-          compact ? "min-h-[160px]" : "min-h-[220px]",
+          compact ? "min-h-[210px] sm:min-h-[260px]" : "min-h-[250px]",
         )}
         onClick={toggle}
         onKeyDown={(event) => {
@@ -80,7 +80,7 @@ export function TierCard({
                 {tier.name}
               </FrontTitle>
               {compact ? (
-                <p className="mt-1 text-xs leading-relaxed text-primary-foreground/90">
+                <p className="mt-1 text-sm leading-snug text-primary-foreground/90">
                   {tier.tagline}
                 </p>
               ) : (
@@ -90,7 +90,7 @@ export function TierCard({
             <p
               className={cn(
                 "relative mt-auto font-medium text-primary-foreground/70",
-                compact ? "pt-2 text-xs" : "pt-3 text-xs",
+                compact ? "pt-2 text-sm" : "pt-3 text-sm",
               )}
             >
               Tap for details →
@@ -101,7 +101,7 @@ export function TierCard({
             <p
               className={cn(
                 "relative font-semibold text-primary-foreground",
-                compact ? "text-xs" : "text-base",
+                compact ? "text-sm" : "text-base",
               )}
             >
               {tier.name}
@@ -114,7 +114,7 @@ export function TierCard({
             <p
               className={cn(
                 "relative leading-snug text-primary-foreground/90",
-                compact ? "mt-1 text-xs" : "mt-2 text-sm",
+                compact ? "mt-1 text-sm" : "mt-2 text-sm",
               )}
             >
               {tier.access}
@@ -127,7 +127,7 @@ export function TierCard({
             <p
               className={cn(
                 "relative mt-auto font-medium text-primary-foreground/70",
-                compact ? "pt-2 text-xs" : "pt-3 text-xs",
+                compact ? "pt-2 text-sm" : "pt-3 text-sm",
               )}
             >
               ← Flip back

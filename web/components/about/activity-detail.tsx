@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ParallaxHeroImage } from "@/components/home/parallax-hero-image";
 import { Reveal } from "@/components/home/reveal";
 import { Button } from "@/components/ui/button";
+import { GatedLink } from "@/components/gated-link";
 import { BackLink } from "@/components/back-link";
 import { JsonLd } from "@/components/json-ld";
 import { buildBreadcrumbJsonLd } from "@/lib/json-ld";
@@ -15,6 +16,11 @@ export type ActivitySection = {
 export type ActivityLink = {
   label: string;
   href: string;
+  /**
+   * Set for members-only routes: where visitors and crawlers go instead
+   * (SEO objective cb64a262). Members still get href.
+   */
+  publicHref?: string;
 };
 
 export function ActivityDetailPage({
@@ -86,7 +92,13 @@ export function ActivityDetailPage({
           <div className="flex flex-wrap gap-3">
             {links.map((link) => (
               <Button key={link.href} variant="outline" asChild>
-                <Link href={link.href}>{link.label}</Link>
+                {link.publicHref ? (
+                  <GatedLink href={link.href} publicHref={link.publicHref}>
+                    {link.label}
+                  </GatedLink>
+                ) : (
+                  <Link href={link.href}>{link.label}</Link>
+                )}
               </Button>
             ))}
             <Button asChild>

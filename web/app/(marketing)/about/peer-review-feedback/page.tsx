@@ -33,8 +33,8 @@ const SECTIONS = [
 ];
 
 const LINKS = [
-  { label: "Find an Expert", href: "/members" },
-  { label: "Browse Review & Feedback", href: "/review-feedback" },
+  { label: "Find an Expert", href: "/members", publicHref: "/join" },
+  { label: "Browse Review & Feedback", href: "/review-feedback", publicHref: "/join" },
 ];
 
 export default function PeerReviewFeedbackPage() {

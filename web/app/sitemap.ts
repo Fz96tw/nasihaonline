@@ -39,7 +39,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // including the genuine dates on the item/thread entries below
   // (objective 441369e6).
   const staticEntries: MetadataRoute.Sitemap = STATIC_ROUTES.map(({ path, changeFrequency, priority }) => ({
-    url: `${SITE_URL}${path}`,
+    // The homepage as SITE_URL, no trailing slash: that's the form Next.js
+    // emits for its canonical and og:url, and all three should agree (SEO
+    // objective cb64a262).
+    url: path === "/" ? SITE_URL : `${SITE_URL}${path}`,
     changeFrequency,
     priority,
   }));

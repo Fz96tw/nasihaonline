@@ -112,7 +112,7 @@ export function PublicEventDetail({ event }: { event: PublicEvent }) {
           </>
         ) : null}
       </div>
-      {!isPast && event.open ? <RegisterBlurb className="-mt-4 text-xs text-muted-foreground" /> : null}
+      {!isPast && event.open ? <RegisterBlurb className="-mt-4 text-muted-foreground" /> : null}
     </div>
   );
 }

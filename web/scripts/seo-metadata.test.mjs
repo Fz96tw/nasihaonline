@@ -291,3 +291,57 @@ test("[AC:e26090d8:ac_3] no alt text on public pages is a filename or generic pl
     }
   }
 });
+
+// ── SEO objective cb64a262 ────────────────────────────────────────────────
+
+// robots.txt Disallow lines as matchers: `*` is any run of characters and a
+// trailing `$` anchors the end, as Google reads them.
+async function disallowMatchers() {
+  const robots = await (await fetch(`${BASE}/robots.txt`)).text();
+  return robots
+    .split("\n")
+    .filter((line) => line.startsWith("Disallow:"))
+    .map((line) => line.slice("Disallow:".length).trim())
+    .filter(Boolean)
+    .map((rule) => {
+      const anchored = rule.endsWith("$");
+      const body = (anchored ? rule.slice(0, -1) : rule)
+        .replace(/[.+?^{}()|[\]\\]/g, "\\$&")
+        .replace(/\*/g, ".*");
+      return { rule, re: new RegExp(`^${body}${anchored ? "$" : ""}`) };
+    });
+}
+
+test("[AC:cb64a262:ac_1] public pages' HTML has no links to robots-disallowed routes", async () => {
+  const matchers = await disallowMatchers();
+  assert.ok(matchers.length > 5, "robots.txt should list its Disallow rules");
+  for (const path of ROUTES) {
+    const html = await page(path);
+    const hrefs = [...html.matchAll(/<a\b[^>]*\bhref="([^"]+)"/g)]
+      .map((m) => decode(m[1]))
+      .map((href) => (href.startsWith(BASE) ? href.slice(BASE.length) || "/" : href))
+      .filter((href) => href.startsWith("/") && !href.startsWith("//"))
+      .map((href) => href.split(/[?#]/)[0]);
+    const blocked = [...new Set(hrefs)].filter((href) => matchers.some(({ re }) => re.test(href)));
+    assert.deepEqual(blocked, [], `${path} links to disallowed routes`);
+  }
+});
+
+test("[AC:cb64a262:ac_1] /sign-in is crawlable so crawlers can see its noindex", async () => {
+  const matchers = await disallowMatchers();
+  assert.ok(!matchers.some(({ re }) => re.test("/sign-in")), "/sign-in must not be disallowed");
+  const html = await (await fetch(`${BASE}/sign-in`)).text();
+  assert.match(meta(html, "name", "robots").join(" "), /noindex/);
+});
+
+test("[AC:cb64a262:ac_2] og:url equals the canonical URL on every public page, and the sitemap agrees", async () => {
+  const sitemap = await (await fetch(`${BASE}/sitemap.xml`)).text();
+  const locs = new Set([...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]));
+  for (const path of ROUTES) {
+    const html = await page(path);
+    const canonical = html.match(/<link rel="canonical" href="([^"]+)"/)?.[1];
+    assert.ok(canonical, `${path}: missing canonical`);
+    assert.deepEqual(meta(html, "property", "og:url"), [canonical], `${path}: og:url !== canonical`);
+    assert.ok(locs.has(canonical), `${path}: sitemap has no <loc> equal to canonical ${canonical}`);
+  }
+});

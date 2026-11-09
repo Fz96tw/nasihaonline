@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { GatedLink } from "@/components/gated-link";
 import { Reveal } from "@/components/home/reveal";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -11,8 +12,8 @@ const ACTIVITIES = [
     body: "Curating and sharing trusted resources across every field.",
     href: "/about/research-curation",
     links: [
-      { label: "Browse the Library", href: "/library" },
-      { label: "See Research Discussions", href: "/forums" },
+      { label: "Browse the Library", href: "/library", gated: true },
+      { label: "See Research Discussions", href: "/forums", gated: true },
     ],
   },
   {
@@ -21,8 +22,8 @@ const ACTIVITIES = [
     body: "Constructive, evidence-based feedback across disciplines.",
     href: "/about/peer-review-feedback",
     links: [
-      { label: "Find an Expert", href: "/members" },
-      { label: "Browse Review & Feedback", href: "/review-feedback" },
+      { label: "Find an Expert", href: "/members", gated: true },
+      { label: "Browse Review & Feedback", href: "/review-feedback", gated: true },
     ],
   },
   {
@@ -32,7 +33,7 @@ const ACTIVITIES = [
     href: "/about/teaching-sharing",
     links: [
       { label: "Upcoming Events", href: "/events" },
-      { label: "Browse the Forums", href: "/forums" },
+      { label: "Browse the Forums", href: "/forums", gated: true },
     ],
   },
 ];
@@ -67,16 +68,20 @@ export function WhatWeDoSection() {
                   </Link>
                   <div className="flex flex-col gap-2">
                     {links.map((link) => (
-                      <Link
+                      <GatedLink
                         key={link.href}
                         href={link.href}
+                        // Members-only for visitors and crawlers: send them to
+                        // this activity's public explainer instead (SEO
+                        // objective cb64a262).
+                        publicHref={"gated" in link ? href : link.href}
                         className={cn(
                           buttonVariants({ variant: "outline", size: "sm" }),
                           "h-auto w-full whitespace-normal py-2 text-center leading-tight",
                         )}
                       >
                         {link.label}
-                      </Link>
+                      </GatedLink>
                     ))}
                   </div>
                 </div>

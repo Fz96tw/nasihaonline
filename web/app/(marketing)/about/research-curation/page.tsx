@@ -33,8 +33,8 @@ const SECTIONS = [
 ];
 
 const LINKS = [
-  { label: "Browse the Library", href: "/library" },
-  { label: "See Research Discussions", href: "/forums" },
+  { label: "Browse the Library", href: "/library", publicHref: "/join" },
+  { label: "See Research Discussions", href: "/forums", publicHref: "/join" },
 ];
 
 export default function ResearchCurationPage() {

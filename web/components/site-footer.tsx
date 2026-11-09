@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { GatedLink } from "@/components/gated-link";
 import { EDUCATIONAL_DISCLAIMER } from "@/lib/legal";
 
 const COMMUNITY_LINKS = [
@@ -11,7 +12,10 @@ const COMMUNITY_LINKS = [
 
 const MEMBER_LINKS = [
   { label: "Sign In", href: "/sign-in" },
-  { label: "Dashboard", href: "/dashboard" },
+  // Members-only: not linked at all for visitors and crawlers (SEO
+  // objective cb64a262). /sign-in is fine: robots.txt lets crawlers fetch
+  // it so they can see its noindex.
+  { label: "Dashboard", href: "/dashboard", memberOnly: true },
   { label: "Privacy Policy", href: "/privacy" },
 ];
 
@@ -47,13 +51,14 @@ export function SiteFooter() {
             Members
           </p>
           {MEMBER_LINKS.map((link) => (
-            <Link
+            <GatedLink
               key={link.href}
               href={link.href}
+              publicHref={"memberOnly" in link ? null : link.href}
               className="mb-2 block text-sm text-white/55 transition-colors hover:text-white"
             >
               {link.label}
-            </Link>
+            </GatedLink>
           ))}
         </div>
       </div>
@@ -62,7 +67,7 @@ export function SiteFooter() {
           © {new Date().getFullYear()} NASIHA — All rights reserved. Users may stream videos and view
           tutorials or articles for personal, non-commercial, and educational purposes only.
         </p>
-        <p className="mt-4 text-xs text-white/35">{EDUCATIONAL_DISCLAIMER}</p>
+        <p className="mt-4 text-sm text-white/35">{EDUCATIONAL_DISCLAIMER}</p>
       </div>
     </footer>
   );

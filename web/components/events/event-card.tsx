@@ -131,7 +131,7 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
         ) : event.open ? (
           <>
             <RegisterButton eventId={event.seriesId} eventTitle={event.title} />
-            <RegisterBlurb className="text-xs text-muted-foreground" />
+            <RegisterBlurb className="text-muted-foreground" />
           </>
         ) : (
           <Button size="sm" asChild>
