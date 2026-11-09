@@ -29,11 +29,14 @@ describe("Public library items and forum threads (DB-backed)", { skip }, () => {
   let outsiderId: string;
   let insiderId: string;
   let clinicalPostId: string;
+  const sitemapEvents: Record<string, string> = {};
+  let events: typeof import("@/lib/events-server");
 
   before(async () => {
     ({ db } = await import("@/lib/db"));
     library = await import("@/lib/library-server");
     forums = await import("@/lib/forums-server");
+    events = await import("@/lib/events-server");
     ({ canViewPastedImage } = await import("@/lib/pasted-images-server"));
 
     const author = await db.user.create({
@@ -136,6 +139,27 @@ describe("Public library items and forum threads (DB-backed)", { skip }, () => {
     await db.forumPost.create({ data: { threadId: replied.id, authorId, body: "A real reply" } });
     const removedReply = await thread("eventRemovedReply", eventsForum, { eventId: await event("removedReply") });
     await db.forumPost.create({ data: { threadId: removedReply.id, authorId, body: "Gone", removed: true } });
+
+    // Public event pages (SEO objective 51c2e8d6).
+    const sitemapEvent = async (key: string, data: Record<string, unknown>) => {
+      const created = await db.event.create({
+        data: {
+          title: `Sitemap event ${key}`,
+          type: "webinar",
+          hostId: authorId,
+          startsAt: new Date(Date.now() - 86_400_000),
+          visibility: "community",
+          publishedAt: new Date(),
+          ...data,
+        },
+      });
+      sitemapEvents[key] = created.id;
+    };
+    await sitemapEvent("public", {});
+    await sitemapEvent("communityTagged", { communities: { create: [{ communityId: community.id }] } });
+    await sitemapEvent("draft", { publishedAt: null });
+    await sitemapEvent("cancelled", { cancelledAt: new Date() });
+    await sitemapEvent("invited", { visibility: "invited" });
   });
 
   it("[AC:789ae42a:ac_1] a signed-out reader gets a published public library item", async () => {
@@ -181,6 +205,18 @@ describe("Public library items and forum threads (DB-backed)", { skip }, () => {
     assert.ok(threadIds.has(threads.gated.id));
     for (const key of ["invited", "removed", "clinical", "restrictedItemDiscussion"]) {
       assert.ok(!threadIds.has(threads[key].id), key);
+    }
+  });
+
+  it("[AC:51c2e8d6:ac_1] sitemap lists exactly the events a signed-out visitor can open", async () => {
+    const eventIds = new Set((await events.getPublicEventSitemapEntries()).map((entry) => entry.id));
+    for (const key of ["public", "communityTagged"]) {
+      assert.ok(eventIds.has(sitemapEvents[key]), key);
+      assert.ok(await events.getPublicEventById(sitemapEvents[key]), `${key} should open signed-out`);
+    }
+    for (const key of ["draft", "cancelled", "invited"]) {
+      assert.ok(!eventIds.has(sitemapEvents[key]), key);
+      assert.equal(await events.getPublicEventById(sitemapEvents[key]), null, `${key} should not open signed-out`);
     }
   });
 

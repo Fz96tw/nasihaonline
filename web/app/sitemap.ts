@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/site";
 import { getPublicKnowledgeItemSitemapEntries } from "@/lib/library-server";
 import { getPublicForumThreadSitemapEntries } from "@/lib/forums-server";
+import { getPublicEventSitemapEntries } from "@/lib/events-server";
 
 // Built per request (the DB isn't reachable during the Docker image build),
 // like the (member) route group's own force-dynamic.
@@ -49,13 +50,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // A DB hiccup degrades to the static sitemap rather than a 500, which
   // would make search engines drop the whole file.
-  const [libraryItems, forumThreads] = await Promise.all([
+  const [libraryItems, forumThreads, events] = await Promise.all([
     getPublicKnowledgeItemSitemapEntries().catch((error) => {
       console.error("[sitemap] Failed to load public library items", error);
       return [];
     }),
     getPublicForumThreadSitemapEntries().catch((error) => {
       console.error("[sitemap] Failed to load public forum threads", error);
+      return [];
+    }),
+    // Every event a visitor can open, past ones included: they drop off the
+    // /events listing once over, so this is how crawlers keep finding them
+    // (SEO objective 51c2e8d6).
+    getPublicEventSitemapEntries().catch((error) => {
+      console.error("[sitemap] Failed to load public events", error);
       return [];
     }),
   ]);
@@ -71,6 +79,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...forumThreads.map((thread) => ({
       url: `${SITE_URL}/forums/${thread.forumSlug}/${thread.id}`,
       lastModified: thread.lastModified,
+      changeFrequency: "weekly" as const,
+      priority: 0.5,
+    })),
+    ...events.map((event) => ({
+      url: `${SITE_URL}/events/${event.id}`,
+      lastModified: event.lastModified,
       changeFrequency: "weekly" as const,
       priority: 0.5,
     })),

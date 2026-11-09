@@ -393,6 +393,30 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
     }));
 }
 
+/**
+ * Which events a signed-out visitor (or crawler) can open at
+ * /events/[eventId]. Shared by getPublicEventById and the sitemap so the
+ * two can't disagree (SEO objective 51c2e8d6). Community tags don't hide an
+ * event from visitors: communityVisibilityWhere(null) is {} by design.
+ */
+export const PUBLIC_EVENT_WHERE = {
+  visibility: EventVisibility.community,
+  cancelledAt: null,
+  // Save as Draft initiative — a draft is only ever visible to its host.
+  publishedAt: { not: null },
+  ...communityVisibilityWhere(null),
+} satisfies Prisma.EventWhereInput;
+
+/** sitemap.xml entries for every event in PUBLIC_EVENT_WHERE, past ones included. */
+export async function getPublicEventSitemapEntries(): Promise<{ id: string; lastModified: Date }[]> {
+  const events = await db.event.findMany({
+    where: PUBLIC_EVENT_WHERE,
+    select: { id: true, updatedAt: true },
+    orderBy: { startsAt: "desc" },
+  });
+  return events.map((event) => ({ id: event.id, lastModified: event.updatedAt }));
+}
+
 // /events/[eventId] — the public detail page for a signed-out visitor.
 // Open to any event, not just `open: true` ones — a members-only event's
 // detail page is still visible to a signed-out visitor (title,
@@ -405,14 +429,7 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
 // resolves.
 export async function getPublicEventById(eventId: string): Promise<PublicEvent | null> {
   const event = await db.event.findFirst({
-    where: {
-      id: eventId,
-      visibility: EventVisibility.community,
-      cancelledAt: null,
-      // Save as Draft initiative — a draft is only ever visible to its host.
-      publishedAt: { not: null },
-      ...communityVisibilityWhere(null),
-    },
+    where: { id: eventId, ...PUBLIC_EVENT_WHERE },
     select: {
       id: true,
       title: true,

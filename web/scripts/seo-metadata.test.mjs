@@ -345,3 +345,63 @@ test("[AC:cb64a262:ac_2] og:url equals the canonical URL on every public page, a
     assert.ok(locs.has(canonical), `${path}: sitemap has no <loc> equal to canonical ${canonical}`);
   }
 });
+
+// ── SEO objective 51c2e8d6: public event pages ───────────────────────────
+
+let eventPagesCache;
+// Every /events/<id> URL in sitemap.xml, fetched from BASE (the sitemap's
+// own origin is SITE_URL, which differs from BASE on a local build).
+async function eventPages() {
+  if (!eventPagesCache) {
+    const sitemap = await (await fetch(`${BASE}/sitemap.xml`)).text();
+    const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]).filter((loc) => /\/events\/[^/]+$/.test(loc));
+    eventPagesCache = [];
+    for (const loc of locs) {
+      const path = new URL(loc).pathname;
+      const res = await fetch(`${BASE}${path}`, { redirect: "manual" });
+      assert.equal(res.status, 200, `${path} (from sitemap) returned ${res.status}`);
+      eventPagesCache.push({ loc, path, html: await res.text() });
+    }
+  }
+  return eventPagesCache;
+}
+
+test("[AC:51c2e8d6:ac_1] sitemap event URLs all resolve as public pages", async () => {
+  const pages = await eventPages();
+  assert.ok(pages.length > 0, "expected at least one /events/<id> URL in sitemap.xml");
+});
+
+test("[AC:51c2e8d6:ac_2] event pages: unique titles, 50–160 char descriptions, canonical == sitemap URL == og:url", async () => {
+  const titles = new Map();
+  for (const { loc, path, html } of await eventPages()) {
+    const title = decode(html.match(/<title>([^<]*)<\/title>/)?.[1] ?? "");
+    assert.ok(title.includes("NASIHA"), `${path}: title "${title}"`);
+    assert.ok(!titles.has(title), `${path} and ${titles.get(title)} share the title "${title}"`);
+    titles.set(title, path);
+    const [description] = meta(html, "name", "description");
+    assert.ok(description && description.length >= 50 && description.length <= 160, `${path}: description length ${description?.length}`);
+    const canonical = html.match(/<link rel="canonical" href="([^"]+)"/)?.[1];
+    assert.equal(canonical, loc, `${path}: canonical`);
+    assert.deepEqual(meta(html, "property", "og:url"), [loc], `${path}: og:url`);
+  }
+});
+
+test("[AC:51c2e8d6:ac_3] event pages output Event and BreadcrumbList JSON-LD for themselves", async () => {
+  for (const { loc, path, html } of await eventPages()) {
+    const nodes = jsonLd(html).flat();
+    const event = nodes.find((node) => node["@type"] === "Event");
+    assert.ok(event, `${path}: no Event JSON-LD`);
+    for (const key of ["name", "startDate", "location", "url"]) assert.ok(event[key], `${path}: Event.${key} missing`);
+    assert.ok(!Number.isNaN(Date.parse(event.startDate)), `${path}: startDate`);
+    assert.equal(new URL(event.url).pathname, path, `${path}: Event.url`);
+    const crumbs = nodes.find((node) => node["@type"] === "BreadcrumbList");
+    assert.ok(crumbs, `${path}: no BreadcrumbList`);
+    assert.equal(crumbs.itemListElement.at(-1).item, loc, `${path}: breadcrumb should end at the event`);
+  }
+});
+
+test("[AC:51c2e8d6:ac_4] an unknown event id is a noindexed 404", async () => {
+  const res = await fetch(`${BASE}/events/no-such-event-51c2e8d6`, { redirect: "manual" });
+  assert.equal(res.status, 404);
+  assert.match(meta(await res.text(), "name", "robots").join(" "), /noindex/);
+});
