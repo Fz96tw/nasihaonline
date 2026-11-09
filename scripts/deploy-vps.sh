@@ -41,7 +41,7 @@ if [ -z "$CLERK_KEY" ]; then
   exit 1
 fi
 
-echo "==> [1/7] Building image (a full next build — a few minutes)..."
+echo "==> [1/8] Building image (a full next build — a few minutes)..."
 docker build \
   --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_KEY" \
   --build-arg NEXT_PUBLIC_APP_URL="$PROD_APP_URL" \
@@ -49,7 +49,7 @@ docker build \
   -t "$IMAGE_WORKER:latest" -t "$IMAGE_WORKER:$GIT_SHA" \
   web/
 
-echo "==> [2/7] Pushing to Docker Hub..."
+echo "==> [2/8] Pushing to Docker Hub..."
 # The :<sha> tags are for traceability only today — vps/docker-compose.yml
 # still pulls :latest, so they don't yet change what gets deployed. They let
 # you check "what commit is actually live" (docker inspect / Docker Hub tag
@@ -59,16 +59,16 @@ for tag in latest "$GIT_SHA"; do
   docker push "$IMAGE_WORKER:$tag"
 done
 
-echo "==> [3/7] Pulling new image on the VPS..."
+echo "==> [3/8] Pulling new image on the VPS..."
 ssh "$VPS_HOST" "cd '$VPS_DIR' && docker compose pull app worker"
 
-echo "==> [4/7] Recreating app + worker containers..."
+echo "==> [4/8] Recreating app + worker containers..."
 ssh "$VPS_HOST" "cd '$VPS_DIR' && docker compose up -d app worker"
 
-echo "==> [5/7] Pruning old image left behind by the :latest pull on the VPS..."
+echo "==> [5/8] Pruning old image left behind by the :latest pull on the VPS..."
 ssh "$VPS_HOST" "docker image prune -f"
 
-echo "==> [6/7] Verifying..."
+echo "==> [6/8] Verifying..."
 # The container runs a data-seed step (skills, communities, forums, etc.)
 # before Next.js even binds its port, so a fixed short sleep here can catch
 # the app mid-startup and get a false-alarm 503 from the proxy. Retry with
@@ -88,7 +88,28 @@ fi
 echo "==> Deployed $GIT_SHA. Health check OK."
 ssh "$VPS_HOST" "docker logs nasiha-app-1 --tail 20 2>&1" | grep -E "migration|rror|Ready" || true
 
-echo "==> [7/7] Cleaning up old local images (each build tags a new :\$GIT_SHA that never gets removed)..."
+echo "==> [7/8] Warming the homepage cache..."
+# The homepage is prerendered during `docker build`, which has no route to
+# the database, so the image ships a copy whose "Find Your Community" list is
+# empty (CommunitiesSection's .catch(() => [])). ISR (revalidate = 60 in
+# app/layout.tsx) serves that stale copy to the first visitor and rebuilds in
+# the background, so request it ourselves now and wait until the rebuilt
+# page, which has the per-community "community-desc-" ids, is the one being served.
+WARM="no"
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  if curl -s --max-time 15 "$PROD_APP_URL/" | grep -q 'community-desc-'; then
+    WARM="yes"
+    break
+  fi
+  sleep 3
+done
+if [ "$WARM" = "yes" ]; then
+  echo "    Homepage is serving the live communities list."
+else
+  echo "    WARNING: homepage still has no communities after ~30s. Check that the DB has communities and 'docker logs nasiha-app-1'." >&2
+fi
+
+echo "==> [8/8] Cleaning up old local images (each build tags a new :\$GIT_SHA that never gets removed)..."
 for img in "$IMAGE_APP" "$IMAGE_WORKER"; do
   docker images "$img" --format '{{.Tag}}' | grep -v -E "^(latest|$GIT_SHA)$" | while read -r tag; do
     docker rmi "$img:$tag" || true

@@ -29,10 +29,11 @@ export function CommunitiesSectionSkeleton() {
  * page shouldn't wait on this fetch to stream. The homepage is statically
  * generated (objective 4) and Docker's `next build` step has no network
  * path to the database, so this falls back to an empty list rather than
- * failing the whole build — production always has a reachable DB at
- * request time, so real visitors never see this fallback; the tradeoff
- * (accepted deliberately) is that this list reflects build time, not live
- * data, until the next deploy.
+ * failing the whole build. The image therefore ships a homepage with an
+ * empty list; ISR (revalidate in app/layout.tsx) serves that copy once and
+ * regenerates it with live data in the background. scripts/deploy-vps.sh
+ * makes that first request itself right after deploying, so real visitors
+ * get the regenerated page, refreshed every revalidate window.
  */
 export async function CommunitiesSection() {
   const communities = await getAllCommunities().catch(() => []);
