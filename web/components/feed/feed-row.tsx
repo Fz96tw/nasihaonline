@@ -533,11 +533,14 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                 </span>
               </div>
             )}
-            {item.libraryViewCount !== undefined && (
+            {(item.libraryViewCount ?? item.articleViewCount) !== undefined && (
               <div className="mt-2 flex items-center justify-end gap-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1" title="Unique visitors">
+                <span
+                  className="flex items-center gap-1"
+                  title={item.articleViewCount !== undefined ? "Members who opened this article" : "Unique visitors"}
+                >
                   <Eye className="h-3.5 w-3.5" />
-                  {item.libraryViewCount}
+                  {item.libraryViewCount ?? item.articleViewCount}
                 </span>
                 {item.forumReplyCount !== undefined && (
                   <span className="flex items-center gap-1" title="Discussion thread replies">

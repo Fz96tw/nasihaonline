@@ -44,7 +44,7 @@ import { digestContentOf, type DigestContent } from "@/lib/weekly-digest-compose
 import { buildFeedAuthor, type FeedAuthorSource } from "@/lib/feed-author";
 import { ORGANIZATION_AVATAR_URL } from "@/lib/system-user-id";
 import { reflectionImageUrl } from "@/lib/reflection-images";
-import { CURATED_ARTICLE_PLACEHOLDER_IMAGE, getCuratedArticleImageUrl } from "@/lib/curated-articles";
+import { CURATED_ARTICLE_PLACEHOLDER_IMAGE, curatedArticleOpenHref, getCuratedArticleImageUrl } from "@/lib/curated-articles";
 import { FROM_THE_WEB_FORUM_SLUG } from "@/lib/forums";
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -823,6 +823,7 @@ export async function getFeedPage(params: {
         approvedAt: true,
         lastActivityAt: true,
         forumThread: { select: DISCUSSION_THREAD_FEED_SELECT },
+        _count: { select: { views: true } },
       },
       orderBy,
       take: pageSize,
@@ -1391,8 +1392,9 @@ export async function getFeedPage(params: {
       const approvedAt = article.approvedAt as Date; // where clause guarantees approved + approvedAt set
       const thread = article.forumThread;
       const threadHref = thread ? withFeedRef(`/forums/${FROM_THE_WEB_FORUM_SLUG}/${thread.id}`, query) : null;
-      // The publisher's own link; older rows only have the dedupe URL.
-      const link = article.linkUrl ?? article.url;
+      // Through NASIHA's open link, which counts the member's open (the eye
+      // icon) and forwards to the publisher's own link.
+      const link = curatedArticleOpenHref(article.id);
       const articleMeta = {
         articleId: article.id,
         url: link,
@@ -1413,6 +1415,9 @@ export async function getFeedPage(params: {
         author: { ...BOARD_SENDER, name: "Shared by NASIHA" },
         imageUrl: getCuratedArticleImageUrl(article.imageKey) ?? CURATED_ARTICLE_PLACEHOLDER_IMAGE,
         article: articleMeta,
+        articleViewCount: article._count.views,
+        // Same convention as library rows: shown once a discussion exists.
+        forumReplyCount: thread ? thread._count.posts - 1 : undefined,
       };
       const rows = !before || approvedAt < before ? [ownRow] : [];
       // The latest discussion reply, as its own row — same one-row-per-item

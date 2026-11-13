@@ -565,3 +565,25 @@ export async function startCuratedArticleDiscussion(articleId: string, actingUse
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// Opens (the What's New row's eye-icon count)
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves an open of a published article: records one view per member
+ * (repeat opens don't add to the count; signed-out visitors aren't counted)
+ * and returns the publisher link to forward to. Null when the article doesn't
+ * exist or isn't published, so unpublished articles can't be reached this way.
+ */
+export async function openCuratedArticle(articleId: string, viewerId: string | null): Promise<string | null> {
+  const article = await db.externalArticle.findUnique({
+    where: { id: articleId },
+    select: { status: true, url: true, linkUrl: true },
+  });
+  if (!article || article.status !== ExternalArticleStatus.approved) return null;
+  if (viewerId) {
+    await db.externalArticleView.createMany({ data: { articleId, userId: viewerId }, skipDuplicates: true });
+  }
+  return article.linkUrl ?? article.url;
+}

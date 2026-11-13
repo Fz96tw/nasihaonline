@@ -86,8 +86,9 @@ describe("Curated article publisher links (DB-backed)", { skip }, () => {
     const dto = await server.setCuratedArticleStatus(article.id, adminId, "approved", { postNow: true });
     assert.equal(dto.url, "https://pub.example.test/article/why-ai/", "admin card link");
     const row = (await feed.getFeedPage({ cursor: null, types: ["article"], viewerId: memberId })).items.find((i) => i.id === article.id);
-    assert.equal(row?.href, "https://pub.example.test/article/why-ai/");
-    assert.equal(row?.article?.url, "https://pub.example.test/article/why-ai/", "Read on… link");
+    assert.equal(row?.href, `/from-the-web/${article.id}/open`);
+    assert.equal(row?.article?.url, `/from-the-web/${article.id}/open`, "Read on… link");
+    assert.equal(await server.openCuratedArticle(article.id, memberId), "https://pub.example.test/article/why-ai/", "forwards to the publisher's exact link");
     const { threadId } = await server.startCuratedArticleDiscussion(article.id, memberId);
     const opening = await db.forumPost.findFirstOrThrow({ where: { threadId }, orderBy: { createdAt: "asc" } });
     assert.match(opening.body, /https:\/\/pub\.example\.test\/article\/why-ai\//);
@@ -98,7 +99,8 @@ describe("Curated article publisher links (DB-backed)", { skip }, () => {
       data: { url: "https://old.example.test/story", title: "Legacy", excerpt: "x", sourceName: "Old", status: "approved", approvedAt: new Date() },
     });
     const row = (await feed.getFeedPage({ cursor: null, types: ["article"], viewerId: memberId })).items.find((i) => i.id === legacy.id);
-    assert.equal(row?.href, "https://old.example.test/story");
+    assert.equal(row?.href, `/from-the-web/${legacy.id}/open`);
+    assert.equal(await server.openCuratedArticle(legacy.id, memberId), "https://old.example.test/story", "older rows forward to their URL");
   });
 
   it("[AC:7d211c48:ac_1] an article added by link keeps the page's canonical link as published", async () => {

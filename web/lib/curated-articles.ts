@@ -25,6 +25,11 @@ export function getCuratedArticleImageUrl(key: string | null): string | null {
   return `/api/curated-articles/image/${key}`;
 }
 
+/** The member-facing link to a curated article: records the open, then forwards to the publisher. */
+export function curatedArticleOpenHref(articleId: string): string {
+  return `/from-the-web/${articleId}/open`;
+}
+
 /** Shown when an article has no usable image of its own. */
 export const CURATED_ARTICLE_PLACEHOLDER_IMAGE = "/images/from-the-web.svg";
 

@@ -233,7 +233,8 @@ describe("Curated articles (DB-backed)", { skip }, () => {
     assert.deepEqual(page.items.map((item) => item.id), [trees.id], "rejected articles never appear");
     const row = page.items[0];
     assert.equal(row.type, "article");
-    assert.equal(row.href, "https://news.example.test/trees", "the row links out to the original article");
+    assert.equal(row.href, `/from-the-web/${trees.id}/open`, "the row links out via NASIHA's open link…");
+    assert.equal(await server.openCuratedArticle(trees.id, memberId), "https://news.example.test/trees", "…which forwards to the original article");
     assert.equal(row.article?.sourceName, "Good Feed");
     assert.equal(row.article?.threadHref, null, "no discussion until someone starts one");
     assert.ok(row.imageUrl, "always has an image (cached thumbnail or placeholder)");

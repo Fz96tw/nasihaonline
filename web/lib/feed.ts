@@ -59,6 +59,8 @@ export type FeedItem = {
   eventViewCount?: number;
   /** Only library items carry a detail-page unique-visitor count (§4.9) — undefined for every other type. */
   libraryViewCount?: number;
+  /** Only "article" items (From the Web) carry this: members who opened the article through its link (§4.18). */
+  articleViewCount?: number;
   /** Only the welcome-new-member Announcement carries this — the member's tier, rendered as a badge after their name in the title. Null/undefined for every other Announcement and every other type. */
   titleTier?: Tier | null;
   /** Only "peer_review" items with an open call (seekingReviewers) carry this — a short status label ("Open for reviewer volunteers") shown next to a Hand icon on every viewer's feed row, including the submitter's own. Null for an invite-only item; undefined for every other type. Whether an inline ReviewOfferButton also renders next to it is driven separately by canOfferToReview. */

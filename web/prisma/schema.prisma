@@ -108,6 +108,7 @@ model User {
   threadViews               ThreadView[]
   eventViews                EventView[]
   knowledgeItemViews        KnowledgeItemView[]
+  externalArticleViews      ExternalArticleView[]
 
   // Peer Review & Feedback (§4.13 replacement) — invite-only item review,
   // separate from Knowledge Library/Forums (see ReviewItem).
@@ -3186,6 +3187,7 @@ model ExternalArticle {
   addedById        String?
 
   communities ExternalArticleCommunity[]
+  views       ExternalArticleView[]
   forumThread ForumThread?
 
   @@index([status, approvedAt])
@@ -3203,4 +3205,20 @@ model ExternalArticleCommunity {
   @@id([articleId, communityId])
   @@index([communityId])
   @@map("external_article_communities")
+}
+
+// One row per member who opened a curated article through its
+// /from-the-web/[id]/open link — the What's New row's eye-icon count, same
+// unique-visitor shape as KnowledgeItemView. Counts click-throughs only; we
+// can't see reads on the publisher's site.
+model ExternalArticleView {
+  id        String          @id @default(cuid())
+  articleId String
+  article   ExternalArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime        @default(now())
+
+  @@unique([articleId, userId])
+  @@map("external_article_views")
 }
