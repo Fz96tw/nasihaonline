@@ -52,14 +52,25 @@ export const curatedArticleUpdateSchema = z.object({
 
 export type CuratedArticleUpdateInput = z.infer<typeof curatedArticleUpdateSchema>;
 
-export const curatedArticleStatusSchema = z.object({ status: z.enum(["pending", "approved", "rejected"]) });
+/** "approved" queues a never-published article for release; `postNow` publishes it immediately instead. */
+export const curatedArticleStatusSchema = z.object({
+  status: z.enum(["pending", "approved", "rejected"]),
+  postNow: z.boolean().optional(),
+});
 
 export const curatedArticleAddByUrlSchema = z.object({
   url: z.string().trim().url("Enter a full http(s) link.").max(ARTICLE_SOURCE_URL_MAX),
   communityIds,
 });
 
-export const curatedArticleSettingsSchema = z.object({ curatedArticlesFetchEnabled: z.boolean() });
+export const curatedArticleSettingsSchema = z
+  .object({
+    curatedArticlesFetchEnabled: z.boolean().optional(),
+    curatedArticlesPerCommunityPerWeek: z.number().int().min(1).max(14).optional(),
+  })
+  .refine((value) => value.curatedArticlesFetchEnabled !== undefined || value.curatedArticlesPerCommunityPerWeek !== undefined, {
+    message: "Nothing to update.",
+  });
 
 /** Comma/newline-separated keywords from a text box → trimmed list (lowercased server-side). */
 export function splitKeywords(text: string): string[] {

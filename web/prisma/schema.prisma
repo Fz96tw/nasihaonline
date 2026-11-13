@@ -377,6 +377,10 @@ model SiteSettings {
   // Set once prisma/seed.ts has inserted the starter source list, so a
   // seeded source an admin later deletes isn't re-created on the next boot.
   curatedArticleSourcesSeededAt    DateTime?
+  // Release cadence for approved articles: at most this many per community
+  // (and per "General" slot for untagged articles) per rolling 7 days,
+  // spaced at least 7/N days apart.
+  curatedArticlesPerCommunityPerWeek Int          @default(3)
   updatedAt                        DateTime       @updatedAt
 
   @@map("site_settings")
@@ -3083,6 +3087,10 @@ enum ArticleSourceKind {
 
 enum ExternalArticleStatus {
   pending
+  // Approved by an admin and waiting in the release queue: the worker
+  // publishes it (-> approved) on the per-community weekly cadence
+  // (lib/curated-article-schedule.ts). Never shown to members.
+  scheduled
   approved
   rejected
 }
@@ -3153,7 +3161,11 @@ model ExternalArticle {
   reviewedAt       DateTime?
   reviewedById     String?
   // Set on approval — the feed row's sort/cursor key.
+  // Kept on unpublish, so a re-approval returns it to the same position.
   approvedAt       DateTime?
+  // When an admin approved it into the release queue — the queue's
+  // first-in, first-out order.
+  scheduledAt      DateTime?
   // Bumped by replies in the article's discussion thread (createForumPost),
   // for the feed's reply row.
   lastActivityAt   DateTime              @default(now())
@@ -3165,6 +3177,7 @@ model ExternalArticle {
 
   @@index([status, approvedAt])
   @@index([status, fetchedAt])
+  @@index([status, scheduledAt])
   @@map("external_articles")
 }
 

@@ -246,3 +246,21 @@ export async function setCuratedArticlesFetchEnabled(enabled: boolean): Promise<
     update: { curatedArticlesFetchEnabled: enabled },
   });
 }
+
+/** Release cadence for approved curated articles — per community, per rolling week (/admin/curated-articles). */
+export async function getCuratedArticlesPerCommunityPerWeek(): Promise<number> {
+  const settings = await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID },
+    update: {},
+  });
+  return settings.curatedArticlesPerCommunityPerWeek;
+}
+
+export async function setCuratedArticlesPerCommunityPerWeek(perWeek: number): Promise<void> {
+  await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID, curatedArticlesPerCommunityPerWeek: perWeek },
+    update: { curatedArticlesPerCommunityPerWeek: perWeek },
+  });
+}

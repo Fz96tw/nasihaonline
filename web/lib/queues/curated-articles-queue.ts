@@ -5,13 +5,21 @@ import { queueConnection } from "@/lib/queues/connection";
 
 export const CURATED_ARTICLES_QUEUE_NAME = "curated-articles";
 
-/** "scheduled" = the 6-hourly tick (honors the site-wide on/off switch); "manual" = an admin's "Fetch now". */
-export type CuratedArticlesJob = { type: "scheduled" } | { type: "manual"; sourceIds?: string[] };
+/**
+ * "scheduled" = the 6-hourly fetch (honors the site-wide on/off switch);
+ * "manual" = an admin's "Fetch now"; "release" = the 30-minute check that
+ * publishes queued (approved) articles on the per-community cadence.
+ */
+export type CuratedArticlesJob = { type: "scheduled" } | { type: "manual"; sourceIds?: string[] } | { type: "release" };
 
 // Fixed jobId so re-registering on every worker boot is idempotent rather
 // than stacking a duplicate schedule per restart.
 const REPEAT_JOB_ID = "curated-articles-fetch";
 const REPEAT_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const RELEASE_JOB_ID = "curated-articles-release";
+// Matches RELEASE_TICK_MS in lib/curated-article-schedule.ts, which the admin
+// tab's release estimates step by.
+const RELEASE_INTERVAL_MS = 30 * 60 * 1000;
 
 const globalForCuratedArticlesQueue = globalThis as unknown as {
   curatedArticlesQueue: Queue<CuratedArticlesJob> | undefined;
@@ -33,6 +41,15 @@ export async function enqueueRepeatingCuratedArticlesFetch(): Promise<void> {
     "scheduled",
     { type: "scheduled" },
     { repeat: { every: REPEAT_INTERVAL_MS }, jobId: REPEAT_JOB_ID, removeOnComplete: true, removeOnFail: 50 },
+  );
+}
+
+/** Registers the 30-minute release check — called once at scripts/worker.ts startup. */
+export async function enqueueRepeatingCuratedArticlesRelease(): Promise<void> {
+  await getCuratedArticlesQueue().add(
+    "release",
+    { type: "release" },
+    { repeat: { every: RELEASE_INTERVAL_MS }, jobId: RELEASE_JOB_ID, removeOnComplete: true, removeOnFail: 50 },
   );
 }
 

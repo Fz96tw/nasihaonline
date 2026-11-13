@@ -155,6 +155,8 @@ type ArticleWithDtoRelations = {
   fetchedAt: Date;
   imageKey: string | null;
   status: ExternalArticleStatus;
+  scheduledAt: Date | null;
+  approvedAt: Date | null;
   communities: { communityId: string }[];
   source: { name: string } | null;
   forumThread: { id: string; _count: { posts: number } } | null;
@@ -173,6 +175,8 @@ function toArticleDto(article: ArticleWithDtoRelations): ExternalArticleDto {
     fetchedAt: article.fetchedAt.toISOString(),
     imageUrl: getCuratedArticleImageUrl(article.imageKey),
     status: article.status,
+    scheduledAt: article.scheduledAt?.toISOString() ?? null,
+    approvedAt: article.approvedAt?.toISOString() ?? null,
     communityIds: article.communities.map((c) => c.communityId),
     threadId: article.forumThread?.id ?? null,
     replyCount: article.forumThread ? Math.max(0, article.forumThread._count.posts - 1) : 0,
@@ -189,7 +193,9 @@ export async function listCuratedArticles(status: ExternalArticleStatus): Promis
       orderBy:
         status === ExternalArticleStatus.approved
           ? [{ approvedAt: "desc" }]
-          : status === ExternalArticleStatus.rejected
+          : status === ExternalArticleStatus.scheduled
+            ? [{ scheduledAt: "asc" }, { id: "asc" }]
+            : status === ExternalArticleStatus.rejected
             ? [{ reviewedAt: "desc" }]
             : [{ fetchedAt: "desc" }, { publishedAt: "desc" }],
       take: CURATED_QUEUE_PAGE_SIZE,
@@ -201,7 +207,7 @@ export async function listCuratedArticles(status: ExternalArticleStatus): Promis
 
 export async function getCuratedArticleCounts(): Promise<Record<ExternalArticleStatus, number>> {
   const rows = await db.externalArticle.groupBy({ by: ["status"], _count: { _all: true } });
-  const counts = { pending: 0, approved: 0, rejected: 0 } as Record<ExternalArticleStatus, number>;
+  const counts = { pending: 0, scheduled: 0, approved: 0, rejected: 0 } as Record<ExternalArticleStatus, number>;
   for (const row of rows) counts[row.status] = row._count._all;
   return counts;
 }
@@ -237,19 +243,36 @@ export async function updateCuratedArticle(id: string, adminId: string, input: C
 }
 
 /**
- * Approve / reject / back to pending. Only `approved` articles reach the
- * feed. A started discussion thread is hidden (ForumThread.removed) whenever
- * its article stops being approved, and shown again on re-approval — so
- * unpublishing an article never destroys members' replies.
+ * Moves an article between review states. What "approve" means depends on
+ * the article's history:
+ * - never published: it joins the release queue (`scheduled`) and the worker
+ *   publishes it on the per-community cadence (curated-articles-release.ts);
+ * - `postNow`: it's published immediately, at the top of the feed;
+ * - previously published (approvedAt set, then unpublished): it's published
+ *   again immediately, back at its original feed position.
+ * Only `approved` articles reach the feed. A started discussion thread is
+ * hidden (ForumThread.removed) whenever its article isn't approved and shown
+ * again on re-approval, so unpublishing never destroys members' replies.
  */
 export async function setCuratedArticleStatus(
   id: string,
   adminId: string,
-  status: ExternalArticleStatus,
-  now: Date = new Date(),
+  requested: "pending" | "approved" | "rejected",
+  options: { postNow?: boolean; now?: Date } = {},
 ): Promise<ExternalArticleDto> {
+  const now = options.now ?? new Date();
   const existing = await db.externalArticle.findUnique({ where: { id }, select: { status: true, approvedAt: true, title: true } });
   if (!existing) throw new CuratedArticleError(404, "Article not found.");
+
+  const publishNow = requested === "approved" && (options.postNow || existing.approvedAt !== null);
+  const status: ExternalArticleStatus =
+    requested === "approved" ? (publishNow ? ExternalArticleStatus.approved : ExternalArticleStatus.scheduled) : requested;
+  // Already queued and asked to queue again: nothing to change.
+  if (status === existing.status && status === ExternalArticleStatus.scheduled) {
+    const unchanged = await db.externalArticle.findUniqueOrThrow({ where: { id }, include: ARTICLE_DTO_INCLUDE });
+    return toArticleDto(unchanged);
+  }
+
   const updated = await db.$transaction(async (tx) => {
     const article = await tx.externalArticle.update({
       where: { id },
@@ -257,8 +280,9 @@ export async function setCuratedArticleStatus(
         status,
         reviewedAt: status === ExternalArticleStatus.pending ? null : now,
         reviewedById: status === ExternalArticleStatus.pending ? null : adminId,
-        // First approval fixes the feed position; a later re-approval doesn't
-        // jump the article back to the top of everyone's feed.
+        scheduledAt: status === ExternalArticleStatus.scheduled ? now : null,
+        // First publish fixes the feed position; republishing keeps it, so an
+        // article never jumps back to the top of everyone's feed.
         ...(status === ExternalArticleStatus.approved && !existing.approvedAt ? { approvedAt: now, lastActivityAt: now } : {}),
       },
       include: ARTICLE_DTO_INCLUDE,
@@ -274,7 +298,7 @@ export async function setCuratedArticleStatus(
           action: `curated_articles.article_${status}`,
           entityType: "ExternalArticle",
           entityId: id,
-          metadata: { title: existing.title, from: existing.status },
+          metadata: { title: existing.title, from: existing.status, ...(options.postNow ? { postNow: true } : {}) },
         },
         tx,
       );

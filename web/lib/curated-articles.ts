@@ -11,7 +11,8 @@ export const ARTICLE_SOURCE_KIND_LABELS: Record<ArticleSourceKind, string> = {
 
 export const EXTERNAL_ARTICLE_STATUS_LABELS: Record<ExternalArticleStatus, string> = {
   pending: "Pending review",
-  approved: "Approved",
+  scheduled: "Scheduled",
+  approved: "Published",
   rejected: "Rejected",
 };
 
@@ -59,6 +60,12 @@ export type ExternalArticleDto = {
   fetchedAt: string;
   imageUrl: string | null;
   status: ExternalArticleStatus;
+  /** When it joined the release queue (scheduled articles). */
+  scheduledAt: string | null;
+  /** When it first reached the feed; kept after unpublishing. */
+  approvedAt: string | null;
+  /** Scheduled tab only: the worker's estimated release time. */
+  estimatedReleaseAt?: string | null;
   communityIds: string[];
   threadId: string | null;
   replyCount: number;

@@ -227,7 +227,7 @@ describe("Curated articles (DB-backed)", { skip }, () => {
       (await feed.getFeedPage({ cursor: null, types: ["article"], viewerId: memberId })).items.map((item) => item.id);
     assert.deepEqual(await feedIds(), [], "pending articles never appear");
 
-    await server.setCuratedArticleStatus(trees.id, adminId, "approved");
+    await server.setCuratedArticleStatus(trees.id, adminId, "approved", { postNow: true });
     await server.setCuratedArticleStatus(library.id, adminId, "rejected");
     const page = await feed.getFeedPage({ cursor: null, types: ["article"], viewerId: memberId });
     assert.deepEqual(page.items.map((item) => item.id), [trees.id], "rejected articles never appear");

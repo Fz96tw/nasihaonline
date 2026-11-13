@@ -2,15 +2,18 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ExternalLink, Pencil, RotateCcw, X } from "lucide-react";
+import { CalendarClock, Check, ExternalLink, Pencil, RotateCcw, Send, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { formatRelativeTime } from "@/lib/format-date";
+import type { ScheduledOverview } from "@/lib/curated-articles-release";
+import { useHasMounted } from "@/lib/use-has-mounted";
 import {
   CURATED_ARTICLE_PLACEHOLDER_IMAGE,
   type CommunityOption,
@@ -20,10 +23,22 @@ import { FROM_THE_WEB_FORUM_SLUG } from "@/lib/forums";
 import { CURATED_EXCERPT_MAX, CURATED_TITLE_MAX, curatedArticleUpdateSchema } from "@/lib/validation/curated-articles";
 import { CommunityPicker, communityNames, curatedAdminRequest } from "@/components/admin/curated-articles-shared";
 
-/** Scheduled-fetch switch and "Fetch now". */
-export function CuratedFetchControls({ enabled }: { enabled: boolean }) {
+const PER_WEEK_OPTIONS = Array.from({ length: 14 }, (_, i) => i + 1);
+
+/** Release time as the admin's local "Sat, Nov 15, 9:30 AM" (rendered after mount: viewer time zone). */
+function ReleaseTime({ iso }: { iso: string }) {
+  const mounted = useHasMounted();
+  if (!mounted) return null;
+  const date = new Date(iso);
+  if (date.getTime() <= Date.now() + 60_000) return <>within the next half hour</>;
+  return <>{date.toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</>;
+}
+
+/** Scheduled-fetch switch, "Fetch now", and the per-community publishing cadence. */
+export function CuratedFetchControls({ enabled, perWeek }: { enabled: boolean; perWeek: number }) {
   const router = useRouter();
   const [on, setOn] = useState(enabled);
+  const [cadence, setCadence] = useState(perWeek);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
@@ -36,6 +51,22 @@ export function CuratedFetchControls({ enabled }: { enabled: boolean }) {
       router.refresh();
     } catch (error) {
       setOn(!next);
+      setMessage({ tone: "error", text: error instanceof Error ? error.message : "Couldn't save." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveCadence(next: number) {
+    const previous = cadence;
+    setCadence(next);
+    setBusy(true);
+    setMessage(null);
+    try {
+      await curatedAdminRequest("PATCH", "/api/admin/curated-articles/settings", { curatedArticlesPerCommunityPerWeek: next });
+      router.refresh();
+    } catch (error) {
+      setCadence(previous);
       setMessage({ tone: "error", text: error instanceof Error ? error.message : "Couldn't save." });
     } finally {
       setBusy(false);
@@ -58,10 +89,11 @@ export function CuratedFetchControls({ enabled }: { enabled: boolean }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Fetching</CardTitle>
+        <CardTitle>Fetching &amp; publishing</CardTitle>
         <CardDescription>
-          Every 6 hours the worker checks each enabled source and adds matching articles here as pending. Nothing reaches members until you
-          approve it. Pending articles nobody reviews are cleared after 30 days.
+          Every 6 hours the worker checks each enabled source and adds matching articles here as pending. Pending articles nobody reviews are
+          cleared after 30 days. Approved articles wait in Scheduled and are published a few at a time per community, so no community
+          floods the feed; &ldquo;Post now&rdquo; skips the wait.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -71,6 +103,26 @@ export function CuratedFetchControls({ enabled }: { enabled: boolean }) {
             <p className="text-sm text-muted-foreground">&ldquo;Fetch now&rdquo; works either way.</p>
           </div>
           <Switch checked={on} onCheckedChange={toggle} disabled={busy} aria-label="Fetch new articles every 6 hours" />
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-4 sm:flex-nowrap">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">Articles per community per week</p>
+            <p className="text-sm text-muted-foreground">
+              Spread evenly through the week. Articles not tied to a community share one &ldquo;General&rdquo; allowance.
+            </p>
+          </div>
+          <Select value={String(cadence)} onValueChange={(v) => saveCadence(Number(v))} disabled={busy}>
+            <SelectTrigger className="w-24" aria-label="Articles per community per week">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PER_WEEK_OPTIONS.map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="outline" onClick={fetchNow} disabled={busy}>
@@ -158,12 +210,25 @@ function ArticleCard({ initial, communities }: { initial: ExternalArticleDto; co
   const [error, setError] = useState<string | null>(null);
   const [movedTo, setMovedTo] = useState<string | null>(null);
 
-  async function setStatus(status: "pending" | "approved" | "rejected") {
+  async function setStatus(status: "pending" | "approved" | "rejected", postNow = false) {
     setBusy(true);
     setError(null);
     try {
-      await curatedAdminRequest("POST", `/api/admin/curated-articles/articles/${article.id}/status`, { status });
-      setMovedTo(status === "approved" ? "Approved: it's now in What's New." : status === "rejected" ? "Rejected." : "Moved back to pending.");
+      const result = await curatedAdminRequest<{ article: ExternalArticleDto }>(
+        "POST",
+        `/api/admin/curated-articles/articles/${article.id}/status`,
+        { status, ...(postNow ? { postNow: true } : {}) },
+      );
+      const now = result.article.status;
+      setMovedTo(
+        now === "approved"
+          ? "Published: it's now in What's New."
+          : now === "scheduled"
+            ? "Scheduled: it'll be published in its community's next open slot (see the Scheduled tab)."
+            : now === "rejected"
+              ? "Rejected."
+              : "Moved back to pending.",
+      );
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't update the article.");
@@ -259,6 +324,18 @@ function ArticleCard({ initial, communities }: { initial: ExternalArticleDto; co
                 {article.publishedAt ? ` · published ${formatRelativeTime(article.publishedAt)}` : ""}
                 {` · fetched ${formatRelativeTime(article.fetchedAt)}`}
               </p>
+              {article.status === "scheduled" && (
+                <p className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                  <CalendarClock className="h-3.5 w-3.5" aria-hidden />
+                  {article.estimatedReleaseAt ? (
+                    <span>
+                      Expected to publish <ReleaseTime iso={article.estimatedReleaseAt} />
+                    </span>
+                  ) : (
+                    <span>Queued; more than 6 months of articles are ahead of it</span>
+                  )}
+                </p>
+              )}
               {article.excerpt ? (
                 <p className="text-sm text-muted-foreground">{article.excerpt}</p>
               ) : (
@@ -305,10 +382,21 @@ function ArticleCard({ initial, communities }: { initial: ExternalArticleDto; co
           </>
         ) : (
           <>
-            {article.status !== "approved" && (
+            {(article.status === "pending" || article.status === "rejected") && (
               <Button size="sm" onClick={() => setStatus("approved")} disabled={busy}>
                 <Check className="mr-1.5 h-4 w-4" />
-                Approve
+                {article.approvedAt ? "Republish" : "Approve"}
+              </Button>
+            )}
+            {article.status !== "approved" && !article.approvedAt && (
+              <Button
+                size="sm"
+                variant={article.status === "scheduled" ? "default" : "outline"}
+                onClick={() => setStatus("approved", true)}
+                disabled={busy}
+              >
+                <Send className="mr-1.5 h-4 w-4" />
+                Post now
               </Button>
             )}
             {article.status !== "rejected" && (
@@ -356,5 +444,39 @@ export function CuratedArticleList({
         <ArticleCard key={`${item.id}:${item.status}`} initial={item} communities={communities} />
       ))}
     </ul>
+  );
+}
+
+/** Per-community release queue summary above the Scheduled list. */
+export function ScheduledOverviewPanel({ slots, perWeek }: { slots: ScheduledOverview["slots"]; perWeek: number }) {
+  if (slots.length === 0) return null;
+  return (
+    <div className="overflow-x-auto rounded-lg border">
+      <table className="w-full text-sm">
+        <caption className="px-4 pt-3 text-left text-xs text-muted-foreground">
+          Up to {perWeek} per community per rolling week. Estimates assume nothing else is approved or posted in the meantime.
+        </caption>
+        <thead>
+          <tr className="border-b text-left text-xs text-muted-foreground">
+            <th scope="col" className="px-4 py-2 font-medium">Community</th>
+            <th scope="col" className="px-4 py-2 font-medium">Queued</th>
+            <th scope="col" className="px-4 py-2 font-medium">Published this week</th>
+            <th scope="col" className="px-4 py-2 font-medium">Next release</th>
+          </tr>
+        </thead>
+        <tbody>
+          {slots.map((slot) => (
+            <tr key={slot.slot} className="border-b last:border-0">
+              <th scope="row" className="px-4 py-2 text-left font-medium">{slot.label}</th>
+              <td className="px-4 py-2">{slot.queued}</td>
+              <td className="px-4 py-2">
+                {slot.releasedThisWeek} of {perWeek}
+              </td>
+              <td className="px-4 py-2 text-muted-foreground">{slot.nextReleaseAt ? <ReleaseTime iso={slot.nextReleaseAt} /> : "Nothing queued"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

@@ -45,8 +45,10 @@ import {
   CURATED_ARTICLES_QUEUE_NAME,
   type CuratedArticlesJob,
   enqueueRepeatingCuratedArticlesFetch,
+  enqueueRepeatingCuratedArticlesRelease,
 } from "@/lib/queues/curated-articles-queue";
 import { runCuratedArticleFetch, type CuratedFetchRunResult } from "@/lib/curated-article-fetch";
+import { releaseDueCuratedArticles } from "@/lib/curated-articles-release";
 
 /**
  * Standalone process (`npm run worker`, docker-compose "worker" service) —
@@ -230,17 +232,26 @@ async function main() {
   // unless enabled on /admin/curated-articles; an admin's "Fetch now" runs
   // regardless. One source failing never fails the job — each records its
   // own error.
-  const curatedArticlesWorker = new Worker<CuratedArticlesJob, CuratedFetchRunResult>(
+  // The same queue's 30-minute "release" job publishes approved articles
+  // waiting in the release queue on the per-community weekly cadence
+  // (lib/curated-article-schedule.ts) — independent of the fetch switch.
+  const curatedArticlesWorker = new Worker<CuratedArticlesJob, CuratedFetchRunResult | { status: "released"; released: string[] }>(
     CURATED_ARTICLES_QUEUE_NAME,
-    async (job) =>
-      job.data.type === "manual"
+    async (job) => {
+      if (job.data.type === "release") return { status: "released" as const, ...(await releaseDueCuratedArticles()) };
+      return job.data.type === "manual"
         ? runCuratedArticleFetch({ force: true, sourceIds: job.data.sourceIds })
-        : runCuratedArticleFetch(),
+        : runCuratedArticleFetch();
+    },
     // One run at a time: two overlapping runs would fetch the same feeds twice.
     { connection: queueConnection, concurrency: 1 },
   );
 
   curatedArticlesWorker.on("completed", (_job, result) => {
+    if (result.status === "released") {
+      if (result.released.length > 0) console.log(`[curated-articles-worker] published ${result.released.length} scheduled article(s)`);
+      return;
+    }
     if (result.status !== "ran") return;
     const failed = result.sources.filter((source) => source.status === "error");
     console.log(
@@ -253,6 +264,7 @@ async function main() {
   });
 
   await enqueueRepeatingCuratedArticlesFetch();
+  await enqueueRepeatingCuratedArticlesRelease();
   console.log("[curated-articles-worker] listening for jobs on", CURATED_ARTICLES_QUEUE_NAME);
 }
 
