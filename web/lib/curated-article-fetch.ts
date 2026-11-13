@@ -10,7 +10,7 @@ import { Client as MinioClient } from "minio";
 import sharp from "sharp";
 import { db } from "@/lib/db";
 import { ArticleSourceKind, ExternalArticleStatus } from "@/lib/generated/prisma/enums";
-import { getCuratedArticlesFetchEnabled } from "@/lib/settings";
+import { getCuratedArticlesFetchEnabled, getCuratedArticlesPendingRetentionDays } from "@/lib/settings";
 import { CURATED_ARTICLE_IMAGE_PREFIX } from "@/lib/curated-articles";
 import {
   ARTICLE_EXCERPT_MAX,
@@ -39,16 +39,16 @@ const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_UPLOAD_IMAGE_BYTES = 5 * 1024 * 1024;
 const THUMBNAIL_WIDTH_PX = 1200;
 
-/** Entries older than this are ignored — a newly added source doesn't backfill its whole archive. */
+/**
+ * Entries older than this are ignored — a newly added source doesn't backfill
+ * its whole archive. Shortened to the admin's pending-retention setting when
+ * that's lower, so an entry the cleanup deleted has also aged out of the
+ * fetch window and isn't re-queued.
+ */
 const MAX_ENTRY_AGE_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
 /** Per source per run, so one noisy feed can't flood the review queue. */
 const MAX_NEW_PER_SOURCE = 5;
-/**
- * Pending articles nobody reviewed within this long are deleted: the queue is
- * a "what's new" inbox, not an archive. Matches MAX_ENTRY_AGE_DAYS, so a
- * pruned entry has aged out of its feed's window and isn't re-queued.
- */
-const PENDING_RETENTION_DAYS = 30;
 /** Article-page fetches per source per run (link previews for entries missing an image/summary). */
 const MAX_PREVIEW_FETCHES_PER_SOURCE = 15;
 
@@ -395,7 +395,7 @@ function sourceFeedUrl(source: Pick<SourceForFetch, "kind" | "url">): string {
   return source.kind === ArticleSourceKind.news_search ? buildNewsSearchFeedUrl(source.url) : source.url;
 }
 
-async function fetchOneSource(source: SourceForFetch, now: Date, get: HttpGet): Promise<SourceFetchResult> {
+async function fetchOneSource(source: SourceForFetch, now: Date, get: HttpGet, entryWindowDays: number): Promise<SourceFetchResult> {
   const response = await get(sourceFeedUrl(source), {
     maxBytes: MAX_FEED_BYTES,
     accept: "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.9, */*;q=0.5",
@@ -413,7 +413,7 @@ async function fetchOneSource(source: SourceForFetch, now: Date, get: HttpGet): 
   }
 
   const feed = parseFeed(response.body.toString("utf8"), response.url);
-  const cutoff = now.getTime() - MAX_ENTRY_AGE_DAYS * 24 * 60 * 60 * 1000;
+  const cutoff = now.getTime() - entryWindowDays * DAY_MS;
   const candidates = feed.entries
     .filter((entry) => !entry.publishedAt || entry.publishedAt.getTime() >= cutoff)
     .filter((entry) => matchesKeywordRules(`${entry.title} ${entry.summary}`, source))
@@ -536,6 +536,8 @@ export async function runCuratedArticleFetch(
 ): Promise<CuratedFetchRunResult> {
   const now = options.now ?? new Date();
   if (!options.force && !(await getCuratedArticlesFetchEnabled())) return { status: "disabled" };
+  const retentionDays = await getCuratedArticlesPendingRetentionDays();
+  const entryWindowDays = Math.min(MAX_ENTRY_AGE_DAYS, retentionDays);
 
   const sources = await db.articleSource.findMany({
     where: { enabled: true, ...(options.sourceIds ? { id: { in: options.sourceIds } } : {}) },
@@ -546,7 +548,7 @@ export async function runCuratedArticleFetch(
   const results: SourceFetchResult[] = [];
   for (const source of sources) {
     try {
-      results.push(await fetchOneSource(source, now, options.get ?? safeGet));
+      results.push(await fetchOneSource(source, now, options.get ?? safeGet, entryWindowDays));
     } catch (error) {
       const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
       await db.articleSource
@@ -558,7 +560,7 @@ export async function runCuratedArticleFetch(
       results.push({ sourceId: source.id, name: source.name, status: "error", error: message });
     }
   }
-  const prunedCount = await pruneStalePendingArticles(now);
+  const prunedCount = await pruneStalePendingArticles(now, retentionDays);
   return {
     status: "ran",
     sources: results,
@@ -567,9 +569,15 @@ export async function runCuratedArticleFetch(
   };
 }
 
-/** Deletes pending articles older than PENDING_RETENTION_DAYS, and their cached images. */
-export async function pruneStalePendingArticles(now: Date = new Date()): Promise<number> {
-  const cutoff = new Date(now.getTime() - PENDING_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+/**
+ * Deletes pending articles fetched more than the admin-configured retention
+ * ago (default 30 days), with their cached images: the queue is a "what's
+ * new" inbox, not an archive. Only `pending` — scheduled, published and
+ * rejected articles are never touched.
+ */
+export async function pruneStalePendingArticles(now: Date = new Date(), retentionDays?: number): Promise<number> {
+  const days = retentionDays ?? (await getCuratedArticlesPendingRetentionDays());
+  const cutoff = new Date(now.getTime() - days * DAY_MS);
   const stale = await db.externalArticle.findMany({
     where: { status: ExternalArticleStatus.pending, fetchedAt: { lt: cutoff } },
     select: { id: true, imageKey: true },

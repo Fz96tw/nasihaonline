@@ -373,6 +373,61 @@ export async function addCuratedArticleByUrl(
 }
 
 // ---------------------------------------------------------------------------
+// Bulk review actions
+// ---------------------------------------------------------------------------
+
+/** Statuses a bulk reject may touch — never `approved`, so published articles (and their threads) stay put. */
+const BULK_REJECTABLE = [ExternalArticleStatus.pending, ExternalArticleStatus.scheduled];
+
+async function bulkReject(
+  where: { id?: { in: string[] }; status: { in: ExternalArticleStatus[] }; fetchedAt?: { lt: Date } },
+  adminId: string,
+  now: Date,
+  metadata: Record<string, unknown>,
+): Promise<{ rejected: number }> {
+  return db.$transaction(async (tx) => {
+    const result = await tx.externalArticle.updateMany({
+      where,
+      data: { status: ExternalArticleStatus.rejected, reviewedAt: now, reviewedById: adminId, scheduledAt: null },
+    });
+    if (result.count > 0) {
+      await recordAdminAction(
+        { actorId: adminId, action: "curated_articles.bulk_rejected", entityType: "ExternalArticle", metadata: { ...metadata, count: result.count } },
+        tx,
+      );
+    }
+    return { rejected: result.count };
+  });
+}
+
+/**
+ * Rejects the ticked pending/scheduled articles in one go. Rejected articles
+ * are kept (so they're never fetched again); ids that are published or
+ * already rejected are simply skipped.
+ */
+export async function bulkRejectCuratedArticles(ids: string[], adminId: string, now: Date = new Date()): Promise<{ rejected: number }> {
+  const unique = Array.from(new Set(ids));
+  return bulkReject({ id: { in: unique }, status: { in: BULK_REJECTABLE } }, adminId, now, { mode: "selected", requested: unique.length });
+}
+
+/** Rejects every pending article fetched more than `days` days ago. */
+export async function rejectPendingOlderThan(days: number, adminId: string, now: Date = new Date()): Promise<{ rejected: number }> {
+  const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  return bulkReject(
+    { status: { in: [ExternalArticleStatus.pending] }, fetchedAt: { lt: cutoff } },
+    adminId,
+    now,
+    { mode: "older-than", days },
+  );
+}
+
+/** How many pending articles a "reject older than X days" would affect — shown in its confirmation. */
+export async function countPendingOlderThan(days: number, now: Date = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  return db.externalArticle.count({ where: { status: ExternalArticleStatus.pending, fetchedAt: { lt: cutoff } } });
+}
+
+// ---------------------------------------------------------------------------
 // Image replacement
 // ---------------------------------------------------------------------------
 

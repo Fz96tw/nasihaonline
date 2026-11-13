@@ -381,6 +381,10 @@ model SiteSettings {
   // (and per "General" slot for untagged articles) per rolling 7 days,
   // spaced at least 7/N days apart.
   curatedArticlesPerCommunityPerWeek Int          @default(3)
+  // Unreviewed pending articles older than this many days are deleted by the
+  // worker (3–90). The fetch also ignores feed entries older than this
+  // window (capped at 30 days) so a deleted article isn't fetched again.
+  curatedArticlesPendingRetentionDays Int         @default(30)
   updatedAt                        DateTime       @updatedAt
 
   @@map("site_settings")

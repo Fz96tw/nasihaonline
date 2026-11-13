@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { ExternalArticleStatus } from "@/lib/generated/prisma/enums";
-import { getCuratedArticlesFetchEnabled } from "@/lib/settings";
+import { getCuratedArticlesFetchEnabled, getCuratedArticlesPendingRetentionDays } from "@/lib/settings";
 import { getCuratedArticleCounts, listCuratedArticles } from "@/lib/curated-articles-server";
 import { getScheduledOverview } from "@/lib/curated-articles-release";
 import { EXTERNAL_ARTICLE_STATUS_LABELS } from "@/lib/curated-articles";
@@ -39,8 +39,9 @@ export default async function AdminCuratedArticlesPage({ searchParams }: { searc
   const status = (STATUSES as readonly string[]).includes(searchParams.status ?? "")
     ? (searchParams.status as ExternalArticleStatus)
     : ExternalArticleStatus.pending;
-  const [fetchEnabled, counts, list, communities, overview] = await Promise.all([
+  const [fetchEnabled, retentionDays, counts, list, communities, overview] = await Promise.all([
     getCuratedArticlesFetchEnabled(),
+    getCuratedArticlesPendingRetentionDays(),
     getCuratedArticleCounts(),
     listCuratedArticles(status),
     db.community.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
@@ -56,7 +57,7 @@ export default async function AdminCuratedArticlesPage({ searchParams }: { searc
       current="/admin/curated-articles"
       description="Articles from around the web to share with members in What's New. Approved articles are published a few at a time per community, each with a Discuss button for members."
     >
-      <CuratedFetchControls enabled={fetchEnabled} perWeek={overview.perWeek} />
+      <CuratedFetchControls enabled={fetchEnabled} perWeek={overview.perWeek} retentionDays={retentionDays} />
       <AddArticleByUrlForm communities={communities} />
       <section className="flex flex-col gap-4" aria-labelledby="curated-queue-heading">
         <h2 id="curated-queue-heading" className="text-xl font-semibold">
@@ -82,7 +83,13 @@ export default async function AdminCuratedArticlesPage({ searchParams }: { searc
             Showing the {list.items.length} most recent of {list.total}.
           </p>
         )}
-        <CuratedArticleList items={items} communities={communities} emptyText={EMPTY_TEXT[status]} />
+        <CuratedArticleList
+          items={items}
+          communities={communities}
+          emptyText={EMPTY_TEXT[status]}
+          selectable={status === ExternalArticleStatus.pending || status === ExternalArticleStatus.scheduled}
+          showOlderThan={status === ExternalArticleStatus.pending && counts.pending > 0}
+        />
       </section>
     </CuratedArticlesShell>
   );

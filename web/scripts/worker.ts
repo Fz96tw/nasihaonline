@@ -47,7 +47,7 @@ import {
   enqueueRepeatingCuratedArticlesFetch,
   enqueueRepeatingCuratedArticlesRelease,
 } from "@/lib/queues/curated-articles-queue";
-import { runCuratedArticleFetch, type CuratedFetchRunResult } from "@/lib/curated-article-fetch";
+import { pruneStalePendingArticles, runCuratedArticleFetch, type CuratedFetchRunResult } from "@/lib/curated-article-fetch";
 import { releaseDueCuratedArticles } from "@/lib/curated-articles-release";
 
 /**
@@ -235,10 +235,18 @@ async function main() {
   // The same queue's 30-minute "release" job publishes approved articles
   // waiting in the release queue on the per-community weekly cadence
   // (lib/curated-article-schedule.ts) — independent of the fetch switch.
-  const curatedArticlesWorker = new Worker<CuratedArticlesJob, CuratedFetchRunResult | { status: "released"; released: string[] }>(
+  // The release tick also applies the pending-retention cleanup, so stale
+  // pending articles are cleared even while scheduled fetching is off.
+  const curatedArticlesWorker = new Worker<
+    CuratedArticlesJob,
+    CuratedFetchRunResult | { status: "released"; released: string[]; prunedCount: number }
+  >(
     CURATED_ARTICLES_QUEUE_NAME,
     async (job) => {
-      if (job.data.type === "release") return { status: "released" as const, ...(await releaseDueCuratedArticles()) };
+      if (job.data.type === "release") {
+        const { released } = await releaseDueCuratedArticles();
+        return { status: "released" as const, released, prunedCount: await pruneStalePendingArticles() };
+      }
       return job.data.type === "manual"
         ? runCuratedArticleFetch({ force: true, sourceIds: job.data.sourceIds })
         : runCuratedArticleFetch();
@@ -250,6 +258,7 @@ async function main() {
   curatedArticlesWorker.on("completed", (_job, result) => {
     if (result.status === "released") {
       if (result.released.length > 0) console.log(`[curated-articles-worker] published ${result.released.length} scheduled article(s)`);
+      if (result.prunedCount > 0) console.log(`[curated-articles-worker] removed ${result.prunedCount} stale pending article(s)`);
       return;
     }
     if (result.status !== "ran") return;

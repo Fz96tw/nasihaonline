@@ -67,10 +67,20 @@ export const curatedArticleSettingsSchema = z
   .object({
     curatedArticlesFetchEnabled: z.boolean().optional(),
     curatedArticlesPerCommunityPerWeek: z.number().int().min(1).max(14).optional(),
+    curatedArticlesPendingRetentionDays: z.number().int().min(3).max(90).optional(),
   })
-  .refine((value) => value.curatedArticlesFetchEnabled !== undefined || value.curatedArticlesPerCommunityPerWeek !== undefined, {
+  .refine((value) => Object.values(value).some((v) => v !== undefined), {
     message: "Nothing to update.",
   });
+
+/** Choices offered for how long unreviewed pending articles are kept. */
+export const PENDING_RETENTION_OPTIONS = [3, 7, 14, 21, 30, 60, 90] as const;
+
+/** Bulk review actions: reject the ticked articles, or every pending article fetched more than `days` ago. */
+export const curatedArticleBulkSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("reject-selected"), ids: z.array(z.string().min(1)).min(1, "Select at least one article.").max(500) }),
+  z.object({ action: z.literal("reject-older-than"), days: z.number().int().min(1).max(365) }),
+]);
 
 /** Comma/newline-separated keywords from a text box → trimmed list (lowercased server-side). */
 export function splitKeywords(text: string): string[] {

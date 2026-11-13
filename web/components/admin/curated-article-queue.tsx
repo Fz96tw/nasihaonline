@@ -20,7 +20,23 @@ import {
   type ExternalArticleDto,
 } from "@/lib/curated-articles";
 import { FROM_THE_WEB_FORUM_SLUG } from "@/lib/forums";
-import { CURATED_EXCERPT_MAX, CURATED_TITLE_MAX, curatedArticleUpdateSchema } from "@/lib/validation/curated-articles";
+import {
+  CURATED_EXCERPT_MAX,
+  CURATED_TITLE_MAX,
+  PENDING_RETENTION_OPTIONS,
+  curatedArticleUpdateSchema,
+} from "@/lib/validation/curated-articles";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { CommunityPicker, communityNames, curatedAdminRequest } from "@/components/admin/curated-articles-shared";
 import { getCsrfToken } from "@/lib/csrf-client";
 
@@ -144,10 +160,11 @@ function ReleaseTime({ iso }: { iso: string }) {
 }
 
 /** Scheduled-fetch switch, "Fetch now", and the per-community publishing cadence. */
-export function CuratedFetchControls({ enabled, perWeek }: { enabled: boolean; perWeek: number }) {
+export function CuratedFetchControls({ enabled, perWeek, retentionDays }: { enabled: boolean; perWeek: number; retentionDays: number }) {
   const router = useRouter();
   const [on, setOn] = useState(enabled);
   const [cadence, setCadence] = useState(perWeek);
+  const [retention, setRetention] = useState(retentionDays);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
@@ -182,6 +199,22 @@ export function CuratedFetchControls({ enabled, perWeek }: { enabled: boolean; p
     }
   }
 
+  async function saveRetention(next: number) {
+    const previous = retention;
+    setRetention(next);
+    setBusy(true);
+    setMessage(null);
+    try {
+      await curatedAdminRequest("PATCH", "/api/admin/curated-articles/settings", { curatedArticlesPendingRetentionDays: next });
+      router.refresh();
+    } catch (error) {
+      setRetention(previous);
+      setMessage({ tone: "error", text: error instanceof Error ? error.message : "Couldn't save." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function fetchNow() {
     setBusy(true);
     setMessage(null);
@@ -201,7 +234,7 @@ export function CuratedFetchControls({ enabled, perWeek }: { enabled: boolean; p
         <CardTitle>Fetching &amp; publishing</CardTitle>
         <CardDescription>
           Every 6 hours the worker checks each enabled source and adds matching articles here as pending. Pending articles nobody reviews are
-          cleared after 30 days. Approved articles wait in Scheduled and are published a few at a time per community, so no community
+          cleared automatically (see below). Approved articles wait in Scheduled and are published a few at a time per community, so no community
           floods the feed; &ldquo;Post now&rdquo; skips the wait.
         </CardDescription>
       </CardHeader>
@@ -228,6 +261,26 @@ export function CuratedFetchControls({ enabled, perWeek }: { enabled: boolean; p
               {PER_WEEK_OPTIONS.map((n) => (
                 <SelectItem key={n} value={String(n)}>
                   {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-4 sm:flex-nowrap">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">Keep unreviewed articles for</p>
+            <p className="text-sm text-muted-foreground">
+              Pending articles older than this are removed automatically. Scheduled, published and rejected articles are never removed.
+            </p>
+          </div>
+          <Select value={String(retention)} onValueChange={(v) => saveRetention(Number(v))} disabled={busy}>
+            <SelectTrigger className="w-28" aria-label="Keep unreviewed articles for">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PENDING_RETENTION_OPTIONS.map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  {n} days
                 </SelectItem>
               ))}
             </SelectContent>
@@ -310,7 +363,16 @@ export function AddArticleByUrlForm({ communities }: { communities: CommunityOpt
   );
 }
 
-function ArticleCard({ initial, communities }: { initial: ExternalArticleDto; communities: CommunityOption[] }) {
+function ArticleCard({
+  initial,
+  communities,
+  selection,
+}: {
+  initial: ExternalArticleDto;
+  communities: CommunityOption[];
+  /** Present on the Pending/Scheduled tabs: the bulk-action checkbox. */
+  selection?: { checked: boolean; onChange: (checked: boolean) => void };
+}) {
   const router = useRouter();
   const [article, setArticle] = useState(initial);
   const [editing, setEditing] = useState(false);
@@ -375,8 +437,16 @@ function ArticleCard({ initial, communities }: { initial: ExternalArticleDto; co
 
   const names = communityNames(communities, article.communityIds);
   return (
-    <li className="overflow-hidden rounded-lg border bg-card">
+    <li className={`overflow-hidden rounded-lg border bg-card ${selection?.checked ? "border-primary ring-1 ring-primary" : ""}`}>
       <div className="flex flex-col gap-4 p-4 sm:flex-row">
+        {selection && (
+          <Checkbox
+            checked={selection.checked}
+            onCheckedChange={(value) => selection.onChange(value === true)}
+            aria-label={`Select “${article.title}”`}
+            className="mt-1 self-start"
+          />
+        )}
         {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied thumbnail or static placeholder */}
         <img
           src={article.imageUrl ?? CURATED_ARTICLE_PLACEHOLDER_IMAGE}
@@ -537,23 +607,194 @@ function ArticleCard({ initial, communities }: { initial: ExternalArticleDto; co
   );
 }
 
+/** "Reject all pending older than X days": counts first, then confirms. */
+function RejectOlderThan() {
+  const router = useRouter();
+  const [days, setDays] = useState(7);
+  const [count, setCount] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+
+  async function preview() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/admin/curated-articles/articles/bulk?olderThanDays=${days}`);
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(typeof payload?.error === "string" ? payload.error : "Couldn't count articles.");
+      if (payload.count === 0) setMessage({ tone: "ok", text: `No pending articles are older than ${days} days.` });
+      else setCount(payload.count);
+    } catch (error) {
+      setMessage({ tone: "error", text: error instanceof Error ? error.message : "Couldn't count articles." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirm() {
+    setBusy(true);
+    try {
+      const result = await curatedAdminRequest<{ rejected: number }>("POST", "/api/admin/curated-articles/articles/bulk", {
+        action: "reject-older-than",
+        days,
+      });
+      setMessage({ tone: "ok", text: `Rejected ${result.rejected} article${result.rejected === 1 ? "" : "s"}.` });
+      router.refresh();
+    } catch (error) {
+      setMessage({ tone: "error", text: error instanceof Error ? error.message : "Couldn't reject." });
+    } finally {
+      setCount(null);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <Label htmlFor="reject-older-days">Reject all pending older than</Label>
+      <Input
+        id="reject-older-days"
+        type="number"
+        min={1}
+        max={365}
+        value={days}
+        onChange={(e) => setDays(Math.max(1, Math.min(365, Number(e.target.value) || 1)))}
+        className="h-8 w-20"
+      />
+      <span>days</span>
+      <Button size="sm" variant="outline" onClick={preview} disabled={busy}>
+        Reject…
+      </Button>
+      {message && (
+        <p role="status" className={message.tone === "error" ? "text-destructive" : "text-muted-foreground"}>
+          {message.text}
+        </p>
+      )}
+      <AlertDialog open={count !== null} onOpenChange={(open) => !open && setCount(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Reject {count} pending article{count === 1 ? "" : "s"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Every pending article fetched more than {days} days ago will move to Rejected. Scheduled and published articles aren&apos;t
+              affected, and you can still approve a rejected article later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirm} disabled={busy}>
+              Reject {count}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
 export function CuratedArticleList({
   items,
   communities,
   emptyText,
+  selectable = false,
+  showOlderThan = false,
 }: {
   items: ExternalArticleDto[];
   communities: CommunityOption[];
   emptyText: string;
+  /** Pending/Scheduled tabs: checkboxes and "Reject selected". */
+  selectable?: boolean;
+  /** Pending tab: "Reject all pending older than X days". */
+  showOlderThan?: boolean;
 }) {
-  if (items.length === 0) return <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">{emptyText}</p>;
+  const router = useRouter();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  // Only ids still on screen count (a refresh may have moved some away).
+  const visibleSelected = items.filter((item) => selected.has(item.id)).map((item) => item.id);
+  const allSelected = items.length > 0 && visibleSelected.length === items.length;
+
+  async function rejectSelected() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await curatedAdminRequest<{ rejected: number }>("POST", "/api/admin/curated-articles/articles/bulk", {
+        action: "reject-selected",
+        ids: visibleSelected,
+      });
+      setMessage({ tone: "ok", text: `Rejected ${result.rejected} article${result.rejected === 1 ? "" : "s"}.` });
+      setSelected(new Set());
+      router.refresh();
+    } catch (error) {
+      setMessage({ tone: "error", text: error instanceof Error ? error.message : "Couldn't reject." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const toolbar =
+    selectable && items.length > 0 ? (
+      <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={allSelected ? true : visibleSelected.length > 0 ? "indeterminate" : false}
+              onCheckedChange={(value) => setSelected(value === true ? new Set(items.map((item) => item.id)) : new Set())}
+              aria-label="Select all shown"
+            />
+            Select all shown ({items.length})
+          </label>
+          <Button size="sm" variant="outline" onClick={rejectSelected} disabled={busy || visibleSelected.length === 0}>
+            <X className="mr-1.5 h-4 w-4" />
+            Reject selected{visibleSelected.length > 0 ? ` (${visibleSelected.length})` : ""}
+          </Button>
+          {message && (
+            <p role="status" className={message.tone === "error" ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
+              {message.text}
+            </p>
+          )}
+        </div>
+        {showOlderThan && <RejectOlderThan />}
+      </div>
+    ) : null;
+
+  if (items.length === 0) {
+    return (
+      <>
+        {message && <p role="status" className="text-sm text-muted-foreground">{message.text}</p>}
+        <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">{emptyText}</p>
+      </>
+    );
+  }
   return (
-    <ul className="flex flex-col gap-3">
-      {items.map((item) => (
-        // Keyed on status too so a refreshed list never reuses a card that already showed its "moved" note.
-        <ArticleCard key={`${item.id}:${item.status}`} initial={item} communities={communities} />
-      ))}
-    </ul>
+    <div className="flex flex-col gap-3">
+      {toolbar}
+      <ul className="flex flex-col gap-3">
+        {items.map((item) => (
+          // Keyed on status too so a refreshed list never reuses a card that already showed its "moved" note.
+          <ArticleCard
+            key={`${item.id}:${item.status}`}
+            initial={item}
+            communities={communities}
+            selection={
+              selectable
+                ? {
+                    checked: selected.has(item.id),
+                    onChange: (checked) =>
+                      setSelected((prev) => {
+                        const next = new Set(prev);
+                        if (checked) next.add(item.id);
+                        else next.delete(item.id);
+                        return next;
+                      }),
+                  }
+                : undefined
+            }
+          />
+        ))}
+      </ul>
+    </div>
   );
 }
 

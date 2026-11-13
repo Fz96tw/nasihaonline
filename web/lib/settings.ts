@@ -264,3 +264,21 @@ export async function setCuratedArticlesPerCommunityPerWeek(perWeek: number): Pr
     update: { curatedArticlesPerCommunityPerWeek: perWeek },
   });
 }
+
+/** How many days unreviewed pending curated articles are kept before the worker deletes them. */
+export async function getCuratedArticlesPendingRetentionDays(): Promise<number> {
+  const settings = await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID },
+    update: {},
+  });
+  return settings.curatedArticlesPendingRetentionDays;
+}
+
+export async function setCuratedArticlesPendingRetentionDays(days: number): Promise<void> {
+  await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID, curatedArticlesPendingRetentionDays: days },
+    update: { curatedArticlesPendingRetentionDays: days },
+  });
+}

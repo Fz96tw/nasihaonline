@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { recordAdminAction } from "@/lib/audit-server";
-import { setCuratedArticlesFetchEnabled, setCuratedArticlesPerCommunityPerWeek } from "@/lib/settings";
+import {
+  setCuratedArticlesFetchEnabled,
+  setCuratedArticlesPendingRetentionDays,
+  setCuratedArticlesPerCommunityPerWeek,
+} from "@/lib/settings";
 import { curatedArticleSettingsSchema } from "@/lib/validation/curated-articles";
 import { parseCuratedBody, withCuratedAdmin } from "@/lib/curated-articles-route";
 
@@ -12,7 +16,7 @@ export async function PATCH(request: Request) {
   return withCuratedAdmin(async (admin) => {
     const body = await parseCuratedBody(request, curatedArticleSettingsSchema);
     if ("response" in body) return body.response;
-    const { curatedArticlesFetchEnabled, curatedArticlesPerCommunityPerWeek } = body.data;
+    const { curatedArticlesFetchEnabled, curatedArticlesPerCommunityPerWeek, curatedArticlesPendingRetentionDays } = body.data;
     if (curatedArticlesFetchEnabled !== undefined) {
       await setCuratedArticlesFetchEnabled(curatedArticlesFetchEnabled);
       await recordAdminAction({
@@ -28,6 +32,15 @@ export async function PATCH(request: Request) {
         action: "curated_articles.cadence_changed",
         entityType: "SiteSettings",
         metadata: { perWeek: curatedArticlesPerCommunityPerWeek },
+      });
+    }
+    if (curatedArticlesPendingRetentionDays !== undefined) {
+      await setCuratedArticlesPendingRetentionDays(curatedArticlesPendingRetentionDays);
+      await recordAdminAction({
+        actorId: admin.id,
+        action: "curated_articles.retention_changed",
+        entityType: "SiteSettings",
+        metadata: { days: curatedArticlesPendingRetentionDays },
       });
     }
     return NextResponse.json({ ok: true });
