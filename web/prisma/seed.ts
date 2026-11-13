@@ -3,7 +3,7 @@ import { EVENTS_FORUM_SLUG } from "@/lib/forums";
 import { INTEREST_AREA_LABELS } from "@/lib/interest-areas";
 import { getOrCreateWeeklyReflectionUser } from "@/lib/system-user";
 import { REFLECTION_QUOTES } from "./reflection-quotes-data";
-import { STARTER_ARTICLE_SOURCES } from "./curated-article-sources-data";
+import { seedStarterArticleSources } from "@/lib/curated-article-seed";
 
 // Absolute, not relative — same rationale as events-server.ts's createEvent:
 // lib/linkify.tsx's linkifyText only turns absolute http(s) URLs into links.
@@ -735,36 +735,14 @@ async function backfillEventForumThreads() {
 // happens on every container start never resets lastPostedAt/timesPosted nor
 // reverts an admin's edits (e.g. active=false) to an existing row.
 /**
- * The starter "From the Web" source list — inserted once per environment
- * (SiteSettings.curatedArticleSourcesSeededAt), so a source an admin deletes
- * isn't brought back by the next container start. Managed configuration,
- * not sample data, so it runs regardless of SEED_SAMPLE_DATA. Fetching
- * itself stays off until an admin enables it.
+ * Starter "From the Web" sources, in versioned batches — each environment
+ * gets every batch it hasn't had yet, once (lib/curated-article-seed.ts).
+ * Managed configuration, not sample data, so it runs regardless of
+ * SEED_SAMPLE_DATA. Fetching itself stays off until an admin enables it.
  */
 async function seedCuratedArticleSources() {
-  const settings = await db.siteSettings.upsert({ where: { id: 1 }, create: { id: 1 }, update: {} });
-  if (settings.curatedArticleSourcesSeededAt) return;
-  const communities = await db.community.findMany({ select: { id: true, slug: true } });
-  const idBySlug = new Map(communities.map((community) => [community.slug, community.id]));
-  for (const source of STARTER_ARTICLE_SOURCES) {
-    const communityIds = source.communities.flatMap((slug) => {
-      const id = idBySlug.get(slug);
-      return id ? [id] : [];
-    });
-    await db.articleSource.create({
-      data: {
-        name: source.name,
-        kind: source.kind,
-        url: source.url,
-        includeKeywords: (source.includeKeywords ?? []).map((keyword) => keyword.toLowerCase()),
-        excludeKeywords: (source.excludeKeywords ?? []).map((keyword) => keyword.toLowerCase()),
-        enabled: source.enabled ?? true,
-        communities: { create: communityIds.map((communityId) => ({ communityId })) },
-      },
-    });
-  }
-  await db.siteSettings.update({ where: { id: 1 }, data: { curatedArticleSourcesSeededAt: new Date() } });
-  console.log(`Seeded ${STARTER_ARTICLE_SOURCES.length} curated article sources.`);
+  const { added, version } = await seedStarterArticleSources();
+  if (added > 0) console.log(`Seeded ${added} curated article sources (starter batches up to ${version}).`);
 }
 
 async function seedReflectionQuotes() {

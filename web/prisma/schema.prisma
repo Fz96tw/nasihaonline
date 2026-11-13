@@ -377,6 +377,10 @@ model SiteSettings {
   // Set once prisma/seed.ts has inserted the starter source list, so a
   // seeded source an admin later deletes isn't re-created on the next boot.
   curatedArticleSourcesSeededAt    DateTime?
+  // Highest starter-source batch (prisma/curated-article-sources-data.ts)
+  // inserted here. Each batch is added once, so a later batch reaches an
+  // already-seeded environment without re-creating sources an admin deleted.
+  curatedArticleSourcesSeedVersion Int          @default(0)
   // Release cadence for approved articles: at most this many per community
   // (and per "General" slot for untagged articles) per rolling 7 days,
   // spaced at least 7/N days apart.

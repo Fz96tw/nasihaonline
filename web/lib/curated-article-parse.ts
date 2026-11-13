@@ -19,9 +19,26 @@ export type ParsedFeedEntry = {
   publishedAt: Date | null;
   /** Best image the feed itself carries for this entry, if any. */
   imageUrl: string | null;
+  /**
+   * Opening of the article text the feed includes (plain text, ≤600 chars),
+   * used only for the English check — never stored or shown. Empty when the
+   * feed carries no article body.
+   */
+  contentText: string;
 };
 
-export type ParsedFeed = { title: string | null; entries: ParsedFeedEntry[] };
+/** `language` is what the feed declares (e.g. "en-us"), or null when it doesn't say. */
+export type ParsedFeed = { title: string | null; language: string | null; entries: ParsedFeedEntry[] };
+
+/**
+ * Whether a declared language tag ("en", "en-GB", "EN_us") means English.
+ * Nothing declared counts as English: most English sites never declare it,
+ * so only an explicit other language is excluded.
+ */
+export function isEnglishLanguage(tag: string | null | undefined): boolean {
+  const primary = (tag ?? "").trim().toLowerCase().split(/[-_,;\s]/)[0];
+  return primary === "" || primary === "en";
+}
 
 // Query parameters that only ever identify a campaign/click, never the page.
 const TRACKING_PARAM_PATTERNS = [/^utm_/i, /^(fbclid|gclid|dclid|msclkid|mc_cid|mc_eid|igshid|_hsenc|_hsmi|ref_src|cmpid|ocid)$/i];
@@ -270,6 +287,7 @@ export function parseFeed(xml: string, feedUrl: string | null = null): ParsedFee
     const base = absolutize(textOf(channel.link), feedUrl) ?? feedUrl;
     return {
       title: htmlToPlainText(textOf(channel.title)) || null,
+      language: (textOf(channel.language) || textOf(channel["dc:language"]) || attr(rss, "xml:lang") || "").trim() || null,
       entries: items.flatMap((item): ParsedFeedEntry[] => {
         const link = absolutize(textOf(item.link) || attr(item, "rdf:about") || textOf(item.guid), base);
         const title = htmlToPlainText(textOf(item.title));
@@ -282,6 +300,7 @@ export function parseFeed(xml: string, feedUrl: string | null = null): ParsedFee
             summary: htmlToPlainText(textOf(item.description) || html),
             publishedAt: parseDate(textOf(item.pubDate) || textOf(item["dc:date"])),
             imageUrl: feedItemImage(item, html, link),
+            contentText: htmlToPlainText(html).slice(0, 600),
           },
         ];
       }),
@@ -292,6 +311,7 @@ export function parseFeed(xml: string, feedUrl: string | null = null): ParsedFee
     const entries = asArray(atom.entry as Record<string, unknown> | Record<string, unknown>[]);
     return {
       title: htmlToPlainText(textOf(atom.title)) || null,
+      language: (attr(atom, "xml:lang") ?? "").trim() || null,
       entries: entries.flatMap((entry): ParsedFeedEntry[] => {
         const links = asArray(entry.link);
         const alternate =
@@ -307,6 +327,7 @@ export function parseFeed(xml: string, feedUrl: string | null = null): ParsedFee
             summary: htmlToPlainText(textOf(entry.summary) || html),
             publishedAt: parseDate(textOf(entry.published) || textOf(entry.updated)),
             imageUrl: feedItemImage(entry, html, link),
+            contentText: htmlToPlainText(html).slice(0, 600),
           },
         ];
       }),
@@ -324,6 +345,8 @@ export type PagePreview = {
   canonicalUrl: string | null;
   /** Fallback candidates from the article body (findArticleBodyImages), used only when there's no imageUrl. */
   bodyImageUrls: string[];
+  /** The page's declared language (<html lang>, then og:locale / content-language), or null. */
+  language: string | null;
 };
 
 /** How many body images the fetch will try before settling for the placeholder. */
@@ -401,7 +424,7 @@ export function parsePagePreview(html: string, pageUrl: string): PagePreview {
   const meta = new Map<string, string>();
   for (const tag of head.match(/<meta\b[^>]*>/gi) ?? []) {
     const attrs = parseAttributes(tag);
-    const key = (attrs.property ?? attrs.name ?? "").toLowerCase();
+    const key = (attrs.property ?? attrs.name ?? attrs["http-equiv"] ?? "").toLowerCase();
     if (key && attrs.content && !meta.has(key)) meta.set(key, attrs.content.trim());
   }
   let canonical: string | null = null;
@@ -423,7 +446,58 @@ export function parsePagePreview(html: string, pageUrl: string): PagePreview {
     siteName: pick("og:site_name", "application-name"),
     canonicalUrl: canonical,
     bodyImageUrls: findArticleBodyImages(html, pageUrl),
+    language: pageLanguage(html, meta),
   };
+}
+
+// Very common English function words — present in almost any English
+// sentence, rare in other languages written in the Latin alphabet.
+const ENGLISH_FUNCTION_WORDS = new Set([
+  "the", "and", "of", "to", "in", "a", "is", "for", "on", "with", "that", "this", "are", "as", "it", "by", "from", "at",
+  "be", "was", "were", "has", "have", "how", "what", "why", "their", "its", "an", "or", "but", "not", "can", "will", "who",
+  "they", "we", "you", "new", "more", "about", "into", "after", "than",
+]);
+
+/**
+ * Content check for English, used alongside declared languages (which are
+ * sometimes wrong — e.g. a feed of Indonesian articles labelled "en-US").
+ * False when the text is mostly non-Latin script, or long enough to judge
+ * yet has almost none of the commonest English words. Short or ambiguous
+ * text gets the benefit of the doubt.
+ */
+// Built with the RegExp constructor: this project's TS target rejects the /u flag on literals.
+const LETTER = new RegExp("\\p{L}", "gu");
+const LATIN_LETTER = new RegExp("\\p{Script=Latin}", "u");
+const WORD = new RegExp("[\\p{L}']+", "gu");
+
+export function looksEnglish(text: string): boolean {
+  const letters = text.match(LETTER) ?? [];
+  if (letters.length < 20) return true;
+  const latin = letters.filter((ch) => LATIN_LETTER.test(ch)).length;
+  if (latin / letters.length < 0.7) return false;
+  const words = text.toLowerCase().match(WORD) ?? [];
+  // Headlines alone are too short to judge reliably (calibrated against live
+  // feeds: English 10–13-word headlines can score low; real French/Indonesian
+  // entries run ~30 words with a score of 0).
+  if (words.length < 20) return true;
+  const common = words.filter((word) => ENGLISH_FUNCTION_WORDS.has(word)).length;
+  return common / words.length >= 0.08;
+}
+
+/**
+ * A feed entry passes when its headline + summary look English and, judged
+ * separately, so does the opening of its article text (when the feed has
+ * one). Separately, because some feeds pair a translated article with the
+ * original's English summary, and mixed together the English half can carry it.
+ */
+export function entryLooksEnglish(entry: Pick<ParsedFeedEntry, "title" | "summary" | "contentText">): boolean {
+  return looksEnglish(`${entry.title} ${entry.summary}`) && looksEnglish(entry.contentText);
+}
+
+function pageLanguage(html: string, meta: Map<string, string>): string | null {
+  const htmlTag = /<html\b[^>]*>/i.exec(html);
+  const lang = htmlTag ? (parseAttributes(htmlTag[0]).lang ?? parseAttributes(htmlTag[0])["xml:lang"]) : undefined;
+  return (lang || meta.get("og:locale") || meta.get("content-language") || "").trim() || null;
 }
 
 /** "www.sciencedaily.com" → "sciencedaily.com" — fallback publisher name. */

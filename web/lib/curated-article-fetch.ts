@@ -19,6 +19,9 @@ import {
   MAX_BODY_IMAGE_CANDIDATES,
   buildNewsSearchFeedUrl,
   cleanArticleLink,
+  entryLooksEnglish,
+  isEnglishLanguage,
+  looksEnglish,
   hostnameLabel,
   matchesKeywordRules,
   normalizeArticleUrl,
@@ -420,10 +423,20 @@ async function fetchOneSource(source: SourceForFetch, now: Date, get: HttpGet, e
   }
 
   const feed = parseFeed(response.body.toString("utf8"), response.url);
+  // English only: a feed that declares another language queues nothing, and
+  // says so on the Sources page.
+  if (!isEnglishLanguage(feed.language)) {
+    throw new ArticleFetchError(`This feed is marked as "${feed.language}", not English, so nothing was queued.`);
+  }
   const cutoff = now.getTime() - entryWindowDays * DAY_MS;
   const candidates = feed.entries
     .filter((entry) => !entry.publishedAt || entry.publishedAt.getTime() >= cutoff)
     .filter((entry) => matchesKeywordRules(`${entry.title} ${entry.summary}`, source))
+    // Declared languages are sometimes wrong (mixed-language feeds labelled
+    // "en"), so the text itself is checked too.
+    // The article text is judged too (entryLooksEnglish): some feeds pair a
+    // translated article with the original's English summary.
+    .filter((entry) => entryLooksEnglish(entry))
     .flatMap((entry) => {
       const publisherLink = unwrapAggregatorLink(entry.link);
       const url = normalizeArticleUrl(publisherLink);
@@ -456,6 +469,9 @@ async function fetchOneSource(source: SourceForFetch, now: Date, get: HttpGet, e
       previewFetches++;
       try {
         const preview = await fetchPagePreview(url, get);
+        // The article page itself says it isn't English: skip it.
+        if (!isEnglishLanguage(preview.language)) continue;
+        if (!summary && preview.description && !looksEnglish(`${entry.title} ${preview.description}`)) continue;
         siteName = preview.siteName;
         if (!summary && preview.description) summary = preview.description;
         if (!imageUrl && preview.imageUrl) imageUrl = preview.imageUrl;
@@ -623,6 +639,13 @@ export async function previewArticleFromUrl(rawUrl: string, get: HttpGet = safeG
   const canonical = preview.canonicalUrl ? normalizeArticleUrl(preview.canonicalUrl) : null;
   const url = canonical ?? normalizeArticleUrl(preview.finalUrl) ?? normalized;
   if (!preview.title) throw new ArticleFetchError("Couldn't find a title on that page.");
+  if (!isEnglishLanguage(preview.language) || !looksEnglish(`${preview.title} ${preview.description ?? ""}`)) {
+    throw new ArticleFetchError(
+      preview.language && !isEnglishLanguage(preview.language)
+        ? `That page is marked as "${preview.language}", and only English articles can be shared.`
+        : "That page doesn't appear to be in English, and only English articles can be shared.",
+    );
+  }
   const sourceName = preview.siteName ?? hostnameLabel(url);
   return {
     url,

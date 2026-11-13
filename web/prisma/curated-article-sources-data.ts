@@ -96,3 +96,71 @@ export const STARTER_ARTICLE_SOURCES: StarterArticleSource[] = [
     enabled: false,
   },
 ];
+
+// ---------------------------------------------------------------------------
+// Batch 2 — international, English-language sources (added 2026-11-12 for an
+// international membership; feeds checked live and declared/written in
+// English that day). General-news outlets carry keyword filters so politics,
+// conflict and sport don't flood the review queue.
+// ---------------------------------------------------------------------------
+
+const GENERAL_NEWS_INCLUDE = [
+  "science", "scientists", "scientific", "research", "researchers", "study", "discovery", "discovered",
+  "university", "universities", "students", "school", "schools", "education", "teachers", "scholarship",
+  "innovation", "technology", "health", "hospital", "vaccine", "medicine",
+  "volunteer", "volunteers", "community", "charity", "nonprofit", "donated",
+  "environment", "conservation", "climate", "wildlife", "heritage", "museum", "library",
+];
+const GENERAL_NEWS_EXCLUDE = [
+  "election", "elections", "killed", "airstrike", "bombing", "shooting", "militants", "troops",
+  "football", "cricket", "tournament", "league", "match", "stocks",
+];
+
+export const INTERNATIONAL_ARTICLE_SOURCES: StarterArticleSource[] = [
+  // Focused on knowledge, discovery and impact
+  { name: "The Conversation: Africa", kind: "rss", url: "https://theconversation.com/africa/articles.atom", communities: [] },
+  { name: "The Conversation: Australia", kind: "rss", url: "https://theconversation.com/au/articles.atom", communities: [] },
+  { name: "AllAfrica: Science & Biotechnology", kind: "rss", url: "https://allafrica.com/tools/headlines/rdf/science/headlines.rdf", communities: ["sciences"] },
+  { name: "The Hindu: Science", kind: "rss", url: "https://www.thehindu.com/sci-tech/science/feeder/default.rss", communities: ["sciences"] },
+  { name: "Times of India: Science", kind: "rss", url: "https://www.timesofindia.indiatimes.com/rssfeeds/-2128672765.cms", communities: ["sciences"] },
+  { name: "The Better India", kind: "rss", url: "https://www.thebetterindia.com/feed/", communities: [] },
+  { name: "Mongabay India", kind: "rss", url: "https://india.mongabay.com/feed/", communities: ["nature-outdoor"] },
+  { name: "Rest of World", kind: "rss", url: "https://restofworld.org/feed/latest", communities: ["technology"] },
+  { name: "South China Morning Post: Tech", kind: "rss", url: "https://www.scmp.com/rss/36/feed", communities: ["technology"] },
+  { name: "Global Voices", kind: "rss", url: "https://globalvoices.org/feed/", communities: ["humanities"] },
+  { name: "UN News", kind: "rss", url: "https://news.un.org/feed/subscribe/en/news/all/rss.xml", communities: [] },
+  { name: "Health Policy Watch", kind: "rss", url: "https://healthpolicy-watch.news/feed/", communities: ["healthcare"] },
+  { name: "The PIE News", kind: "rss", url: "https://thepienews.com/feed/", communities: ["education-career"] },
+  // General news, filtered to knowledge/education/health/community stories
+  ...[
+    { name: "Arab News", url: "https://www.arabnews.com/rss.xml" },
+    { name: "The National (UAE)", url: "https://www.thenationalnews.com/arc/outboundfeeds/rss/?outputType=xml" },
+    { name: "Al Jazeera", url: "https://www.aljazeera.com/xml/rss/all.xml" },
+    { name: "Dawn (Pakistan)", url: "https://www.dawn.com/feeds/home" },
+    { name: "Daily Maverick (South Africa)", url: "https://www.dailymaverick.co.za/dmrss/" },
+    { name: "Africanews", url: "https://www.africanews.com/feed/rss" },
+    { name: "Premium Times (Nigeria)", url: "https://www.premiumtimesng.com/feed" },
+    { name: "The Japan Times", url: "https://www.japantimes.co.jp/feed/" },
+    { name: "CNA (Singapore)", url: "https://www.channelnewsasia.com/rssfeeds/8395986" },
+  ].map(
+    (source): StarterArticleSource => ({
+      ...source,
+      kind: "rss",
+      communities: [],
+      includeKeywords: GENERAL_NEWS_INCLUDE,
+      excludeKeywords: GENERAL_NEWS_EXCLUDE,
+      enabled: true,
+    }),
+  ),
+];
+
+/**
+ * Starter sources in the order they were introduced. Each environment gets
+ * every batch newer than SiteSettings.curatedArticleSourcesSeedVersion, once.
+ * Add new sources as a new batch — never edit a released batch, since
+ * environments that already have it won't see the change.
+ */
+export const STARTER_SOURCE_BATCHES: { version: number; sources: StarterArticleSource[] }[] = [
+  { version: 1, sources: STARTER_ARTICLE_SOURCES },
+  { version: 2, sources: INTERNATIONAL_ARTICLE_SOURCES },
+];

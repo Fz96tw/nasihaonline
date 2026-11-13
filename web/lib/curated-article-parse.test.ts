@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   ARTICLE_EXCERPT_MAX,
+  entryLooksEnglish,
+  isEnglishLanguage,
+  looksEnglish,
   cleanArticleLink,
   findArticleBodyImages,
   buildNewsSearchFeedUrl,
@@ -131,6 +134,7 @@ describe("[AC:dfdf223a:ac_4] link-preview metadata only, never article text", ()
       siteName: "Reasons to be Cheerful",
       canonicalUrl: "https://reasonstobecheerful.world/moss-as-living-infrastructure",
       bodyImageUrls: [],
+      language: null,
     });
     assert.ok(!JSON.stringify(preview).includes("SECRET"), "body text is never read");
   });
@@ -209,5 +213,54 @@ describe("[AC:7d211c48:ac_1] [AC:7d211c48:ac_3] publisher link vs dedupe key", (
     const a = normalizeArticleUrl("https://knowledge.wharton.upenn.edu/article/why-ai/?utm_source=rss");
     const b = normalizeArticleUrl("https://knowledge.wharton.upenn.edu/article/why-ai");
     assert.equal(a, b);
+  });
+});
+
+describe("[AC:783da79e:ac_4] [AC:783da79e:ac_5] English-only checks", () => {
+  it("treats en / en-GB / missing as English and anything else as not", () => {
+    for (const tag of ["en", "en-US", "EN_gb", "en-Us", null, "", undefined]) assert.equal(isEnglishLanguage(tag), true, String(tag));
+    for (const tag of ["fr", "id", "ar-SA", "hi", "zh-Hans"]) assert.equal(isEnglishLanguage(tag), false, tag);
+  });
+
+  it("reads the language a feed and a page declare", () => {
+    const rss = `<?xml version="1.0"?><rss version="2.0"><channel><title>t</title><language>fr-FR</language><item><title>x</title><link>https://e.org/a</link></item></channel></rss>`;
+    assert.equal(parseFeed(rss).language, "fr-FR");
+    const atom = `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="id"><title>t</title></feed>`;
+    assert.equal(parseFeed(atom).language, "id");
+    assert.equal(parseFeed(RSS).language, null);
+    assert.equal(parsePagePreview('<html lang="ar"><head><title>x</title></head></html>', "https://e.org/").language, "ar");
+    assert.equal(parsePagePreview('<html><head><meta http-equiv="content-language" content="hi"></head></html>', "https://e.org/").language, "hi");
+    assert.equal(parsePagePreview("<html><head><title>x</title></head></html>", "https://e.org/").language, null);
+  });
+
+  it("recognises English text and rejects French, Indonesian and non-Latin text (from real feed entries)", () => {
+    assert.equal(
+      looksEnglish("Baby chimpanzees learn calls much like human infants learn words, according to a new study of wild chimps in Uganda by researchers at the university"),
+      true,
+    );
+    assert.equal(
+      looksEnglish("La BAD prône une nouvelle architecture du financement du développement en Afrique, alors que les besoins des pays du continent restent considérables selon les experts"),
+      false,
+    );
+    assert.equal(
+      looksEnglish("Mengapa pemimpin otoriter dan antikritik kerap bangga dengan pencapaian ekonomi negara mereka padahal rakyat masih kesulitan memenuhi kebutuhan pokok sehari hari"),
+      false,
+    );
+    assert.equal(looksEnglish("وزارة التعليم تطلق برنامجا جديدا لدعم الطلاب في المدارس الحكومية في جميع أنحاء المملكة"), false);
+    assert.equal(looksEnglish("Science Snapshots: November 1, 2026"), true, "short headlines get the benefit of the doubt");
+  });
+});
+
+describe("[AC:783da79e:ac_5] mixed-language feed entries", () => {
+  it("judges by the article text too, so a French article with an English summary is caught", () => {
+    const atom = `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en-US"><title>t</title><entry>
+      <title>Élection présidentielle au Cabo Verde : les enjeux dans l'une des démocraties les plus stables d'Afrique</title>
+      <link rel="alternate" href="https://theconversation.com/election-presidentielle-au-cabo-verde-296430"/>
+      <summary>The presidential election will test party loyalties and voters' expectations of the presidency, as well as its role in the political system.</summary>
+      <content type="html">&lt;p&gt;L'élection présidentielle au Cabo Verde est un évènement qui reste exceptionnel dans le contexte régional. Ce pays, constitué d'un archipel au large des côtes de l'Afrique de l'Ouest, connaît une concurrence multipartite depuis plus de trois décennies. Il a connu des transferts de pouvoir pacifiques et n'a connu aucun coup d'État.&lt;/p&gt;</content>
+    </entry></feed>`;
+    const [entry] = parseFeed(atom).entries;
+    assert.equal(looksEnglish(`${entry.title} ${entry.summary}`), true, "title + English summary alone would pass…");
+    assert.equal(entryLooksEnglish(entry), false, "…the article text, judged on its own, gives it away");
   });
 });

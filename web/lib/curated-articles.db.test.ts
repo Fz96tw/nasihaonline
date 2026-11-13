@@ -270,8 +270,18 @@ describe("Curated articles (DB-backed)", { skip }, () => {
         meili.ensureSurveysIndexConfigured(),
         meili.ensureReviewItemsIndexConfigured(),
       ]);
+      // Index creation is queued in Meilisearch, not awaited; on a freshly
+      // started instance wait until searching every index works.
+      let searched: Awaited<ReturnType<typeof feed.getFeedPage>> | undefined;
+      for (let attempt = 0; attempt < 40 && !searched; attempt++) {
+        searched = await feed.getFeedPage({ cursor: null, viewerId: memberId, q: "admin-written" }).catch(async (error) => {
+          if (!/not found/i.test(String(error))) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          return undefined;
+        });
+      }
+      assert.ok(searched, "search became available");
       const approved = await db.externalArticle.findFirstOrThrow({ where: { status: "approved" } });
-      const searched = await feed.getFeedPage({ cursor: null, viewerId: memberId, q: "admin-written" });
       assert.ok(searched.items.some((item) => item.id === approved.id));
       assert.equal(searched.countsByType?.article, 1);
       const miss = await feed.getFeedPage({ cursor: null, viewerId: memberId, q: "zzz-no-such-words" });
