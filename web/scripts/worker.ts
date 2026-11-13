@@ -47,7 +47,12 @@ import {
   enqueueRepeatingCuratedArticlesFetch,
   enqueueRepeatingCuratedArticlesRelease,
 } from "@/lib/queues/curated-articles-queue";
-import { pruneStalePendingArticles, runCuratedArticleFetch, type CuratedFetchRunResult } from "@/lib/curated-article-fetch";
+import {
+  pruneRejectedArticleImages,
+  pruneStalePendingArticles,
+  runCuratedArticleFetch,
+  type CuratedFetchRunResult,
+} from "@/lib/curated-article-fetch";
 import { releaseDueCuratedArticles } from "@/lib/curated-articles-release";
 
 /**
@@ -239,13 +244,18 @@ async function main() {
   // pending articles are cleared even while scheduled fetching is off.
   const curatedArticlesWorker = new Worker<
     CuratedArticlesJob,
-    CuratedFetchRunResult | { status: "released"; released: string[]; prunedCount: number }
+    CuratedFetchRunResult | { status: "released"; released: string[]; prunedCount: number; clearedImageCount: number }
   >(
     CURATED_ARTICLES_QUEUE_NAME,
     async (job) => {
       if (job.data.type === "release") {
         const { released } = await releaseDueCuratedArticles();
-        return { status: "released" as const, released, prunedCount: await pruneStalePendingArticles() };
+        return {
+          status: "released" as const,
+          released,
+          prunedCount: await pruneStalePendingArticles(),
+          clearedImageCount: await pruneRejectedArticleImages(),
+        };
       }
       return job.data.type === "manual"
         ? runCuratedArticleFetch({ force: true, sourceIds: job.data.sourceIds })
@@ -259,12 +269,13 @@ async function main() {
     if (result.status === "released") {
       if (result.released.length > 0) console.log(`[curated-articles-worker] published ${result.released.length} scheduled article(s)`);
       if (result.prunedCount > 0) console.log(`[curated-articles-worker] removed ${result.prunedCount} stale pending article(s)`);
+      if (result.clearedImageCount > 0) console.log(`[curated-articles-worker] removed images of ${result.clearedImageCount} rejected article(s)`);
       return;
     }
     if (result.status !== "ran") return;
     const failed = result.sources.filter((source) => source.status === "error");
     console.log(
-      `[curated-articles-worker] fetched ${result.sources.length} sources — ${result.newCount} new, ${failed.length} failed, ${result.prunedCount} stale pending pruned`,
+      `[curated-articles-worker] fetched ${result.sources.length} sources — ${result.newCount} new, ${failed.length} failed, ${result.prunedCount} stale pending pruned, ${result.clearedImageCount} rejected images removed`,
     );
     for (const source of failed) console.warn(`[curated-articles-worker]   ${source.name}: ${source.error}`);
   });

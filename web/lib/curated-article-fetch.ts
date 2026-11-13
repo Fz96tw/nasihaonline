@@ -387,7 +387,7 @@ export type SourceFetchResult =
 
 export type CuratedFetchRunResult =
   | { status: "disabled" }
-  | { status: "ran"; sources: SourceFetchResult[]; newCount: number; prunedCount: number };
+  | { status: "ran"; sources: SourceFetchResult[]; newCount: number; prunedCount: number; clearedImageCount: number };
 
 type SourceForFetch = {
   id: string;
@@ -588,11 +588,13 @@ export async function runCuratedArticleFetch(
     }
   }
   const prunedCount = await pruneStalePendingArticles(now, retentionDays);
+  const clearedImageCount = await pruneRejectedArticleImages(now, retentionDays);
   return {
     status: "ran",
     sources: results,
     newCount: results.reduce((sum, r) => sum + (r.status === "ok" ? r.newCount : 0), 0),
     prunedCount,
+    clearedImageCount,
   };
 }
 
@@ -605,15 +607,55 @@ export async function runCuratedArticleFetch(
 export async function pruneStalePendingArticles(now: Date = new Date(), retentionDays?: number): Promise<number> {
   const days = retentionDays ?? (await getCuratedArticlesPendingRetentionDays());
   const cutoff = new Date(now.getTime() - days * DAY_MS);
+  // approvedAt: null — an article that was ever published (and may have a
+  // member discussion) is never auto-deleted, even if an admin later moved
+  // it back to pending: deleting it would hard-delete its thread and every
+  // reply. Those can only be rejected.
   const stale = await db.externalArticle.findMany({
-    where: { status: ExternalArticleStatus.pending, fetchedAt: { lt: cutoff } },
+    where: { status: ExternalArticleStatus.pending, approvedAt: null, fetchedAt: { lt: cutoff } },
     select: { id: true, imageKey: true },
     take: 500,
   });
   if (stale.length === 0) return 0;
-  await db.externalArticle.deleteMany({ where: { id: { in: stale.map((row) => row.id) }, status: ExternalArticleStatus.pending } });
+  await db.externalArticle.deleteMany({
+    where: { id: { in: stale.map((row) => row.id) }, status: ExternalArticleStatus.pending, approvedAt: null },
+  });
   for (const row of stale) await deleteArticleImage(row.imageKey);
   return stale.length;
+}
+
+/**
+ * Deletes the cached images of articles rejected more than the retention
+ * period ago (same setting as pending articles). The article rows are kept —
+ * that's what stops a rejected story from being fetched again — so only the
+ * image goes; a later re-approval shows the placeholder until an admin adds
+ * one. Pending, scheduled and published articles are never touched.
+ */
+export async function pruneRejectedArticleImages(now: Date = new Date(), retentionDays?: number): Promise<number> {
+  const days = retentionDays ?? (await getCuratedArticlesPendingRetentionDays());
+  const cutoff = new Date(now.getTime() - days * DAY_MS);
+  const rejected = await db.externalArticle.findMany({
+    where: {
+      status: ExternalArticleStatus.rejected,
+      imageKey: { not: null },
+      // Rejection time; fetch time for any row rejected before reviewedAt existed.
+      OR: [{ reviewedAt: { lt: cutoff } }, { reviewedAt: null, fetchedAt: { lt: cutoff } }],
+    },
+    select: { id: true, imageKey: true },
+    take: 500,
+  });
+  let cleared = 0;
+  for (const row of rejected) {
+    // Compare-and-set: skip if it was re-approved or given a new image meanwhile.
+    const result = await db.externalArticle.updateMany({
+      where: { id: row.id, status: ExternalArticleStatus.rejected, imageKey: row.imageKey },
+      data: { imageKey: null, originalImageUrl: null },
+    });
+    if (result.count === 0) continue;
+    await deleteArticleImage(row.imageKey);
+    cleared++;
+  }
+  return cleared;
 }
 
 /**
