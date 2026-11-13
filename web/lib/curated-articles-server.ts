@@ -16,6 +16,15 @@ import {
 } from "@/lib/curated-article-fetch";
 import { getCuratedArticleImageUrl, type ArticleSourceDto, type ExternalArticleDto } from "@/lib/curated-articles";
 import type { ArticleSourceInput, CuratedArticleUpdateInput } from "@/lib/validation/curated-articles";
+import {
+  ADDED_BY_LINK,
+  QUEUE_PAGE_SIZE,
+  clampPage,
+  defaultSort,
+  type QueueSort,
+  type QueueSource,
+  type QueueStatus,
+} from "@/lib/curated-queue-params";
 
 export class CuratedArticleError extends Error {
   constructor(
@@ -194,26 +203,46 @@ function toArticleDto(article: ArticleWithDtoRelations): ExternalArticleDto {
   };
 }
 
-export const CURATED_QUEUE_PAGE_SIZE = 50;
+/**
+ * One page of a review-queue tab. Sorted by the date that matters for the tab
+ * (fetched for Pending, queued for Scheduled, published for Published,
+ * reviewed for Rejected), newest or oldest first, optionally narrowed to one
+ * source (or ADDED_BY_LINK for admin-added articles). An out-of-range page is
+ * clamped to the last one.
+ */
+export async function listCuratedArticles(
+  status: ExternalArticleStatus,
+  options: { page?: number; sort?: QueueSort; source?: QueueSource } = {},
+): Promise<{ items: ExternalArticleDto[]; total: number; page: number; pageCount: number }> {
+  const sort = options.sort ?? defaultSort(status as QueueStatus);
+  const direction = sort === "oldest" ? "asc" : "desc";
+  const where = {
+    status,
+    ...(options.source === ADDED_BY_LINK ? { sourceId: null } : options.source ? { sourceId: options.source } : {}),
+  };
+  const dateField =
+    status === ExternalArticleStatus.approved
+      ? "approvedAt"
+      : status === ExternalArticleStatus.scheduled
+        ? "scheduledAt"
+        : status === ExternalArticleStatus.rejected
+          ? "reviewedAt"
+          : "fetchedAt";
+  const total = await db.externalArticle.count({ where });
+  const { page, pageCount } = clampPage(options.page ?? 1, total);
+  const items = await db.externalArticle.findMany({
+    where,
+    include: ARTICLE_DTO_INCLUDE,
+    orderBy: [{ [dateField]: direction }, { id: direction }],
+    skip: (page - 1) * QUEUE_PAGE_SIZE,
+    take: QUEUE_PAGE_SIZE,
+  });
+  return { items: items.map(toArticleDto), total, page, pageCount };
+}
 
-export async function listCuratedArticles(status: ExternalArticleStatus): Promise<{ items: ExternalArticleDto[]; total: number }> {
-  const [items, total] = await Promise.all([
-    db.externalArticle.findMany({
-      where: { status },
-      include: ARTICLE_DTO_INCLUDE,
-      orderBy:
-        status === ExternalArticleStatus.approved
-          ? [{ approvedAt: "desc" }]
-          : status === ExternalArticleStatus.scheduled
-            ? [{ scheduledAt: "asc" }, { id: "asc" }]
-            : status === ExternalArticleStatus.rejected
-            ? [{ reviewedAt: "desc" }]
-            : [{ fetchedAt: "desc" }, { publishedAt: "desc" }],
-      take: CURATED_QUEUE_PAGE_SIZE,
-    }),
-    db.externalArticle.count({ where: { status } }),
-  ]);
-  return { items: items.map(toArticleDto), total };
+/** Sources for the review queue's filter, by name. */
+export async function listArticleSourceOptions(): Promise<{ id: string; name: string }[]> {
+  return db.articleSource.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } });
 }
 
 export async function getCuratedArticleCounts(): Promise<Record<ExternalArticleStatus, number>> {
