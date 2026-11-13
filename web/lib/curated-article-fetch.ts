@@ -251,14 +251,69 @@ export async function storeArticleImage(input: Buffer): Promise<string> {
   return key;
 }
 
-/** Downloads `imageUrl` and caches it; null (never throws) when it can't be used. */
+let storageErrorLogged = false;
+
+/**
+ * Downloads `imageUrl` and caches it; null (never throws) when it can't be
+ * used. A bad or unreachable image is expected and skipped quietly, but a
+ * storage failure (MinIO unreachable or misconfigured) is logged once per
+ * process, since it means *every* article is silently losing its image.
+ */
 export async function cacheArticleImage(imageUrl: string, get: HttpGet = safeGet): Promise<string | null> {
+  let body: Buffer;
   try {
-    const response = await get(imageUrl, { maxBytes: MAX_IMAGE_BYTES, accept: "image/avif,image/webp,image/*;q=0.8" });
-    return await storeArticleImage(response.body);
+    body = (await get(imageUrl, { maxBytes: MAX_IMAGE_BYTES, accept: "image/avif,image/webp,image/*;q=0.8" })).body;
   } catch {
     return null;
   }
+  try {
+    return await storeArticleImage(body);
+  } catch (error) {
+    if (!(error instanceof ArticleFetchError) && !storageErrorLogged) {
+      storageErrorLogged = true;
+      console.error("[curated-articles] couldn't store an article image — check the MinIO settings:", error);
+    }
+    return null;
+  }
+}
+
+/**
+ * Looks up and caches an image for published/queued articles that have none
+ * (link-preview image, then the article-body fallback). For recovering after
+ * images couldn't be stored; run via scripts/backfill-curated-article-images.ts.
+ */
+export async function backfillMissingArticleImages(
+  options: { limit?: number; get?: HttpGet } = {},
+): Promise<{ checked: number; filled: number }> {
+  const get = options.get ?? safeGet;
+  const articles = await db.externalArticle.findMany({
+    where: { imageKey: null, status: { not: ExternalArticleStatus.rejected } },
+    select: { id: true, url: true },
+    orderBy: { fetchedAt: "desc" },
+    take: options.limit ?? 500,
+  });
+  let filled = 0;
+  for (const article of articles) {
+    let preview: Awaited<ReturnType<typeof fetchPagePreview>>;
+    try {
+      preview = await fetchPagePreview(article.url, get);
+    } catch {
+      continue;
+    }
+    const candidates = [
+      ...(preview.imageUrl && !(await isGenericSiteImage(preview.imageUrl)) ? [preview.imageUrl] : []),
+      ...preview.bodyImageUrls,
+    ];
+    const cached = await cacheFirstImage(candidates, get);
+    if (!cached) continue;
+    const result = await db.externalArticle.updateMany({
+      where: { id: article.id, imageKey: null },
+      data: { imageKey: cached.key, originalImageUrl: cached.sourceUrl },
+    });
+    if (result.count > 0) filled++;
+    else await deleteArticleImage(cached.key);
+  }
+  return { checked: articles.length, filled };
 }
 
 /**
@@ -269,7 +324,7 @@ export async function cacheFirstImage(
   candidates: string[],
   get: HttpGet = safeGet,
 ): Promise<{ key: string; sourceUrl: string } | null> {
-  for (const candidate of candidates.slice(0, MAX_BODY_IMAGE_CANDIDATES)) {
+  for (const candidate of candidates.slice(0, MAX_BODY_IMAGE_CANDIDATES + 1)) {
     const key = await cacheArticleImage(candidate, get);
     if (key) return { key, sourceUrl: candidate };
   }

@@ -154,10 +154,20 @@ services:
       NODE_ENV: production
       MEILI_HOST: http://meilisearch:7700
       MEILI_MASTER_KEY: nasiha-dev-master-key
+      # Curated "From the Web" articles: the fetch job caches each article's
+      # thumbnail in MinIO (lib/curated-article-fetch.ts), so the worker needs
+      # the same connection settings as the app.
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_USE_SSL: "false"
+      MINIO_ACCESS_KEY: nasiha
+      MINIO_SECRET_KEY: nasiha123
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
       meilisearch:
         condition: service_healthy
