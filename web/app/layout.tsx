@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Inter_Tight, IBM_Plex_Sans, Montserrat, Mulish, Lora, Source_Serif_4 } from "next/font/google";
+import localFont from "next/font/local";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 import { cn } from "@/lib/utils";
@@ -13,26 +13,58 @@ import { JsonLd } from "@/components/json-ld";
 import { buildOrganizationJsonLd } from "@/lib/json-ld";
 import { Analytics } from "@/components/analytics";
 
-// The full curated font set is preloaded here regardless of which one is
-// active — next/font/google self-hosts fonts at build time, so the admin's
-// choice (SiteSettings.bodyFont/headingFont) can only select among fonts
-// already bundled, not load an arbitrary Google Font at runtime. See
-// lib/fonts.ts for the option list and CSS variable names.
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-const interTight = Inter_Tight({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+// The full curated font set is bundled here regardless of which one is
+// active, so the admin's choice (SiteSettings.bodyFont/headingFont) can only
+// select among these fonts. See lib/fonts.ts for the option list and CSS
+// variable names.
+//
+// Loaded from files committed in app/fonts (next/font/local), not
+// next/font/google: the Google loader downloads every family from Google
+// Fonts during `next build`, and an occasional unparseable response from
+// Google failed the whole build (and with it a VPS deploy). These are the
+// same Latin-subset variable files Google serves; see app/fonts/README.md.
+const inter = localFont({
+  src: "./fonts/inter-latin-variable.woff2",
+  weight: "100 900",
+  variable: "--font-inter",
+  adjustFontFallback: "Arial",
+});
+const interTight = localFont({
+  src: "./fonts/inter-tight-latin-variable.woff2",
+  weight: "400 700",
   variable: "--font-inter-tight",
+  adjustFontFallback: "Arial",
 });
-const ibmPlexSans = IBM_Plex_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+const ibmPlexSans = localFont({
+  src: "./fonts/ibm-plex-sans-latin-variable.woff2",
+  weight: "400 700",
   variable: "--font-ibm-plex-sans",
+  adjustFontFallback: "Arial",
 });
-const montserrat = Montserrat({ subsets: ["latin"], variable: "--font-montserrat" });
-const mulish = Mulish({ subsets: ["latin"], variable: "--font-mulish" });
-const lora = Lora({ subsets: ["latin"], variable: "--font-lora" });
-const sourceSerif4 = Source_Serif_4({ subsets: ["latin"], variable: "--font-source-serif-4" });
+const montserrat = localFont({
+  src: "./fonts/montserrat-latin-variable.woff2",
+  weight: "100 900",
+  variable: "--font-montserrat",
+  adjustFontFallback: "Arial",
+});
+const mulish = localFont({
+  src: "./fonts/mulish-latin-variable.woff2",
+  weight: "200 1000",
+  variable: "--font-mulish",
+  adjustFontFallback: "Arial",
+});
+const lora = localFont({
+  src: "./fonts/lora-latin-variable.woff2",
+  weight: "400 700",
+  variable: "--font-lora",
+  adjustFontFallback: "Times New Roman",
+});
+const sourceSerif4 = localFont({
+  src: "./fonts/source-serif-4-latin-variable.woff2",
+  weight: "200 900",
+  variable: "--font-source-serif-4",
+  adjustFontFallback: "Times New Roman",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

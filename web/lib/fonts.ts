@@ -2,9 +2,10 @@ import { BodyFont, HeadingFont } from "@/lib/generated/prisma/enums";
 
 /**
  * Curated, admin-selectable font set. Each entry's `variable` must match the
- * CSS variable name a next/font/google loader was given in app/layout.tsx —
- * next/font self-hosts fonts at build time, so the admin picks among a fixed
- * preloaded set rather than typing an arbitrary Google Font name.
+ * CSS variable name a next/font/local loader was given in app/layout.tsx —
+ * the font files are committed in app/fonts, so the admin picks among a fixed
+ * bundled set rather than typing an arbitrary Google Font name. Adding a font
+ * means adding its file there too (see app/fonts/README.md).
  */
 export const BODY_FONT_OPTIONS: Record<BodyFont, { label: string; variable: string }> = {
   [BodyFont.inter]: { label: "Inter", variable: "--font-inter" },
