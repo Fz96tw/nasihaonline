@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --test --experimental-strip-types lib/presenter-overlay/*.test.ts lib/reflection-*.test.ts lib/feed-author.test.ts lib/games.test.ts lib/game-2048.test.ts lib/event-guest-access.test.ts lib/guest-address.test.ts lib/meeting-backgrounds.test.ts lib/community-report.test.ts lib/forum-indexing.test.ts lib/gated-href.test.ts lib/event-seo.test.ts lib/curated-article-parse.test.ts lib/curated-article-schedule.test.ts",
+    "test": "node --test --experimental-strip-types lib/presenter-overlay/*.test.ts lib/reflection-*.test.ts lib/feed-author.test.ts lib/games.test.ts lib/game-2048.test.ts lib/event-guest-access.test.ts lib/guest-address.test.ts lib/meeting-backgrounds.test.ts lib/community-report.test.ts lib/forum-indexing.test.ts lib/gated-href.test.ts lib/event-seo.test.ts lib/curated-article-parse.test.ts lib/curated-article-schedule.test.ts lib/host-pacer.test.ts",
     "worker": "tsx scripts/worker.ts",
     "reindex:profiles": "tsx scripts/reindex-profiles.ts",
     "reindex:library": "tsx scripts/reindex-library.ts",
@@ -17,7 +17,7 @@
     "reindex:announcements": "tsx scripts/reindex-announcements.ts",
     "reindex:surveys": "tsx scripts/reindex-surveys.ts",
     "reindex:review-items": "tsx scripts/reindex-review-items.ts",
-    "test:db": "NODE_OPTIONS='--require ./lib/test-support/stub-server-only.cjs' tsx --test --test-concurrency=1 lib/weekly-reflection.db.test.ts lib/weekly-reflection-admin.db.test.ts lib/weekly-reflection-look.db.test.ts lib/weekly-reflection-replace.db.test.ts lib/event-guests.db.test.ts lib/public-content.db.test.ts lib/welcome-announcement.db.test.ts lib/curated-articles.db.test.ts lib/curated-articles-release.db.test.ts lib/curated-articles-images.db.test.ts lib/curated-articles-bulk.db.test.ts",
+    "test:db": "NODE_OPTIONS='--require ./lib/test-support/stub-server-only.cjs' tsx --test --test-concurrency=1 lib/weekly-reflection.db.test.ts lib/weekly-reflection-admin.db.test.ts lib/weekly-reflection-look.db.test.ts lib/weekly-reflection-replace.db.test.ts lib/event-guests.db.test.ts lib/public-content.db.test.ts lib/welcome-announcement.db.test.ts lib/curated-articles.db.test.ts lib/curated-articles-release.db.test.ts lib/curated-articles-images.db.test.ts lib/curated-articles-bulk.db.test.ts lib/curated-articles-links.db.test.ts",
     "test:seo": "node --test scripts/seo-metadata.test.mjs",
     "test:seo:mobile": "node --test scripts/seo-mobile-text.test.mjs"
   },

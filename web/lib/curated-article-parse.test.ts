@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   ARTICLE_EXCERPT_MAX,
+  cleanArticleLink,
   findArticleBodyImages,
   buildNewsSearchFeedUrl,
   htmlToPlainText,
@@ -189,5 +190,24 @@ describe("[AC:57bbacfa:ac_1] [AC:57bbacfa:ac_2] article-body image fallback cand
     const preview = parsePagePreview(page, "https://news.example.org/story/1");
     assert.equal(preview.imageUrl, null);
     assert.equal(preview.bodyImageUrls[0], "https://news.example.org/img/lead-photo.jpg");
+  });
+});
+
+describe("[AC:7d211c48:ac_1] [AC:7d211c48:ac_3] publisher link vs dedupe key", () => {
+  it("keeps the publisher's link as published, minus tracking parameters and fragment", () => {
+    assert.equal(
+      cleanArticleLink("https://knowledge.wharton.upenn.edu/article/why-ai/?utm_source=rss&utm_medium=feed#comments"),
+      "https://knowledge.wharton.upenn.edu/article/why-ai/",
+      "trailing slash kept",
+    );
+    assert.equal(cleanArticleLink("https://e.org/a?z=1&a=2&fbclid=x"), "https://e.org/a?z=1&a=2", "parameter order kept");
+    assert.equal(cleanArticleLink("https://e.org/a?b=1&a=2"), "https://e.org/a?b=1&a=2", "untouched when nothing to strip");
+    assert.equal(cleanArticleLink("javascript:alert(1)"), null);
+  });
+
+  it("the dedupe key still treats slash/tracking variants as one story", () => {
+    const a = normalizeArticleUrl("https://knowledge.wharton.upenn.edu/article/why-ai/?utm_source=rss");
+    const b = normalizeArticleUrl("https://knowledge.wharton.upenn.edu/article/why-ai");
+    assert.equal(a, b);
   });
 });

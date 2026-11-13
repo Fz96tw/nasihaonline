@@ -56,6 +56,33 @@ export function normalizeArticleUrl(raw: string): string | null {
 }
 
 /**
+ * The link members are sent to: the publisher's own URL with only tracking
+ * parameters and the fragment removed — path, trailing slash, host case and
+ * the order of the remaining parameters are left exactly as published, since
+ * some sites redirect (or their bot protection objects) when those change.
+ * normalizeArticleUrl's stricter form is only the dedupe key. Null for
+ * anything that isn't an absolute http(s) URL.
+ */
+export function cleanArticleLink(raw: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  url.hash = "";
+  const kept = Array.from(url.searchParams.entries()).filter(
+    ([key]) => !TRACKING_PARAM_PATTERNS.some((pattern) => pattern.test(key)),
+  );
+  if (kept.length !== Array.from(url.searchParams.keys()).length) {
+    url.search = "";
+    for (const [key, value] of kept) url.searchParams.append(key, value);
+  }
+  return url.toString();
+}
+
+/**
  * News-search aggregator links point at a click-tracking redirect, with the
  * real article in a query parameter (Bing News: apiclick.aspx?url=…).
  * Returns the wrapped URL, or the link unchanged when it isn't one.

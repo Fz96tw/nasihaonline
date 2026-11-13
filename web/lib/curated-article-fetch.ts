@@ -12,11 +12,13 @@ import { db } from "@/lib/db";
 import { ArticleSourceKind, ExternalArticleStatus } from "@/lib/generated/prisma/enums";
 import { getCuratedArticlesFetchEnabled, getCuratedArticlesPendingRetentionDays } from "@/lib/settings";
 import { CURATED_ARTICLE_IMAGE_PREFIX } from "@/lib/curated-articles";
+import { createHostPacer } from "@/lib/host-pacer";
 import {
   ARTICLE_EXCERPT_MAX,
   ARTICLE_TITLE_MAX,
   MAX_BODY_IMAGE_CANDIDATES,
   buildNewsSearchFeedUrl,
+  cleanArticleLink,
   hostnameLabel,
   matchesKeywordRules,
   normalizeArticleUrl,
@@ -118,10 +120,15 @@ export type HttpGet = (url: string, options: HttpGetOptions) => Promise<SafeResp
  * on bytes read (the rest of the body is discarded unread). A 304 comes back
  * with an empty body.
  */
+// One pacer per process: at least 1.5s between requests to the same host
+// (lib/host-pacer.ts), every redirect hop included.
+const paceHost = createHostPacer();
+
 export async function safeGet(rawUrl: string, options: HttpGetOptions): Promise<SafeResponse> {
   let current = new URL(rawUrl);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     await assertPublicHttpUrl(current);
+    await paceHost(current.hostname);
     let response: Response;
     try {
       response = await fetch(current, {
@@ -418,8 +425,9 @@ async function fetchOneSource(source: SourceForFetch, now: Date, get: HttpGet, e
     .filter((entry) => !entry.publishedAt || entry.publishedAt.getTime() >= cutoff)
     .filter((entry) => matchesKeywordRules(`${entry.title} ${entry.summary}`, source))
     .flatMap((entry) => {
-      const url = normalizeArticleUrl(unwrapAggregatorLink(entry.link));
-      return url ? [{ ...entry, url }] : [];
+      const publisherLink = unwrapAggregatorLink(entry.link);
+      const url = normalizeArticleUrl(publisherLink);
+      return url ? [{ ...entry, url, linkUrl: cleanArticleLink(publisherLink) ?? url }] : [];
     });
 
   const existing = new Set(
@@ -436,6 +444,7 @@ async function fetchOneSource(source: SourceForFetch, now: Date, get: HttpGet, e
     existing.add(entry.url);
 
     let url = entry.url;
+    let linkUrl = entry.linkUrl;
     let summary = entry.summary;
     let imageUrl = entry.imageUrl;
     let siteName: string | null = null;
@@ -456,6 +465,7 @@ async function fetchOneSource(source: SourceForFetch, now: Date, get: HttpGet, e
           if (existing.has(canonical) || (await db.externalArticle.count({ where: { url: canonical } })) > 0) continue;
           existing.add(canonical);
           url = canonical;
+          linkUrl = cleanArticleLink(preview.canonicalUrl as string) ?? canonical;
         }
       } catch {
         // A page we can't read still gets queued, with whatever the feed gave us.
@@ -479,6 +489,7 @@ async function fetchOneSource(source: SourceForFetch, now: Date, get: HttpGet, e
         data: {
           sourceId: source.id,
           url,
+          linkUrl,
           title: truncateText(stripPublisherSuffix(entry.title, sourceName), ARTICLE_TITLE_MAX),
           excerpt: truncateText(summary, ARTICLE_EXCERPT_MAX),
           sourceName,
@@ -596,6 +607,8 @@ export async function pruneStalePendingArticles(now: Date = new Date(), retentio
  */
 export async function previewArticleFromUrl(rawUrl: string, get: HttpGet = safeGet): Promise<{
   url: string;
+  /** The publisher's link to send members to (see ExternalArticle.linkUrl). */
+  linkUrl: string;
   title: string;
   excerpt: string;
   sourceName: string;
@@ -604,13 +617,16 @@ export async function previewArticleFromUrl(rawUrl: string, get: HttpGet = safeG
 }> {
   const normalized = normalizeArticleUrl(rawUrl);
   if (!normalized) throw new ArticleFetchError("Enter a full http(s) link.");
-  const preview = await fetchPagePreview(normalized, get);
+  // Request the link as the admin pasted it (minus tracking parameters), not
+  // the dedupe form, so we don't trigger the publisher's slash redirect.
+  const preview = await fetchPagePreview(cleanArticleLink(rawUrl) ?? normalized, get);
   const canonical = preview.canonicalUrl ? normalizeArticleUrl(preview.canonicalUrl) : null;
   const url = canonical ?? normalizeArticleUrl(preview.finalUrl) ?? normalized;
   if (!preview.title) throw new ArticleFetchError("Couldn't find a title on that page.");
   const sourceName = preview.siteName ?? hostnameLabel(url);
   return {
     url,
+    linkUrl: cleanArticleLink(canonical ? (preview.canonicalUrl as string) : preview.finalUrl) ?? url,
     title: truncateText(stripPublisherSuffix(preview.title, sourceName), ARTICLE_TITLE_MAX),
     excerpt: truncateText(preview.description ?? "", ARTICLE_EXCERPT_MAX),
     sourceName,

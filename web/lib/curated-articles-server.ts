@@ -156,6 +156,7 @@ const ARTICLE_DTO_INCLUDE = {
 type ArticleWithDtoRelations = {
   id: string;
   url: string;
+  linkUrl: string | null;
   title: string;
   excerpt: string;
   sourceName: string;
@@ -174,7 +175,8 @@ type ArticleWithDtoRelations = {
 function toArticleDto(article: ArticleWithDtoRelations): ExternalArticleDto {
   return {
     id: article.id,
-    url: article.url,
+    // Admins open the same link members get.
+    url: article.linkUrl ?? article.url,
     title: article.title,
     excerpt: article.excerpt,
     sourceName: article.sourceName,
@@ -331,7 +333,7 @@ export async function addCuratedArticleByUrl(
 
   let preview: Awaited<ReturnType<typeof previewArticleFromUrl>>;
   try {
-    preview = await previewArticleFromUrl(normalized, options.get);
+    preview = await previewArticleFromUrl(input.url, options.get);
   } catch (error) {
     if (error instanceof ArticleFetchError) throw new CuratedArticleError(400, `Couldn't read that page: ${error.message}`);
     throw new CuratedArticleError(400, "Couldn't read that page.");
@@ -352,6 +354,7 @@ export async function addCuratedArticleByUrl(
     const article = await tx.externalArticle.create({
       data: {
         url: preview.url,
+        linkUrl: preview.linkUrl,
         title: preview.title,
         excerpt: preview.excerpt,
         sourceName: preview.sourceName,
@@ -499,7 +502,7 @@ export async function removeCuratedArticleImage(id: string, adminId: string): Pr
 export async function startCuratedArticleDiscussion(articleId: string, actingUserId: string): Promise<{ threadId: string }> {
   const article = await db.externalArticle.findUnique({
     where: { id: articleId },
-    select: { id: true, title: true, url: true, sourceName: true, status: true, forumThread: { select: { id: true } } },
+    select: { id: true, title: true, url: true, linkUrl: true, sourceName: true, status: true, forumThread: { select: { id: true } } },
   });
   if (!article || article.status !== ExternalArticleStatus.approved) throw new CuratedArticleError(404, "Article not found.");
   if (article.forumThread) return { threadId: article.forumThread.id };
@@ -517,7 +520,7 @@ export async function startCuratedArticleDiscussion(articleId: string, actingUse
         data: {
           threadId: created.id,
           authorId: actingUserId,
-          body: `Discussion thread for this article from ${article.sourceName}: ${article.url}\n\nRead it, then share your thoughts below.`,
+          body: `Discussion thread for this article from ${article.sourceName}: ${article.linkUrl ?? article.url}\n\nRead it, then share your thoughts below.`,
         },
       });
       return created;

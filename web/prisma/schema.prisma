@@ -3148,6 +3148,11 @@ model ExternalArticle {
   // Normalized (tracking parameters stripped, redirects resolved) — the
   // dedupe key, so the same story from two feeds is stored once.
   url              String                @unique
+  // The link members are sent to: the publisher's own URL (tracking
+  // parameters and fragment removed, otherwise exactly as published — e.g.
+  // trailing slash kept). Null for articles stored before this existed;
+  // readers fall back to `url`.
+  linkUrl          String?
   title            String
   // Short blurb shown on the feed row: the feed's own summary or the page's
   // og:description, truncated — never the article body. Admin-editable.

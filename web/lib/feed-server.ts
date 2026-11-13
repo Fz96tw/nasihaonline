@@ -815,6 +815,7 @@ export async function getFeedPage(params: {
       select: {
         id: true,
         url: true,
+        linkUrl: true,
         title: true,
         excerpt: true,
         sourceName: true,
@@ -1390,9 +1391,11 @@ export async function getFeedPage(params: {
       const approvedAt = article.approvedAt as Date; // where clause guarantees approved + approvedAt set
       const thread = article.forumThread;
       const threadHref = thread ? withFeedRef(`/forums/${FROM_THE_WEB_FORUM_SLUG}/${thread.id}`, query) : null;
+      // The publisher's own link; older rows only have the dedupe URL.
+      const link = article.linkUrl ?? article.url;
       const articleMeta = {
         articleId: article.id,
-        url: article.url,
+        url: link,
         sourceName: article.sourceName,
         threadHref,
         replyCount: thread ? thread._count.posts - 1 : 0,
@@ -1402,7 +1405,7 @@ export async function getFeedPage(params: {
         id: article.id,
         title: article.title,
         excerpt: excerptOf(article.excerpt),
-        href: article.url,
+        href: link,
         timestamp: approvedAt.toISOString(),
         // Admin-curated, so credited to the organization (same masked,
         // unfollowable identity as Board announcements); the publisher is
