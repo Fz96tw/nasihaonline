@@ -295,7 +295,63 @@ export type PagePreview = {
   imageUrl: string | null;
   siteName: string | null;
   canonicalUrl: string | null;
+  /** Fallback candidates from the article body (findArticleBodyImages), used only when there's no imageUrl. */
+  bodyImageUrls: string[];
 };
+
+/** How many body images the fetch will try before settling for the placeholder. */
+export const MAX_BODY_IMAGE_CANDIDATES = 4;
+
+// File names / attributes that mark site chrome rather than a story photo.
+const NON_PHOTO_PATTERN =
+  /(^|[^a-z])(logo|icon|favicon|avatar|gravatar|sprite|pixel|spacer|blank|badge|emoji|placeholder|tracking|tracker|beacon|advert|ads?|banner-ad|doubleclick|share|social|subscribe|newsletter|author|byline|headshot)([^a-z]|$)/i;
+
+/** The first <article>, else <main>, else <body> — where a story's own images live. */
+function articleRegion(html: string): string {
+  for (const tag of ["article", "main"]) {
+    const open = new RegExp(`<${tag}\\b[^>]*>`, "i").exec(html);
+    if (open) {
+      const rest = html.slice(open.index + open[0].length);
+      const close = rest.search(new RegExp(`</${tag}>`, "i"));
+      return close >= 0 ? rest.slice(0, close) : rest;
+    }
+  }
+  const body = /<body\b[^>]*>/i.exec(html);
+  return body ? html.slice(body.index + body[0].length) : html;
+}
+
+/**
+ * Candidate story images from an article page's body, in document order, for
+ * when neither the feed nor the link-preview tags name an image. Looks only
+ * inside the article/main region (not header, sidebar or footer), reads lazy-
+ * loading attributes too, and skips data: URIs, SVG/GIF, anything that looks
+ * like a logo/icon/avatar/ad/tracking pixel, and declared sizes under
+ * 200×100. Capped at MAX_BODY_IMAGE_CANDIDATES; the caller still checks real
+ * dimensions when it downloads one. Never returns any text.
+ */
+export function findArticleBodyImages(html: string, pageUrl: string): string[] {
+  const region = articleRegion(html.replace(/<(script|style|noscript|svg)[^>]*>[\s\S]*?<\/\1>/gi, " "));
+  const found: string[] = [];
+  for (const tag of region.match(/<img\b[^>]*>/gi) ?? []) {
+    const attrs = parseAttributes(tag);
+    const raw =
+      attrs["data-src"] || attrs["data-lazy-src"] || attrs["data-original"] || attrs.src || (attrs.srcset ?? attrs["data-srcset"] ?? "").split(",")[0]?.trim().split(/\s+/)[0] || "";
+    if (!raw || raw.startsWith("data:")) continue;
+    const url = absolutize(raw, pageUrl);
+    if (!url) continue;
+    const path = new URL(url).pathname.toLowerCase();
+    if (path.endsWith(".svg") || path.endsWith(".gif")) continue;
+    // Path, class and id only — alt text is a caption ("Students share…"), not a role.
+    const descriptor = [path, attrs.class, attrs.id].filter(Boolean).join(" ");
+    if (NON_PHOTO_PATTERN.test(descriptor)) continue;
+    const width = Number.parseInt(attrs.width ?? "", 10);
+    const height = Number.parseInt(attrs.height ?? "", 10);
+    if ((Number.isFinite(width) && width < 200) || (Number.isFinite(height) && height < 100)) continue;
+    if (!found.includes(url)) found.push(url);
+    if (found.length >= MAX_BODY_IMAGE_CANDIDATES) break;
+  }
+  return found;
+}
 
 function parseAttributes(tag: string): Record<string, string> {
   const attrs: Record<string, string> = {};
@@ -339,6 +395,7 @@ export function parsePagePreview(html: string, pageUrl: string): PagePreview {
     imageUrl: absolutize(pick("og:image:secure_url", "og:image", "og:image:url", "twitter:image", "twitter:image:src"), pageUrl),
     siteName: pick("og:site_name", "application-name"),
     canonicalUrl: canonical,
+    bodyImageUrls: findArticleBodyImages(html, pageUrl),
   };
 }
 

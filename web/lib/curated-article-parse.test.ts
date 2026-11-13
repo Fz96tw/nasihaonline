@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   ARTICLE_EXCERPT_MAX,
+  findArticleBodyImages,
   buildNewsSearchFeedUrl,
   htmlToPlainText,
   matchesKeywordRules,
@@ -128,6 +129,7 @@ describe("[AC:dfdf223a:ac_4] link-preview metadata only, never article text", ()
       imageUrl: "https://cdn.example.org/moss.jpg",
       siteName: "Reasons to be Cheerful",
       canonicalUrl: "https://reasonstobecheerful.world/moss-as-living-infrastructure",
+      bodyImageUrls: [],
     });
     assert.ok(!JSON.stringify(preview).includes("SECRET"), "body text is never read");
   });
@@ -145,5 +147,47 @@ describe("[AC:dfdf223a:ac_4] link-preview metadata only, never article text", ()
     assert.ok(cut.endsWith("…"));
     assert.equal(htmlToPlainText("<p>a&nbsp;b</p><script>x()</script>"), "a b");
     assert.equal(stripPublisherSuffix("Big news - The Daily", "The Daily"), "Big news");
+  });
+});
+
+describe("[AC:57bbacfa:ac_1] [AC:57bbacfa:ac_2] article-body image fallback candidates", () => {
+  const page = `<html><head><title>x</title></head><body>
+    <header><img src="/static/site-photo-header.jpg"></header>
+    <aside><img src="https://cdn.example.org/sidebar-promo.jpg"></aside>
+    <article class="story">
+      <img src="/assets/logo.png" alt="Students share their project">
+      <img src="/img/diagram.svg">
+      <img src="/img/animation.gif">
+      <img src="data:image/png;base64,AAAA">
+      <img src="/img/thumb.jpg" width="80" height="80">
+      <img class="author-headshot" src="/img/jane.jpg">
+      <img src="data:image/gif;base64,R0lGOD" data-src="/img/lead-photo.jpg" alt="Students share their project">
+      <img srcset="/img/second-640.jpg 640w, /img/second-1280.jpg 1280w">
+      <img src="https://cdn.example.org/third.webp">
+      <img src="/img/fourth.jpg"><img src="/img/fifth.jpg">
+    </article>
+    <footer><img src="/img/footer-photo.jpg"></footer>
+  </body></html>`;
+
+  it("takes only story photos from inside <article>, skipping chrome, SVG/GIF, data: URIs and declared-tiny images", () => {
+    assert.deepEqual(findArticleBodyImages(page, "https://news.example.org/story/1"), [
+      "https://news.example.org/img/lead-photo.jpg",
+      "https://news.example.org/img/second-640.jpg",
+      "https://cdn.example.org/third.webp",
+      "https://news.example.org/img/fourth.jpg",
+    ]);
+  });
+
+  it("is capped at 4 candidates and falls back to <main>, then <body>", () => {
+    const many = `<main>${Array.from({ length: 9 }, (_, i) => `<img src="/p${i}.jpg">`).join("")}</main>`;
+    assert.equal(findArticleBodyImages(many, "https://e.org/").length, 4);
+    assert.deepEqual(findArticleBodyImages("<body><p>Hi</p><img src='/only.jpg'></body>", "https://e.org/a"), ["https://e.org/only.jpg"]);
+    assert.deepEqual(findArticleBodyImages("<body><p>No images</p></body>", "https://e.org/"), []);
+  });
+
+  it("is exposed on the page preview alongside the og:image", () => {
+    const preview = parsePagePreview(page, "https://news.example.org/story/1");
+    assert.equal(preview.imageUrl, null);
+    assert.equal(preview.bodyImageUrls[0], "https://news.example.org/img/lead-photo.jpg");
   });
 });

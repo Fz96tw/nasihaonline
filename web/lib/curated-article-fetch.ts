@@ -15,6 +15,7 @@ import { CURATED_ARTICLE_IMAGE_PREFIX } from "@/lib/curated-articles";
 import {
   ARTICLE_EXCERPT_MAX,
   ARTICLE_TITLE_MAX,
+  MAX_BODY_IMAGE_CANDIDATES,
   buildNewsSearchFeedUrl,
   hostnameLabel,
   matchesKeywordRules,
@@ -34,6 +35,8 @@ const MAX_FEED_BYTES = 5 * 1024 * 1024;
 // Only the <head> is read; most pages put it well inside the first few hundred KB.
 const MAX_PAGE_BYTES = 1024 * 1024;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+/** Same cap as the app's other image uploads (lib/storage.ts). */
+const MAX_UPLOAD_IMAGE_BYTES = 5 * 1024 * 1024;
 const THUMBNAIL_WIDTH_PX = 1200;
 
 /** Entries older than this are ignored — a newly added source doesn't backfill its whole archive. */
@@ -231,7 +234,7 @@ export async function storeArticleImage(input: Buffer): Promise<string> {
     const metadata = await image.metadata();
     if (!metadata.width || !metadata.height) throw new Error("no dimensions");
     // Tiny images are icons/tracking pixels, not article photos.
-    if (metadata.width < 200 || metadata.height < 100) throw new ArticleFetchError("Image is too small to use.");
+    if (metadata.width < 200 || metadata.height < 100) throw new ArticleFetchError("That image is too small (it needs to be at least 200×100 pixels).");
     output = await image
       .rotate()
       .resize({ width: THUMBNAIL_WIDTH_PX, withoutEnlargement: true })
@@ -256,6 +259,42 @@ export async function cacheArticleImage(imageUrl: string, get: HttpGet = safeGet
   } catch {
     return null;
   }
+}
+
+/**
+ * Tries image URLs in order and caches the first one that downloads, decodes
+ * and passes the size check — the article-body fallback. Null when none do.
+ */
+export async function cacheFirstImage(
+  candidates: string[],
+  get: HttpGet = safeGet,
+): Promise<{ key: string; sourceUrl: string } | null> {
+  for (const candidate of candidates.slice(0, MAX_BODY_IMAGE_CANDIDATES)) {
+    const key = await cacheArticleImage(candidate, get);
+    if (key) return { key, sourceUrl: candidate };
+  }
+  return null;
+}
+
+/**
+ * An admin's uploaded replacement image: size-capped here, then the same
+ * decode/minimum-size checks and resize as fetched images.
+ */
+export async function storeUploadedArticleImage(input: Buffer): Promise<string> {
+  if (input.length > MAX_UPLOAD_IMAGE_BYTES) throw new ArticleFetchError("Images can be at most 5MB.");
+  return storeArticleImage(input);
+}
+
+/** An admin's pasted image link: fetched through the same public-address guard. Throws ArticleFetchError with the reason. */
+export async function storeLinkedArticleImage(imageUrl: string, get: HttpGet = safeGet): Promise<string> {
+  let parsed: URL;
+  try {
+    parsed = new URL(imageUrl);
+  } catch {
+    throw new ArticleFetchError("Enter the image's full http(s) link.");
+  }
+  const response = await get(parsed.toString(), { maxBytes: MAX_IMAGE_BYTES, accept: "image/avif,image/webp,image/*;q=0.8" });
+  return storeArticleImage(response.body);
 }
 
 export async function deleteArticleImage(key: string | null): Promise<void> {
@@ -345,6 +384,7 @@ async function fetchOneSource(source: SourceForFetch, now: Date, get: HttpGet): 
     let summary = entry.summary;
     let imageUrl = entry.imageUrl;
     let siteName: string | null = null;
+    let bodyImageUrls: string[] = [];
     const isNewsSearch = source.kind === ArticleSourceKind.news_search;
     // News-search results come from arbitrary publishers, so always read the
     // page for its real name/image; feed entries only when something's missing.
@@ -355,6 +395,7 @@ async function fetchOneSource(source: SourceForFetch, now: Date, get: HttpGet): 
         siteName = preview.siteName;
         if (!summary && preview.description) summary = preview.description;
         if (!imageUrl && preview.imageUrl) imageUrl = preview.imageUrl;
+        bodyImageUrls = preview.bodyImageUrls;
         const canonical = preview.canonicalUrl ? normalizeArticleUrl(preview.canonicalUrl) : null;
         if (canonical && canonical !== url) {
           if (existing.has(canonical) || (await db.externalArticle.count({ where: { url: canonical } })) > 0) continue;
@@ -368,7 +409,15 @@ async function fetchOneSource(source: SourceForFetch, now: Date, get: HttpGet): 
 
     const sourceName = isNewsSearch ? (siteName ?? hostnameLabel(url)) : source.name;
     const usableImage = imageUrl && !(await isGenericSiteImage(imageUrl)) ? imageUrl : null;
-    const imageKey = usableImage ? await cacheArticleImage(usableImage, get) : null;
+    let cachedImage: { key: string; sourceUrl: string } | null = null;
+    if (usableImage) {
+      const key = await cacheArticleImage(usableImage, get);
+      if (key) cachedImage = { key, sourceUrl: usableImage };
+    }
+    // Neither the feed nor the link-preview tags gave a usable image: fall
+    // back to the first suitable photo in the article body.
+    if (!cachedImage) cachedImage = await cacheFirstImage(bodyImageUrls, get);
+    const imageKey = cachedImage?.key ?? null;
 
     try {
       await db.externalArticle.create({
@@ -380,7 +429,7 @@ async function fetchOneSource(source: SourceForFetch, now: Date, get: HttpGet): 
           sourceName,
           publishedAt: entry.publishedAt,
           imageKey,
-          originalImageUrl: imageKey ? usableImage : null,
+          originalImageUrl: cachedImage?.sourceUrl ?? null,
           status: ExternalArticleStatus.pending,
           fetchedAt: now,
           communities: { create: source.communities.map((c) => ({ communityId: c.communityId })) },
@@ -482,16 +531,17 @@ export async function pruneStalePendingArticles(now: Date = new Date()): Promise
  * link-preview metadata and caches its image. Throws ArticleFetchError with
  * an admin-readable message when the page can't be used.
  */
-export async function previewArticleFromUrl(rawUrl: string): Promise<{
+export async function previewArticleFromUrl(rawUrl: string, get: HttpGet = safeGet): Promise<{
   url: string;
   title: string;
   excerpt: string;
   sourceName: string;
   imageUrl: string | null;
+  bodyImageUrls: string[];
 }> {
   const normalized = normalizeArticleUrl(rawUrl);
   if (!normalized) throw new ArticleFetchError("Enter a full http(s) link.");
-  const preview = await fetchPagePreview(normalized);
+  const preview = await fetchPagePreview(normalized, get);
   const canonical = preview.canonicalUrl ? normalizeArticleUrl(preview.canonicalUrl) : null;
   const url = canonical ?? normalizeArticleUrl(preview.finalUrl) ?? normalized;
   if (!preview.title) throw new ArticleFetchError("Couldn't find a title on that page.");
@@ -502,5 +552,6 @@ export async function previewArticleFromUrl(rawUrl: string): Promise<{
     excerpt: truncateText(preview.description ?? "", ARTICLE_EXCERPT_MAX),
     sourceName,
     imageUrl: preview.imageUrl,
+    bodyImageUrls: preview.bodyImageUrls,
   };
 }

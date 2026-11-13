@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, Check, ExternalLink, Pencil, RotateCcw, Send, X } from "lucide-react";
+import { CalendarClock, Check, ExternalLink, ImageOff, Link2, Pencil, RotateCcw, Send, Upload, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +22,115 @@ import {
 import { FROM_THE_WEB_FORUM_SLUG } from "@/lib/forums";
 import { CURATED_EXCERPT_MAX, CURATED_TITLE_MAX, curatedArticleUpdateSchema } from "@/lib/validation/curated-articles";
 import { CommunityPicker, communityNames, curatedAdminRequest } from "@/components/admin/curated-articles-shared";
+import { getCsrfToken } from "@/lib/csrf-client";
+
+/**
+ * Replace (upload or image link) or remove an article's image. Applies
+ * immediately — including to a published article's feed row — independent of
+ * the headline/blurb Save button.
+ */
+function ArticleImageControls({
+  article,
+  onChange,
+  disabled,
+}: {
+  article: ExternalArticleDto;
+  onChange: (next: ExternalArticleDto) => void;
+  disabled?: boolean;
+}) {
+  const [link, setLink] = useState("");
+  const [busy, setBusy] = useState<null | "upload" | "link" | "remove">(null);
+  const [error, setError] = useState<string | null>(null);
+  const endpoint = `/api/admin/curated-articles/articles/${article.id}/image`;
+
+  async function run(kind: "upload" | "link" | "remove", action: () => Promise<{ article: ExternalArticleDto }>) {
+    setBusy(kind);
+    setError(null);
+    try {
+      const result = await action();
+      onChange(result.article);
+      if (kind === "link") setLink("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't update the image.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function upload(file: File) {
+    await run("upload", async () => {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch(endpoint, { method: "POST", headers: { "x-csrf-token": await getCsrfToken() }, body });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(typeof payload?.error === "string" ? payload.error : "Couldn't upload that image.");
+      return payload as { article: ExternalArticleDto };
+    });
+  }
+
+  const locked = disabled || busy !== null;
+  return (
+    <fieldset className="flex flex-col gap-2" disabled={locked}>
+      <legend className="mb-1.5 text-sm font-medium">Image</legend>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button asChild size="sm" variant="outline" className={locked ? "pointer-events-none opacity-50" : "cursor-pointer"}>
+          <label>
+            <Upload className="mr-1.5 h-4 w-4" />
+            {busy === "upload" ? "Uploading…" : "Upload image"}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="sr-only"
+              disabled={locked}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void upload(file);
+              }}
+            />
+          </label>
+        </Button>
+        {article.imageUrl && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => run("remove", () => curatedAdminRequest("DELETE", endpoint))}
+          >
+            <ImageOff className="mr-1.5 h-4 w-4" />
+            {busy === "remove" ? "Removing…" : "Remove image"}
+          </Button>
+        )}
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          type="url"
+          inputMode="url"
+          aria-label="Image link"
+          placeholder="…or paste an image link (https://)"
+          value={link}
+          onChange={(e) => setLink(e.target.value)}
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={locked || !link.trim()}
+          onClick={() => run("link", () => curatedAdminRequest("POST", endpoint, { url: link.trim() }))}
+        >
+          <Link2 className="mr-1.5 h-4 w-4" />
+          {busy === "link" ? "Fetching…" : "Use link"}
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">JPEG, PNG, WebP or GIF up to 5MB, at least 200×100 pixels. Changes apply right away.</p>
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+    </fieldset>
+  );
+}
 
 const PER_WEEK_OPTIONS = Array.from({ length: 14 }, (_, i) => i + 1);
 
@@ -305,6 +414,7 @@ function ArticleCard({ initial, communities }: { initial: ExternalArticleDto; co
                 onChange={(communityIds) => setDraft((prev) => ({ ...prev, communityIds }))}
                 disabled={busy}
               />
+              <ArticleImageControls article={article} onChange={setArticle} disabled={busy} />
             </div>
           ) : (
             <>

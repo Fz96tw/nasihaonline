@@ -4,7 +4,16 @@ import { ArticleSourceKind, ExternalArticleStatus } from "@/lib/generated/prisma
 import { recordAdminAction } from "@/lib/audit-server";
 import { FROM_THE_WEB_FORUM_SLUG } from "@/lib/forums";
 import { normalizeKeywords, normalizeArticleUrl } from "@/lib/curated-article-parse";
-import { ArticleFetchError, cacheArticleImage, previewArticleFromUrl } from "@/lib/curated-article-fetch";
+import {
+  ArticleFetchError,
+  cacheArticleImage,
+  cacheFirstImage,
+  deleteArticleImage,
+  previewArticleFromUrl,
+  storeLinkedArticleImage,
+  storeUploadedArticleImage,
+  type HttpGet,
+} from "@/lib/curated-article-fetch";
 import { getCuratedArticleImageUrl, type ArticleSourceDto, type ExternalArticleDto } from "@/lib/curated-articles";
 import type { ArticleSourceInput, CuratedArticleUpdateInput } from "@/lib/validation/curated-articles";
 
@@ -312,6 +321,7 @@ export async function setCuratedArticleStatus(
 export async function addCuratedArticleByUrl(
   adminId: string,
   input: { url: string; communityIds: string[] },
+  options: { get?: HttpGet } = {},
 ): Promise<ExternalArticleDto> {
   await assertCommunitiesExist(input.communityIds);
   const normalized = normalizeArticleUrl(input.url);
@@ -321,7 +331,7 @@ export async function addCuratedArticleByUrl(
 
   let preview: Awaited<ReturnType<typeof previewArticleFromUrl>>;
   try {
-    preview = await previewArticleFromUrl(normalized);
+    preview = await previewArticleFromUrl(normalized, options.get);
   } catch (error) {
     if (error instanceof ArticleFetchError) throw new CuratedArticleError(400, `Couldn't read that page: ${error.message}`);
     throw new CuratedArticleError(400, "Couldn't read that page.");
@@ -330,7 +340,14 @@ export async function addCuratedArticleByUrl(
     preview.url !== normalized ? await db.externalArticle.findUnique({ where: { url: preview.url }, select: { status: true } }) : null;
   if (canonicalDuplicate) throw new CuratedArticleError(409, `That article is already in the queue (${canonicalDuplicate.status}).`);
 
-  const imageKey = preview.imageUrl ? await cacheArticleImage(preview.imageUrl) : null;
+  // Link-preview image first, then the first suitable photo in the article body.
+  let cachedImage: { key: string; sourceUrl: string } | null = null;
+  if (preview.imageUrl) {
+    const key = await cacheArticleImage(preview.imageUrl, options.get);
+    if (key) cachedImage = { key, sourceUrl: preview.imageUrl };
+  }
+  if (!cachedImage) cachedImage = await cacheFirstImage(preview.bodyImageUrls, options.get);
+  const imageKey = cachedImage?.key ?? null;
   const created = await db.$transaction(async (tx) => {
     const article = await tx.externalArticle.create({
       data: {
@@ -339,7 +356,7 @@ export async function addCuratedArticleByUrl(
         excerpt: preview.excerpt,
         sourceName: preview.sourceName,
         imageKey,
-        originalImageUrl: imageKey ? preview.imageUrl : null,
+        originalImageUrl: cachedImage?.sourceUrl ?? null,
         status: ExternalArticleStatus.pending,
         addedById: adminId,
         communities: { create: input.communityIds.map((communityId) => ({ communityId })) },
@@ -353,6 +370,65 @@ export async function addCuratedArticleByUrl(
     return article;
   });
   return toArticleDto(created);
+}
+
+// ---------------------------------------------------------------------------
+// Image replacement
+// ---------------------------------------------------------------------------
+
+async function swapArticleImage(
+  id: string,
+  adminId: string,
+  next: { key: string | null; sourceUrl: string | null },
+  action: string,
+): Promise<ExternalArticleDto> {
+  const existing = await db.externalArticle.findUnique({ where: { id }, select: { imageKey: true, title: true } });
+  if (!existing) {
+    await deleteArticleImage(next.key);
+    throw new CuratedArticleError(404, "Article not found.");
+  }
+  const updated = await db.$transaction(async (tx) => {
+    const article = await tx.externalArticle.update({
+      where: { id },
+      data: { imageKey: next.key, originalImageUrl: next.sourceUrl },
+      include: ARTICLE_DTO_INCLUDE,
+    });
+    await recordAdminAction(
+      { actorId: adminId, action, entityType: "ExternalArticle", entityId: id, metadata: { title: existing.title, ...(next.sourceUrl ? { imageUrl: next.sourceUrl } : {}) } },
+      tx,
+    );
+    return article;
+  });
+  // Old object removed only after the row points at the new one.
+  if (existing.imageKey && existing.imageKey !== next.key) await deleteArticleImage(existing.imageKey);
+  return toArticleDto(updated);
+}
+
+/**
+ * An admin replacing an article's image with an uploaded file or a pasted
+ * image link. Takes effect everywhere at once, the feed included. Bad files
+ * and unusable links come back as a 400 with the reason.
+ */
+export async function replaceCuratedArticleImage(
+  id: string,
+  adminId: string,
+  source: { upload: Buffer } | { url: string },
+  options: { get?: HttpGet } = {},
+): Promise<ExternalArticleDto> {
+  if ((await db.externalArticle.count({ where: { id } })) === 0) throw new CuratedArticleError(404, "Article not found.");
+  let key: string;
+  try {
+    key = "upload" in source ? await storeUploadedArticleImage(source.upload) : await storeLinkedArticleImage(source.url, options.get);
+  } catch (error) {
+    if (error instanceof ArticleFetchError) throw new CuratedArticleError(400, error.message);
+    throw new CuratedArticleError(400, "Couldn't use that image.");
+  }
+  return swapArticleImage(id, adminId, { key, sourceUrl: "url" in source ? source.url : null }, "curated_articles.image_replaced");
+}
+
+/** Clears an article's image so it shows the "From the Web" placeholder. */
+export async function removeCuratedArticleImage(id: string, adminId: string): Promise<ExternalArticleDto> {
+  return swapArticleImage(id, adminId, { key: null, sourceUrl: null }, "curated_articles.image_removed");
 }
 
 // ---------------------------------------------------------------------------
