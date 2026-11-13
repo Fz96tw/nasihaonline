@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import {
   EventVisibility,
+  ExternalArticleStatus,
   ForumThreadVisibility,
   KnowledgeStatus,
   KnowledgeVisibility,
@@ -43,6 +44,8 @@ import { digestContentOf, type DigestContent } from "@/lib/weekly-digest-compose
 import { buildFeedAuthor, type FeedAuthorSource } from "@/lib/feed-author";
 import { ORGANIZATION_AVATAR_URL } from "@/lib/system-user-id";
 import { reflectionImageUrl } from "@/lib/reflection-images";
+import { CURATED_ARTICLE_PLACEHOLDER_IMAGE, getCuratedArticleImageUrl } from "@/lib/curated-articles";
+import { FROM_THE_WEB_FORUM_SLUG } from "@/lib/forums";
 
 const DEFAULT_PAGE_SIZE = 20;
 const EXCERPT_LENGTH = 180;
@@ -202,7 +205,7 @@ export async function getFeedPage(params: {
   const wants = (type: FeedItem["type"]) =>
     (!params.types || params.types.includes(type)) &&
     // Following mode: only domains with a real, followable member author.
-    !(authorIds && (type === "announcement" || type === "survey" || type === "inbox"));
+    !(authorIds && (type === "announcement" || type === "survey" || type === "article" || type === "inbox"));
   const viewerId = params.viewerId;
   const query = params.q?.trim() || null;
   // In search mode, center each item's excerpt on the actual match instead
@@ -372,7 +375,9 @@ export async function getFeedPage(params: {
     // either, unlike the restricted-visibility gates below which stay
     // approximate/over-counting per the note above.
     removed: false,
-    ...(query ? {} : { eventId: null, knowledgeItemId: null }),
+    // externalArticleId: null — same for a curated article's discussion,
+    // which surfaces on the article's own row instead.
+    ...(query ? {} : { eventId: null, knowledgeItemId: null, externalArticleId: null }),
     // lastActivityAt (bumped by every new reply, see createForumPost) is
     // the sort/cursor field here rather than createdAt, so a thread with
     // fresh activity resurfaces near the top instead of only ever
@@ -780,10 +785,66 @@ export async function getFeedPage(params: {
         reviewHitIds?.length === 0 ? 0 : db.reviewItem.count({ where: reviewWhere }),
       ]);
 
+  // Curated "From the Web" articles — admin-approved links only. Not in
+  // Meilisearch (they're short, admin-written teasers), so search mode is a
+  // plain case-insensitive match on the headline, blurb and publisher. Same
+  // two-query shape as libraryItems: by approvedAt for each article's own
+  // row, by lastActivityAt for the discussion-reply row of an older one.
+  // Untagged articles are for everyone; the "only my communities" filter
+  // keeps them alongside the viewer's own communities' articles.
+  const articleWhere = {
+    status: ExternalArticleStatus.approved,
+    ...(query
+      ? {
+          OR: [
+            { title: { contains: query, mode: "insensitive" as const } },
+            { excerpt: { contains: query, mode: "insensitive" as const } },
+            { sourceName: { contains: query, mode: "insensitive" as const } },
+          ],
+        }
+      : {}),
+    ...(params.communityIds?.length
+      ? { AND: [{ OR: [{ communities: { none: {} } }, { communities: { some: { communityId: { in: params.communityIds } } } }] }] }
+      : {}),
+  };
+  const articleOwnWhere = { ...articleWhere, approvedAt: before ? { not: null, lt: before } : { not: null } };
+  const articleReplyWhere = { ...articleWhere, ...(before ? { lastActivityAt: { lt: before } } : {}) };
+  const fetchArticles = (where: typeof articleOwnWhere | typeof articleReplyWhere, orderBy: { approvedAt: "desc" } | { lastActivityAt: "desc" }) =>
+    db.externalArticle.findMany({
+      where,
+      select: {
+        id: true,
+        url: true,
+        title: true,
+        excerpt: true,
+        sourceName: true,
+        imageKey: true,
+        approvedAt: true,
+        lastActivityAt: true,
+        forumThread: { select: DISCUSSION_THREAD_FEED_SELECT },
+      },
+      orderBy,
+      take: pageSize,
+    });
+  const articlesPromise = !wants("article")
+    ? Promise.resolve([])
+    : query
+      ? fetchArticles(articleOwnWhere, { approvedAt: "desc" })
+      : Promise.all([
+          fetchArticles(articleOwnWhere, { approvedAt: "desc" }),
+          fetchArticles(articleReplyWhere, { lastActivityAt: "desc" }),
+        ]).then(([byApproved, byActivity]) => {
+          const seen = new Set(byApproved.map((article) => article.id));
+          return [...byApproved, ...byActivity.filter((article) => !seen.has(article.id))];
+        });
+  const articleCountPromise = query ? db.externalArticle.count({ where: articleOwnWhere }) : Promise.resolve(0);
+
   const [
     [events, libraryItems, forumThreads, announcements, surveys, seekingReviewItems, inboxRaw],
     [eventCount, libraryCount, forumCount, announcementCount, surveyCount, reviewCount],
-  ] = await Promise.all([itemsPromise, countsPromise]);
+    articles,
+    articleCount,
+  ] = await Promise.all([itemsPromise, countsPromise, articlesPromise, articleCountPromise]);
 
   // Each browsed/followed thread's opening post, for the thread's own
   // "New thread" row — the `posts` select above is newest-first (take: 1),
@@ -1325,6 +1386,51 @@ export async function getFeedPage(params: {
         volunteerNote: item.volunteerNote,
       };
     }),
+    ...articles.flatMap((article): FeedItem[] => {
+      const approvedAt = article.approvedAt as Date; // where clause guarantees approved + approvedAt set
+      const thread = article.forumThread;
+      const threadHref = thread ? withFeedRef(`/forums/${FROM_THE_WEB_FORUM_SLUG}/${thread.id}`, query) : null;
+      const articleMeta = {
+        articleId: article.id,
+        url: article.url,
+        sourceName: article.sourceName,
+        threadHref,
+        replyCount: thread ? thread._count.posts - 1 : 0,
+      };
+      const ownRow: FeedItem = {
+        type: "article",
+        id: article.id,
+        title: article.title,
+        excerpt: excerptOf(article.excerpt),
+        href: article.url,
+        timestamp: approvedAt.toISOString(),
+        // Admin-curated, so credited to the organization (same masked,
+        // unfollowable identity as Board announcements); the publisher is
+        // named on the row's "Read on …" link.
+        author: { ...BOARD_SENDER, name: "Shared by NASIHA" },
+        imageUrl: getCuratedArticleImageUrl(article.imageKey) ?? CURATED_ARTICLE_PLACEHOLDER_IMAGE,
+        article: articleMeta,
+      };
+      const rows = !before || approvedAt < before ? [ownRow] : [];
+      // The latest discussion reply, as its own row — same one-row-per-item
+      // convention as the libraryItems branch's replyRow. Never in search mode.
+      const reply = query ? null : latestDiscussionReply(thread, article.lastActivityAt, approvedAt);
+      if (!reply || !threadHref || (before && article.lastActivityAt >= before)) return rows;
+      return [
+        ...rows,
+        {
+          type: "article",
+          id: reply.id,
+          title: article.title,
+          excerpt: "Replied in the article discussion",
+          href: `${threadHref}#post-${reply.id}`,
+          timestamp: article.lastActivityAt.toISOString(),
+          author: authorOf(reply.author),
+          replyExcerpt: excerptOf(stripPastedImageTokens(reply.body)) || undefined,
+          imageUrl: null,
+        },
+      ];
+    }),
     ...inboxItems,
   ].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
@@ -1351,6 +1457,7 @@ export async function getFeedPage(params: {
         announcement: announcementCount,
         survey: surveyCount,
         peer_review: reviewCount,
+        article: articleCount,
         inbox: matchedInboxRaw.length,
       }
     : undefined;

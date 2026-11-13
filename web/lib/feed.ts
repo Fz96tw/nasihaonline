@@ -5,7 +5,7 @@
 
 import type { ReviewVolunteerStatus, Tier } from "@/lib/generated/prisma/enums";
 
-export type FeedItemType = "event" | "library" | "forum_thread" | "announcement" | "survey" | "peer_review" | "inbox";
+export type FeedItemType = "event" | "library" | "forum_thread" | "announcement" | "survey" | "peer_review" | "article" | "inbox";
 
 export const FEED_TYPE_LABELS: Record<FeedItemType, string> = {
   event: "Event",
@@ -14,6 +14,7 @@ export const FEED_TYPE_LABELS: Record<FeedItemType, string> = {
   announcement: "Announcement",
   survey: "Survey",
   peer_review: "Peer Review",
+  article: "From the Web",
   inbox: "Messages",
 };
 
@@ -80,6 +81,13 @@ export type FeedItem = {
   imageIsBodyImage?: boolean;
   /** "event", "forum_thread" and "library" items carry this — true when the underlying Event/ForumThread's visibility is `invited`, or the KnowledgeItem's is `restricted`, driving FeedRow's lock-icon title prefix. Undefined for every other type. */
   isRestricted?: boolean;
+  /**
+   * Only "article" items (curated "From the Web" links) carry this. The row
+   * links out to `url` in a new tab rather than to an in-app page; the
+   * discussion lives in its own thread, started on demand (`threadHref` null
+   * until someone does).
+   */
+  article?: { articleId: string; url: string; sourceName: string; threadHref: string | null; replyCount: number };
   /** Only a weekly-digest "announcement" item carries this — true when the row is the community's weekly digest, so FeedRow prefixes the title with a digest icon. */
   isDigest?: boolean;
   /**

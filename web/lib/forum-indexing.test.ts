@@ -16,3 +16,8 @@ test("[AC:441369e6:ac_3] standalone threads, and auto-created threads with a rep
   assert.equal(isIndexableForumThread({ eventId: "e1", knowledgeItemId: null, visiblePostCount: 2 }), true);
   assert.equal(isIndexableForumThread({ eventId: null, knowledgeItemId: "k1", visiblePostCount: 5 }), true);
 });
+
+test("[AC:dfdf223a:ac_9] a curated article's discussion waits for a reply before it's indexable, like library threads", () => {
+  assert.equal(isIndexableForumThread({ ...standalone, externalArticleId: "a1", visiblePostCount: 1 }), false);
+  assert.equal(isIndexableForumThread({ ...standalone, externalArticleId: "a1", visiblePostCount: 2 }), true);
+});

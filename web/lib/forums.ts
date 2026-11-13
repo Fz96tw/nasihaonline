@@ -27,6 +27,12 @@ export const LIBRARY_FORUM_SLUG = "library-discussions";
 // Weekly Reflection job posts (lib/weekly-reflection-post.ts).
 export const WEEKLY_REFLECTION_FORUM_SLUG = "weekly-reflection";
 
+// Seeded forum slug (the "From the Web" forum in prisma/seed.ts) that holds
+// the on-demand discussion thread behind an approved curated article's
+// "Discuss" button (lib/curated-articles-server.ts) — same lazy, one thread
+// per article shape as LIBRARY_FORUM_SLUG, and likewise hidden from /forums.
+export const FROM_THE_WEB_FORUM_SLUG = "from-the-web";
+
 export type ForumCategory = {
   id: string;
   name: string;

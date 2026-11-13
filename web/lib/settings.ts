@@ -228,3 +228,21 @@ export async function getWeeklyReflectionMessage(): Promise<{ titleTemplate: str
   });
   return { titleTemplate: settings.weeklyReflectionTitleTemplate, bodyTemplate: settings.weeklyReflectionBodyTemplate };
 }
+
+/** Curated "From the Web" articles — whether the worker fetches sources (/admin/curated-articles). */
+export async function getCuratedArticlesFetchEnabled(): Promise<boolean> {
+  const settings = await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID },
+    update: {},
+  });
+  return settings.curatedArticlesFetchEnabled;
+}
+
+export async function setCuratedArticlesFetchEnabled(enabled: boolean): Promise<void> {
+  await db.siteSettings.upsert({
+    where: { id: SETTINGS_ROW_ID },
+    create: { id: SETTINGS_ROW_ID, curatedArticlesFetchEnabled: enabled },
+    update: { curatedArticlesFetchEnabled: enabled },
+  });
+}

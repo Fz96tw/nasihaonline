@@ -18,7 +18,7 @@ import { findMentionedMembers } from "@/lib/mentions";
 import { getSystemUserIds } from "@/lib/system-user";
 import { reflectionImageUrl } from "@/lib/reflection-images";
 import { DIRECTORY_TIERS } from "@/lib/members";
-import { CLINICAL_DISCUSSIONS_SLUG, EVENTS_FORUM_SLUG, LIBRARY_FORUM_SLUG } from "@/lib/forums";
+import { CLINICAL_DISCUSSIONS_SLUG, EVENTS_FORUM_SLUG, FROM_THE_WEB_FORUM_SLUG, LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import { isIndexableForumThread } from "@/lib/forum-indexing";
 import { ensureCommunityMembership, getMemberCommunityContext, type MemberCommunityContext } from "@/lib/profile-server";
 import { countPastedImageReferences, linkPastedImages, MAX_PASTED_IMAGES_PER_BODY } from "@/lib/pasted-images-server";
@@ -60,7 +60,7 @@ export class ForumError extends Error {
  */
 export async function getForumCategories(userId?: string, isPrivileged = false): Promise<ForumCategory[]> {
   const forums = await db.forum.findMany({
-    where: { active: true, slug: { notIn: [EVENTS_FORUM_SLUG, LIBRARY_FORUM_SLUG] } },
+    where: { active: true, slug: { notIn: [EVENTS_FORUM_SLUG, LIBRARY_FORUM_SLUG, FROM_THE_WEB_FORUM_SLUG] } },
     select: {
       id: true,
       name: true,
@@ -332,6 +332,7 @@ export async function getPublicForumThreadSitemapEntries(): Promise<
       lastActivityAt: true,
       eventId: true,
       knowledgeItemId: true,
+      externalArticleId: true,
       forum: { select: { slug: true } },
       _count: { select: { posts: { where: { removed: false } } } },
     },
@@ -497,6 +498,7 @@ export async function getForumThreadDetail(
       knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
       eventId: true,
       knowledgeItemId: true,
+      externalArticleId: true,
       visibility: true,
       removed: true,
       categories: { select: { category: { select: { id: true, name: true, slug: true } } } },
@@ -588,7 +590,7 @@ export async function getForumThreadDetail(
     posts: roots,
     visibility: thread.visibility,
     invitees,
-    isEditable: !thread.eventId && !thread.knowledgeItemId,
+    isEditable: !thread.eventId && !thread.knowledgeItemId && !thread.externalArticleId,
     mentionAllowedIds: getThreadMentionAllowedIds(thread),
     categories: thread.categories.map((c) => c.category),
     reflection: thread.reflectionPost?.quoteText
@@ -603,6 +605,7 @@ export async function getForumThreadDetail(
     isIndexable: isIndexableForumThread({
       eventId: thread.eventId,
       knowledgeItemId: thread.knowledgeItemId,
+      externalArticleId: thread.externalArticleId,
       visiblePostCount: thread.posts.filter((post) => !post.removed).length,
     }),
   };
@@ -650,12 +653,15 @@ export async function deleteForumThread(
       authorId: true,
       eventId: true,
       knowledgeItemId: true,
+      externalArticleId: true,
       removed: true,
       event: { select: { hostId: true } },
     },
   });
   if (!thread) throw new ForumError(404, "Thread not found.");
-  if (thread.knowledgeItemId) {
+  // A curated article's thread is hidden/shown with its article's approval
+  // (curated-articles-server.ts), never deleted on its own.
+  if (thread.knowledgeItemId || thread.externalArticleId) {
     throw new ForumError(400, "This thread is managed automatically and can't be deleted here.");
   }
   if (thread.removed) throw new ForumError(400, "This thread has already been removed.");
@@ -879,6 +885,8 @@ export async function createForumThread(
     select: { id: true, slug: true, active: true, category: { select: { communityId: true } } },
   });
   if (!forum || !forum.active) throw new ForumError(404, "Forum not found.");
+  // From the Web only ever holds curated articles' own discussion threads.
+  if (forum.slug === FROM_THE_WEB_FORUM_SLUG) throw new ForumError(404, "Forum not found.");
   // Community-based-categorization initiative, objective 6 — same
   // "Forum not found" 404 (not 403) as the check above, preserving the
   // privacy convention every other restricted-content check in this
@@ -1033,6 +1041,7 @@ export async function updateForumThread(
       visibility: true,
       eventId: true,
       knowledgeItemId: true,
+      externalArticleId: true,
       removed: true,
       forumId: true,
       forum: { select: { slug: true, category: { select: { communityId: true } } } },
@@ -1041,7 +1050,7 @@ export async function updateForumThread(
     },
   });
   if (!thread) throw new ForumError(404, "Thread not found.");
-  if (thread.eventId || thread.knowledgeItemId) {
+  if (thread.eventId || thread.knowledgeItemId || thread.externalArticleId) {
     throw new ForumError(400, "This thread's title and audience are managed automatically and can't be edited here.");
   }
   if (thread.removed) throw new ForumError(400, "This thread has been removed and can't be edited.");
@@ -1068,6 +1077,7 @@ export async function updateForumThread(
       !target.active ||
       target.slug === EVENTS_FORUM_SLUG ||
       target.slug === LIBRARY_FORUM_SLUG ||
+      target.slug === FROM_THE_WEB_FORUM_SLUG ||
       !isForumAccessibleToMember(target, member, isPrivileged)
     ) {
       throw new ForumError(404, "Forum not found.");
@@ -1176,6 +1186,7 @@ export async function createForumPost(
       forumId: true,
       eventId: true,
       knowledgeItemId: true,
+      externalArticleId: true,
       forum: { select: { slug: true, category: { select: { communityId: true } } } },
       event: EVENT_THREAD_ACCESS_SELECT,
       knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
@@ -1241,6 +1252,8 @@ export async function createForumPost(
     await db.event.update({ where: { id: thread.eventId }, data: { lastActivityAt: post.createdAt } });
   } else if (thread.knowledgeItemId) {
     await db.knowledgeItem.update({ where: { id: thread.knowledgeItemId }, data: { lastActivityAt: post.createdAt } });
+  } else if (thread.externalArticleId) {
+    await db.externalArticle.update({ where: { id: thread.externalArticleId }, data: { lastActivityAt: post.createdAt } });
   }
 
   // Auto-join rule (community-based-categorization initiative, see

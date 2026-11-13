@@ -14,6 +14,26 @@ import { HighlightText } from "@/components/highlight-text";
 import { useHasMounted } from "@/lib/use-has-mounted";
 import { cn } from "@/lib/utils";
 import { ReflectionFeedCard } from "@/components/feed/reflection-feed-card";
+import { ArticleRowActions } from "@/components/feed/article-row-actions";
+
+/**
+ * The row's clickable wrapper: an in-app <Link>, except a "From the Web"
+ * article's own row, which opens the original article in a new tab.
+ */
+function FeedRowLink({ item, className, children }: { item: FeedItem; className: string; children: ReactNode }) {
+  if (item.article) {
+    return (
+      <a href={item.href} target="_blank" rel="noopener noreferrer" className={className}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <Link href={item.href} className={className}>
+      {children}
+    </Link>
+  );
+}
 
 /**
  * Pasted-image strip for a forum-thread feed row. One image renders as a
@@ -274,15 +294,15 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
   // item's title (smaller, the base text-base size, not the
   // usual large Library/Event title), then the quoted reply — the reverse
   // of every other row's title-then-excerpt order.
-  const isDiscussionReplyRow = (item.type === "library" || item.type === "event") && !!item.replyExcerpt;
+  const isDiscussionReplyRow = (item.type === "library" || item.type === "event" || item.type === "article") && !!item.replyExcerpt;
 
   return (
     <li>
-      <Link
-        href={item.href}
+      <FeedRowLink
+        item={item}
         className={cn(
           "flex w-full items-start gap-3 p-4 text-left transition-colors hover:bg-accent/50",
-          item.reviewOfferPrompt && "pb-2",
+          (item.reviewOfferPrompt || item.article) && "pb-2",
         )}
       >
         <div className="flex min-w-0 flex-1 flex-col">
@@ -410,7 +430,7 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                             // Forum threads match too (confirmed with user), but
                             // not their reply rows (item.isReply), which stay small.
                             !isDiscussionReplyRow &&
-                              (item.type === "library" || item.type === "event" || (item.type === "forum_thread" && !item.isReply))
+                              (item.type === "library" || item.type === "event" || item.type === "article" || (item.type === "forum_thread" && !item.isReply))
                               ? "text-2xl font-bold"
                               : "text-base font-semibold",
                             hasThreadImage && "text-neutral-900",
@@ -549,7 +569,8 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
             )}
           </div>
         </div>
-      </Link>
+      </FeedRowLink>
+      {item.article && <ArticleRowActions article={item.article} />}
       {item.reviewOfferPrompt && (
         <div className="flex items-center justify-between gap-3 py-0 pl-[60px] pr-4 pb-4">
           <span className="flex items-center gap-1 text-xs font-medium text-primary">

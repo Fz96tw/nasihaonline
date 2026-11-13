@@ -368,6 +368,15 @@ model SiteSettings {
   // (a DB test asserts they match). Edits apply to future posts only.
   weeklyReflectionTitleTemplate    String         @default("Weekly Reflection: “{quote}”")
   weeklyReflectionBodyTemplate     String         @default("{prompt}\n\n“{quote}”\n— {attribution}")
+  // Curated "From the Web" articles (/admin/curated-articles). Off by default
+  // for the same reason as weeklyDigestEnabled: the homelab/test instance runs
+  // its own worker, and fetching is switched on deliberately per instance.
+  // Fetching only ever creates `pending` articles — nothing reaches members
+  // until an admin approves it.
+  curatedArticlesFetchEnabled      Boolean        @default(false)
+  // Set once prisma/seed.ts has inserted the starter source list, so a
+  // seeded source an admin later deletes isn't re-created on the next boot.
+  curatedArticleSourcesSeededAt    DateTime?
   updatedAt                        DateTime       @updatedAt
 
   @@map("site_settings")
@@ -1878,6 +1887,8 @@ model Community {
   profiles       ProfileCommunity[]
   events         EventCommunity[]
   knowledgeItems KnowledgeItemCommunity[]
+  articleSources   ArticleSourceCommunity[]
+  externalArticles ExternalArticleCommunity[]
   createdAt      DateTime                 @default(now())
   updatedAt      DateTime                 @updatedAt
 
@@ -2482,6 +2493,13 @@ model ForumThread {
   knowledgeItemId String?        @unique
   knowledgeItem   KnowledgeItem? @relation(fields: [knowledgeItemId], references: [id])
 
+  // Set only for the on-demand discussion thread behind an approved
+  // "From the Web" article's Discuss button — same lazy, first-click
+  // creation as knowledgeItemId above, in the seeded "From the Web" forum.
+  // Hidden (removed: true) while its article isn't approved.
+  externalArticleId String?          @unique
+  externalArticle   ExternalArticle? @relation(fields: [externalArticleId], references: [id], onDelete: Cascade)
+
   @@index([forumId])
   @@index([authorId])
   @@map("forum_threads")
@@ -3045,4 +3063,118 @@ model GameRun {
   @@index([game, score])
   @@index([userId])
   @@map("game_runs")
+}
+
+// ---------------------------------------------------------------------------
+// Curated "From the Web" articles. A worker job (lib/curated-article-fetch.ts)
+// polls admin-managed sources, keeps entries matching each source's keyword
+// rules, and stores them as `pending`. Admins approve them at
+// /admin/curated-articles; only approved articles reach the What's New feed,
+// as a link-out row (headline, source, image, short excerpt) — the article's
+// own text is never copied.
+// ---------------------------------------------------------------------------
+
+enum ArticleSourceKind {
+  // A publisher's RSS or Atom feed URL.
+  rss
+  // A Google News search, stored as the query text; fetched as its RSS feed.
+  news_search
+}
+
+enum ExternalArticleStatus {
+  pending
+  approved
+  rejected
+}
+
+model ArticleSource {
+  id                  String            @id @default(cuid())
+  name                String
+  kind                ArticleSourceKind @default(rss)
+  // Feed URL for `rss`; the search query text for `news_search`.
+  url                 String
+  // Lowercased keywords matched against an entry's title + description.
+  // Empty include list = keep everything not excluded.
+  includeKeywords     String[]          @default([])
+  excludeKeywords     String[]          @default([])
+  enabled             Boolean           @default(true)
+  // Conditional-GET validators from the last successful fetch.
+  etag                String?
+  lastModified        String?
+  lastFetchedAt       DateTime?
+  lastSuccessAt       DateTime?
+  // The last fetch's error, cleared on the next success.
+  lastError           String?
+  consecutiveFailures Int               @default(0)
+  // New pending articles the last successful fetch added.
+  lastNewCount        Int?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  communities ArticleSourceCommunity[]
+  articles    ExternalArticle[]
+
+  @@map("article_sources")
+}
+
+model ArticleSourceCommunity {
+  sourceId    String
+  source      ArticleSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  communityId String
+  community   Community     @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@id([sourceId, communityId])
+  @@index([communityId])
+  @@map("article_source_communities")
+}
+
+model ExternalArticle {
+  id               String                @id @default(cuid())
+  // Null for an article an admin added by URL, or once its source is deleted.
+  sourceId         String?
+  source           ArticleSource?        @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  // Normalized (tracking parameters stripped, redirects resolved) — the
+  // dedupe key, so the same story from two feeds is stored once.
+  url              String                @unique
+  title            String
+  // Short blurb shown on the feed row: the feed's own summary or the page's
+  // og:description, truncated — never the article body. Admin-editable.
+  excerpt          String
+  // Publisher name shown as "Read on {sourceName}".
+  sourceName       String
+  publishedAt      DateTime?
+  // MinIO key (attachments bucket, curated-article/ prefix) of our cached,
+  // resized copy of the article's image; null when none was found.
+  imageKey         String?
+  // Where imageKey was copied from, for the admin queue.
+  originalImageUrl String?
+  status           ExternalArticleStatus @default(pending)
+  fetchedAt        DateTime              @default(now())
+  reviewedAt       DateTime?
+  reviewedById     String?
+  // Set on approval — the feed row's sort/cursor key.
+  approvedAt       DateTime?
+  // Bumped by replies in the article's discussion thread (createForumPost),
+  // for the feed's reply row.
+  lastActivityAt   DateTime              @default(now())
+  // Set when an admin added the article by URL rather than a fetch.
+  addedById        String?
+
+  communities ExternalArticleCommunity[]
+  forumThread ForumThread?
+
+  @@index([status, approvedAt])
+  @@index([status, fetchedAt])
+  @@map("external_articles")
+}
+
+model ExternalArticleCommunity {
+  articleId   String
+  article     ExternalArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  communityId String
+  community   Community       @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, communityId])
+  @@index([communityId])
+  @@map("external_article_communities")
 }

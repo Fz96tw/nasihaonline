@@ -18,9 +18,11 @@
 export function isIndexableForumThread(thread: {
   eventId: string | null;
   knowledgeItemId: string | null;
+  /** A curated "From the Web" article's discussion — auto-created the same way. */
+  externalArticleId?: string | null;
   /** Posts in the thread with removed = false, the opening post included. */
   visiblePostCount: number;
 }): boolean {
-  const autoCreated = thread.eventId !== null || thread.knowledgeItemId !== null;
+  const autoCreated = thread.eventId !== null || thread.knowledgeItemId !== null || (thread.externalArticleId ?? null) !== null;
   return !autoCreated || thread.visiblePostCount >= 2;
 }

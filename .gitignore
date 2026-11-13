@@ -4,3 +4,6 @@ livekit.yaml
 egress.yaml
 .claude/settings.local.json
 *Zone.Identifier
+
+# Planwright local agent-run marker
+.planwright/active-run

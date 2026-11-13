@@ -15,6 +15,7 @@ import { getOpenPrivacyRequestCount } from "@/lib/privacy-server";
 import { getUnreadContactMessageCount } from "@/lib/contact-server";
 import { getPendingApplicationsCount } from "@/lib/admin-review-server";
 import { getNewDonationsCount } from "@/lib/donations-server";
+import { getPendingCuratedArticleCount } from "@/lib/curated-articles-server";
 import { AdminPhaseForm } from "@/components/admin-phase-form";
 import { WelcomeAnnouncementSettingsForm } from "@/components/admin/welcome-announcement-settings-form";
 import { QuickRecordingSettingsForm } from "@/components/admin/quick-recording-settings-form";
@@ -110,6 +111,14 @@ const ADMIN_SECTIONS = [
     href: "/admin/surveys",
     title: "Surveys",
     description: "Build and send surveys to members, donors, and event registrants.",
+    group: "Communications",
+  },
+  {
+    href: "/admin/curated-articles",
+    title: "From the Web",
+    description: "Review articles fetched from around the web and share the best in What's New.",
+    countKey: "curatedArticles",
+    countLabel: "to review",
     group: "Communications",
   },
   {
@@ -210,6 +219,7 @@ export default async function AdminPage() {
     privacyCount,
     contactCount,
     donationsCount,
+    curatedArticlesCount,
   ] = await Promise.all([
     getAdmissionPhase(),
     getWelcomeAnnouncementSettings(),
@@ -223,6 +233,7 @@ export default async function AdminPage() {
     getOpenPrivacyRequestCount(),
     getUnreadContactMessageCount(),
     getNewDonationsCount(),
+    getPendingCuratedArticleCount(),
   ]);
 
   const counts: Record<string, number> = {
@@ -234,6 +245,7 @@ export default async function AdminPage() {
     privacy: privacyCount,
     contact: contactCount,
     donations: donationsCount,
+    curatedArticles: curatedArticlesCount,
   };
 
   const needsAttention = ADMIN_SECTIONS.filter(

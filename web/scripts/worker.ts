@@ -41,6 +41,12 @@ import { sendInboxReminders } from "@/lib/inbox-reminders";
 import { runWeeklyDigestCheck } from "@/lib/weekly-digest-job";
 import { sendPendingDigestTeasers } from "@/lib/weekly-digest-email";
 import { runWeeklyReflectionCheck } from "@/lib/weekly-reflection-job";
+import {
+  CURATED_ARTICLES_QUEUE_NAME,
+  type CuratedArticlesJob,
+  enqueueRepeatingCuratedArticlesFetch,
+} from "@/lib/queues/curated-articles-queue";
+import { runCuratedArticleFetch, type CuratedFetchRunResult } from "@/lib/curated-article-fetch";
 
 /**
  * Standalone process (`npm run worker`, docker-compose "worker" service) —
@@ -218,6 +224,36 @@ async function main() {
 
   await enqueueRepeatingWeeklyReflectionCheck();
   console.log("[weekly-reflection-worker] listening for jobs on", WEEKLY_REFLECTION_QUEUE_NAME);
+
+  // Curated "From the Web" articles — a 6-hourly fetch of every enabled
+  // source into the admin review queue (lib/curated-article-fetch.ts). Off
+  // unless enabled on /admin/curated-articles; an admin's "Fetch now" runs
+  // regardless. One source failing never fails the job — each records its
+  // own error.
+  const curatedArticlesWorker = new Worker<CuratedArticlesJob, CuratedFetchRunResult>(
+    CURATED_ARTICLES_QUEUE_NAME,
+    async (job) =>
+      job.data.type === "manual"
+        ? runCuratedArticleFetch({ force: true, sourceIds: job.data.sourceIds })
+        : runCuratedArticleFetch(),
+    // One run at a time: two overlapping runs would fetch the same feeds twice.
+    { connection: queueConnection, concurrency: 1 },
+  );
+
+  curatedArticlesWorker.on("completed", (_job, result) => {
+    if (result.status !== "ran") return;
+    const failed = result.sources.filter((source) => source.status === "error");
+    console.log(
+      `[curated-articles-worker] fetched ${result.sources.length} sources — ${result.newCount} new, ${failed.length} failed, ${result.prunedCount} stale pending pruned`,
+    );
+    for (const source of failed) console.warn(`[curated-articles-worker]   ${source.name}: ${source.error}`);
+  });
+  curatedArticlesWorker.on("failed", (_job, error) => {
+    console.error("[curated-articles-worker] run failed:", error);
+  });
+
+  await enqueueRepeatingCuratedArticlesFetch();
+  console.log("[curated-articles-worker] listening for jobs on", CURATED_ARTICLES_QUEUE_NAME);
 }
 
 main().catch((error) => {
