@@ -138,6 +138,16 @@ if [ "$SYNC_COMPOSE" = "yes" ]; then
 else
   echo "    Nothing to copy."
 fi
+# The nightly nasiha-backup.timer runs these from the VPS's own scripts/ dir
+# (see scripts/README.md), so keep them in step with the repo on every
+# deploy. Upload to a temp name then mv, so a backup that happens to start
+# mid-deploy never runs a half-copied script.
+$SSH "$VPS_HOST" "mkdir -p '$VPS_DIR/scripts'"
+for script in backup.sh restore.sh; do
+  $SCP "scripts/$script" "$VPS_HOST:$VPS_DIR/scripts/.$script.new"
+  $SSH "$VPS_HOST" "chmod 755 '$VPS_DIR/scripts/.$script.new' && mv '$VPS_DIR/scripts/.$script.new' '$VPS_DIR/scripts/$script'"
+done
+echo "    Synced scripts/backup.sh, scripts/restore.sh."
 
 echo "==> [5/10] Pulling new image on the VPS..."
 $SSH "$VPS_HOST" "cd '$VPS_DIR' && docker compose pull app worker"

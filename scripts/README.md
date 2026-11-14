@@ -71,15 +71,15 @@ ssh 50.6.224.185 'systemctl list-timers nasiha-backup.timer; journalctl -u nasih
 # run one now
 ssh 50.6.224.185 'sudo systemctl start nasiha-backup.service'
 
-# (re)install after changing backup.sh or the unit files
-scp scripts/backup.sh scripts/restore.sh 50.6.224.185:/home/ubuntu/nasiha/scripts/
+# (re)install after changing the unit files
 scp vps/systemd/nasiha-backup.* 50.6.224.185:/tmp/
 ssh 50.6.224.185 'sudo install -m 644 /tmp/nasiha-backup.* /etc/systemd/system/ && \
   sudo systemctl daemon-reload && sudo systemctl enable --now nasiha-backup.timer'
 ```
 
-`deploy-vps.sh` does **not** sync these — re-run the `scp` above after editing
-`backup.sh`.
+`deploy-vps.sh` copies `backup.sh` and `restore.sh` to the VPS on every
+deploy, so script edits go live with the next deploy. The systemd unit files
+are not synced — re-run the install above after changing them.
 
 **This only writes to local disk on the host.** For real disaster recovery
 (surviving total host failure) the resulting `$BACKUP_ROOT` directory still
