@@ -1,0 +1,12 @@
+# 08:00 UTC = 3-4am US Eastern. Persistent=true runs a missed backup at the
+# next boot if the VPS was down at the scheduled time.
+[Unit]
+Description=Nightly Nasiha backup
+
+[Timer]
+OnCalendar=*-*-* 08:00:00 UTC
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

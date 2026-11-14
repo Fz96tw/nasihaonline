@@ -8,7 +8,21 @@
 set -euo pipefail
 
 BACKUP_DIR="${1:?Usage: $0 <backup-dir> (e.g. ~/backups/nasiha/20260808-020000)}"
-COMPOSE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Locate the compose project: $COMPOSE_DIR if set; else the script's parent
+# dir if it holds a docker-compose.yml (the VPS layout, scripts/ installed
+# next to the compose file); else <repo>/homelab (this repo's checkout).
+if [ -z "${COMPOSE_DIR:-}" ]; then
+  _parent="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  if [ -f "$_parent/docker-compose.yml" ]; then
+    COMPOSE_DIR="$_parent"
+  else
+    COMPOSE_DIR="$_parent/homelab"
+  fi
+fi
+if [ ! -f "$COMPOSE_DIR/docker-compose.yml" ]; then
+  echo "No docker-compose.yml in $COMPOSE_DIR (set COMPOSE_DIR)." >&2
+  exit 1
+fi
 
 PG_USER="${PG_USER:-nasiha}"
 PG_RESTORE_DB="${PG_RESTORE_DB:-nasiha_restore_test}"
@@ -40,6 +54,9 @@ if [ -z "$MINIO_CONTAINER" ]; then
   exit 1
 fi
 
+# minio/mc is no longer pullable; the MinIO server image ships mc.
+MC_IMAGE="$(docker inspect -f '{{.Config.Image}}' "$MINIO_CONTAINER")"
+
 for bucket_dir in "$BACKUP_DIR"/minio/*/; do
   bucket="$(basename "$bucket_dir")"
   restore_bucket="${bucket}${MINIO_BUCKET_SUFFIX}"
@@ -48,8 +65,8 @@ for bucket_dir in "$BACKUP_DIR"/minio/*/; do
     --network "container:${MINIO_CONTAINER}" \
     -e "MC_HOST_local=http://${MINIO_ACCESS_KEY}:${MINIO_SECRET_KEY}@localhost:9000" \
     -v "$bucket_dir:/restore" \
-    minio/mc:latest \
-    sh -c "mc mb --ignore-existing local/${restore_bucket} && mc mirror --overwrite --quiet /restore local/${restore_bucket}"
+    --entrypoint sh "$MC_IMAGE" \
+    -c "mc mb --ignore-existing local/${restore_bucket} && mc mirror --overwrite --quiet /restore local/${restore_bucket}"
 done
 
 cat <<EOF

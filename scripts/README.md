@@ -24,8 +24,12 @@ already configured.
 # Backup / restore scripts
 
 Backs up Postgres and MinIO from the docker-compose stack (`postgres`, `minio`
-services). Run all commands from the repo root, with `docker compose up`
-already running.
+services), with `docker compose up` already running. The scripts find the
+compose project themselves: `$COMPOSE_DIR` if set, else the script's parent
+dir if it contains a `docker-compose.yml` (the VPS layout,
+`/home/ubuntu/nasiha/scripts/`), else `<repo>/homelab` (this checkout). The
+`docker compose` commands in the manual steps below must be run from that same
+directory.
 
 ## Config (env vars, all optional — defaults match docker-compose.yml)
 
@@ -33,7 +37,13 @@ already running.
 - `RETENTION_DAYS` — how long to keep old backups (default `14`)
 - `PG_USER` (default `nasiha`), `PG_DB` (default `nasiha`)
 - `MINIO_ACCESS_KEY` (default `nasiha`), `MINIO_SECRET_KEY` (default `nasiha123`)
-- `MINIO_BUCKETS` — space-separated bucket list (default `attachments avatars documents`)
+- `MINIO_BUCKETS` — space-separated bucket list (default: every bucket on the
+  server, so recordings and any new buckets are included automatically)
+- `COMPOSE_DIR` — compose project directory (default: auto-detected, above)
+
+`mc` runs from the same image as the running `minio` container (the
+`minio/mc` image is no longer pullable from Docker Hub), as the invoking user
+so backup files aren't root-owned.
 
 ## Taking a backup
 
@@ -46,6 +56,30 @@ Writes to `$BACKUP_ROOT/<timestamp>/`:
 - `minio/<bucket>/...` — mirrored copy of each bucket
 
 Prunes backup folders older than `RETENTION_DAYS` automatically.
+
+## Nightly backups on the VPS (production)
+
+A systemd timer runs `backup.sh` every night at 08:00 UTC on the VPS, writing
+to `/home/ubuntu/backups/nasiha/` with 14-day retention. The unit files live
+in `vps/systemd/`; the script is copied to `/home/ubuntu/nasiha/scripts/`.
+(The VPS image has no `cron`, and the timer's `Persistent=true` also runs a
+missed backup after downtime.)
+
+```bash
+# check status / last run / logs
+ssh 50.6.224.185 'systemctl list-timers nasiha-backup.timer; journalctl -u nasiha-backup -n 30'
+# run one now
+ssh 50.6.224.185 'sudo systemctl start nasiha-backup.service'
+
+# (re)install after changing backup.sh or the unit files
+scp scripts/backup.sh scripts/restore.sh 50.6.224.185:/home/ubuntu/nasiha/scripts/
+scp vps/systemd/nasiha-backup.* 50.6.224.185:/tmp/
+ssh 50.6.224.185 'sudo install -m 644 /tmp/nasiha-backup.* /etc/systemd/system/ && \
+  sudo systemctl daemon-reload && sudo systemctl enable --now nasiha-backup.timer'
+```
+
+`deploy-vps.sh` does **not** sync these — re-run the `scp` above after editing
+`backup.sh`.
 
 **This only writes to local disk on the host.** For real disaster recovery
 (surviving total host failure) the resulting `$BACKUP_ROOT` directory still
@@ -100,13 +134,14 @@ and should not be a one-command operation. Do this manually, carefully:
    anything added since the backup was taken):
    ```bash
    MINIO_CONTAINER="$(docker compose ps -q minio)"
+   MC_IMAGE="$(docker inspect -f '{{.Config.Image}}' "$MINIO_CONTAINER")"
    docker run --rm \
      --network "container:${MINIO_CONTAINER}" \
      -e "MC_HOST_local=http://nasiha:nasiha123@localhost:9000" \
      -v ~/backups/nasiha/<timestamp>/minio/attachments:/restore \
-     minio/mc:latest \
+     --entrypoint mc "$MC_IMAGE" \
      mirror --overwrite --remove /restore local/attachments
-   # repeat for avatars, documents
+   # repeat for each bucket dir in the backup (avatars, documents, recordings, ...)
    ```
 5. **Verify the data**, then bring the app back up:
    ```bash
