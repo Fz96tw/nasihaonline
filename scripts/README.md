@@ -23,6 +23,9 @@ already configured.
 
 # Backup / restore scripts
 
+> **Recovering production?** Follow the step-by-step runbook in
+> [`docs/Nasiha_Backup_and_Restore_Runbook.md`](../docs/Nasiha_Backup_and_Restore_Runbook.md).
+
 Backs up Postgres and MinIO from the docker-compose stack (`postgres`, `minio`
 services), with `docker compose up` already running. The scripts find the
 compose project themselves: `$COMPOSE_DIR` if set, else the script's parent
