@@ -12,6 +12,8 @@ User=ubuntu
 Group=ubuntu
 SupplementaryGroups=docker
 Environment=HOME=/home/ubuntu
+# Each run is a full copy (~2.6G as of 2026-11); 7 days keeps ~8 backups.
+Environment=RETENTION_DAYS=7
 ExecStart=/home/ubuntu/nasiha/scripts/backup.sh
 Nice=10
 IOSchedulingClass=idle

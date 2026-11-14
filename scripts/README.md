@@ -60,7 +60,7 @@ Prunes backup folders older than `RETENTION_DAYS` automatically.
 ## Nightly backups on the VPS (production)
 
 A systemd timer runs `backup.sh` every night at 08:00 UTC on the VPS, writing
-to `/home/ubuntu/backups/nasiha/` with 14-day retention. The unit files live
+to `/home/ubuntu/backups/nasiha/` with 7-day retention (`RETENTION_DAYS` in the service unit). The unit files live
 in `vps/systemd/`; the script is copied to `/home/ubuntu/nasiha/scripts/`.
 (The VPS image has no `cron`, and the timer's `Persistent=true` also runs a
 missed backup after downtime.)
