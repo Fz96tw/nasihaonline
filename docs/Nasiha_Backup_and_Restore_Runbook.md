@@ -157,7 +157,10 @@ docker run --rm --network "container:${MINIO_CONTAINER}" \
 ## Open gaps (as of 2026-11-13)
 
 - [ ] No offsite copy of backups, so losing the VPS loses all member data.
-- [ ] Restore drill (§1) never run against a VPS backup.
+- [x] Restore drill (§1) run against a VPS backup: **passed 2026-11-14** on backup
+      `20261114-031908`. All 81 tables matched live row-for-row (3,163 rows), all 5
+      buckets matched by file count, names and size (~2.5 GiB), and a sample
+      recording's sha256 matched. It took 19s. Run it again monthly.
 - [ ] Encrypted secrets in git (`vps/*.enc`) predate the 2026-09-05 cutover.
       Re-run `scripts/secrets-backup-vps.sh` and commit.
 - [ ] nginx-proxy-manager config and certificates (`npm_data`, `npm_letsencrypt` volumes)
