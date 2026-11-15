@@ -8,9 +8,10 @@ import { Role } from "@/lib/generated/prisma/enums";
  * PATCH /api/forums/threads/:threadId/invitees — adds and/or removes
  * members from a restricted standalone thread's invited list after
  * creation (Member-Initiated Restricted Forum Threads, §4.13/§11.16).
- * Thread author or moderator/admin only, enforced inside
- * updateForumThreadInvitees() — this route only checks the caller is
- * signed in.
+ * Thread author or moderator/admin only — except an Inbox group message
+ * (§4.7), where any participant may add and only the author or an admin may
+ * remove. Enforced inside updateForumThreadInvitees() — this route only
+ * checks the caller is signed in.
  */
 export async function PATCH(request: Request, { params }: { params: { threadId: string } }) {
   let user;
@@ -29,7 +30,13 @@ export async function PATCH(request: Request, { params }: { params: { threadId: 
   const isPrivileged = user.role === Role.admin || user.role === Role.moderator;
 
   try {
-    const result = await updateForumThreadInvitees(params.threadId, user.id, isPrivileged, parsed.data);
+    const result = await updateForumThreadInvitees(
+      params.threadId,
+      user.id,
+      isPrivileged,
+      parsed.data,
+      user.role === Role.admin,
+    );
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof ForumError) {

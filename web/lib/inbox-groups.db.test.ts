@@ -35,6 +35,8 @@ describe("Inbox group messages (DB-backed)", { skip }, () => {
   let carol: User;
   let outsider: User;
   let friend: User;
+  let dana: User;
+  let moderator: User;
   let groupId: string;
 
   const rejectsWith = (promise: Promise<unknown>, status: number) =>
@@ -76,6 +78,8 @@ describe("Inbox group messages (DB-backed)", { skip }, () => {
     carol = await member("carol", "Carol Colleague");
     outsider = await member("outsider", "Olly Outsider");
     friend = await member("friend", "Fay Friend", { tier: "friend" });
+    dana = await member("dana", "Dana Doe");
+    moderator = await member("moderator", "Mo Moderator", { role: "moderator" });
   });
 
   it("[AC:b0496a5f:ac_1] creates a group message from two or more recipients, dropping ineligible ones", async () => {
@@ -129,7 +133,8 @@ describe("Inbox group messages (DB-backed)", { skip }, () => {
     const detail = await groups.getGroupMessageThread(groupId, alice.id, false);
     assert.equal(detail.messages.length, 1);
     assert.equal(detail.canLeave, true);
-    assert.equal(detail.canManageParticipants, false);
+    assert.equal(detail.canAddParticipants, true);
+    assert.equal(detail.canRemoveParticipants, false);
 
     const after = await inbox.getUnreadInboxSummaryForUser(alice.id);
     assert.equal(after.unreadCount, 0);
@@ -249,15 +254,59 @@ describe("Inbox group messages (DB-backed)", { skip }, () => {
     );
   });
 
-  it("lets the author add and remove people, and an invitee leave", async () => {
-    await forums.updateForumThreadInvitees(groupId, author.id, false, { addUserIds: [carol.id], removeUserIds: [] });
+  it("[AC:626372f2:ac_1] [AC:626372f2:ac_3] lets any participant add people and tells the rest of the group", async () => {
+    // Alice (an invitee, not the author) adds Carol.
+    await forums.updateForumThreadInvitees(groupId, alice.id, false, { addUserIds: [carol.id], removeUserIds: [] });
     const [added] = await notificationsFor(carol.id);
-    assert.match(added.message, /added you to a group message/);
+    assert.match(added.message, /Alice Ally added you to a group message/);
 
+    const authorBells = await notificationsFor(author.id);
+    assert.match(authorBells[authorBells.length - 1].message, /Alice Ally added Carol Colleague to "Group test: journal club"/);
+    const aliceBells = await notificationsFor(alice.id);
+    assert.equal(
+      aliceBells.some((bell) => /added Carol/.test(bell.message)),
+      false,
+      "the adder isn't told about their own add",
+    );
+    assert.equal((await groups.getGroupMessageThread(groupId, carol.id, false)).participants.length, 4);
+
+    // A non-participant (even a moderator) can't add, and can't tell the group exists.
     await rejectsWith(
-      forums.updateForumThreadInvitees(groupId, alice.id, false, { addUserIds: [outsider.id], removeUserIds: [] }),
+      forums.updateForumThreadInvitees(groupId, outsider.id, false, { addUserIds: [outsider.id], removeUserIds: [] }),
+      404,
+    );
+    await rejectsWith(
+      forums.updateForumThreadInvitees(groupId, moderator.id, true, { addUserIds: [dana.id], removeUserIds: [] }),
+      404,
+    );
+  });
+
+  it("[AC:626372f2:ac_1] caps a group at 20 people, whoever is adding", async () => {
+    const extras = await Promise.all(
+      Array.from({ length: 16 }, (_, i) => member(`extra${i}`, `Extra Person ${i}`)),
+    );
+    // 4 people now + 16 = 20: allowed. One more: rejected.
+    await forums.updateForumThreadInvitees(groupId, carol.id, false, { addUserIds: extras.map((u) => u.id), removeUserIds: [] });
+    await rejectsWith(
+      forums.updateForumThreadInvitees(groupId, carol.id, false, { addUserIds: [dana.id], removeUserIds: [] }),
+      400,
+    );
+    await forums.updateForumThreadInvitees(groupId, author.id, false, { addUserIds: [], removeUserIds: extras.map((u) => u.id) });
+  });
+
+  it("[AC:626372f2:ac_2] lets only the author or an admin remove people, and an invitee leave", async () => {
+    await rejectsWith(
+      forums.updateForumThreadInvitees(groupId, alice.id, false, { addUserIds: [], removeUserIds: [carol.id] }),
       403,
     );
+    // A moderator who's in the group gets no removal power either.
+    await forums.updateForumThreadInvitees(groupId, alice.id, false, { addUserIds: [moderator.id], removeUserIds: [] });
+    await rejectsWith(
+      forums.updateForumThreadInvitees(groupId, moderator.id, true, { addUserIds: [], removeUserIds: [carol.id] }),
+      403,
+    );
+    const admin = await member("admin", "Ada Admin", { role: "admin" });
+    await forums.updateForumThreadInvitees(groupId, admin.id, true, { addUserIds: [], removeUserIds: [moderator.id] }, true);
 
     await groups.leaveGroupMessage(groupId, carol.id);
     assert.equal((await inbox.getInboxList(carol.id)).some((item) => item.id === groupId), false);

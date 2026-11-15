@@ -179,7 +179,7 @@ function ParticipantsControl({
   const { data: members = [] } = useQuery({
     queryKey: ["members-for-new-conversation"],
     queryFn: fetchMembers,
-    enabled: thread.canManageParticipants && open,
+    enabled: thread.canAddParticipants && open,
   });
   const participantIds = useMemo(() => new Set(thread.participants.map((p) => p.id)), [thread.participants]);
   const addable = members.filter((member) => !participantIds.has(member.id));
@@ -272,7 +272,7 @@ function ParticipantsControl({
               {thread.participants.map((participant) => {
                 const isAuthor = participant.id === thread.authorId;
                 const removable =
-                  thread.canManageParticipants && !isAuthor && thread.participants.length > 2;
+                  thread.canRemoveParticipants && !isAuthor && thread.participants.length > 2;
                 return (
                   <li key={participant.id} className="flex items-center gap-2 px-3 py-1.5 text-sm">
                     <Avatar name={participant.name} src={participant.avatarUrl} size="xs" />
@@ -300,7 +300,7 @@ function ParticipantsControl({
               })}
             </ul>
             <div className="flex flex-col gap-1 border-t p-2">
-              {thread.canManageParticipants && (
+              {thread.canAddParticipants && (
                 <Button
                   variant="ghost"
                   size="sm"

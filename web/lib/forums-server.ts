@@ -26,6 +26,7 @@ import {
   groupMessageLink,
   markGroupMessageRead,
   notifyAddedToGroup,
+  notifyGroupOfAdditions,
 } from "@/lib/inbox-groups-server";
 import { MAX_GROUP_MESSAGE_PARTICIPANTS } from "@/lib/inbox";
 import { countPastedImageReferences, linkPastedImages, MAX_PASTED_IMAGES_PER_BODY } from "@/lib/pasted-images-server";
@@ -1552,6 +1553,8 @@ export async function updateForumThreadInvitees(
   userId: string,
   isPrivileged: boolean,
   input: { addUserIds: string[]; removeUserIds: string[] },
+  /** Admin specifically (not moderator) — only consulted for Inbox group messages, see below. */
+  isAdmin = false,
 ): Promise<{ added: number; removed: number }> {
   const thread = await db.forumThread.findUnique({
     where: { id: threadId },
@@ -1563,6 +1566,7 @@ export async function updateForumThreadInvitees(
       removed: true,
       isGroupMessage: true,
       forum: { select: { slug: true, category: { select: { communityId: true } } } },
+      invitees: { select: { userId: true } },
       _count: { select: { invitees: true } },
     },
   });
@@ -1571,7 +1575,16 @@ export async function updateForumThreadInvitees(
   if (thread.visibility !== ForumThreadVisibility.invited) {
     throw new ForumError(400, "Only a restricted thread has an invited list.");
   }
-  if (!isPrivileged && userId !== thread.authorId) {
+  if (thread.isGroupMessage) {
+    // Inbox group messages (§4.7): any participant (or an admin) may add
+    // people; only the author or an admin may remove. A moderator has no
+    // extra power here, and a non-participant can't even confirm it exists.
+    const isParticipant = isGroupParticipant(thread, userId);
+    if (!isParticipant && !isAdmin) throw new ForumError(404, "Thread not found.");
+    if (input.removeUserIds.length > 0 && userId !== thread.authorId && !isAdmin) {
+      throw new ForumError(403, "Only the person who started this group or an admin can remove people.");
+    }
+  } else if (!isPrivileged && userId !== thread.authorId) {
     throw new ForumError(403, "Only the thread's author or a moderator/admin can manage invitees.");
   }
 
@@ -1656,14 +1669,25 @@ export async function updateForumThreadInvitees(
     }
   });
 
-  if (thread.isGroupMessage) {
+  if (thread.isGroupMessage && newInvitees.length > 0) {
     const actor = await db.user.findUnique({ where: { id: userId }, select: { name: true } });
+    const actorName = actor?.name ?? "A member";
     await notifyAddedToGroup({
       threadId,
       subject: thread.title,
-      actorName: actor?.name ?? "A member",
+      actorName,
       userIds: newInvitees.map((user) => user.id),
       kind: "added",
+    });
+    const removedIds = new Set(removeCandidates.map((row) => row.userId));
+    await notifyGroupOfAdditions({
+      threadId,
+      subject: thread.title,
+      actorName,
+      addedUserIds: newInvitees.map((user) => user.id),
+      recipientIds: [thread.authorId, ...thread.invitees.map((invitee) => invitee.userId)].filter(
+        (id) => id !== userId && !removedIds.has(id),
+      ),
     });
   }
 

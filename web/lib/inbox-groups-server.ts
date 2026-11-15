@@ -171,6 +171,33 @@ export async function notifyAddedToGroup(params: {
 }
 
 /**
+ * Bell-only heads-up to a group's existing participants that someone added
+ * new people (§4.7) — "Omar added Sara to …". The adder and the new members
+ * themselves are left out (the latter get notifyAddedToGroup instead).
+ */
+export async function notifyGroupOfAdditions(params: {
+  threadId: string;
+  subject: string;
+  actorName: string;
+  addedUserIds: string[];
+  recipientIds: string[];
+}): Promise<void> {
+  if (params.addedUserIds.length === 0 || params.recipientIds.length === 0) return;
+  const added = await db.user.findMany({ where: { id: { in: params.addedUserIds } }, select: { name: true } });
+  const names = added.map((user) => user.name ?? "a member");
+  const who = names.length <= 2 ? names.join(" and ") : `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
+  const message = `${params.actorName} added ${who} to "${params.subject}"`;
+  await db.notification.createMany({
+    data: Array.from(new Set(params.recipientIds)).map((recipientId) => ({
+      recipientId,
+      type: NotificationType.group_message,
+      message,
+      link: groupMessageLink(params.threadId),
+    })),
+  });
+}
+
+/**
  * Throttled new-message email for a group (§4.7): a participant is emailed
  * only if they haven't been emailed about this group since they last read
  * it, and at most once per GROUP_EMAIL_THROTTLE_MS. The claim is an atomic
@@ -461,7 +488,8 @@ export async function getGroupMessageThread(
       isOwn: post.authorId === userId,
       removed: post.removed,
     })),
-    canManageParticipants: isAuthor || isAdmin,
+    canAddParticipants: true,
+    canRemoveParticipants: isAuthor || isAdmin,
     canLeave: !isAuthor,
     mentionAllowedIds: participants.map((participant) => participant.id),
   };

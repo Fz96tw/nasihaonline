@@ -164,8 +164,10 @@ export type GroupMessageThread = {
   authorId: string;
   participants: GroupMessageParticipant[];
   messages: GroupMessageThreadMessage[];
-  /** The author or an admin — may add/remove participants. */
-  canManageParticipants: boolean;
+  /** Any participant may add people (§4.7). */
+  canAddParticipants: boolean;
+  /** Only the author or an admin may remove people. */
+  canRemoveParticipants: boolean;
   /** An invitee (not the author) — may leave. */
   canLeave: boolean;
   /** Ids an `@`-tag may resolve to (participants only). */
