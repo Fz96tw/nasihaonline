@@ -21,6 +21,13 @@ import { DIRECTORY_TIERS } from "@/lib/members";
 import { CLINICAL_DISCUSSIONS_SLUG, EVENTS_FORUM_SLUG, FROM_THE_WEB_FORUM_SLUG, LIBRARY_FORUM_SLUG } from "@/lib/forums";
 import { isIndexableForumThread } from "@/lib/forum-indexing";
 import { ensureCommunityMembership, getMemberCommunityContext, type MemberCommunityContext } from "@/lib/profile-server";
+import {
+  emailGroupParticipantsAboutPost,
+  groupMessageLink,
+  markGroupMessageRead,
+  notifyAddedToGroup,
+} from "@/lib/inbox-groups-server";
+import { MAX_GROUP_MESSAGE_PARTICIPANTS } from "@/lib/inbox";
 import { countPastedImageReferences, linkPastedImages, MAX_PASTED_IMAGES_PER_BODY } from "@/lib/pasted-images-server";
 import { countSharedRecordingTargets, linkSharedRecording, unlinkSharedRecordings } from "@/lib/quick-recordings-server";
 import type {
@@ -203,6 +210,11 @@ export const OWN_THREAD_ACCESS_SELECT = {
   invitees: { select: { userId: true } },
   removed: true,
 } as const;
+
+/** An Inbox group message's participants (§4.7): its author plus its invitees. */
+function isGroupParticipant(thread: Pick<OwnThreadAccess, "authorId" | "invitees">, userId: string): boolean {
+  return thread.authorId === userId || thread.invitees.some((invitee) => invitee.userId === userId);
+}
 
 function isOwnThreadVisible(thread: OwnThreadAccess, viewerId: string | undefined, isPrivileged: boolean): boolean {
   if (thread.visibility !== ForumThreadVisibility.invited) return true;
@@ -501,6 +513,7 @@ export async function getForumThreadDetail(
       externalArticleId: true,
       visibility: true,
       removed: true,
+      isGroupMessage: true,
       categories: { select: { category: { select: { id: true, name: true, slug: true } } } },
       // Set only for a Weekly Reflection thread — drives the hero banner.
       reflectionPost: { select: { imageFile: true, quoteText: true, quoteAttribution: true } },
@@ -527,6 +540,9 @@ export async function getForumThreadDetail(
     },
   });
   if (!thread || thread.forum.slug !== forumSlug) return null;
+  // An Inbox group message (§4.7) is never rendered as a forum thread — the
+  // thread page redirects a participant to /inbox before calling this.
+  if (thread.isGroupMessage) return null;
   // A member who passes isThreadVisible participates normally. Anyone else
   // — a signed-out reader, or a member outside a community-gated forum's
   // community (objective 412202d3) — may still read a thread that passes the
@@ -739,7 +755,6 @@ export async function getMemberForumThreads(
   isPrivileged = false,
 ): Promise<MemberForumThread[]> {
   const posts = await db.forumPost.findMany({
-    where: { authorId: userId },
     select: {
       threadId: true,
       createdAt: true,
@@ -753,6 +768,8 @@ export async function getMemberForumThreads(
         },
       },
     },
+    // Inbox group messages (§4.7) never show on a profile or /my-posts.
+    where: { authorId: userId, thread: { isGroupMessage: false } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -1043,6 +1060,7 @@ export async function updateForumThread(
       knowledgeItemId: true,
       externalArticleId: true,
       removed: true,
+      isGroupMessage: true,
       forumId: true,
       forum: { select: { slug: true, category: { select: { communityId: true } } } },
       invitees: { select: { userId: true } },
@@ -1050,6 +1068,9 @@ export async function updateForumThread(
     },
   });
   if (!thread) throw new ForumError(404, "Thread not found.");
+  // A group message (§4.7) is managed from the Inbox — it can never be
+  // retitled into, moved out to, or opened up as a forum thread.
+  if (thread.isGroupMessage) throw new ForumError(404, "Thread not found.");
   if (thread.eventId || thread.knowledgeItemId || thread.externalArticleId) {
     throw new ForumError(400, "This thread's title and audience are managed automatically and can't be edited here.");
   }
@@ -1187,6 +1208,7 @@ export async function createForumPost(
       eventId: true,
       knowledgeItemId: true,
       externalArticleId: true,
+      isGroupMessage: true,
       forum: { select: { slug: true, category: { select: { communityId: true } } } },
       event: EVENT_THREAD_ACCESS_SELECT,
       knowledgeItem: KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
@@ -1194,6 +1216,10 @@ export async function createForumPost(
     },
   });
   if (!thread) throw new ForumError(404, "Thread not found.");
+  // A group message (§4.7) accepts posts from its participants only — a
+  // moderator/admin's isPrivileged bypass doesn't let them post into a
+  // private conversation they aren't part of.
+  if (thread.isGroupMessage && !isGroupParticipant(thread, authorId)) throw new ForumError(404, "Thread not found.");
   const member = await getMemberCommunityContext(authorId);
   if (!isThreadVisible(thread, authorId, isPrivileged, member)) throw new ForumError(404, "Thread not found.");
 
@@ -1321,7 +1347,10 @@ export async function createForumPost(
   );
   Array.from(systemUserIds).forEach((id) => otherParticipantIds.delete(id));
   const mentionedMembers = mentionedCandidates.filter((member) => !systemUserIds.has(member.id));
-  const postLink = `/forums/${thread.forum.slug}/${threadId}#post-${post.id}`;
+  // A group message's links open it in the Inbox (§4.7), never a forum URL.
+  const postLink = thread.isGroupMessage
+    ? groupMessageLink(threadId)
+    : `/forums/${thread.forum.slug}/${threadId}#post-${post.id}`;
 
   await Promise.all(
     mentionedMembers.map((member) =>
@@ -1335,6 +1364,32 @@ export async function createForumPost(
   );
 
   const mentionedIds = new Set(mentionedMembers.map((member) => member.id));
+
+  // Inbox group message (§4.7): every other participant gets a
+  // group_message bell (a tagged one gets only the mention above), and the
+  // throttled email goes to all of them, tagged or not. Posting counts as
+  // reading — the sender's own read marker moves to this post.
+  if (thread.isGroupMessage) {
+    const senderName = author?.name ?? "A member";
+    const recipientIds = Array.from(otherParticipantIds).filter((id) => !mentionedIds.has(id));
+    await db.notification.createMany({
+      data: recipientIds.map((recipientId) => ({
+        recipientId,
+        type: NotificationType.group_message,
+        message: `${senderName} sent a message in "${thread.title}"`,
+        link: postLink,
+      })),
+    });
+    await markGroupMessageRead(threadId, authorId, post.createdAt);
+    await emailGroupParticipantsAboutPost({
+      threadId,
+      subject: thread.title,
+      senderName,
+      body: input.body,
+      recipientIds: Array.from(new Set([...Array.from(otherParticipantIds), ...Array.from(mentionedIds)])),
+    });
+    return { id: post.id, createdAt: post.createdAt.toISOString() };
+  }
 
   if (otherParticipantIds.size > 0) {
     const followers = await db.forumFollow.findMany({
@@ -1506,6 +1561,7 @@ export async function updateForumThreadInvitees(
       authorId: true,
       visibility: true,
       removed: true,
+      isGroupMessage: true,
       forum: { select: { slug: true, category: { select: { communityId: true } } } },
       _count: { select: { invitees: true } },
     },
@@ -1554,7 +1610,16 @@ export async function updateForumThreadInvitees(
 
   const finalCount = thread._count.invitees + newInvitees.length - removeCandidates.length;
   if (removeCandidates.length > 0 && finalCount < 1) {
-    throw new ForumError(400, "A restricted thread must keep at least one invited member.");
+    throw new ForumError(
+      400,
+      thread.isGroupMessage
+        ? "A group message must keep at least one other member."
+        : "A restricted thread must keep at least one invited member.",
+    );
+  }
+  // Group messages (§4.7) cap at MAX_GROUP_MESSAGE_PARTICIPANTS, author included.
+  if (thread.isGroupMessage && finalCount + 1 > MAX_GROUP_MESSAGE_PARTICIPANTS) {
+    throw new ForumError(400, `A group message can have at most ${MAX_GROUP_MESSAGE_PARTICIPANTS} people.`);
   }
 
   await db.$transaction(async (tx) => {
@@ -1562,7 +1627,9 @@ export async function updateForumThreadInvitees(
       await tx.forumThreadInvitee.createMany({
         data: newInvitees.map((user) => ({ threadId, userId: user.id })),
       });
-      await notifyThreadInvitees(tx, {
+      // A group message's added members are notified (bell + email) after
+      // the transaction instead — see notifyAddedToGroup below.
+      if (!thread.isGroupMessage) await notifyThreadInvitees(tx, {
         threadId,
         forumSlug: thread.forum.slug,
         title: thread.title,
@@ -1578,7 +1645,9 @@ export async function updateForumThreadInvitees(
         data: removeIds.map((recipientId) => ({
           recipientId,
           type: NotificationType.forum_thread_removed,
-          message: `You no longer have access to a private thread: "${thread.title}"`,
+          message: thread.isGroupMessage
+            ? `You were removed from a group message: "${thread.title}"`
+            : `You no longer have access to a private thread: "${thread.title}"`,
           // No link — a removed invitee's next request for the thread
           // 404s, same rationale as library_item_removed/event_removed.
           link: null,
@@ -1586,6 +1655,17 @@ export async function updateForumThreadInvitees(
       });
     }
   });
+
+  if (thread.isGroupMessage) {
+    const actor = await db.user.findUnique({ where: { id: userId }, select: { name: true } });
+    await notifyAddedToGroup({
+      threadId,
+      subject: thread.title,
+      actorName: actor?.name ?? "A member",
+      userIds: newInvitees.map((user) => user.id),
+      kind: "added",
+    });
+  }
 
   const forumCommunityId = thread.forum.category?.communityId;
   await ensureCommunityMembership(
@@ -1715,6 +1795,8 @@ export async function getTrendingForumThreads(
       // same rule), so this dashboard-wide surface shouldn't surface it
       // just because the viewer is an admin/moderator.
       removed: false,
+      // Inbox group messages (§4.7) are private conversations, never trending.
+      isGroupMessage: false,
       ...(isPrivileged
         ? {}
         : {

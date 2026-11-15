@@ -1,18 +1,119 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm, type ControllerRenderProps } from "react-hook-form";
+import { UserPlus, Users, X } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { sendMessageSchema, type SendMessageValues } from "@/lib/validation/inbox";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { usePasteImageUpload } from "@/lib/use-paste-image-upload";
-import type { SharedContext } from "@/lib/members";
+import type { DirectoryMember, SharedContext } from "@/lib/members";
+import { MAX_GROUP_MESSAGE_PARTICIPANTS } from "@/lib/inbox";
 import { buildMessageTemplates, type MessageTemplate } from "@/lib/message-templates";
+
+type Recipient = { id: string; name: string };
+
+async function fetchMembers(): Promise<DirectoryMember[]> {
+  const response = await fetch("/api/members");
+  if (!response.ok) throw new Error("Failed to load members");
+  const data = (await response.json()) as { members: DirectoryMember[] };
+  return data.members;
+}
+
+/**
+ * The "To" row when a message can become a group message (§4.7): the
+ * chosen recipients as removable chips plus an "Add people" picker over the
+ * same /api/members listing as the Inbox's own picker.
+ */
+function RecipientsField({
+  recipients,
+  currentUserId,
+  onChange,
+}: {
+  recipients: Recipient[];
+  currentUserId: string;
+  onChange: (next: Recipient[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const { data: members = [] } = useQuery({
+    queryKey: ["members-for-new-conversation"],
+    queryFn: fetchMembers,
+  });
+  const chosen = new Set(recipients.map((recipient) => recipient.id));
+  const options = members.filter((member) => member.id !== currentUserId && !chosen.has(member.id));
+  const atCap = recipients.length + 1 >= MAX_GROUP_MESSAGE_PARTICIPANTS;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-sm font-medium">To</span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {recipients.map((recipient) => (
+          <span
+            key={recipient.id}
+            className="flex items-center gap-1 rounded-full bg-muted py-1 pl-2.5 pr-1 text-xs font-medium"
+          >
+            {recipient.name}
+            {recipients.length > 1 && (
+              <button
+                type="button"
+                onClick={() => onChange(recipients.filter((r) => r.id !== recipient.id))}
+                className="rounded-full p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
+                aria-label={`Remove ${recipient.name}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </span>
+        ))}
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button type="button" variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" disabled={atCap}>
+              <UserPlus className="h-3.5 w-3.5" />
+              {atCap ? "Group is full" : "Add people"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-64 p-0" align="start">
+            <Command>
+              <CommandInput placeholder="Search members…" />
+              <CommandList>
+                <CommandEmpty>No member found.</CommandEmpty>
+                <CommandGroup>
+                  {options.map((member) => (
+                    <CommandItem
+                      key={member.id}
+                      value={member.name ?? member.id}
+                      onSelect={() => {
+                        onChange([...recipients, { id: member.id, name: member.name ?? "Unnamed member" }]);
+                        setOpen(false);
+                      }}
+                    >
+                      {member.name ?? "Unnamed member"}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      </div>
+      {recipients.length > 1 && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Users className="h-3.5 w-3.5" />
+          Group message — everyone listed can read and reply. Up to {MAX_GROUP_MESSAGE_PARTICIPANTS} people, you
+          included.
+        </p>
+      )}
+    </div>
+  );
+}
 
 const DEFAULT_VALUES: SendMessageValues = {
   recipientId: null,
@@ -147,12 +248,23 @@ export function SendMessageForm({
   recipientId,
   recipientName,
   onDone,
+  groupComposer,
 }: {
   recipientId: string;
   recipientName: string;
   /** Called from the post-send "Done" button. */
   onDone: () => void;
+  /**
+   * Set from the Inbox's own compose entry points (§4.7): lets the sender
+   * add more recipients, turning the message into a group message. Left
+   * unset on Directory cards, which stay single-recipient in v1.
+   */
+  groupComposer?: { currentUserId: string };
 }) {
+  const queryClient = useQueryClient();
+  const [recipients, setRecipients] = useState<Recipient[]>([{ id: recipientId, name: recipientName }]);
+  const isGroup = recipients.length > 1;
+  const primary = recipients[0];
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -167,20 +279,35 @@ export function SendMessageForm({
   });
 
   async function onSubmit(values: SendMessageValues) {
+    const subject = values.subject?.trim() ? values.subject.trim() : null;
+    if (isGroup && !subject) {
+      form.setError("subject", { message: "A group message needs a subject" });
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       const csrfToken = await getCsrfToken();
-      const res = await fetch("/api/inbox/messages", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
-        body: JSON.stringify({
-          recipientId,
-          subject: values.subject?.trim() ? values.subject.trim() : null,
-          body: values.body,
-          parentId: null,
-        }),
-      });
+      const res = isGroup
+        ? await fetch("/api/inbox/groups", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+            body: JSON.stringify({
+              recipientIds: recipients.map((recipient) => recipient.id),
+              subject,
+              body: values.body,
+            }),
+          })
+        : await fetch("/api/inbox/messages", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-csrf-token": csrfToken },
+            body: JSON.stringify({
+              recipientId: primary.id,
+              subject,
+              body: values.body,
+              parentId: null,
+            }),
+          });
       if (!res.ok) {
         const payload = await res.json().catch(() => null);
         throw new Error(
@@ -188,6 +315,7 @@ export function SendMessageForm({
         );
       }
       setSent(true);
+      await queryClient.invalidateQueries({ queryKey: ["inbox-list"] });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
@@ -199,7 +327,11 @@ export function SendMessageForm({
     <>
     {sent ? (
       <div className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground">Message sent to {recipientName}.</p>
+        <p className="text-sm text-muted-foreground">
+          {isGroup
+            ? `Group message sent to ${recipients.map((recipient) => recipient.name).join(", ")}.`
+            : `Message sent to ${primary.name}.`}
+        </p>
         <DialogFooter>
           <Button onClick={() => onDone()}>Done</Button>
         </DialogFooter>
@@ -207,9 +339,22 @@ export function SendMessageForm({
     ) : (
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
+          {groupComposer && (
+            <RecipientsField
+              recipients={recipients}
+              currentUserId={groupComposer.currentUserId}
+              onChange={(next) => {
+                setRecipients(next);
+                form.clearErrors("subject");
+              }}
+            />
+          )}
+
+          {!isGroup && (
           <TemplatePicker
-            recipientId={recipientId}
-            recipientName={recipientName}
+            key={primary.id}
+            recipientId={primary.id}
+            recipientName={primary.name}
             hasCustomText={() => {
               const { body, subject } = form.getValues();
               const applied = appliedTemplate.current;
@@ -223,13 +368,14 @@ export function SendMessageForm({
               form.setValue("body", template.body, { shouldDirty: true, shouldValidate: true });
             }}
           />
+          )}
 
           <FormField
             control={form.control}
             name="subject"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Subject (optional)</FormLabel>
+                <FormLabel>{isGroup ? "Subject" : "Subject (optional)"}</FormLabel>
                 <FormControl>
                   <Input
                     value={field.value ?? ""}

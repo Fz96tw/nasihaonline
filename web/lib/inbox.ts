@@ -92,7 +92,50 @@ export type MeetingRequestListItem = {
   meetingOrganizerMessageImageUrl: string | null;
 };
 
-export type InboxListItem = InboxMessageListItem | MeetingRequestListItem;
+/** One member of an Inbox group message (§4.7) — the author plus every invitee. */
+export type GroupMessageParticipant = {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+};
+
+/** Inbox group messages (§4.7): at most this many participants, the author included. */
+export const MAX_GROUP_MESSAGE_PARTICIPANTS = 20;
+
+/**
+ * A row in the inbox list for a group message (§4.7) — a restricted forum
+ * thread in the hidden Group Messages forum, shown alongside direct
+ * messages. `otherParty*` is the "face" of the row (the latest sender who
+ * isn't the viewer, else the author) so code that treats every item as
+ * having one counterparty keeps working; `participants` is the full list.
+ */
+export type GroupMessageListItem = {
+  kind: "group_message";
+  /** The ForumThread id — also the id used by GET /api/inbox/groups/:id. */
+  id: string;
+  otherPartyId: string;
+  otherPartyName: string;
+  otherPartyAvatarUrl: string | null;
+  subject: string;
+  /** Everyone in the group, the viewer included, author first. */
+  participants: GroupMessageParticipant[];
+  /** "Aisha: latest message…", truncated. */
+  snippet: string;
+  searchText: string;
+  unread: boolean;
+  lastActivityAt: string;
+};
+
+export type InboxListItem = InboxMessageListItem | MeetingRequestListItem | GroupMessageListItem;
+
+/** The other participants' first names, for a group row's label — "Aisha, Omar +3". */
+export function formatGroupParticipantNames(participants: GroupMessageParticipant[], viewerId: string, shown = 2): string {
+  const others = participants.filter((participant) => participant.id !== viewerId);
+  if (others.length === 0) return "Only you";
+  const names = others.slice(0, shown).map((participant) => participant.name.split(" ")[0] || participant.name);
+  const rest = others.length - names.length;
+  return rest > 0 ? `${names.join(", ")} +${rest}` : names.join(", ");
+}
 
 /** A single message within a thread's detail pane, in chronological order. */
 export type InboxThreadMessage = {
@@ -106,6 +149,27 @@ export type InboxThreadMessage = {
   editedAt: string | null;
   /** True if this message was sent by the current viewer. */
   isOwn: boolean;
+};
+
+/** A message in a group message's detail pane (§4.7) — a ForumPost, flattened chronologically. */
+export type GroupMessageThreadMessage = InboxThreadMessage & {
+  /** A post taken down by a moderator or deleted by its author — body is a placeholder, no Edit. */
+  removed: boolean;
+};
+
+/** GET /api/inbox/groups/:id — a group message's detail pane (§4.7). */
+export type GroupMessageThread = {
+  id: string;
+  subject: string;
+  authorId: string;
+  participants: GroupMessageParticipant[];
+  messages: GroupMessageThreadMessage[];
+  /** The author or an admin — may add/remove participants. */
+  canManageParticipants: boolean;
+  /** An invitee (not the author) — may leave. */
+  canLeave: boolean;
+  /** Ids an `@`-tag may resolve to (participants only). */
+  mentionAllowedIds: string[];
 };
 
 export type InboxThread = {
@@ -127,6 +191,8 @@ export function matchesInboxSearch(item: InboxListItem, query: string): boolean 
   const haystack =
     item.kind === "message"
       ? [item.otherPartyName, item.subject, item.searchText]
-      : [item.otherPartyName, item.topic, item.searchText];
+      : item.kind === "group_message"
+        ? [item.subject, item.searchText, ...item.participants.map((participant) => participant.name)]
+        : [item.otherPartyName, item.topic, item.searchText];
   return haystack.some((value) => value?.toLowerCase().includes(query));
 }

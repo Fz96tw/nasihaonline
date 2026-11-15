@@ -380,6 +380,9 @@ export async function getFeedPage(params: {
     // either, unlike the restricted-visibility gates below which stay
     // approximate/over-counting per the note above.
     removed: false,
+    // Inbox group messages (§4.7) only ever surface in the Inbox — the
+    // feed's search mode already finds them through getInboxList.
+    isGroupMessage: false,
     // externalArticleId: null — same for a curated article's discussion,
     // which surfaces on the article's own row instead.
     ...(query ? {} : { eventId: null, knowledgeItemId: null, externalArticleId: null }),
@@ -972,6 +975,15 @@ export async function getFeedPage(params: {
             return {
               ...base,
               title: item.subject ?? `Message from ${item.otherPartyName}`,
+              excerpt: excerptOf(item.searchText),
+            };
+          }
+          if (item.kind === "group_message") {
+            // An Inbox group message (§4.7) the viewer is in — same
+            // full-text excerpt rule as a direct message above.
+            return {
+              ...base,
+              title: `Group: ${item.subject}`,
               excerpt: excerptOf(item.searchText),
             };
           }

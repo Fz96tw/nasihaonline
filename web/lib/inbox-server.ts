@@ -8,6 +8,7 @@ import { INBOX_TIERS } from "@/lib/members";
 import { createNotification } from "@/lib/notifications-server";
 import { getMeetingMessageImageUrl, getProfileAvatarUrl } from "@/lib/storage";
 import { countPastedImageReferences, linkPastedImages, MAX_PASTED_IMAGES_PER_BODY } from "@/lib/pasted-images-server";
+import { getGroupMessageListItems, getUnreadGroupMessageSummary } from "@/lib/inbox-groups-server";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
@@ -47,7 +48,7 @@ const MEETING_REQUEST_INCLUDE = {
  * merged into the same most-recent-activity-sorted list per §4.7.
  */
 export async function getInboxList(userId: string): Promise<InboxListItem[]> {
-  const [messages, meetingRequests] = await Promise.all([
+  const [messages, meetingRequests, groupMessages] = await Promise.all([
     db.inboxMessage.findMany({
       where: { OR: [{ senderId: userId }, { recipientId: userId }] },
       include: MESSAGE_INCLUDE,
@@ -61,6 +62,9 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
       include: MEETING_REQUEST_INCLUDE,
       orderBy: { updatedAt: "desc" },
     }),
+    // Group messages (§4.7) — restricted forum threads in the hidden Group
+    // Messages forum, listed here alongside direct messages.
+    getGroupMessageListItems(userId),
   ]);
 
   type Message = (typeof messages)[number];
@@ -147,6 +151,8 @@ export async function getInboxList(userId: string): Promise<InboxListItem[]> {
     });
   }
 
+  items.push(...groupMessages);
+
   return items.sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
 }
 
@@ -173,7 +179,7 @@ export async function getUnreadInboxSummaryForUser(userId: string) {
     meetingRequest: { OR: [{ senderId: userId }, { recipientId: userId }] },
   };
 
-  const [inboxUnreadCount, meetingUnreadCount, unreadMessages, unreadComments] = await Promise.all([
+  const [inboxUnreadCount, meetingUnreadCount, unreadMessages, unreadComments, groupSummary] = await Promise.all([
     db.inboxMessage.count({ where: { recipientId: userId, readAt: null } }),
     db.meetingRequestMessage.count({ where: meetingRequestUnreadWhere }),
     db.inboxMessage.findMany({
@@ -199,6 +205,7 @@ export async function getUnreadInboxSummaryForUser(userId: string) {
       orderBy: { createdAt: "desc" },
       take: DASHBOARD_INBOX_LIMIT,
     }),
+    getUnreadGroupMessageSummary(userId),
   ]);
 
   const items = [
@@ -216,12 +223,13 @@ export async function getUnreadInboxSummaryForUser(userId: string) {
       snippet: truncate(comment.body ?? ""),
       createdAt: comment.createdAt.toISOString(),
     })),
+    ...groupSummary.items.map((item) => ({ ...item, subject: `Group: ${item.subject}` })),
   ]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, DASHBOARD_INBOX_LIMIT);
 
   return {
-    unreadCount: inboxUnreadCount + meetingUnreadCount,
+    unreadCount: inboxUnreadCount + meetingUnreadCount + groupSummary.unreadCount,
     items,
   };
 }

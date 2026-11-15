@@ -134,13 +134,15 @@ export async function syncForumThreadToIndex(threadId: string): Promise<void> {
       id: true,
       title: true,
       removed: true,
+      isGroupMessage: true,
       author: { select: { name: true } },
       forum: { select: { name: true, slug: true } },
       posts: { select: { body: true }, orderBy: { createdAt: "asc" } },
     },
   });
 
-  if (!thread || thread.removed) {
+  // Inbox group messages (§4.7) are private conversations — never indexed.
+  if (!thread || thread.removed || thread.isGroupMessage) {
     await deleteForumDocument(threadId);
     return;
   }

@@ -33,7 +33,7 @@ export async function getFlaggedContent(): Promise<ModerationItem[]> {
         flagReason: true,
         createdAt: true,
         author: { select: { name: true } },
-        thread: { select: { id: true, title: true, forum: { select: { slug: true } } } },
+        thread: { select: { id: true, title: true, isGroupMessage: true, forum: { select: { slug: true } } } },
       },
     }),
   ]);
@@ -55,12 +55,12 @@ export async function getFlaggedContent(): Promise<ModerationItem[]> {
     ...forumPosts.map((post) => ({
       id: post.id,
       type: "forum_post" as const,
-      title: post.thread.title,
+      title: post.thread.isGroupMessage ? `Group message: ${post.thread.title}` : post.thread.title,
       excerpt: post.body,
       authorName: post.author.name,
       flagReason: post.flagReason,
       createdAt: post.createdAt.toISOString(),
-      href: `/forums/${post.thread.forum.slug}/${post.thread.id}`,
+      href: post.thread.isGroupMessage ? null : `/forums/${post.thread.forum.slug}/${post.thread.id}`,
     })),
   ];
 

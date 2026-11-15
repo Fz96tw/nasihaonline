@@ -16,11 +16,12 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { InboxList } from "@/components/inbox/inbox-list";
+import { GroupAvatars, InboxList } from "@/components/inbox/inbox-list";
 import { InboxDetail } from "@/components/inbox/inbox-detail";
+import { GroupMessageDetail } from "@/components/inbox/group-message-detail";
 import { MeetingRequestDetail } from "@/components/inbox/meeting-request-detail";
 import { NewConversationActions } from "@/components/inbox/new-conversation-actions";
-import { matchesInboxSearch, type InboxListItem, type InboxThread } from "@/lib/inbox";
+import { matchesInboxSearch, type GroupMessageThread, type InboxListItem, type InboxThread } from "@/lib/inbox";
 import { cn } from "@/lib/utils";
 
 type InboxFilter = "all" | "unread" | "message" | "meeting_request";
@@ -120,6 +121,21 @@ async function fetchThread(id: string): Promise<InboxThread> {
   return response.json();
 }
 
+/** GET /api/inbox/groups/:id — also marks the group read for the viewer (§4.7). */
+async function fetchGroupThread(id: string): Promise<GroupMessageThread> {
+  const response = await fetch(`/api/inbox/groups/${id}`);
+  if (!response.ok) throw new Error("Failed to load group message");
+  return response.json();
+}
+
+/** The member ids an item involves — one counterparty, or every other participant of a group. */
+function otherPartyIds(item: InboxListItem, currentUserId: string): string[] {
+  if (item.kind === "group_message") {
+    return item.participants.filter((participant) => participant.id !== currentUserId).map((participant) => participant.id);
+  }
+  return [item.otherPartyId];
+}
+
 /** Side-effect-only call — marks a meeting request's unread messages as read (§4.7 AC2, mirroring fetchThread for InboxMessage). */
 async function markMeetingRequestRead(id: string): Promise<void> {
   const response = await fetch(`/api/inbox/meeting-requests/${id}`);
@@ -156,20 +172,28 @@ export function InboxPanel({
   const people = useMemo(() => {
     const byId = new Map<string, Person>();
     for (const item of items) {
-      if (!byId.has(item.otherPartyId)) {
+      if (item.kind === "group_message") {
+        for (const participant of item.participants) {
+          if (participant.id !== currentUserId && !byId.has(participant.id)) {
+            byId.set(participant.id, { id: participant.id, name: participant.name });
+          }
+        }
+      } else if (!byId.has(item.otherPartyId)) {
         byId.set(item.otherPartyId, { id: item.otherPartyId, name: item.otherPartyName });
       }
     }
     return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [items]);
+  }, [items, currentUserId]);
 
   // One entry per counterparty, most recently active first — the item is
-  // that person's latest thread/request, so one click opens it.
+  // that person's latest thread/request, so one click opens it. A group
+  // message is its own entry (keyed by the group, not a person).
   const recentConversations = useMemo(() => {
     const byPerson = new Map<string, InboxListItem>();
     for (const item of items) {
-      const existing = byPerson.get(item.otherPartyId);
-      if (!existing || item.lastActivityAt > existing.lastActivityAt) byPerson.set(item.otherPartyId, item);
+      const key = item.kind === "group_message" ? `group:${item.id}` : item.otherPartyId;
+      const existing = byPerson.get(key);
+      if (!existing || item.lastActivityAt > existing.lastActivityAt) byPerson.set(key, item);
     }
     return Array.from(byPerson.values())
       .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt))
@@ -180,13 +204,14 @@ export function InboxPanel({
     const query = search.trim().toLowerCase();
     return items.filter((item) => {
       if (filter === "unread" && !item.unread) return false;
-      if (filter === "message" && item.kind !== "message") return false;
+      // "Messages" covers direct and group messages alike (§4.7).
+      if (filter === "message" && item.kind === "meeting_request") return false;
       if (filter === "meeting_request" && item.kind !== "meeting_request") return false;
-      if (personFilter && item.otherPartyId !== personFilter) return false;
+      if (personFilter && !otherPartyIds(item, currentUserId).includes(personFilter)) return false;
       if (query && !matchesInboxSearch(item, query)) return false;
       return true;
     });
-  }, [items, search, filter, personFilter]);
+  }, [items, search, filter, personFilter, currentUserId]);
 
   const selectedItem = items.find((item) => item.id === selectedId) ?? null;
 
@@ -195,6 +220,19 @@ export function InboxPanel({
     queryFn: () => fetchThread(selectedId as string),
     enabled: selectedItem?.kind === "message",
   });
+
+  const { data: groupThread, isLoading: groupThreadLoading } = useQuery({
+    queryKey: ["inbox-group", selectedId],
+    queryFn: () => fetchGroupThread(selectedId as string),
+    enabled: selectedItem?.kind === "group_message",
+  });
+
+  // Same as the direct-message effect below: opening a group marks it read
+  // server-side, so refresh the list's unread dot.
+  useEffect(() => {
+    if (groupThread) queryClient.invalidateQueries({ queryKey: ["inbox-list"] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupThread?.id, groupThread?.messages.length]);
 
   // GET /api/inbox/messages/:id marks the viewer's unread messages in that
   // thread as read as a side effect — refresh the list so its unread state
@@ -222,6 +260,7 @@ export function InboxPanel({
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["inbox-list"] }),
       selectedId ? queryClient.invalidateQueries({ queryKey: ["inbox-thread", selectedId] }) : Promise.resolve(),
+      selectedId ? queryClient.invalidateQueries({ queryKey: ["inbox-group", selectedId] }) : Promise.resolve(),
     ]);
   }
 
@@ -240,7 +279,7 @@ export function InboxPanel({
           </h3>
           <ul className="flex flex-wrap gap-2">
             {recentConversations.map((item) => (
-              <li key={item.otherPartyId} className="min-w-0 max-w-full">
+              <li key={item.kind === "group_message" ? `group:${item.id}` : item.otherPartyId} className="min-w-0 max-w-full">
                 <button
                   type="button"
                   onClick={() => {
@@ -249,14 +288,22 @@ export function InboxPanel({
                     setPersonFilter(null);
                     setSelectedId(item.id);
                   }}
-                  aria-label={`Open your latest conversation with ${item.otherPartyName}`}
+                  aria-label={
+                    item.kind === "group_message"
+                      ? `Open the group message ${item.subject}`
+                      : `Open your latest conversation with ${item.otherPartyName}`
+                  }
                   className={cn(
                     "flex max-w-full items-center gap-2 rounded-full border bg-card py-1 pl-1 pr-3 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     item.unread && "border-primary font-semibold",
                   )}
                 >
-                  <Avatar name={item.otherPartyName} src={item.otherPartyAvatarUrl} size="xs" />
-                  <span className="truncate">{item.otherPartyName}</span>
+                  {item.kind === "group_message" ? (
+                    <GroupAvatars participants={item.participants} currentUserId={currentUserId} size="xs" />
+                  ) : (
+                    <Avatar name={item.otherPartyName} src={item.otherPartyAvatarUrl} size="xs" />
+                  )}
+                  <span className="truncate">{item.kind === "group_message" ? item.subject : item.otherPartyName}</span>
                   {item.unread && <span className="h-2 w-2 rounded-full bg-primary" aria-label="unread" />}
                 </button>
               </li>
@@ -306,6 +353,7 @@ export function InboxPanel({
               items={filteredItems}
               selectedId={selectedId}
               onSelect={setSelectedId}
+              currentUserId={currentUserId}
               hasUnfilteredItems={items.length > 0}
             />
           </div>
@@ -317,6 +365,18 @@ export function InboxPanel({
               currentUserId={currentUserId}
               onBack={() => setSelectedId(null)}
               onUpdated={refresh}
+            />
+          ) : selectedItem?.kind === "group_message" ? (
+            <GroupMessageDetail
+              thread={groupThread}
+              isLoading={groupThreadLoading}
+              currentUserId={currentUserId}
+              onBack={() => setSelectedId(null)}
+              onThreadChanged={refresh}
+              onLeft={async () => {
+                setSelectedId(null);
+                await queryClient.invalidateQueries({ queryKey: ["inbox-list"] });
+              }}
             />
           ) : (
             <InboxDetail

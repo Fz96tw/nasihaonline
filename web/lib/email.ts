@@ -763,6 +763,56 @@ export async function sendInboxMessageEmail(
 }
 
 /**
+ * Inbox group messages (§4.7) — "started a group with you", "added you", or
+ * a new message (throttled by the caller, lib/inbox-groups-server.ts).
+ * Best-effort like every other function here.
+ */
+export async function sendGroupMessageEmail(
+  to: string,
+  name: string,
+  message: {
+    kind: "started" | "added" | "message";
+    senderName: string;
+    subject: string;
+    snippet: string | null;
+    threadUrl: string;
+  },
+) {
+  if (!resend) {
+    console.warn(`[email] RESEND_API_KEY not set — skipping group message email to ${to}`);
+    return;
+  }
+
+  const subjectLine =
+    message.kind === "started"
+      ? `${message.senderName} started a group message: ${message.subject}`
+      : message.kind === "added"
+        ? `${message.senderName} added you to a group message: ${message.subject}`
+        : `New message in "${message.subject}"`;
+  const lead =
+    message.kind === "started"
+      ? `${message.senderName} started a group message with you — "${message.subject}"`
+      : message.kind === "added"
+        ? `${message.senderName} added you to a group message — "${message.subject}"`
+        : `${message.senderName} posted in your group message "${message.subject}"`;
+  const footer =
+    message.kind === "message"
+      ? "We won't email you about this group again until you've read it."
+      : "New messages in this group email you at most once until you've read it.";
+
+  try {
+    await sendEmail({
+      from: FROM_EMAIL,
+      to,
+      subject: subjectLine,
+      text: `Hi ${name},\n\n${lead}${message.snippet ? `:\n\n"${message.snippet}"` : "."}\n\nRead and reply here:\n${message.threadUrl}\n\n${footer}\n\n— The NASIHA Team`,
+    });
+  } catch (error) {
+    console.error("[email] Failed to send group message email", error);
+  }
+}
+
+/**
  * Gentle once-per-thread nudge (lib/inbox-reminders.ts) to a recipient who
  * hasn't replied to an inbox message after a few days. Best-effort like every
  * other function here — the sweep has already marked the message processed.

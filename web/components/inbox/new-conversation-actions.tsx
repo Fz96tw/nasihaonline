@@ -115,6 +115,7 @@ export function NewConversationActions({ currentUserId }: { currentUserId: strin
         <SendMessageDialog
           recipientId={messageRecipient.id}
           recipientName={messageRecipient.name}
+          groupComposer={{ currentUserId }}
           open={Boolean(messageRecipient)}
           onOpenChange={(next) => {
             if (!next) setMessageRecipient(null);

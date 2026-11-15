@@ -31,3 +31,21 @@ export const editMessageSchema = z.object({
 });
 
 export type EditMessageValues = z.infer<typeof editMessageSchema>;
+
+/**
+ * POST /api/inbox/groups body shape (§4.7) — a group message, sent when the
+ * Inbox composer has two or more recipients. Subject is required (it's the
+ * group's title); the 20-participant cap (author included) leaves room for
+ * 19 recipients. Body limit matches a forum post's, since that's what the
+ * first message is stored as.
+ */
+export const createGroupMessageSchema = z.object({
+  recipientIds: z
+    .array(z.string().trim().min(1))
+    .min(2, "Pick at least two members for a group message")
+    .max(19, "A group message can have at most 20 people, you included"),
+  subject: z.string().trim().min(1, "A group message needs a subject").max(200),
+  body: z.string().trim().min(1, "Message can't be empty").max(10000),
+});
+
+export type CreateGroupMessageValues = z.infer<typeof createGroupMessageSchema>;

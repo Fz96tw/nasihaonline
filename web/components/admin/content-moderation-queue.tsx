@@ -62,9 +62,13 @@ export function ContentModerationQueue({ initialItems }: { initialItems: Moderat
                 <Badge variant={TYPE_BADGE_VARIANT[item.type]}>{MODERATION_TYPE_LABELS[item.type]}</Badge>
                 <span className="text-xs text-muted-foreground">{formatDate(item.createdAt)}</span>
               </div>
-              <Link href={item.href} className="font-medium hover:underline" target="_blank">
-                {item.title}
-              </Link>
+              {item.href ? (
+                <Link href={item.href} className="font-medium hover:underline" target="_blank">
+                  {item.title}
+                </Link>
+              ) : (
+                <span className="font-medium">{item.title}</span>
+              )}
               <span className="text-xs text-muted-foreground">{item.authorName ?? "A member"}</span>
             </div>
           </CardHeader>

@@ -20,5 +20,6 @@ export type ModerationItem = {
   authorName: string | null;
   flagReason: string | null;
   createdAt: string;
-  href: string;
+  /** Null for a post in an Inbox group message (§4.7) — it has no page a moderator can open; act from the queue. */
+  href: string | null;
 };

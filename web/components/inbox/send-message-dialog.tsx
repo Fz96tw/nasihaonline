@@ -18,22 +18,32 @@ export function SendMessageDialog({
   recipientName,
   open,
   onOpenChange,
+  groupComposer,
 }: {
   recipientId: string;
   recipientName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Set from the Inbox page — the sender may add people to make it a group message (§4.7). */
+  groupComposer?: { currentUserId: string };
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Message {recipientName}</DialogTitle>
+          <DialogTitle>{groupComposer ? "New message" : `Message ${recipientName}`}</DialogTitle>
           <DialogDescription>
-            Sends an asynchronous message to their Inbox — not a live chat.
+            {groupComposer
+              ? "Sends an asynchronous message to their Inbox — not a live chat. Add more people to start a group message."
+              : "Sends an asynchronous message to their Inbox — not a live chat."}
           </DialogDescription>
         </DialogHeader>
-        <SendMessageForm recipientId={recipientId} recipientName={recipientName} onDone={() => onOpenChange(false)} />
+        <SendMessageForm
+          recipientId={recipientId}
+          recipientName={recipientName}
+          onDone={() => onOpenChange(false)}
+          groupComposer={groupComposer}
+        />
       </DialogContent>
     </Dialog>
   );

@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Lock, Pin } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { getForumThreadDetail } from "@/lib/forums-server";
+import { getGroupMessageRedirect } from "@/lib/inbox-groups-server";
 import { getMentionableMembers } from "@/lib/members-server";
 import { ForumThreadView } from "@/components/forums/forum-thread-view";
 import { DeleteForumThreadButton } from "@/components/forums/delete-forum-thread-button";
@@ -80,6 +81,14 @@ export default async function ForumThreadPage({
 }) {
   const user = await getSessionUser();
   const q = searchParams.q?.trim() || undefined;
+
+  // An Inbox group message (§4.7) has no forum page: participants read it
+  // in the Inbox, everyone else (signed in or not) gets a 404.
+  const groupRedirect = await getGroupMessageRedirect(params.threadId, user?.id);
+  if (groupRedirect.isGroupMessage) {
+    if (groupRedirect.participantLink) redirect(groupRedirect.participantLink);
+    notFound();
+  }
 
   const isPrivileged = user?.role === Role.moderator || user?.role === Role.admin;
   const thread = await getForumThreadDetail(params.category, params.threadId, user?.id, isPrivileged);

@@ -115,7 +115,7 @@ export function NewConversationComposer({
 
           <p className="text-sm text-muted-foreground">
             {mode === "message"
-              ? "Sends an asynchronous message to their Inbox — not a live chat."
+              ? "Sends an asynchronous message to their Inbox — not a live chat. Add more people to start a group message."
               : "Sends a structured request to their Inbox — they can accept, decline, or propose a new time."}
           </p>
 
@@ -126,6 +126,7 @@ export function NewConversationComposer({
               recipientId={recipient.id}
               recipientName={recipient.name}
               onDone={() => setFormKey((key) => key + 1)}
+              groupComposer={{ currentUserId }}
             />
           ) : (
             <RequestMeetingForm

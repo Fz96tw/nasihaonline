@@ -1186,6 +1186,12 @@ enum NotificationType {
   // Sent to a volunteer when the submitter declines their offer — a
   // gentle notice, not silence, so it doesn't feel like a black hole.
   peer_review_volunteer_declined
+  // Inbox group messages (§4.7) — a participant is told a group message was
+  // started with them, they were added to one, or a new message was posted
+  // in one. Links into /inbox, never a forum URL. Emails for this type are
+  // throttled per group (ThreadView.lastEmailedAt) and follow the
+  // inbox_message email opt-out.
+  group_message
 }
 
 // Homegrown in-app notification feed (§4.10) — no third-party vendor.
@@ -2469,6 +2475,12 @@ model ForumThread {
   // instead of only ever appearing once at its original creation time.
   lastActivityAt DateTime              @default(now())
 
+  // Inbox group message (§4.7) — a restricted (`invited`) standalone thread
+  // in the hidden Group Messages forum, read and replied to only from the
+  // Inbox. Every forum/feed/search/profile surface excludes these, and the
+  // forum thread page redirects participants to /inbox instead.
+  isGroupMessage Boolean               @default(false)
+
   // Set by deleteForumThread (the author, or a moderator/admin, self-serve
   // removing a standalone thread) — same "row kept, everyone loses access"
   // shape as ForumPost.removed, but unconditional rather than swapping in a
@@ -2565,6 +2577,11 @@ model ThreadView {
   userId    String
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime    @default(now())
+  // Inbox group messages only (§4.7): the participant's read marker (a
+  // group is unread when it has a post by someone else newer than this) and
+  // the last time they were emailed about it (the per-group email throttle).
+  lastReadAt    DateTime?
+  lastEmailedAt DateTime?
 
   @@unique([threadId, userId])
   @@map("thread_views")

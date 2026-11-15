@@ -105,15 +105,17 @@ export async function gatherWeeklyDigestData(
         eventId: null,
         knowledgeItemId: null,
         visibility: ForumThreadVisibility.invited,
+        // Inbox group messages (§4.7) are conversations, not private threads.
+        isGroupMessage: false,
       },
     }),
     db.reviewItem.count({ where: { createdAt: inWindow } }),
     db.forumPost.findMany({
-      where: { createdAt: inWindow, removed: false, selfDeleted: false, thread: { removed: false } },
+      where: { createdAt: inWindow, removed: false, selfDeleted: false, thread: { removed: false, isGroupMessage: false } },
       select: { threadId: true, createdAt: true },
     }),
     db.forumThread.findMany({
-      where: { createdAt: inWindow, removed: false },
+      where: { createdAt: inWindow, removed: false, isGroupMessage: false },
       select: { id: true },
     }),
     // A confirmed row counts for the week it was confirmed in (auto-posted

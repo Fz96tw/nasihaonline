@@ -33,6 +33,13 @@ export const WEEKLY_REFLECTION_FORUM_SLUG = "weekly-reflection";
 // per article shape as LIBRARY_FORUM_SLUG, and likewise hidden from /forums.
 export const FROM_THE_WEB_FORUM_SLUG = "from-the-web";
 
+// Hidden forum holding Inbox group messages (§4.7) — created on demand
+// (inactive, so it never lists on /forums or accepts forum-composer
+// threads) by lib/inbox-groups-server.ts. ForumThread.isGroupMessage, not
+// this slug, is what every exclusion filter keys off.
+export const GROUP_MESSAGES_FORUM_SLUG = "group-messages";
+export const GROUP_MESSAGES_FORUM_NAME = "Group Messages";
+
 export type ForumCategory = {
   id: string;
   name: string;
