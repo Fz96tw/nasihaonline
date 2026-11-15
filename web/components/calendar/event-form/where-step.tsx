@@ -82,13 +82,22 @@ export function WhereStep({
                   <InviteePicker value={field.value} onChange={field.onChange} excludeUserId={currentUserId} />
                 </FormControl>
                 <FormDescription>
-                  Co-hosts can start/stop recording and name further co-hosts, the same as you. You can also add or
-                  remove co-hosts from the participant list once the meeting is underway.
+                  Co-hosts can start/stop recording and name further co-hosts, the same as you, and can join without
+                  an RSVP. You can also add or remove co-hosts from the event page, or from the participant list once
+                  the meeting is underway.
+                  {isRestricted && " Co-hosts are also added to the invited members and get the invitation."}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
+        )}
+
+        {!isFirstSubmission && meetLinkSource === "livekit" && existingEvent?.meetLinkSource === "livekit" && (
+          <p className="rounded-md border p-4 text-sm text-muted-foreground">
+            To add or remove co-hosts, use the Co-hosts section on the event&apos;s page, or the participant list
+            once the meeting is underway.
+          </p>
         )}
 
         {meetLinkSource === "manual" && (

@@ -150,6 +150,15 @@ export function getEventAudienceBadge(event: {
   return { label: "Members Only", variant: "info" };
 }
 
+// A Nasiha Conference event's designated co-hosts, as listed on its detail
+// page's ManageCoHosts block (any visibility — see EventCoHost in
+// schema.prisma).
+export type EventCoHostMember = {
+  userId: string;
+  name: string | null;
+  avatarUrl: string | null;
+};
+
 // Full per-person invitee roster for a restricted event's detail page
 // (Objective 02) — visible to every invited member, not just the
 // organizer. `pending` = invited but no RSVP row yet.

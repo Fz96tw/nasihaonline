@@ -10,6 +10,7 @@ import { RsvpBlurb, RsvpButton } from "@/components/calendar/rsvp-button";
 import { AddToCalendarButton } from "@/components/calendar/add-to-calendar-button";
 import { EventViewCounter } from "@/components/calendar/event-view-counter";
 import { ManageInvitees } from "@/components/calendar/manage-invitees";
+import { ManageCoHosts } from "@/components/calendar/manage-co-hosts";
 import { CancelEventButton } from "@/components/calendar/cancel-event-button";
 import { ManageGuestInvites } from "@/components/calendar/manage-guest-invites";
 import { ResendNotifications } from "@/components/calendar/resend-notifications";
@@ -24,6 +25,7 @@ import {
   ROSTER_STATUS_VARIANT,
   type AttendanceChecklistMember,
   type EventRegistrationAttendee,
+  type EventCoHostMember,
   type EventRosterMember,
   type EventRsvpAttendee,
   type MemberEvent,
@@ -78,9 +80,11 @@ export function EventDetail({
   event: initialEvent,
   canEdit,
   isHost,
+  isCoHost,
   attendees,
   hostProfile,
   roster,
+  coHosts,
   attendanceChecklist,
   notificationBroadcasts,
   attendeeMessages,
@@ -90,11 +94,15 @@ export function EventDetail({
   canEdit: boolean;
   /** True only for the event's actual organizer (not an admin viewing someone else's event) — hides the RSVP button and gates the "Join session link" open regardless of RSVP status, since the host never auto-RSVPs to their own event. */
   isHost: boolean;
+  /** Designated co-host of this Nasiha Conference event — gets the "Join session" link without an RSVP, same as the host (getEventMeetingStatus lets them in). */
+  isCoHost: boolean;
   attendees: { rsvps: EventRsvpAttendee[]; registrations: EventRegistrationAttendee[] } | null;
   /** Host's Directory profile, if they're directory-listed and tier-eligible (§4.3/§9) — null otherwise, in which case the avatar shows initials only and isn't clickable. */
   hostProfile: DirectoryMember | null;
   /** Full invitee roster for a restricted event (Objective 02) — visible to every invited member, not just the organizer. Null for a community event. */
   roster: EventRosterMember[] | null;
+  /** A Nasiha Conference event's co-hosts — non-null only when the viewer may manage them (host, admin or co-host) and the event isn't cancelled. */
+  coHosts: EventCoHostMember[] | null;
   /** Host/admin-facing attendance checklist (Objective 04) — non-null only once a restricted event's startsAt has passed and the viewer can edit it. */
   attendanceChecklist: AttendanceChecklistMember[] | null;
   /** Resend Notifications' history trail — non-null only for a community event when canEdit (host/admin), matching resendEventNotifications' own gate. */
@@ -130,7 +138,7 @@ export function EventDetail({
     .filter(({ segment }) => segment.ready || segment.failed || isRecordingAvailable);
   const hostName = event.hostName ?? "NASIHA Member";
   const audienceBadge = getEventAudienceBadge(event);
-  const showJoinLink = !event.cancelled && !isPast && (event.rsvped || isHost) && (event.meetingUrl || event.livekitRoomName);
+  const showJoinLink = !event.cancelled && !isPast && (event.rsvped || isHost || isCoHost) && (event.meetingUrl || event.livekitRoomName);
   const showRecordingUrl = isRecordingAvailable && event.recordingUrl;
   const hasMeetingSection =
     showRecordingUrl || visibleLiveKitSegments.length > 0 || event.chatTranscriptPostId;
@@ -364,6 +372,16 @@ export function EventDetail({
             </ul>
           </div>
         )
+      ) : null}
+
+      {coHosts ? (
+        <ManageCoHosts
+          key={coHosts.map((member) => member.userId).join(",")}
+          eventId={event.seriesId}
+          hostId={event.hostId}
+          isRestricted={event.visibility === EventVisibility.invited}
+          initialCoHosts={coHosts}
+        />
       ) : null}
 
       {canEdit && !roster && attendees ? (

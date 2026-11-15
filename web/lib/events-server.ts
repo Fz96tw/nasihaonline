@@ -29,6 +29,7 @@ import type {
   EventNotificationBroadcastItem,
   EventAttendeeMessageItem,
   EventRegistrationAttendee,
+  EventCoHostMember,
   EventRosterMember,
   EventRsvpAttendee,
   EventWithRsvp,
@@ -1000,6 +1001,20 @@ export async function getEventRoster(eventId: string): Promise<EventRosterMember
       status,
     };
   });
+}
+
+/** A Nasiha Conference event's designated co-hosts, oldest first — for the detail page's ManageCoHosts block. */
+export async function getEventCoHosts(eventId: string): Promise<EventCoHostMember[]> {
+  const rows = await db.eventCoHost.findMany({
+    where: { eventId },
+    select: { userId: true, user: { select: { name: true, profile: { select: { avatarUrl: true } } } } },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map((row) => ({
+    userId: row.userId,
+    name: row.user.name,
+    avatarUrl: getProfileAvatarUrl(row.user.profile?.avatarUrl ?? null),
+  }));
 }
 
 export async function getEventViewCount(eventId: string): Promise<number> {
@@ -2113,10 +2128,14 @@ export async function createEvent(
   // updateEventInvitees already applies when editing the list later.
   // Resolved regardless of mode — a draft still persists EventInvitee rows
   // (see the transaction below) so a resumed draft keeps its picks.
+  // Co-hosts are folded in too: on a restricted event only invitees can
+  // see the event or join its meeting, so a co-host is always also invited
+  // (and gets the same invitation). Same in saveEventDraft/publishEventDraft
+  // and updateEventCoHosts.
   const invitedUsers = isRestricted
     ? await db.user.findMany({
         where: {
-          id: { in: input.invitedUserIds, notIn: [hostId] },
+          id: { in: [...input.invitedUserIds, ...input.coHostUserIds], notIn: [hostId] },
           tier: { in: DIRECTORY_TIERS },
           profile: { listInDirectory: true },
         },
@@ -3148,7 +3167,7 @@ export async function saveEventDraft(
   const invitedUsers = isRestricted
     ? await db.user.findMany({
         where: {
-          id: { in: input.invitedUserIds, notIn: [event.hostId] },
+          id: { in: [...input.invitedUserIds, ...input.coHostUserIds], notIn: [event.hostId] },
           tier: { in: DIRECTORY_TIERS },
           profile: { listInDirectory: true },
         },
@@ -3336,7 +3355,7 @@ export async function publishEventDraft(
   const invitedUsers = isRestricted
     ? await db.user.findMany({
         where: {
-          id: { in: input.invitedUserIds, notIn: [event.hostId] },
+          id: { in: [...input.invitedUserIds, ...input.coHostUserIds], notIn: [event.hostId] },
           tier: { in: DIRECTORY_TIERS },
           profile: { listInDirectory: true },
         },
@@ -3549,6 +3568,8 @@ export async function updateEventInvitees(
   eventId: string,
   actingUser: UserModel,
   input: { addUserIds: string[]; removeUserIds: string[] },
+  /** Server-internal only (updateEventCoHosts): the caller already verified actingUser is a co-host, who may invite the co-hosts they add. Never set from a route. */
+  options: { actingIsCoHost?: boolean } = {},
 ): Promise<{ added: number; removed: number }> {
   const event = await db.event.findUnique({
     where: { id: eventId },
@@ -3575,7 +3596,7 @@ export async function updateEventInvitees(
 
   const isAdmin = actingUser.role === Role.admin;
   const isHost = actingUser.id === event.hostId;
-  if (!isAdmin && !isHost) {
+  if (!isAdmin && !isHost && !options.actingIsCoHost) {
     throw new EventError(403, "Only the event's host or an admin can manage invitees.");
   }
 
@@ -4668,7 +4689,10 @@ export async function getEventMeetingStatus(
     if (event.meetingEndedAt && !event.meetingStartedAt) {
       guestJoinInvite = await guestJoinInviteUrl(registrationId!, registration.email);
     }
-  } else if (!isHost) {
+  } else if (!isHostOrCoHost) {
+    // Co-hosts skip the RSVP/visibility checks below, same as the host —
+    // they run the meeting rather than attend it. (On a restricted event a
+    // co-host is always also an invitee; see updateEventCoHosts.)
     const rsvp = await db.rSVP.findUnique({
       where: { eventId_userId: { eventId, userId } },
       select: { status: true },
@@ -4802,6 +4826,99 @@ export async function setEventCoHost(
   }
   const rows = await db.eventCoHost.findMany({ where: { eventId }, select: { userId: true } });
   return rows.map((row) => row.userId);
+}
+
+/**
+ * Adds and/or removes co-hosts on a Nasiha Conference event at any time
+ * before or during the meeting, for any visibility (public events included)
+ * — the pre-meeting counterpart to setEventCoHost's live, in-meeting
+ * toggle, and the post-publish counterpart to createEvent's coHostUserIds.
+ * Same authority as the live toggle plus admins: the host, an existing
+ * co-host, or an admin. Additions are re-resolved against the same
+ * directory eligibility as createEvent (ineligible ids, the host and
+ * existing co-hosts are silently skipped). On a restricted event, new
+ * co-hosts are also invited (updateEventInvitees). Returns the full current
+ * list plus enough state for the route to mirror it into a live room's
+ * metadata.
+ */
+export async function updateEventCoHosts(
+  eventId: string,
+  actingUser: UserModel,
+  input: { addUserIds: string[]; removeUserIds: string[] },
+): Promise<{ coHostUserIds: string[]; livekitRoomName: string | null; meetingLive: boolean }> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: {
+      hostId: true,
+      cancelledAt: true,
+      visibility: true,
+      livekitRoomName: true,
+      meetingStartedAt: true,
+      communities: { select: { communityId: true } },
+    },
+  });
+  if (!event) throw new EventError(404, "Event not found.");
+  if (event.cancelledAt) throw new EventError(409, "This event has been cancelled.");
+  if (!event.livekitRoomName) {
+    throw new EventError(400, "Co-hosts are only available for Nasiha Conference meetings.");
+  }
+
+  const isAdmin = actingUser.role === Role.admin;
+  const isHost = actingUser.id === event.hostId;
+  const isCoHost = !isAdmin && !isHost && (await isEventCoHost(eventId, actingUser.id));
+  if (!isAdmin && !isHost && !isCoHost) {
+    throw new EventError(403, "Only the host, a co-host, or an admin can manage co-hosts.");
+  }
+
+  const addCandidates =
+    input.addUserIds.length > 0
+      ? await db.user.findMany({
+          where: {
+            id: { in: input.addUserIds, notIn: [event.hostId] },
+            tier: { in: DIRECTORY_TIERS },
+            profile: { listInDirectory: true },
+          },
+          select: { id: true },
+        })
+      : [];
+  if (input.addUserIds.length > 0 && addCandidates.length === 0) {
+    throw new EventError(400, "That member can't be added as a co-host.");
+  }
+  const addIds = addCandidates.map((user) => user.id).filter((id) => !input.removeUserIds.includes(id));
+
+  const rows = await db.$transaction(async (tx) => {
+    if (addIds.length > 0) {
+      await tx.eventCoHost.createMany({
+        data: addIds.map((userId) => ({ eventId, userId })),
+        skipDuplicates: true,
+      });
+    }
+    if (input.removeUserIds.length > 0) {
+      await tx.eventCoHost.deleteMany({ where: { eventId, userId: { in: input.removeUserIds } } });
+    }
+    return tx.eventCoHost.findMany({ where: { eventId }, select: { userId: true } });
+  });
+
+  // Only invitees can see a restricted event or join its meeting, so a new
+  // co-host is invited too (with the usual invitation; anyone already
+  // invited is skipped). Removing a co-host leaves them invited.
+  if (event.visibility === EventVisibility.invited && addIds.length > 0) {
+    await updateEventInvitees(eventId, actingUser, { addUserIds: addIds, removeUserIds: [] }, { actingIsCoHost: isCoHost });
+  }
+
+  // Same rationale as createEvent's ensureCommunityMembership call for co-hosts.
+  if (addIds.length > 0) {
+    await ensureCommunityMembership(
+      addIds,
+      event.communities.map((c) => c.communityId),
+    );
+  }
+
+  return {
+    coHostUserIds: rows.map((row) => row.userId),
+    livekitRoomName: event.livekitRoomName,
+    meetingLive: event.meetingStartedAt !== null,
+  };
 }
 
 /**

@@ -4,6 +4,8 @@ import { getSessionUser } from "@/lib/auth";
 import { getEventAttendanceChecklist } from "@/lib/attendance-server";
 import {
   getEventAttendees,
+  getEventCoHosts,
+  isEventCoHost,
   getEventNotificationBroadcasts,
   getEventAttendeeMessages,
   getEventAttendeeMessageRecipientCounts,
@@ -120,6 +122,13 @@ export default async function EventDetailPage({
     getPeopleYouMetAtEvent(event, user),
   ]);
 
+  // Co-hosts can be managed for any visibility once published, by the same
+  // people who can change them in the live meeting (host, co-host) plus
+  // admins — only for Nasiha Conference events, the only kind with co-hosts.
+  const isCoHost = Boolean(event.livekitRoomName) && !isHost && (await isEventCoHost(event.seriesId, user.id));
+  const canManageCoHosts = Boolean(event.livekitRoomName) && !event.cancelled && (canEdit || isCoHost);
+  const coHosts = canManageCoHosts ? await getEventCoHosts(event.seriesId) : null;
+
   const isInvited = roster?.some((member) => member.userId === user.id) ?? false;
   const isPrivilegedOverride = isPrivileged && isRestricted && !isHost && !isInvited;
 
@@ -157,9 +166,11 @@ export default async function EventDetailPage({
         event={event}
         canEdit={canEdit}
         isHost={isHost}
+        isCoHost={isCoHost}
         attendees={attendees}
         hostProfile={hostProfile}
         roster={roster}
+        coHosts={coHosts}
         attendanceChecklist={attendanceChecklist}
         notificationBroadcasts={notificationBroadcasts}
         attendeeMessages={attendeeMessages}
