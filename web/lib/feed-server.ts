@@ -99,6 +99,11 @@ type DiscussionThreadForFeed = {
  * when the row sits at its original position (lastActivityAt still equals
  * `baseTime`, or the thread holds only its auto-created opening post).
  */
+/** A row's `communities` badge list — undefined (not []) when the item has none, so untagged rows stay unchanged. */
+function communityNamesOf(links: { community: { name: string } }[]): string[] | undefined {
+  return links.length ? links.map((link) => link.community.name).sort() : undefined;
+}
+
 function latestDiscussionReply(thread: DiscussionThreadForFeed, lastActivityAt: Date, baseTime: Date) {
   if (!thread || thread._count.posts < 2 || lastActivityAt.getTime() <= baseTime.getTime()) return null;
   return thread.posts[0] ?? null;
@@ -546,6 +551,7 @@ export async function getFeedPage(params: {
         // branch below) instead of overwriting this event's own row.
         forumThread: { select: DISCUSSION_THREAD_FEED_SELECT },
         lastActivityAt: true,
+        communities: { select: { community: { select: { name: true } } } },
         // Whether the viewer themself RSVP'd going — gates the discussion
         // reply row below (attendees and invitees get event discussion activity).
         rsvps: { where: { userId: viewerId ?? "", status: RSVPStatus.going }, select: { id: true }, take: 1 },
@@ -585,6 +591,7 @@ export async function getFeedPage(params: {
         // overwriting this item's own row.
         forumThread: { select: DISCUSSION_THREAD_FEED_SELECT },
         lastActivityAt: true,
+        communities: { select: { community: { select: { name: true } } } },
       },
       orderBy,
       take: pageSize,
@@ -619,7 +626,7 @@ export async function getFeedPage(params: {
         createdAt: true,
         lastActivityAt: true,
         author: { select: AUTHOR_SELECT },
-        forum: { select: { name: true, slug: true, category: { select: { communityId: true } } } },
+        forum: { select: { name: true, slug: true, category: { select: { communityId: true, community: { select: { name: true } } } } } },
         // Latest post's author + body — a bump from a reply should credit
         // the replier (not the thread creator) and show what they wrote.
         // Falls back to `author` above when the thread has no posts yet.
@@ -824,6 +831,7 @@ export async function getFeedPage(params: {
         lastActivityAt: true,
         forumThread: { select: DISCUSSION_THREAD_FEED_SELECT },
         _count: { select: { views: true } },
+        communities: { select: { community: { select: { name: true } } } },
       },
       orderBy,
       take: pageSize,
@@ -1020,6 +1028,7 @@ export async function getFeedPage(params: {
         eventStartsAt: event.startsAt.toISOString(),
         eventViewCount: event._count.views,
         isRestricted: event.visibility === EventVisibility.invited,
+        communities: communityNamesOf(event.communities),
       };
 
       // Search mode never bumps/adds a reply row here, same as before —
@@ -1061,6 +1070,7 @@ export async function getFeedPage(params: {
               imageUrl: null,
               eventStartsAt: event.startsAt.toISOString(),
               isRestricted: event.visibility === EventVisibility.invited,
+              communities: communityNamesOf(event.communities),
             }
           : null;
       if (rescheduledRow) eventRows.push(rescheduledRow);
@@ -1086,6 +1096,7 @@ export async function getFeedPage(params: {
         // ownRow above carries the event's own hero image.
         imageUrl: null,
         isRestricted: event.visibility === EventVisibility.invited,
+        communities: communityNamesOf(event.communities),
       };
       return [...eventRows, replyRow];
     }),
@@ -1152,6 +1163,7 @@ export async function getFeedPage(params: {
         isRestricted: item.visibility === KnowledgeVisibility.restricted,
         libraryViewCount: item._count.views,
         forumReplyCount: item.forumThread ? item.forumThread._count.posts - 1 : undefined,
+        communities: communityNamesOf(item.communities),
       };
 
       // Search mode never bumps/adds a reply row here, same as the events
@@ -1195,6 +1207,7 @@ export async function getFeedPage(params: {
         // which always carries the item's own hero/YouTube-thumbnail image.
         imageUrl: null,
         isRestricted: item.visibility === KnowledgeVisibility.restricted,
+        communities: communityNamesOf(item.communities),
       };
       return [...libraryRows, replyRow];
     }),
@@ -1257,6 +1270,7 @@ export async function getFeedPage(params: {
             : {}),
           isRestricted: thread.visibility === ForumThreadVisibility.invited,
           isReply,
+          communities: thread.forum.category?.community ? [thread.forum.category.community.name] : undefined,
           // The image-panel look is only for the thread's own opening row.
           ...(!isReply && thread.reflectionPost?.quoteText
             ? {
@@ -1418,6 +1432,7 @@ export async function getFeedPage(params: {
         articleViewCount: article._count.views,
         // Same convention as library rows: shown once a discussion exists.
         forumReplyCount: thread ? thread._count.posts - 1 : undefined,
+        communities: communityNamesOf(article.communities),
       };
       const rows = !before || approvedAt < before ? [ownRow] : [];
       // The latest discussion reply, as its own row — same one-row-per-item
@@ -1436,6 +1451,7 @@ export async function getFeedPage(params: {
           author: authorOf(reply.author),
           replyExcerpt: excerptOf(stripPastedImageTokens(reply.body)) || undefined,
           imageUrl: null,
+          communities: communityNamesOf(article.communities),
         },
       ];
     }),

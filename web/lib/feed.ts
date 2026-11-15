@@ -102,6 +102,8 @@ export type FeedItem = {
   reflectionCard?: { imageUrl: string | null; quote: string; attribution: string };
   /** Only "forum_thread" items carry this — true when the row is a reply/bump row rather than the thread's own opening row. FeedRow keeps a reply row's title at the smaller size. */
   isReply?: boolean;
+  /** The community/communities the underlying item belongs to, rendered by FeedRow as badges beside the type badge: an Event's/KnowledgeItem's/ExternalArticle's own community tags, or a forum thread's forum's category community. Undefined for types with no community (announcements, surveys, peer reviews, messages) and for untagged items / general forums. */
+  communities?: string[];
 };
 
 // Marks a feed row's href so the page it lands on (blog post, forum thread,

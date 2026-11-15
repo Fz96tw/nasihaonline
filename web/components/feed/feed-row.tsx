@@ -337,7 +337,24 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                   {formatRelativeTime(item.timestamp)}
                 </span>
               </div>
-              {subtitle && <div className="truncate text-xs text-muted-foreground">{subtitle}</div>}
+              {(subtitle || item.communities?.length) && (
+                <div className="flex items-center gap-2">
+                  {subtitle && <div className="min-w-0 truncate text-xs text-muted-foreground">{subtitle}</div>}
+                  {item.communities?.length ? (
+                    // The community the item belongs to, on this second line
+                    // rather than the header row so names as long as "Arts,
+                    // Culture & Lifestyle" fit on phones. Multi-community items
+                    // show the first plus "+N"; the full list is in the tooltip.
+                    <Badge
+                      className="ml-auto mt-0.5 flex-shrink-0 bg-primary/10 text-primary"
+                      title={item.communities.join(", ")}
+                    >
+                      {item.communities[0]}
+                      {item.communities.length > 1 && <span className="ml-1">+{item.communities.length - 1}</span>}
+                    </Badge>
+                  ) : null}
+                </div>
+              )}
             </div>
           </div>
           <div className="min-w-0 flex-1">
