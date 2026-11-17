@@ -196,6 +196,17 @@ services:
         condition: service_healthy
       meilisearch:
         condition: service_healthy
+    # /api/health answers 503 when Postgres or Redis is down or hangs past 2s
+    # (web/lib/health.ts), so this marks the container unhealthy in
+    # `docker ps` instead of "Up". It doesn't restart anything by itself.
+    # start_period covers the prisma seed step that runs before `next start`
+    # binds the port.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
     networks:
       - default
       - appnet

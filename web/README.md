@@ -111,7 +111,7 @@ Directory search (§7.2/§9) is powered by [Meilisearch](https://www.meilisearch
 
 ## Reference API routes
 
-- `GET /api/health` — checks DB and Redis connectivity
+- `GET /api/health` — public, uncached. Checks Postgres and Redis (2s timeout each) and returns 200 `{"ok":true,"db":"ok","redis":"ok"}`, or 503 with the failing one marked `"down"`. Used by the external uptime monitor, `scripts/deploy-vps.sh` and the VPS app healthcheck; see [`docs/Nasiha_Uptime_Monitoring_Runbook.md`](../docs/Nasiha_Uptime_Monitoring_Runbook.md)
 - `GET|POST /api/example` — reference Redis-backed rate limiter (5 requests/minute per identifier)
 - `GET /api/protected/me` — reference protected route; 401 without a valid Clerk session, else the caller's local user record
 - `GET /api/admin/ping` — reference admin-only route; 401 unauthenticated, 403 non-admin, 200 for admins
