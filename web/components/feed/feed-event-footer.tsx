@@ -67,8 +67,8 @@ function JoinNowButton({ eventId, direct }: { eventId: string; direct: boolean }
 
   return (
     <div className="flex flex-col items-start gap-1">
-      <Button size="sm" onClick={join} disabled={busy} className="bg-red-600 text-white hover:bg-red-700">
-        <Video className="mr-1.5 h-4 w-4" aria-hidden />
+      <Button size="xs" onClick={join} disabled={busy} className="bg-red-600 text-white hover:bg-red-700">
+        <Video className="mr-1 h-3.5 w-3.5" aria-hidden />
         {busy ? "Joining…" : "Join now"}
       </Button>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
@@ -105,6 +105,7 @@ export function FeedEventFooter({ item }: { item: FeedItem }) {
         <RsvpButton
           eventId={actions.eventId}
           rsvped={rsvped}
+          size="xs"
           onToggled={(result) => {
             setRsvped(result.rsvped);
             if (result.attendeeCount !== undefined) setAttendeeCount(result.attendeeCount);
@@ -123,7 +124,7 @@ export function FeedEventFooter({ item }: { item: FeedItem }) {
     <div className="mt-2 flex items-start justify-between gap-3">
       <div>{action && <StopRowLink>{action}</StopRowLink>}</div>
       {hasCounts && (
-        <div className="flex items-center gap-3 pt-1.5 text-xs text-muted-foreground">
+        <div className="flex h-7 items-center gap-3 text-xs text-muted-foreground">
           {item.eventViewCount !== undefined && (
             <span className="flex items-center gap-1" title="Unique visitors">
               <Eye className="h-3.5 w-3.5" />

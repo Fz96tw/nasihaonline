@@ -16,9 +16,12 @@ export function RsvpButton({
   eventId,
   rsvped,
   onToggled,
+  size = "sm",
 }: {
   eventId: string;
   rsvped: boolean;
+  /** "xs" for compact contexts like the What's New feed row; every other caller keeps the default. */
+  size?: "xs" | "sm";
   onToggled: (result: { rsvped: boolean; meetingUrl: string | null; livekitRoomName: string | null; attendeeCount?: number }) => void;
 }) {
   const [pending, setPending] = useState(false);
@@ -49,14 +52,14 @@ export function RsvpButton({
   return (
     <div className="flex flex-col items-start gap-1 sm:items-end">
       <Button
-        size="sm"
+        size={size}
         variant={rsvped ? "outline" : "default"}
         disabled={pending}
         onClick={toggle}
       >
         {rsvped ? (
           <>
-            <CheckCircle2 className="mr-1.5 h-4 w-4 text-emerald-600" />
+            <CheckCircle2 className={size === "xs" ? "mr-1 h-3.5 w-3.5 text-emerald-600" : "mr-1.5 h-4 w-4 text-emerald-600"} />
             You&apos;re going
           </>
         ) : (
