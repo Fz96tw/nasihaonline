@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Eye, Hand, Lock, MessageSquare, Newspaper, Play, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Hand, Lock, MessageSquare, Newspaper, Play } from "lucide-react";
 import { type FeedGallerySlide, type FeedItem, FEED_TYPE_LABELS } from "@/lib/feed";
 import { formatRelativeTime } from "@/lib/format-date";
 import { DIRECTORY_TIER_LABELS, TIER_BADGE_VARIANT } from "@/lib/members";
@@ -16,6 +16,7 @@ import { ReflectionFeedCard } from "@/components/feed/reflection-feed-card";
 import { ArticleRowActions } from "@/components/feed/article-row-actions";
 import { ArticleBundleRow } from "@/components/feed/article-bundle-row";
 import { FeedEventDateBadge } from "@/components/feed/feed-event-date-badge";
+import { FeedEventFooter } from "@/components/feed/feed-event-footer";
 
 /**
  * The row's clickable wrapper: an in-app <Link>, except a "From the Web"
@@ -562,26 +563,7 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                 )}
               </div>
             )}
-            {item.attendeeCount !== undefined && (
-              <div className="mt-2 flex items-center justify-end gap-3 text-xs text-muted-foreground">
-                {item.eventViewCount !== undefined && (
-                  <span className="flex items-center gap-1" title="Unique visitors">
-                    <Eye className="h-3.5 w-3.5" />
-                    {item.eventViewCount}
-                  </span>
-                )}
-                <span className="flex items-center gap-1" title="Registered or RSVP'd">
-                  <Users className="h-3.5 w-3.5" />
-                  {item.attendeeCount}
-                </span>
-                {item.forumReplyCount !== undefined && (
-                  <span className="flex items-center gap-1" title="Discussion thread replies">
-                    <MessageSquare className="h-3.5 w-3.5" />
-                    {item.forumReplyCount}
-                  </span>
-                )}
-              </div>
-            )}
+            {hasEventBadge && <FeedEventFooter item={item} />}
           </div>
         </div>
       </FeedRowLink>

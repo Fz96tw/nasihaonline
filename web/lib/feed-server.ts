@@ -140,6 +140,40 @@ const BOARD_SENDER = {
  * Exact-millisecond ties across domains are an accepted, extremely rare
  * edge case — not worth compound OR where-clauses to close.
  */
+// The viewer's RSVP / Join now state for an event row (FeedEventFooter).
+// canRsvp mirrors the server-side gate in applyRsvp/ensureGoingRsvp
+// (lib/events-server.ts): a restricted event only for its host, an invitee,
+// or an admin. The feed itself can still surface a restricted event to
+// someone else (a moderator's search bypass, or a member who RSVP'd and was
+// later removed from the invite list) — they get no button rather than one
+// that would 403.
+function feedEventActions(
+  event: {
+    id: string;
+    hostId: string;
+    visibility: EventVisibility;
+    rsvps: unknown[];
+    invitees: unknown[];
+    coHosts: unknown[];
+    meetingUrl: string | null;
+    livekitRoomName: string | null;
+  },
+  viewerId: string | null,
+  viewerRole: Role | undefined,
+): FeedItem["eventActions"] {
+  if (!viewerId) return undefined;
+  const isHost = event.hostId === viewerId || event.coHosts.length > 0;
+  const canRsvp =
+    event.visibility !== EventVisibility.invited || isHost || event.invitees.length > 0 || viewerRole === Role.admin;
+  if (!canRsvp) return undefined;
+  return {
+    eventId: event.id,
+    rsvped: event.rsvps.length > 0,
+    isHost,
+    hasMeeting: !!(event.meetingUrl || event.livekitRoomName),
+  };
+}
+
 // The occurrence the feed's date badge (FeedEventDateBadge) shows: the
 // event's own start/end for a one-off event. For a recurring series,
 // startsAt is only the *first* occurrence, so badging it would read
@@ -587,6 +621,11 @@ export async function getFeedPage(params: {
         // reply row below (attendees and invitees get event discussion activity).
         rsvps: { where: { userId: viewerId ?? "", status: RSVPStatus.going }, select: { id: true }, take: 1 },
         invitees: { where: { userId: viewerId ?? "" }, select: { id: true }, take: 1 },
+        coHosts: { where: { userId: viewerId ?? "" }, select: { id: true }, take: 1 },
+        // Only whether a meeting exists (feedEventActions' Join now) — the
+        // link itself stays on the event/meeting pages, gated by RSVP.
+        meetingUrl: true,
+        livekitRoomName: true,
       },
       orderBy,
       take: pageSize,
@@ -1129,6 +1168,7 @@ export async function getFeedPage(params: {
         attendeeCount: event._count.rsvps + event._count.registrations,
         forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : undefined,
         ...feedEventWindow(event),
+        eventActions: feedEventActions(event, viewerId, params.viewerRole),
         eventViewCount: event._count.views,
         isRestricted: event.visibility === EventVisibility.invited,
         communities: communityNamesOf(event.communities),
@@ -1172,6 +1212,7 @@ export async function getFeedPage(params: {
               author: authorOf(event.host),
               imageUrl: null,
               ...feedEventWindow(event),
+              eventActions: feedEventActions(event, viewerId, params.viewerRole),
               isRestricted: event.visibility === EventVisibility.invited,
               communities: communityNamesOf(event.communities),
             }

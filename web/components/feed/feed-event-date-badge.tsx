@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 const ASSUMED_DURATION_MS = 60 * 60_000;
 const DAY_MS = 24 * 60 * 60_000;
 
-type Status =
+export type EventStatus =
   | { kind: "live" }
   | { kind: "ended" }
   | { kind: "soon"; label: string }
@@ -19,7 +19,7 @@ function localMidnight(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
-function statusOf(start: Date, end: Date, now: Date): Status {
+function statusOf(start: Date, end: Date, now: Date): EventStatus {
   if (now >= end) return { kind: "ended" };
   if (now >= start) return { kind: "live" };
   // Calendar days in the viewer's own zone, not 24h blocks — an event at
@@ -29,6 +29,26 @@ function statusOf(start: Date, end: Date, now: Date): Status {
   if (days === 1) return { kind: "soon", label: "Tomorrow" };
   if (days <= 6) return { kind: "soon", label: `In ${days} days` };
   return { kind: "later" };
+}
+
+/**
+ * The event's live/ended/upcoming state against the viewer's clock — null
+ * until mount (it depends on the viewer's own time and zone, so it can't be
+ * part of the server render). Re-evaluated each minute so "Today" → "Live
+ * now" → "Ended" flips without a reload on a feed left open. Shared by the
+ * date badge and FeedEventFooter's RSVP/Join button so the two never disagree.
+ */
+export function useEventStatus(startsAt: string, endsAt?: string): EventStatus | null {
+  const hasMounted = useHasMounted();
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  if (!hasMounted) return null;
+  const start = new Date(startsAt);
+  const end = endsAt ? new Date(endsAt) : new Date(start.getTime() + ASSUMED_DURATION_MS);
+  return statusOf(start, end, now);
 }
 
 /**
@@ -53,17 +73,8 @@ export function FeedEventDateBadge({
   variant: "overlay" | "inline";
 }) {
   const hasMounted = useHasMounted();
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    // Re-evaluated each minute so "Today" → "Live now" → "Ended" flips
-    // without a reload on a feed left open.
-    const timer = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(timer);
-  }, []);
-
+  const status = useEventStatus(startsAt, endsAt);
   const start = new Date(startsAt);
-  const end = endsAt ? new Date(endsAt) : new Date(start.getTime() + ASSUMED_DURATION_MS);
-  const status = hasMounted ? statusOf(start, end, now) : null;
   const ended = status?.kind === "ended";
 
   const month = start.toLocaleDateString("en-US", { month: "short" }).toUpperCase();

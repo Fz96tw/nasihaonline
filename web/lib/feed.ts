@@ -75,6 +75,8 @@ export type FeedItem = {
   eventStartsAt?: string;
   /** Paired with eventStartsAt when the event has a scheduled end — drives FeedEventDateBadge's "Live now"/"Ended" states. For a recurring series both are the current-or-next occurrence's, not the series' first. */
   eventEndsAt?: string;
+  /** Events only, and only when the viewer may RSVP/join at all (restricted events: host, co-host, invitee, or admin) — drives FeedEventFooter's (eventId is the real Event id — a rescheduled row's own id is prefixed) RSVP / You're going / Join now button. `isHost` covers co-hosts too: neither RSVPs, both can join. */
+  eventActions?: { eventId: string; rsvped: boolean; isHost: boolean; hasMeeting: boolean };
   /** Events with a linked Events-forum thread (§4.6) or library items with a started on-demand discussion thread (§4.9) carry this — undefined when there's no thread yet. */
   forumReplyCount?: number;
   /** Only events carry a detail-page unique-visitor count (§4.6) — undefined for every other type. */
