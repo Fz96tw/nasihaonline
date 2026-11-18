@@ -73,6 +73,8 @@ export type FeedItem = {
   attendeeCount?: number;
   /** Only events carry a start time (§4.5/§4.6 calendar) — undefined for every other type. */
   eventStartsAt?: string;
+  /** Paired with eventStartsAt when the event has a scheduled end — drives FeedEventDateBadge's "Live now"/"Ended" states. For a recurring series both are the current-or-next occurrence's, not the series' first. */
+  eventEndsAt?: string;
   /** Events with a linked Events-forum thread (§4.6) or library items with a started on-demand discussion thread (§4.9) carry this — undefined when there's no thread yet. */
   forumReplyCount?: number;
   /** Only events carry a detail-page unique-visitor count (§4.6) — undefined for every other type. */

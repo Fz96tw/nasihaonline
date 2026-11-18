@@ -38,6 +38,7 @@ import {
 } from "@/lib/forums-server";
 import { formatEventDateTime } from "@/lib/format-date";
 import { communityVisibilityWhere, getMemberCommunityContext, hasEventEnded } from "@/lib/events-server";
+import { buildRRule, type RecurrenceInput } from "@/lib/recurrence";
 import { getInboxList } from "@/lib/inbox-server";
 import { matchesInboxSearch } from "@/lib/inbox";
 import { digestContentOf, type DigestContent } from "@/lib/weekly-digest-compose";
@@ -139,6 +140,31 @@ const BOARD_SENDER = {
  * Exact-millisecond ties across domains are an accepted, extremely rare
  * edge case — not worth compound OR where-clauses to close.
  */
+// The occurrence the feed's date badge (FeedEventDateBadge) shows: the
+// event's own start/end for a one-off event. For a recurring series,
+// startsAt is only the *first* occurrence, so badging it would read
+// "Ended" for a series that's still running — instead the badge gets the
+// current-or-next occurrence (one still in progress counts, hence the
+// duration lookback), or the series' last occurrence once it's over.
+function feedEventWindow(event: {
+  startsAt: Date;
+  endsAt: Date | null;
+  recurrence: RecurrenceInput | null;
+}): { eventStartsAt: string; eventEndsAt?: string } {
+  const durationMs = event.endsAt ? event.endsAt.getTime() - event.startsAt.getTime() : null;
+  let start = event.startsAt;
+  if (event.recurrence) {
+    const rule = buildRRule(event.recurrence, event.startsAt);
+    const now = Date.now();
+    const lookbackMs = durationMs ?? 60 * 60_000;
+    start = rule.after(new Date(now - lookbackMs), true) ?? rule.before(new Date(now), true) ?? event.startsAt;
+  }
+  return {
+    eventStartsAt: start.toISOString(),
+    ...(durationMs !== null ? { eventEndsAt: new Date(start.getTime() + durationMs).toISOString() } : {}),
+  };
+}
+
 export async function getFeedPage(params: {
   cursor: FeedCursor | null;
   pageSize?: number;
@@ -532,7 +558,7 @@ export async function getFeedPage(params: {
         publishedAt: true,
         startsAt: true,
         endsAt: true,
-        recurrence: { select: { until: true } },
+        recurrence: { select: { frequency: true, interval: true, byWeekday: true, until: true } },
         timezone: true,
         rescheduledAt: true,
         heroImageUrl: true,
@@ -1102,7 +1128,7 @@ export async function getFeedPage(params: {
         imageUrl: getEventHeroImageUrl(event.heroImageUrl),
         attendeeCount: event._count.rsvps + event._count.registrations,
         forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : undefined,
-        eventStartsAt: event.startsAt.toISOString(),
+        ...feedEventWindow(event),
         eventViewCount: event._count.views,
         isRestricted: event.visibility === EventVisibility.invited,
         communities: communityNamesOf(event.communities),
@@ -1145,7 +1171,7 @@ export async function getFeedPage(params: {
               timestamp: event.rescheduledAt.toISOString(),
               author: authorOf(event.host),
               imageUrl: null,
-              eventStartsAt: event.startsAt.toISOString(),
+              ...feedEventWindow(event),
               isRestricted: event.visibility === EventVisibility.invited,
               communities: communityNamesOf(event.communities),
             }

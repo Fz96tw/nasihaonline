@@ -11,11 +11,11 @@ import { FollowMemberButton } from "@/components/members/follow-member-button";
 import { Badge } from "@/components/ui/badge";
 import { ReviewOfferButton } from "@/components/review/review-offer-button";
 import { HighlightText } from "@/components/highlight-text";
-import { useHasMounted } from "@/lib/use-has-mounted";
 import { cn } from "@/lib/utils";
 import { ReflectionFeedCard } from "@/components/feed/reflection-feed-card";
 import { ArticleRowActions } from "@/components/feed/article-row-actions";
 import { ArticleBundleRow } from "@/components/feed/article-bundle-row";
+import { FeedEventDateBadge } from "@/components/feed/feed-event-date-badge";
 
 /**
  * The row's clickable wrapper: an in-app <Link>, except a "From the Web"
@@ -248,30 +248,10 @@ function FeedYoutubePlayer({
   );
 }
 
-// Deliberately not lib/format-date.ts's formatTimestamp: that's a generic
-// "when did this happen" formatter shared by ~20 unrelated call sites
-// (forum posts, chat messages, admin tables) where labeling the zone would
-// be noise. This is specifically an event's *scheduled* start time — same
-// category as event-detail.tsx/event-card.tsx/event-list-item.tsx/
-// public-event-detail.tsx, so it gets the same timeZoneName: "short"
-// treatment. No explicit `timeZone` here means it already converts to the
-// viewer's own browser zone; the abbreviation just confirms that.
-function formatFeedEventDate(iso: string) {
-  const date = new Date(iso);
-  const datePart = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const timePart = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZoneName: "short" });
-  return `${datePart}, ${timePart}`;
-}
-
 export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string; currentUserId?: string }) {
-  // Guards the one viewer-zone-dependent value below (formatFeedEventDate)
-  // so the server-rendered HTML (server's own zone) and the client's first
-  // hydration pass render the same "nothing yet", same rationale as
-  // event-list-item.tsx's identical guard on its own event date line.
-  const hasMounted = useHasMounted();
   const subtitle = [item.author.titleSpecialty, item.author.countryRegion].filter(Boolean).join(", ");
   // A Weekly Reflection thread's own row is a full-panel image look instead of
-  // the standard layout (after the hooks above, so hook order is unchanged).
+  // the standard layout.
   if (item.reflectionCard) return <ReflectionFeedCard item={{ ...item, reflectionCard: item.reflectionCard }} q={q} />;
   if (item.articleBundle) return <ArticleBundleRow item={{ ...item, articleBundle: item.articleBundle }} />;
   // Forum threads always carry the same static default image (no per-thread
@@ -297,6 +277,12 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
   // usual large Library/Event title), then the quoted reply — the reverse
   // of every other row's title-then-excerpt order.
   const isDiscussionReplyRow = (item.type === "library" || item.type === "event" || item.type === "article") && !!item.replyExcerpt;
+  // Event date as a calendar tile: pinned over the hero banner when the row
+  // has a plain image (no gallery/video, whose controls it would cover),
+  // otherwise beside the title. Reply rows carry no eventStartsAt.
+  const hasEventBadge = item.type === "event" && !!item.eventStartsAt;
+  const hasOverlayEventBadge = hasEventBadge && !!item.imageUrl && !item.youtubeEmbedUrl && !item.gallery;
+  const hasInlineEventBadge = hasEventBadge && !hasOverlayEventBadge;
 
   return (
     <li>
@@ -400,7 +386,12 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
               </>
             ) : (
               <>
-                <div className="flex items-start gap-1">
+                <div className={cn("flex items-start", hasInlineEventBadge ? "gap-3" : "gap-1")}>
+                  {hasInlineEventBadge && (
+                    <div className="mt-2">
+                      <FeedEventDateBadge startsAt={item.eventStartsAt!} endsAt={item.eventEndsAt} variant="inline" />
+                    </div>
+                  )}
                   <div className={cn("mt-2 min-w-0 flex-1", hasThreadImage && "relative")}>
                     {hasThreadImage && (
                       <div className="absolute right-0 top-0 aspect-square w-[9%] overflow-hidden rounded-md">
@@ -493,16 +484,6 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                           Looking for: <HighlightText text={item.volunteerNote} query={q} />
                         </div>
                       )}
-                      {item.eventStartsAt && (
-                        <div
-                          className={cn(
-                            "mt-0.5 text-xs",
-                            hasThreadImage ? "text-neutral-800" : "text-muted-foreground",
-                          )}
-                        >
-                          Event Date: {hasMounted ? formatFeedEventDate(item.eventStartsAt) : null}
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -512,16 +493,28 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                 {!isForumThread && item.gallery && !isLibraryOverlay && (
                   <FeedImageCarousel slides={item.gallery} />
                 )}
-                {!isForumThread && item.imageUrl && !item.youtubeEmbedUrl && !item.gallery && (
-                  // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
-                  <img
-                    src={item.imageUrl}
-                    alt=""
-                    className={cn(
-                      "mt-2 w-full rounded-md bg-muted",
-                      item.imageIsBodyImage ? "max-h-48 object-contain" : "aspect-video sm:aspect-[8/3] object-cover object-center",
-                    )}
-                  />
+                {hasOverlayEventBadge ? (
+                  <div className="relative mt-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
+                    <img
+                      src={item.imageUrl!}
+                      alt=""
+                      className="block aspect-video w-full rounded-md bg-muted object-cover object-center sm:aspect-[8/3]"
+                    />
+                    <FeedEventDateBadge startsAt={item.eventStartsAt!} endsAt={item.eventEndsAt} variant="overlay" />
+                  </div>
+                ) : (
+                  !isForumThread && item.imageUrl && !item.youtubeEmbedUrl && !item.gallery && (
+                    // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale
+                    <img
+                      src={item.imageUrl}
+                      alt=""
+                      className={cn(
+                        "mt-2 w-full rounded-md bg-muted",
+                        item.imageIsBodyImage ? "max-h-48 object-contain" : "aspect-video sm:aspect-[8/3] object-cover object-center",
+                      )}
+                    />
+                  )
                 )}
               </>
             )}
