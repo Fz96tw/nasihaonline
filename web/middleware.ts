@@ -1,5 +1,5 @@
 
-import { NextResponse } from "next/server";
+import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 import { clerkMiddleware } from "@clerk/nextjs/server";
 
 const CSRF_COOKIE = "csrf_token";
@@ -53,7 +53,7 @@ function isProtectedPageRoute(pathname: string) {
  * disclosed Clerk bypass (GHSA-vqx2-fgx2-5wq9); this two-layer setup is the
  * defense-in-depth pattern Clerk now recommends.
  */
-export default clerkMiddleware(async (auth, request) => {
+const withClerk = clerkMiddleware(async (auth, request) => {
   const { pathname } = request.nextUrl;
 
   if (isApiRoute(pathname) && !isWebhookRoute(pathname)) {
@@ -98,6 +98,16 @@ export default clerkMiddleware(async (auth, request) => {
 
   return response;
 });
+
+// The uptime monitor and deploy-vps.sh poll /api/health. It must never go
+// through Clerk: Clerk can answer a page-load-looking request (Accept:
+// text/html, which UptimeRobot sends) with a 307 handshake redirect
+// (reason "dev-browser-missing" on a development instance), which a monitor
+// reads as "down". The route needs no session or CSRF cookie.
+export default function middleware(request: NextRequest, event: NextFetchEvent) {
+  if (request.nextUrl.pathname === "/api/health") return NextResponse.next();
+  return withClerk(request, event);
+}
 
 export const config = {
   matcher: [
