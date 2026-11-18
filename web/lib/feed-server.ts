@@ -36,7 +36,6 @@ import {
   EVENT_THREAD_ACCESS_SELECT,
   KNOWLEDGE_ITEM_THREAD_ACCESS_SELECT,
 } from "@/lib/forums-server";
-import { formatEventDateTime } from "@/lib/format-date";
 import { communityVisibilityWhere, getMemberCommunityContext, hasEventEnded } from "@/lib/events-server";
 import { buildRRule, type RecurrenceInput } from "@/lib/recurrence";
 import { getInboxList } from "@/lib/inbox-server";
@@ -484,7 +483,7 @@ export async function getFeedPage(params: {
   };
   // eventWhere minus its publishedAt cursor (keeping `not: null` — drafts
   // stay out), re-keyed to lastActivityAt / rescheduledAt for the reply-row
-  // and rescheduled-row fetches (see the event findMany above).
+  // and rescheduled-event fetches (see the event findMany above).
   const eventWhereWithoutCursor = { ...eventWhere, publishedAt: { not: null } };
   const eventReplyWhere = {
     ...eventWhereWithoutCursor,
@@ -492,7 +491,7 @@ export async function getFeedPage(params: {
   } as typeof eventWhere;
   const eventRescheduledWhere = {
     ...eventWhereWithoutCursor,
-    // Only an upcoming event gets a "Rescheduled" row (see the events.flatMap branch).
+    // Only an upcoming event is moved up to its reschedule time (see the events.flatMap branch).
     startsAt: { gt: new Date() },
     rescheduledAt: before ? { not: null, lt: before } : { not: null },
   } as typeof eventWhere;
@@ -730,7 +729,7 @@ export async function getFeedPage(params: {
       ? fetchEvents(eventWhere, { publishedAt: "desc" })
       // Browse/following: events are found three ways — by publishedAt for
       // their own rows, by lastActivityAt for reply rows, and by
-      // rescheduledAt for "Rescheduled" rows (a reschedule doesn't bump
+      // rescheduledAt for rescheduled events' own rows (a reschedule doesn't bump
       // lastActivityAt) — so a reply or reschedule on an old event still
       // surfaces at the top. Same merge as library/forumThreads; the
       // events.flatMap branch only emits whichever row's own timestamp
@@ -1134,6 +1133,18 @@ export async function getFeedPage(params: {
 
   const merged: FeedItem[] = [
     ...events.flatMap((event): FeedItem[] => {
+      // A reschedule of a still-upcoming event moves the event's own row up
+      // to the reschedule time and flags it (FeedEventDateBadge's "NEW DATE"
+      // strip), instead of adding a second "Rescheduled" row for the same
+      // event — once every event row carried the date badge and RSVP button,
+      // that second row read as a duplicate copy of the event. One row per
+      // event, at the later of its publish/reschedule time; the rescheduledAt
+      // fetch above (eventRescheduledWhere) is what still finds an old event
+      // whose reschedule is recent. Search mode keeps the publish time
+      // (results aren't a timeline) but still flags the new date.
+      const isRescheduled = !!event.rescheduledAt && event.startsAt.getTime() > Date.now();
+      const publishedTime = event.publishedAt ?? event.createdAt;
+      const ownRowTime = isRescheduled && !query && event.rescheduledAt! > publishedTime ? event.rescheduledAt! : publishedTime;
       const ownRow: FeedItem = {
         type: "event",
         id: event.id,
@@ -1162,9 +1173,10 @@ export async function getFeedPage(params: {
             ? excerptOf(event.description)
             : "No description provided.",
         href: withFeedRef(`/calendar/${event.id}`, query),
-        timestamp: (event.publishedAt ?? event.createdAt).toISOString(),
+        timestamp: ownRowTime.toISOString(),
         author: authorOf(event.host),
         imageUrl: getEventHeroImageUrl(event.heroImageUrl),
+        ...(isRescheduled ? { eventRescheduled: true } : {}),
         attendeeCount: event._count.rsvps + event._count.registrations,
         forumReplyCount: event.forumThread ? event.forumThread._count.posts - 1 : undefined,
         ...feedEventWindow(event),
@@ -1186,7 +1198,7 @@ export async function getFeedPage(params: {
       // fetched via another query (see events above) may have one row
       // already shown on an earlier page.
       const eventRows: FeedItem[] =
-        (!authorIds || followedAuthorSet.has(event.hostId)) && (!before || (event.publishedAt ?? event.createdAt) < before)
+        (!authorIds || followedAuthorSet.has(event.hostId)) && (!before || ownRowTime < before)
           ? [ownRow]
           : [];
       const followedReply = authorIds && event.forumThread ? followedPostByThread.get(event.forumThread.id) : undefined;
@@ -1195,29 +1207,6 @@ export async function getFeedPage(params: {
         : authorIds
           ? (followedReply?.isReply ? followedReply.post : null)
           : latestDiscussionReply(event.forumThread, event.lastActivityAt, event.createdAt);
-      // A reschedule of a still-upcoming event, as its own row (id prefixed
-      // so it can't collide with the event's or a reply's) — same approach as
-      // the reply row below: the event's own row keeps its publishedAt
-      // position. Never in search mode; in following mode only when the host
-      // is followed (same as the event's own row).
-      const rescheduledRow: FeedItem | null =
-        !query && event.rescheduledAt && event.startsAt.getTime() > Date.now() && (!authorIds || followedAuthorSet.has(event.hostId)) && (!before || event.rescheduledAt < before)
-          ? {
-              type: "event",
-              id: `rescheduled-${event.id}`,
-              title: event.title,
-              excerpt: `Rescheduled to ${formatEventDateTime(event.startsAt, event.timezone)}`,
-              href: withFeedRef(`/calendar/${event.id}`, query),
-              timestamp: event.rescheduledAt.toISOString(),
-              author: authorOf(event.host),
-              imageUrl: null,
-              ...feedEventWindow(event),
-              eventActions: feedEventActions(event, viewerId, params.viewerRole),
-              isRestricted: event.visibility === EventVisibility.invited,
-              communities: communityNamesOf(event.communities),
-            }
-          : null;
-      if (rescheduledRow) eventRows.push(rescheduledRow);
       if (!reply || (before && event.lastActivityAt >= before)) return eventRows;
 
       // The latest reply, as its own row (id: reply.id, not event.id)

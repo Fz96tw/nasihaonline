@@ -67,10 +67,13 @@ export function FeedEventDateBadge({
   startsAt,
   endsAt,
   variant,
+  rescheduled = false,
 }: {
   startsAt: string;
   endsAt?: string;
   variant: "overlay" | "inline";
+  /** The host moved this event: a "NEW DATE" strip tops the tile, so it's unambiguous that the date shown is the new one. */
+  rescheduled?: boolean;
 }) {
   const hasMounted = useHasMounted();
   const status = useEventStatus(startsAt, endsAt);
@@ -102,7 +105,7 @@ export function FeedEventDateBadge({
   return (
     <div
       role="img"
-      aria-label={hasMounted ? `Event ${ended ? "was" : "starts"} ${fullLabel}${statusText ? ` — ${statusText}` : ""}` : "Event date"}
+      aria-label={hasMounted ? `Event ${ended ? "was" : rescheduled ? "rescheduled, now starts" : "starts"} ${fullLabel}${statusText ? ` — ${statusText}` : ""}` : "Event date"}
       className={cn(
         "flex w-[4.75rem] flex-shrink-0 flex-col overflow-hidden rounded-lg text-center",
         glass
@@ -112,6 +115,16 @@ export function FeedEventDateBadge({
     >
       {hasMounted ? (
         <>
+          {rescheduled && !ended && (
+            <div
+              className={cn(
+                "py-0.5 text-[10px] font-extrabold uppercase leading-tight tracking-wider",
+                glass ? "bg-amber-300/90 text-amber-950 [text-shadow:none]" : "bg-amber-100 text-amber-900",
+              )}
+            >
+              New date
+            </div>
+          )}
           <div
             className={cn(
               "py-0.5 text-xs font-bold tracking-wider",

@@ -391,7 +391,7 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                   {hasInlineEventBadge && (
                     // order-last: drawn to the right of the title column.
                     <div className="order-last mt-2">
-                      <FeedEventDateBadge startsAt={item.eventStartsAt!} endsAt={item.eventEndsAt} variant="inline" />
+                      <FeedEventDateBadge startsAt={item.eventStartsAt!} endsAt={item.eventEndsAt} variant="inline" rescheduled={item.eventRescheduled} />
                     </div>
                   )}
                   <div className={cn("mt-2 min-w-0 flex-1", hasThreadImage && "relative")}>
@@ -503,7 +503,7 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                       alt=""
                       className="block aspect-video w-full rounded-md bg-muted object-cover object-center sm:aspect-[8/3]"
                     />
-                    <FeedEventDateBadge startsAt={item.eventStartsAt!} endsAt={item.eventEndsAt} variant="overlay" />
+                    <FeedEventDateBadge startsAt={item.eventStartsAt!} endsAt={item.eventEndsAt} variant="overlay" rescheduled={item.eventRescheduled} />
                   </div>
                 ) : (
                   !isForumThread && item.imageUrl && !item.youtubeEmbedUrl && !item.gallery && (
