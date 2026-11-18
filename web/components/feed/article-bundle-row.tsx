@@ -22,6 +22,12 @@ const USER_PAUSE_MS = 5000;
  * clicks an arrow/dot, and while the row is off screen, hovered, focused, the
  * tab is hidden, or the viewer prefers reduced motion. Tapping a slide opens
  * the article; the Discuss button beside the dots follows the slide in view.
+ *
+ * Auto-advance stops for good once the member follows any same-tab link on
+ * the page, or taps anything in this row other than the arrows/dots. Next 14's
+ * router re-issues a pending navigation's RSC fetch whenever the page
+ * re-renders mid-navigation, so a slide change every few seconds kept
+ * restarting it — navigation to a post took 20+ seconds in production.
  */
 export function ArticleBundleRow({ item }: { item: FeedItem & { articleBundle: NonNullable<FeedItem["articleBundle"]> } }) {
   const { slides, seeAllHref } = item.articleBundle;
@@ -32,6 +38,7 @@ export function ArticleBundleRow({ item }: { item: FeedItem & { articleBundle: N
   const activeRef = useRef(0);
   const pausedUntil = useRef(0);
   const holding = useRef({ hover: false, focus: false, offscreen: true });
+  const stopped = useRef(false);
 
   const pauseForUser = () => {
     pausedUntil.current = Date.now() + USER_PAUSE_MS;
@@ -51,16 +58,24 @@ export function ArticleBundleRow({ item }: { item: FeedItem & { articleBundle: N
       holding.current.offscreen = !entry.isIntersecting || entry.intersectionRatio < 0.5;
     }, { threshold: [0, 0.5, 1] });
     observer.observe(root);
+    // Capture phase, so this runs before next/link starts the navigation.
+    const onDocumentClick = (event: MouseEvent) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const anchor = (event.target as Element | null)?.closest?.("a[href]");
+      if (anchor && anchor.getAttribute("target") !== "_blank") stopped.current = true;
+    };
+    document.addEventListener("click", onDocumentClick, true);
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const timer = window.setInterval(() => {
       const { hover, focus, offscreen } = holding.current;
-      if (reduceMotion.matches || document.hidden || hover || focus || offscreen) return;
+      if (stopped.current || reduceMotion.matches || document.hidden || hover || focus || offscreen) return;
       if (Date.now() < pausedUntil.current) return;
       const next = (activeRef.current + 1) % slideCount;
       scrollToIndex(next, next === 0);
     }, AUTO_ADVANCE_MS);
     return () => {
       observer.disconnect();
+      document.removeEventListener("click", onDocumentClick, true);
       window.clearInterval(timer);
     };
   }, [slideCount]);
@@ -70,6 +85,9 @@ export function ArticleBundleRow({ item }: { item: FeedItem & { articleBundle: N
   return (
     <li
       ref={rootRef}
+      onClickCapture={(e) => {
+        if (!(e.target as Element).closest("[data-carousel-control]")) stopped.current = true;
+      }}
       onMouseEnter={() => (holding.current.hover = true)}
       onMouseLeave={() => (holding.current.hover = false)}
       onFocus={() => (holding.current.focus = true)}
@@ -110,6 +128,7 @@ export function ArticleBundleRow({ item }: { item: FeedItem & { articleBundle: N
             onScroll={(e) => {
               const el = e.currentTarget;
               const i = Math.round(el.scrollLeft / el.clientWidth);
+              if (i === activeRef.current) return;
               activeRef.current = i;
               setActive(i);
             }}
@@ -190,6 +209,7 @@ export function ArticleBundleRow({ item }: { item: FeedItem & { articleBundle: N
               <button
                 key={dir}
                 type="button"
+                data-carousel-control
                 aria-label={dir < 0 ? "Previous article" : "Next article"}
                 onClick={() => {
                   pauseForUser();
@@ -214,6 +234,7 @@ export function ArticleBundleRow({ item }: { item: FeedItem & { articleBundle: N
                 key={i}
                 type="button"
                 role="tab"
+                data-carousel-control
                 aria-selected={i === active}
                 aria-label={i < slides.length ? `Article ${i + 1} of ${slides.length}` : "See all articles"}
                 onClick={() => {
