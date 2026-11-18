@@ -69,10 +69,22 @@ export async function getDirectoryMembers(): Promise<DirectoryMember[]> {
       user: { tier: { in: DIRECTORY_TIERS }, suspended: false },
     },
     include: PROFILE_INCLUDE,
-    orderBy: { user: { name: "asc" } },
   });
 
-  return profiles.map(toDirectoryMember);
+  // Sorted here, not with a Prisma orderBy: production's Postgres (Alpine
+  // image, musl) collates byte-wise despite its en_US.utf8 setting, so every
+  // lowercase-initial name sorted after "Z". Case- and accent-insensitive.
+  return profiles.map(toDirectoryMember).sort((a, b) => compareMemberNames(a.name, b.name));
+}
+
+const memberNameCollator = new Intl.Collator("en", { sensitivity: "base", numeric: true });
+
+/** Alphabetical by display name, ignoring case and accents; unnamed members last. */
+function compareMemberNames(a: string | null, b: string | null): number {
+  const left = a?.trim() ?? "";
+  const right = b?.trim() ?? "";
+  if (!left || !right) return left ? -1 : right ? 1 : 0;
+  return memberNameCollator.compare(left, right);
 }
 
 /**
