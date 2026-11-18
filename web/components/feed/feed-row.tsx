@@ -278,9 +278,9 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
   // usual large Library/Event title), then the quoted reply — the reverse
   // of every other row's title-then-excerpt order.
   const isDiscussionReplyRow = (item.type === "library" || item.type === "event" || item.type === "article") && !!item.replyExcerpt;
-  // Event date as a calendar tile: pinned over the hero banner when the row
-  // has a plain image (no gallery/video, whose controls it would cover),
-  // otherwise beside the title. Reply rows carry no eventStartsAt.
+  // Event date as a calendar tile: pinned top-right over the hero banner when
+  // the row has a plain image (no gallery/video, whose controls it would
+  // cover), otherwise to the right of the title. Reply rows carry no eventStartsAt.
   const hasEventBadge = item.type === "event" && !!item.eventStartsAt;
   const hasOverlayEventBadge = hasEventBadge && !!item.imageUrl && !item.youtubeEmbedUrl && !item.gallery;
   const hasInlineEventBadge = hasEventBadge && !hasOverlayEventBadge;
@@ -389,7 +389,8 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
               <>
                 <div className={cn("flex items-start", hasInlineEventBadge ? "gap-3" : "gap-1")}>
                   {hasInlineEventBadge && (
-                    <div className="mt-2">
+                    // order-last: drawn to the right of the title column.
+                    <div className="order-last mt-2">
                       <FeedEventDateBadge startsAt={item.eventStartsAt!} endsAt={item.eventEndsAt} variant="inline" />
                     </div>
                   )}
