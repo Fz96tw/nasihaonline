@@ -4075,11 +4075,12 @@ async function applyRsvp(actingUser: UserModel, eventId: string, mode: "toggle" 
     if (!invited) throw new EventError(403, "You're not invited to this event.");
   }
 
-  // Same belt-and-suspenders rationale as the restricted-event check above,
-  // for community-based-categorization initiative, objective 5's gating: a
-  // member outside a tagged event's communities can't see it via any
-  // listing/detail query, but this is the enforcement point against a
-  // guessed eventId reaching the RSVP action directly.
+  // Deliberately no community-tag check here: a `visibility: community`
+  // event is fully public (PRD §4.6) — its community tags are a browse
+  // label, not an audience restriction (see communityVisibilityWhere), and
+  // anyone can already find and register for it on the public /events
+  // page. The invite-list check above is the only RSVP access gate; a
+  // community check here would contradict that, not complete it.
 
   const existing = await db.rSVP.findUnique({
     where: { eventId_userId: { eventId, userId } },
@@ -4162,10 +4163,11 @@ async function applyRsvp(actingUser: UserModel, eventId: string, mode: "toggle" 
  * Unlike rsvpToEvent this is idempotent — it never toggles. A host or an
  * already-`going` member is a no-op, a `cancelled` row is reactivated, and a
  * missing row is created, so repeat clicks can't cancel anyone's RSVP or
- * create duplicates. It re-applies rsvpToEvent's access checks (restricted
- * events: host / invitee / admin else 403; other events: community
- * visibility else 404; cancelled or someone else's draft: 404) but
- * deliberately skips its side effects: no calendar-invite email and no host
+ * create duplicates. Access checks: restricted events need host / invitee /
+ * admin, else 403 (same gate as rsvpToEvent); a cancelled event or someone
+ * else's draft is 404. No community-tag check, same as rsvpToEvent (see its
+ * comment on why). Unlike rsvpToEvent it deliberately skips the side
+ * effects: no calendar-invite email and no host
  * notification — joining a meeting that's already running shouldn't send
  * either. The member still shows up on the host's roster via the RSVP row.
  */
