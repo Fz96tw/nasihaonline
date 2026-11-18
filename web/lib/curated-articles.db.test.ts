@@ -239,9 +239,15 @@ describe("Curated articles (DB-backed)", { skip }, () => {
     assert.equal(row.article?.threadHref, null, "no discussion until someone starts one");
     assert.ok(row.imageUrl, "always has an image (cached thumbnail or placeholder)");
 
-    // The whole merged feed includes it too.
+    // The whole merged feed carries it as a slide of the single "From the
+    // Web" carousel row, not as its own row.
     const all = await feed.getFeedPage({ cursor: null, viewerId: memberId });
-    assert.ok(all.items.some((item) => item.id === trees.id));
+    assert.ok(!all.items.some((item) => item.id === trees.id), "no per-article row in the mixed feed");
+    const bundles = all.items.filter((item) => item.articleBundle);
+    assert.equal(bundles.length, 1, "exactly one carousel row");
+    assert.deepEqual(bundles[0].articleBundle?.slides.map((slide) => slide.articleId), [trees.id]);
+    assert.equal(bundles[0].timestamp, bundles[0].articleBundle?.slides[0].timestamp, "row sorts by its newest article");
+    assert.equal(bundles[0].articleBundle?.seeAllHref, "/whats-new?type=article");
 
     // Following mode has no member author for an article — never shown there.
     const following = await feed.getFeedPage({ cursor: null, viewerId: memberId, authorIds: [adminId] });

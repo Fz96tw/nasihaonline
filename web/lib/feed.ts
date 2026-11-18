@@ -29,6 +29,26 @@ export type FeedGallerySlide =
   | { kind: "image"; url: string; /** The item's hero/cover image — rendered as a fixed 8:3 cropped banner rather than fit-to-frame. */ banner?: boolean }
   | { kind: "video"; thumbnailUrl: string; embedUrl: string };
 
+/** One article in the "From the Web" carousel row (FeedItem.articleBundle). */
+export type ArticleBundleSlide = {
+  articleId: string;
+  title: string;
+  excerpt: string;
+  /** NASIHA's open link (counts the open, then forwards to the publisher). */
+  url: string;
+  sourceName: string;
+  imageUrl: string;
+  /** ISO approval/release time. */
+  timestamp: string;
+  viewCount: number;
+  threadHref: string | null;
+  replyCount: number;
+  communities?: string[];
+};
+
+/** id prefix of the "From the Web" carousel row — never a real article id. */
+export const ARTICLE_BUNDLE_ID_PREFIX = "from-the-web:";
+
 export type FeedItem = {
   type: FeedItemType;
   id: string;
@@ -90,6 +110,14 @@ export type FeedItem = {
    * until someone does).
    */
   article?: { articleId: string; url: string; sourceName: string; threadHref: string | null; replyCount: number };
+  /**
+   * Only the mixed browse feed's single "From the Web" row carries this: the
+   * newest curated articles (newest first, capped) shown as an auto-advancing
+   * carousel, ending in a "See all" slide linking to `seeAllHref` (the
+   * per-article "From the Web" pill view). The row's own timestamp is the
+   * newest slide's, so a new release lifts it back to the top (§4.18).
+   */
+  articleBundle?: { slides: ArticleBundleSlide[]; seeAllHref: string };
   /** Only a weekly-digest "announcement" item carries this — true when the row is the community's weekly digest, so FeedRow prefixes the title with a digest icon. */
   isDigest?: boolean;
   /**

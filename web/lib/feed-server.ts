@@ -19,7 +19,7 @@ import {
   getSurveyHeroImageUrl,
   getKnowledgeItemHeroImageUrl,
 } from "@/lib/storage";
-import { withFeedRef, type FeedGallerySlide, type FeedItem, type FeedItemType, type FeedCursor } from "@/lib/feed";
+import { ARTICLE_BUNDLE_ID_PREFIX, withFeedRef, type FeedGallerySlide, type FeedItem, type FeedItemType, type FeedCursor } from "@/lib/feed";
 import { allForumPostImageUrls, FORUM_POST_IMAGE_URL_PREFIX, libraryBodyImageUrls, MAX_FEED_CAROUSEL_IMAGES, stripPastedImageTokens } from "@/lib/pasted-images";
 import { extractSnippet, textContainsMatch } from "@/lib/text-highlight";
 import { firstYoutubeUrlInText, youtubeEmbedUrl, youtubeThumbnailUrl } from "@/lib/youtube";
@@ -48,6 +48,8 @@ import { CURATED_ARTICLE_PLACEHOLDER_IMAGE, curatedArticleOpenHref, getCuratedAr
 import { FROM_THE_WEB_FORUM_SLUG } from "@/lib/forums";
 
 const DEFAULT_PAGE_SIZE = 20;
+/** Articles in the What's New "From the Web" carousel row (§4.18). */
+const ARTICLE_BUNDLE_SIZE = 10;
 const EXCERPT_LENGTH = 180;
 // In search mode, a forum thread's excerpt needs to come from whichever post
 // actually contains the match (Meilisearch's ForumSearchDocument.body
@@ -819,7 +821,11 @@ export async function getFeedPage(params: {
   };
   const articleOwnWhere = { ...articleWhere, approvedAt: before ? { not: null, lt: before } : { not: null } };
   const articleReplyWhere = { ...articleWhere, ...(before ? { lastActivityAt: { lt: before } } : {}) };
-  const fetchArticles = (where: typeof articleOwnWhere | typeof articleReplyWhere, orderBy: { approvedAt: "desc" } | { lastActivityAt: "desc" }) =>
+  const fetchArticles = (
+    where: typeof articleOwnWhere | typeof articleReplyWhere,
+    orderBy: { approvedAt: "desc" } | { lastActivityAt: "desc" },
+    take = pageSize,
+  ) =>
     db.externalArticle.findMany({
       where,
       select: {
@@ -837,10 +843,26 @@ export async function getFeedPage(params: {
         communities: { select: { community: { select: { name: true } } } },
       },
       orderBy,
-      take: pageSize,
+      take,
     });
+  // The mixed browse feed shows every article in ONE carousel row (§4.18) so
+  // a burst of releases can't crowd out member posts: its timestamp is the
+  // newest article's, so each new release lifts the row back to the top and
+  // member activity pushes it down again. The "From the Web" pill and search
+  // keep one row per article — the pill view is the archive the carousel's
+  // "See all" slide links to. Discussion-reply rows stay separate either way:
+  // they're member posts.
+  const bundleArticles = !query && wants("article") && !(params.types?.length === 1);
   const articlesPromise = !wants("article")
     ? Promise.resolve([])
+    : bundleArticles
+      ? Promise.all([
+          fetchArticles({ ...articleWhere, approvedAt: { not: null } }, { approvedAt: "desc" }, ARTICLE_BUNDLE_SIZE),
+          fetchArticles(articleReplyWhere, { lastActivityAt: "desc" }),
+        ]).then(([newest, byActivity]) => {
+          const seen = new Set(newest.map((article) => article.id));
+          return [...newest, ...byActivity.filter((article) => !seen.has(article.id))];
+        })
     : query
       ? fetchArticles(articleOwnWhere, { approvedAt: "desc" })
       : Promise.all([
@@ -1001,6 +1023,49 @@ export async function getFeedPage(params: {
             excerpt: excerptSource ? excerptOf(excerptSource) : "View this meeting request.",
           };
         });
+
+  // The single "From the Web" carousel row (see bundleArticles above):
+  // `articles` leads with the newest ARTICLE_BUNDLE_SIZE by approvedAt,
+  // fetched without the cursor, so the row's timestamp is always the newest
+  // article's and it lands on exactly one page — the one whose cursor window
+  // holds that timestamp.
+  const bundleSource = bundleArticles ? articles.slice(0, ARTICLE_BUNDLE_SIZE) : [];
+  const newestArticle = bundleSource[0];
+  const articleBundleRows: FeedItem[] =
+    newestArticle && (!before || (newestArticle.approvedAt as Date) < before)
+      ? [
+          {
+            type: "article",
+            id: `${ARTICLE_BUNDLE_ID_PREFIX}${newestArticle.id}`,
+            title: "From the Web",
+            excerpt: "",
+            href: withFeedRef("/whats-new?type=article"),
+            timestamp: (newestArticle.approvedAt as Date).toISOString(),
+            author: { ...BOARD_SENDER, name: "Shared by NASIHA" },
+            imageUrl: null,
+            articleBundle: {
+              seeAllHref: "/whats-new?type=article",
+              slides: bundleSource.map((article) => {
+                const thread = article.forumThread;
+                const replyCount = thread ? thread._count.posts - 1 : 0;
+                return {
+                  articleId: article.id,
+                  title: article.title,
+                  excerpt: truncate(article.excerpt),
+                  url: curatedArticleOpenHref(article.id),
+                  sourceName: article.sourceName,
+                  imageUrl: getCuratedArticleImageUrl(article.imageKey) ?? CURATED_ARTICLE_PLACEHOLDER_IMAGE,
+                  timestamp: (article.approvedAt as Date).toISOString(),
+                  viewCount: article._count.views,
+                  threadHref: thread ? withFeedRef(`/forums/${FROM_THE_WEB_FORUM_SLUG}/${thread.id}`) : null,
+                  replyCount,
+                  communities: communityNamesOf(article.communities),
+                };
+              }),
+            },
+          },
+        ]
+      : [];
 
   const merged: FeedItem[] = [
     ...events.flatMap((event): FeedItem[] => {
@@ -1414,6 +1479,7 @@ export async function getFeedPage(params: {
         volunteerNote: item.volunteerNote,
       };
     }),
+    ...articleBundleRows,
     ...articles.flatMap((article): FeedItem[] => {
       const approvedAt = article.approvedAt as Date; // where clause guarantees approved + approvedAt set
       const thread = article.forumThread;
@@ -1446,7 +1512,7 @@ export async function getFeedPage(params: {
         forumReplyCount: thread ? thread._count.posts - 1 : undefined,
         communities: communityNamesOf(article.communities),
       };
-      const rows = !before || approvedAt < before ? [ownRow] : [];
+      const rows = !bundleArticles && (!before || approvedAt < before) ? [ownRow] : [];
       // The latest discussion reply, as its own row — same one-row-per-item
       // convention as the libraryItems branch's replyRow. Never in search mode.
       const reply = query ? null : latestDiscussionReply(thread, article.lastActivityAt, approvedAt);

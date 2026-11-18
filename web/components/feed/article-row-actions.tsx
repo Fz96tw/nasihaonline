@@ -10,12 +10,10 @@ import { FROM_THE_WEB_FORUM_SLUG } from "@/lib/forums";
 import { withFeedRef, type FeedItem } from "@/lib/feed";
 
 /**
- * Footer under a "From the Web" feed row: the external "Read on {source}"
- * link plus the article's discussion — a link once a thread exists, or a
- * Discuss button that starts one (any member; idempotent server-side) and
- * opens it.
+ * An article's discussion: a link once a thread exists, or a Discuss button
+ * that starts one (any member; idempotent server-side) and opens it.
  */
-export function ArticleRowActions({ article }: { article: NonNullable<FeedItem["article"]> }) {
+export function ArticleDiscussButton({ article }: { article: Pick<NonNullable<FeedItem["article"]>, "articleId" | "threadHref" | "replyCount"> }) {
   const router = useRouter();
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +39,31 @@ export function ArticleRowActions({ article }: { article: NonNullable<FeedItem["
   }
 
   return (
+    <div className="flex flex-col items-end gap-1">
+      {article.threadHref ? (
+        <Button asChild size="sm" variant="outline">
+          <Link href={article.threadHref}>
+            <MessageSquare className="mr-1.5 h-4 w-4" />
+            Discuss{article.replyCount > 0 ? ` (${article.replyCount})` : ""}
+          </Link>
+        </Button>
+      ) : (
+        <Button size="sm" variant="outline" onClick={startDiscussion} disabled={starting}>
+          <MessageSquare className="mr-1.5 h-4 w-4" />
+          {starting ? "Starting…" : "Discuss"}
+        </Button>
+      )}
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * Footer under a "From the Web" feed row: the external "Read on {source}"
+ * link plus the article's Discuss button.
+ */
+export function ArticleRowActions({ article }: { article: NonNullable<FeedItem["article"]> }) {
+  return (
     <div className="flex flex-wrap items-center justify-between gap-3 px-4 pb-4">
       <a
         href={article.url}
@@ -52,22 +75,7 @@ export function ArticleRowActions({ article }: { article: NonNullable<FeedItem["
         <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />
         <span className="sr-only">(opens in a new tab)</span>
       </a>
-      <div className="flex flex-col items-end gap-1">
-        {article.threadHref ? (
-          <Button asChild size="sm" variant="outline">
-            <Link href={article.threadHref}>
-              <MessageSquare className="mr-1.5 h-4 w-4" />
-              Discuss{article.replyCount > 0 ? ` (${article.replyCount})` : ""}
-            </Link>
-          </Button>
-        ) : (
-          <Button size="sm" variant="outline" onClick={startDiscussion} disabled={starting}>
-            <MessageSquare className="mr-1.5 h-4 w-4" />
-            {starting ? "Starting…" : "Discuss"}
-          </Button>
-        )}
-        {error && <p className="text-xs text-destructive">{error}</p>}
-      </div>
+      <ArticleDiscussButton article={article} />
     </div>
   );
 }

@@ -15,6 +15,7 @@ import { useHasMounted } from "@/lib/use-has-mounted";
 import { cn } from "@/lib/utils";
 import { ReflectionFeedCard } from "@/components/feed/reflection-feed-card";
 import { ArticleRowActions } from "@/components/feed/article-row-actions";
+import { ArticleBundleRow } from "@/components/feed/article-bundle-row";
 
 /**
  * The row's clickable wrapper: an in-app <Link>, except a "From the Web"
@@ -272,6 +273,7 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
   // A Weekly Reflection thread's own row is a full-panel image look instead of
   // the standard layout (after the hooks above, so hook order is unchanged).
   if (item.reflectionCard) return <ReflectionFeedCard item={{ ...item, reflectionCard: item.reflectionCard }} q={q} />;
+  if (item.articleBundle) return <ArticleBundleRow item={{ ...item, articleBundle: item.articleBundle }} />;
   // Forum threads always carry the same static default image (no per-thread
   // upload), so instead of the full-width hero image other feed types render
   // below their content, it's shown as a small dimmed square in the
