@@ -9,6 +9,7 @@ export function FeedList({
   initialItems,
   initialCursor,
   initialHasMore,
+  totalCount,
   activeType,
   q,
   myCommunities,
@@ -19,6 +20,14 @@ export function FeedList({
   initialItems: FeedItem[];
   initialCursor: FeedCursor | null;
   initialHasMore: boolean;
+  /**
+   * Search mode only: getFeedPage's permission-filtered match total, shown
+   * as "Showing X of Y" beside "Load more". Taken from the first page and
+   * not refreshed on later pages. The forum count can run slightly high, so
+   * the line is shown only while hasMore is true, never as an exact
+   * "N remaining".
+   */
+  totalCount?: number;
   activeType?: FeedItemType;
   /** Active search query (What's New feed's inline search box), threaded into "Load more" pagination. */
   q?: string;
@@ -73,7 +82,12 @@ export function FeedList({
         ))}
       </ul>
       {hasMore && (
-        <div className="flex justify-center p-4">
+        <div className="flex flex-col items-center gap-2 p-4">
+          {q && totalCount != null && (
+            <p className="text-xs text-muted-foreground">
+              Showing {items.length} of {Math.max(totalCount, items.length)} results
+            </p>
+          )}
           <Button variant="outline" onClick={loadMore} disabled={loading}>
             {loading ? "Loading…" : "Load more"}
           </Button>

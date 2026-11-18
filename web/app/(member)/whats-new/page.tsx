@@ -159,6 +159,7 @@ export default async function WhatsNewPage({
           initialItems={items}
           initialCursor={nextCursor}
           initialHasMore={hasMore}
+          totalCount={totalCount}
           activeType={activeType}
           q={q}
           myCommunities={myCommunities}
