@@ -144,7 +144,7 @@ export function ArticleBundleRow({ item }: { item: FeedItem & { articleBundle: N
                 aria-label={`${slide.title} (${slide.sourceName}, opens in a new tab)`}
                 className="flex w-full shrink-0 snap-center flex-col overflow-hidden rounded-md border bg-card transition-colors hover:bg-accent/50"
               >
-                {/* Title overlaid on the image over a dark gradient (like Library's overlay option), so long headlines get 3 lines without growing the card. */}
+                {/* Title overlaid on the image over a dark gradient (like Library's overlay option), so long headlines get 4 lines without growing the card. */}
                 <div className="relative aspect-video w-full bg-muted sm:aspect-[8/3]">
                   {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
                   <img
@@ -157,7 +157,7 @@ export function ArticleBundleRow({ item }: { item: FeedItem & { articleBundle: N
                   <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" aria-hidden />
                   {/* Padding on the wrapper, not the clamped h3 — padding there would show a 4th line peeking out. */}
                   <div className="absolute inset-x-0 bottom-0 p-3">
-                    <h3 className="line-clamp-3 text-lg font-semibold leading-snug text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">
+                    <h3 className="line-clamp-4 text-lg font-semibold leading-snug text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">
                       {slide.title}
                     </h3>
                   </div>
