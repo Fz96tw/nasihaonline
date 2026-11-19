@@ -125,13 +125,25 @@ export function EventsCarousel({ slides }: { slides: EventSlide[] }) {
               aria-label={`${slide.title} — event ${i + 1} of ${slideCount}`}
               className="relative block aspect-square w-full shrink-0 snap-center overflow-hidden bg-muted sm:aspect-[5/2]"
             >
+              {/* The whole banner, never cropped, whatever shape the host
+                  uploaded: fitted (object-contain) over a blurred, darkened,
+                  enlarged copy of itself that fills the leftover space. */}
+              {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
+              <img
+                src={slide.imageUrl ?? FALLBACK_IMAGE}
+                alt=""
+                aria-hidden
+                draggable={false}
+                loading={i === 0 ? "eager" : "lazy"}
+                className="absolute inset-0 h-full w-full scale-110 object-cover object-center blur-2xl brightness-75"
+              />
               {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
               <img
                 src={slide.imageUrl ?? FALLBACK_IMAGE}
                 alt=""
                 draggable={false}
                 loading={i === 0 ? "eager" : "lazy"}
-                className="absolute inset-0 h-full w-full object-cover object-center"
+                className="absolute inset-0 h-full w-full object-contain object-center"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent" aria-hidden />
               <FeedEventDateBadge startsAt={slide.startsAt} endsAt={slide.endsAt ?? undefined} variant="overlay" />
