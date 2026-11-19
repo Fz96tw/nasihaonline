@@ -501,9 +501,7 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                     <img
                       src={item.imageUrl!}
                       alt=""
-                      // Anchored to the top (not centered) so a banner's top edge
-                      // — often its heading — isn't the part the 8:3 crop cuts.
-                      className="block aspect-video w-full rounded-md bg-muted object-cover object-top sm:aspect-[8/3]"
+                      className="block aspect-video w-full rounded-md bg-muted object-cover object-center sm:aspect-[8/3]"
                     />
                     <FeedEventDateBadge startsAt={item.eventStartsAt!} endsAt={item.eventEndsAt} variant="overlay" rescheduled={item.eventRescheduled} />
                   </div>

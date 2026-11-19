@@ -111,11 +111,10 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
         {event.heroImageUrl ? (
           // Fixed 2:1 frame (cropped to fill) rather than the upload's own
           // shape, so a tall/square banner can't stretch the card and every
-          // card's text starts at the same height across a grid row. Anchored
-          // to the top: hosts' banners tend to put headings/faces up there.
+          // card's text starts at the same height across a grid row.
           <div className="relative aspect-[2/1] w-full shrink-0 overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
-            <img src={event.heroImageUrl} alt="" className="h-full w-full object-cover object-top" />
+            <img src={event.heroImageUrl} alt="" className="h-full w-full object-cover object-center" />
             <div className="absolute inset-0 bg-[rgba(10,20,70,.4)]" />
             <FeedEventDateBadge startsAt={event.startsAt} endsAt={event.endsAt ?? undefined} variant="overlay" />
           </div>
