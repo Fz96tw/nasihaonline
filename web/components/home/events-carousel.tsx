@@ -138,7 +138,7 @@ export function EventsCarousel({ slides }: { slides: EventSlide[] }) {
               {/* Padding on the wrapper, not the clamped h3 — padding there would show an extra line peeking out. */}
               {/* Extra side padding on mouse devices keeps the text clear of the prev/next arrows. */}
               <div className="absolute inset-x-0 bottom-0 p-5 sm:p-8 [@media(pointer:fine)]:px-16 sm:[@media(pointer:fine)]:px-20">
-                <h3 className="line-clamp-2 max-w-[820px] text-xl font-extrabold leading-tight text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)] sm:text-3xl lg:text-4xl">
+                <h3 className="line-clamp-2 max-w-[720px] text-xl font-extrabold leading-tight text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)] sm:text-3xl">
                   {slide.title}
                 </h3>
                 {slide.description && (

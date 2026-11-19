@@ -8,8 +8,8 @@ import { getPublicUpcomingEvents } from "@/lib/events-server";
 function SectionHeading() {
   return (
     <Reveal className="mb-10 text-center">
-      <p className="mb-3 text-sm font-bold uppercase tracking-[.1em] text-primary">Upcoming</p>
-      <h2 className="text-3xl font-extrabold tracking-[-.02em] md:text-4xl">Events Calendar</h2>
+      <p className="mb-3 text-sm font-bold uppercase tracking-[.1em] text-primary">Events Calendar</p>
+      <h2 className="text-3xl font-extrabold tracking-[-.02em] md:text-4xl">Upcoming Events</h2>
       <p className="mx-auto mt-4 max-w-[640px] text-lg text-muted-foreground">
         Webinars, workshops, and roundtables hosted by NASIHA members — open to everyone.
       </p>
@@ -28,14 +28,14 @@ export function EventsCalendarSectionSkeleton() {
           <Skeleton className="h-9 w-64" />
           <Skeleton className="h-5 w-96 max-w-full" />
         </div>
-        <Skeleton className="aspect-square w-full rounded-xl sm:aspect-[5/2]" />
+        <Skeleton className="mx-auto aspect-square w-full max-w-[880px] rounded-xl sm:aspect-[5/2]" />
       </div>
     </section>
   );
 }
 
 /**
- * Homepage "Events Calendar": every upcoming public event (the same set a
+ * Homepage "Upcoming Events" section: every upcoming public event (the same set a
  * signed-out visitor sees on /events) as an auto-advancing carousel, earliest
  * first. A recurring series gets one slide, for its next occurrence —
  * otherwise a weekly event would fill the carousel with copies of itself.
@@ -70,7 +70,11 @@ export async function EventsCalendarSection() {
       <div className="mx-auto max-w-[1120px]">
         <SectionHeading />
         {slides.length > 0 ? (
-          <EventsCarousel slides={slides} />
+          // Narrower than the section (1120px): at full width a 5:2 slide
+          // stood ~450px tall on desktop and dominated the page.
+          <div className="mx-auto max-w-[880px]">
+            <EventsCarousel slides={slides} />
+          </div>
         ) : (
           <p className="text-center text-muted-foreground">No upcoming events right now — check back soon.</p>
         )}
