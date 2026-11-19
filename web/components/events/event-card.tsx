@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RsvpBlurb, RsvpButton } from "@/components/calendar/rsvp-button";
 import { LiveEventBadge } from "@/components/events/live-event-badge";
+import { FeedEventDateBadge } from "@/components/feed/feed-event-date-badge";
 import { RegisterBlurb, RegisterButton } from "@/components/events/register-button";
 import { EVENT_TYPE_LABELS, getEventAudienceBadge, type EventWithRsvp } from "@/lib/events";
 import { EventVisibility } from "@/lib/generated/prisma/enums";
@@ -73,6 +74,7 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
             {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
             <img src={event.heroImageUrl} alt="" className="h-auto w-full" />
             <div className="absolute inset-0 bg-[rgba(10,20,70,.4)]" />
+            <FeedEventDateBadge startsAt={event.startsAt} endsAt={event.endsAt ?? undefined} variant="overlay" />
           </div>
         ) : null}
         <CardHeader>
@@ -109,9 +111,13 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
                 agreement; the visible, viewer-local date is the line below. */}
             <span className="sr-only">, {formatEventDayForHeading(event.startsAt)}</span>
           </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            {hasMounted ? formatEventDate(event.startsAt) : null}
-          </p>
+          {/* With a banner, the date badge on the image carries the date;
+              the text line stays only for an image-less card. */}
+          {!event.heroImageUrl && (
+            <p className="text-sm text-muted-foreground">
+              {hasMounted ? formatEventDate(event.startsAt) : null}
+            </p>
+          )}
           {event.hostName ? (
             <p className="text-sm text-muted-foreground">Hosted by {event.hostName}</p>
           ) : null}
