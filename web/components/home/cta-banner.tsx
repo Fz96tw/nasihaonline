@@ -5,7 +5,7 @@ import { Reveal } from "@/components/home/reveal";
 
 export function CtaBanner() {
   return (
-    <section className="relative overflow-hidden px-8 py-20 text-center text-primary-foreground">
+    <section className="relative overflow-hidden px-8 py-12 text-center text-primary-foreground md:py-16">
       <ParallaxHeroImage src="/images/meadow-morning.jpg" />
       <div className="absolute inset-0 -z-10 bg-[linear-gradient(135deg,rgba(30,58,138,.88),rgba(37,99,235,.75))]" />
       <Reveal className="relative mx-auto max-w-[520px]">

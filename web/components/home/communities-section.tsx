@@ -10,7 +10,7 @@ import { getCommunityImage } from "@/lib/community-images";
 // layout — same rationale as HeroStatsSkeleton in hero-section.tsx.
 export function CommunitiesSectionSkeleton() {
   return (
-    <section className="px-8 py-24">
+    <section className="bg-muted px-8 py-12 md:py-16">
       <div className="mx-auto max-w-[1120px]">
         <div className="mb-10 flex flex-col items-center gap-3">
           <Skeleton className="h-4 w-28" />
@@ -39,7 +39,7 @@ export async function CommunitiesSection() {
   const communities = await getAllCommunities().catch(() => []);
 
   return (
-    <section className="px-8 py-24">
+    <section className="bg-muted px-8 py-12 md:py-16">
       <div className="mx-auto max-w-[1120px]">
         <Reveal className="mb-10 text-center">
           <p className="mb-3 text-sm font-bold uppercase tracking-[.1em] text-primary">Explore by Topic</p>

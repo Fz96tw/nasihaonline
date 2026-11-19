@@ -4,7 +4,7 @@ import { MEMBERSHIP_TIERS } from "@/lib/membership-tiers";
 
 export function MembershipTiersSection() {
   return (
-    <section className="bg-muted/40 px-8 py-20">
+    <section className="bg-background px-8 py-12 md:py-16">
       <div className="mx-auto max-w-[960px]">
         <Reveal className="mx-auto max-w-[640px] text-center">
           <p className="text-base font-semibold uppercase tracking-wide text-primary">

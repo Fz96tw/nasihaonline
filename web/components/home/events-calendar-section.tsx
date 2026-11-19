@@ -21,7 +21,7 @@ function SectionHeading() {
 // layout — same rationale as CommunitiesSectionSkeleton.
 export function EventsCalendarSectionSkeleton() {
   return (
-    <section className="bg-muted/40 px-8 py-24">
+    <section className="bg-background px-8 py-12 md:py-16">
       <div className="mx-auto max-w-[1120px]">
         <div className="mb-10 flex flex-col items-center gap-3">
           <Skeleton className="h-4 w-28" />
@@ -66,7 +66,7 @@ export async function EventsCalendarSection() {
   }
 
   return (
-    <section className="bg-muted/40 px-8 py-24">
+    <section className="bg-background px-8 py-12 md:py-16">
       <div className="mx-auto max-w-[1120px]">
         <SectionHeading />
         {slides.length > 0 ? (

@@ -40,7 +40,7 @@ const ACTIVITIES = [
 
 export function WhatWeDoSection() {
   return (
-    <section className="bg-muted px-8 py-24">
+    <section className="bg-muted px-8 py-12 md:py-16">
       <div className="mx-auto max-w-[1120px]">
         <Reveal className="mb-10 text-center">
           <p className="mb-3 text-sm font-bold uppercase tracking-[.1em] text-primary">

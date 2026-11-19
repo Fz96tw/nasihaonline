@@ -60,7 +60,7 @@ export default function AboutPage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-[1120px] px-8 py-24">
+      <section className="mx-auto max-w-[1120px] px-8 py-12 md:py-16">
         <div className="grid grid-cols-1 items-start gap-14 lg:grid-cols-2">
           <div>
             <Reveal>
@@ -119,7 +119,7 @@ export default function AboutPage() {
 
       <WhatWeDoSection />
 
-      <section className="px-8 py-24 text-center">
+      <section className="px-8 py-12 text-center md:py-16">
         <Reveal>
           <h2 className="mb-4 text-3xl font-extrabold tracking-[-.02em] md:text-4xl">
             Ready to Join the Exchange?
