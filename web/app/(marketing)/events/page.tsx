@@ -9,6 +9,7 @@ import { Reveal } from "@/components/home/reveal";
 import { buildMetadata } from "@/lib/seo";
 import { buildBreadcrumbJsonLd, buildEventJsonLd } from "@/lib/json-ld";
 import { JsonLd } from "@/components/json-ld";
+import { DEFAULT_EVENT_TIME_ZONE } from "@/lib/format-date";
 
 export const metadata: Metadata = buildMetadata({
   title: "Events — Webinars, Workshops & Expert Talks | NASIHA",
@@ -21,6 +22,31 @@ const BREADCRUMB_JSON_LD = buildBreadcrumbJsonLd([
   { name: "Home", path: "/" },
   { name: "Events", path: "/events" },
 ]);
+
+/**
+ * Splits the (already earliest-first) list into consecutive month sections
+ * ("December 2026", "January 2027", ...). Months are taken in the site's
+ * default event time zone, not the viewer's — this renders on the server, so
+ * a fixed zone is what keeps SSR and hydration in agreement (same reason as
+ * EventCard's sr-only heading date). An event near midnight on the 1st can
+ * therefore sit under the neighboring month for a far-away viewer; its card's
+ * date badge still shows their own local date. Months with no events simply
+ * don't appear.
+ */
+function groupEventsByMonth<T extends { startsAt: string }>(events: T[]) {
+  const keyFormat = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "2-digit", timeZone: DEFAULT_EVENT_TIME_ZONE });
+  const labelFormat = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "long", timeZone: DEFAULT_EVENT_TIME_ZONE });
+  const groups: { key: string; label: string; events: T[] }[] = [];
+  for (const event of events) {
+    const date = new Date(event.startsAt);
+    const parts = keyFormat.formatToParts(date);
+    const key = `${parts.find((p) => p.type === "year")?.value}-${parts.find((p) => p.type === "month")?.value}`;
+    const last = groups[groups.length - 1];
+    if (last?.key === key) last.events.push(event);
+    else groups.push({ key, label: labelFormat.format(date), events: [event] });
+  }
+  return groups;
+}
 
 export default async function EventsPage({
   searchParams,
@@ -103,13 +129,21 @@ export default async function EventsPage({
               : "No upcoming events right now — check back soon."}
           </p>
         ) : (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Outline only (h1 → h2 → event-card h3s); the grid speaks for itself visually. */}
-            <h2 className="sr-only">Upcoming events</h2>
-            {events.map((event, index) => (
-              <Reveal key={event.id} index={index} hover className="h-full">
-                <EventCard event={event} isSignedIn={isSignedIn} />
-              </Reveal>
+          <div className="flex flex-col gap-12">
+            {groupEventsByMonth(events).map((group) => (
+              <section key={group.key} aria-labelledby={`month-${group.key}`} className="flex flex-col gap-5">
+                {/* Outline: h1 → month h2s → event-card h3s. */}
+                <h2 id={`month-${group.key}`} className="border-b pb-2 text-2xl font-bold tracking-tight">
+                  {group.label}
+                </h2>
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {group.events.map((event, index) => (
+                    <Reveal key={event.id} index={index} hover className="h-full">
+                      <EventCard event={event} isSignedIn={isSignedIn} />
+                    </Reveal>
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         )}
