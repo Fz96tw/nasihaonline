@@ -19,7 +19,10 @@ export const metadata: Metadata = buildMetadata({
 
 export default function Home() {
   return (
-    <main>
+    // Sections alternate grey/white. When Upcoming Events hides itself (no
+    // events), two grey sections meet — a hairline keeps them from merging
+    // into one block. Suspense adds no DOM wrapper, so they're siblings here.
+    <main className="[&>section.bg-muted+section.bg-muted]:border-t">
       <JsonLd data={buildWebSiteJsonLd()} />
       <HeroSection />
       <WhatWeDoSection />

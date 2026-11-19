@@ -65,19 +65,20 @@ export async function EventsCalendarSection() {
     });
   }
 
+  // No upcoming events: no section at all, rather than a heading over an
+  // empty-state line. (Also true for the build-time copy, which has no
+  // database — ISR fills it in on the first real request; see above.)
+  if (slides.length === 0) return null;
+
   return (
     <section className="bg-background px-8 py-12 md:py-16">
       <div className="mx-auto max-w-[1120px]">
         <SectionHeading />
-        {slides.length > 0 ? (
-          // Narrower than the section (1120px): at full width a 5:2 slide
-          // stood ~450px tall on desktop and dominated the page.
-          <div className="mx-auto max-w-[880px]">
-            <EventsCarousel slides={slides} />
-          </div>
-        ) : (
-          <p className="text-center text-muted-foreground">No upcoming events right now — check back soon.</p>
-        )}
+        {/* Narrower than the section (1120px): at full width a 5:2 slide
+            stood ~450px tall on desktop and dominated the page. */}
+        <div className="mx-auto max-w-[880px]">
+          <EventsCarousel slides={slides} />
+        </div>
         <Reveal className="mt-10 text-center">
           <Button variant="outline" size="lg" asChild>
             <Link href="/events">See all events</Link>
