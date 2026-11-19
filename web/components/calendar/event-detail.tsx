@@ -189,6 +189,11 @@ export function EventDetail({
           )}
           <HighlightText text={event.title} query={highlightQuery} />
         </h1>
+        {event.subtitle ? (
+          <p className="-mt-1 text-xl font-medium text-muted-foreground">
+            <HighlightText text={event.subtitle} query={highlightQuery} />
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-3">
           {hostProfile ? (
             <Link

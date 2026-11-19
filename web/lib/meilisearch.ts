@@ -78,6 +78,7 @@ export type ForumSearchDocument = {
 export type EventSearchDocument = {
   id: string; // eventId
   title: string;
+  subtitle?: string | null;
   description: string | null;
   type: EventType;
   hostName: string | null;
@@ -284,7 +285,7 @@ export async function ensureEventsIndexConfigured(): Promise<void> {
   const client = getClient();
   await client.createIndex(EVENTS_INDEX_NAME, { primaryKey: "id" }).catch(() => undefined);
   const index = getEventsIndex();
-  await index.updateSearchableAttributes(["title", "description", "hostName"]);
+  await index.updateSearchableAttributes(["title", "subtitle", "description", "hostName"]);
   await index.updateFilterableAttributes(["type"]);
   await index.updateTypoTolerance({ enabled: false });
 }

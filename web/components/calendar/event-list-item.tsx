@@ -98,6 +98,7 @@ export function EventListItem({
             )}
             <span className="truncate">{event.title}</span>
           </Link>
+          {event.subtitle ? <p className="truncate text-sm font-medium text-muted-foreground">{event.subtitle}</p> : null}
           {event.hostName ? (
             <p className="text-sm text-muted-foreground">Hosted by {event.hostName}</p>
           ) : null}

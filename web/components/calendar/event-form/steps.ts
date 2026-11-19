@@ -20,6 +20,7 @@ export const EVENT_WIZARD_STEPS: { id: EventStepId; label: string }[] = [
 /** Which step each form field is edited on — used to attribute schema issues (and dirty fields) to a step. */
 const FIELD_STEP: Record<string, EventFieldStepId> = {
   title: "basics",
+  subtitle: "basics",
   type: "basics",
   description: "basics",
   deidentificationConfirmed: "basics",

@@ -46,6 +46,7 @@ import {
 
 const DEFAULT_VALUES: CreateEventValues = {
   title: "",
+  subtitle: null,
   description: null,
   type: "" as EventType,
   startsAt: "",
@@ -165,6 +166,7 @@ export function SubmitEventForm({
     defaultValues: existingEvent
       ? {
           title: existingEvent.title,
+          subtitle: existingEvent.subtitle,
           description: existingEvent.description,
           type: existingEvent.type,
           // Redisplayed in the zone the event was actually created/last
@@ -381,6 +383,7 @@ export function SubmitEventForm({
       const formData = new FormData();
       formData.append("action", action);
       formData.append("title", values.title);
+      if (values.subtitle) formData.append("subtitle", values.subtitle);
       if (values.description) formData.append("description", values.description);
       formData.append("type", values.type);
       // datetime-local values are converted to real ISO instants here, in

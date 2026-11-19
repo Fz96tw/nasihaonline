@@ -153,6 +153,9 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
                 agreement; the visible, viewer-local date is the line below. */}
             <span className="sr-only">, {formatEventDayForHeading(event.startsAt)}</span>
           </CardTitle>
+          {event.subtitle ? (
+            <p className="line-clamp-2 text-base font-medium leading-snug text-muted-foreground">{event.subtitle}</p>
+          ) : null}
           {/* With a banner, the date badge on the image carries the date;
               the text line stays only for an image-less card. */}
           {!event.heroImageUrl && (

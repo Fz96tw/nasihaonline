@@ -75,6 +75,8 @@ export type FeedItem = {
   eventStartsAt?: string;
   /** Paired with eventStartsAt when the event has a scheduled end — drives FeedEventDateBadge's "Live now"/"Ended" states. For a recurring series both are the current-or-next occurrence's, not the series' first. */
   eventEndsAt?: string;
+  /** Events only: the event's optional subtitle (Event.subtitle), shown under the title. */
+  eventSubtitle?: string;
   /** Events only: true when an upcoming event was rescheduled — its row sits at the reschedule time and the date badge shows a "NEW DATE" strip. */
   eventRescheduled?: boolean;
   /** Events only, and only when the viewer may RSVP/join at all (restricted events: host, co-host, invitee, or admin) — drives FeedEventFooter's RSVP / You're going / Join now button. `isHost` covers co-hosts too: neither RSVPs, both can join. */

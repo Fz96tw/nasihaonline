@@ -359,6 +359,7 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
     select: {
       id: true,
       title: true,
+      subtitle: true,
       description: true,
       type: true,
       startsAt: true,
@@ -380,6 +381,7 @@ export async function getPublicUpcomingEvents(): Promise<PublicEvent[]> {
     .map((event) => ({
       id: event.occurrenceId,
       title: event.title,
+      subtitle: event.subtitle,
       description: event.description,
       type: event.type,
       startsAt: event.occurrenceStart.toISOString(),
@@ -434,6 +436,7 @@ export async function getPublicEventById(eventId: string): Promise<PublicEvent |
     select: {
       id: true,
       title: true,
+      subtitle: true,
       description: true,
       type: true,
       startsAt: true,
@@ -450,6 +453,7 @@ export async function getPublicEventById(eventId: string): Promise<PublicEvent |
   return {
     id: event.id,
     title: event.title,
+    subtitle: event.subtitle,
     description: event.description,
     type: event.type,
     startsAt: event.startsAt.toISOString(),
@@ -518,6 +522,7 @@ export async function getEventsForViewer(
     select: {
       id: true,
       title: true,
+      subtitle: true,
       description: true,
       type: true,
       startsAt: true,
@@ -541,6 +546,7 @@ export async function getEventsForViewer(
     .map((event) => ({
       id: event.occurrenceId,
       title: event.title,
+      subtitle: event.subtitle,
       description: event.description,
       type: event.type,
       startsAt: event.occurrenceStart.toISOString(),
@@ -618,6 +624,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
     select: {
       id: true,
       title: true,
+      subtitle: true,
       description: true,
       type: true,
       startsAt: true,
@@ -674,6 +681,7 @@ export async function getMemberEvents(userId: string): Promise<MemberEvent[]> {
       return {
         id: event.occurrenceId,
         title: event.title,
+        subtitle: event.subtitle,
         description: event.description,
         type: event.type,
         startsAt: event.occurrenceStart.toISOString(),
@@ -758,6 +766,7 @@ export async function getMemberEventById(
     select: {
       id: true,
       title: true,
+      subtitle: true,
       description: true,
       type: true,
       startsAt: true,
@@ -855,6 +864,7 @@ export async function getMemberEventById(
   return {
     id: event.recurrence ? `${event.id}::${occurrenceStart.toISOString()}` : event.id,
     title: event.title,
+    subtitle: event.subtitle,
     description: event.description,
     type: event.type,
     startsAt: occurrenceStart.toISOString(),
@@ -2027,6 +2037,7 @@ export async function createEvent(
   hostId: string,
   input: {
     title: string;
+    subtitle?: string | null;
     description: string | null;
     type: EventType;
     startsAt: string;
@@ -2225,6 +2236,7 @@ export async function createEvent(
       data: {
         ...(resolvedEventId ? { id: resolvedEventId } : {}),
         title: input.title,
+        subtitle: input.subtitle || null,
         description: input.description,
         type: input.type,
         hostId,
@@ -2682,6 +2694,7 @@ export async function getEventForEdit(eventId: string) {
     select: {
       id: true,
       title: true,
+      subtitle: true,
       description: true,
       type: true,
       startsAt: true,
@@ -2719,6 +2732,7 @@ export async function getEventForEdit(eventId: string) {
   return {
     id: event.id,
     title: event.title,
+    subtitle: event.subtitle,
     description: event.description,
     type: event.type,
     startsAt: event.startsAt.toISOString(),
@@ -2766,6 +2780,7 @@ export async function updateEvent(
   actingUser: UserModel,
   input: {
     title: string;
+    subtitle?: string | null;
     description: string | null;
     type: EventType;
     startsAt: string;
@@ -2944,6 +2959,7 @@ export async function updateEvent(
       where: { id: event.id },
       data: {
         title: input.title,
+        subtitle: input.subtitle || null,
         description: input.description,
         type: input.type,
         startsAt,
@@ -3059,6 +3075,7 @@ export async function saveEventDraft(
   actingUser: UserModel,
   input: {
     title: string;
+    subtitle?: string | null;
     description: string | null;
     type: EventType;
     startsAt: string;
@@ -3192,6 +3209,7 @@ export async function saveEventDraft(
       where: { id: event.id },
       data: {
         title: input.title,
+        subtitle: input.subtitle || null,
         description: input.description,
         type: input.type,
         startsAt,
@@ -3262,6 +3280,7 @@ export async function publishEventDraft(
   actingUser: UserModel,
   input: {
     title: string;
+    subtitle?: string | null;
     description: string | null;
     type: EventType;
     startsAt: string;
@@ -3421,6 +3440,7 @@ export async function publishEventDraft(
       where: { id: event.id },
       data: {
         title: input.title,
+        subtitle: input.subtitle || null,
         description: input.description,
         type: input.type,
         startsAt,

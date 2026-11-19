@@ -37,6 +37,8 @@ export const EVENT_TYPE_LABELS: Record<EventType, string> = {
 export type PublicEvent = {
   id: string;
   title: string;
+  /** Optional line shown under the title in a lighter style (Event.subtitle). */
+  subtitle: string | null;
   description: string | null;
   type: EventType;
   startsAt: string;

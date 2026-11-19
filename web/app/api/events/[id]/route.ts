@@ -71,6 +71,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const schema = action === "draft" ? draftEventSchema : action === "publish" ? createEventSchema : updateEventSchema;
   const parsed = schema.safeParse({
     title: formData.get("title"),
+    subtitle: formData.get("subtitle") || null,
     description: formData.get("description") || null,
     type: formData.get("type"),
     startsAt: formData.get("startsAt"),

@@ -172,6 +172,7 @@ export async function syncEventToIndex(eventId: string): Promise<void> {
     select: {
       id: true,
       title: true,
+      subtitle: true,
       description: true,
       type: true,
       startsAt: true,
@@ -189,6 +190,7 @@ export async function syncEventToIndex(eventId: string): Promise<void> {
   await upsertEventDocument({
     id: event.id,
     title: event.title,
+    subtitle: event.subtitle,
     description: event.description,
     type: event.type,
     hostName: event.host.name,

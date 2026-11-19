@@ -106,6 +106,7 @@ export const AUDIENCE_DESCRIPTIONS: Record<AudienceChoice, string> = {
 export type ExistingEvent = {
   id: string;
   title: string;
+  subtitle: string | null;
   description: string | null;
   type: EventType;
   startsAt: string;

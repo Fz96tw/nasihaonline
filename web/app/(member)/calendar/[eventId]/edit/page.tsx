@@ -50,6 +50,7 @@ export default async function EditEventPage({ params }: { params: { eventId: str
         existingEvent={{
           id: event.id,
           title: event.title,
+          subtitle: event.subtitle,
           description: event.description,
           type: event.type,
           startsAt: event.startsAt,

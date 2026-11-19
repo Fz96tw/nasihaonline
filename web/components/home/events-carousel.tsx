@@ -16,6 +16,7 @@ const FALLBACK_IMAGE = "/images/events.jpg";
 export type EventSlide = {
   id: string;
   title: string;
+  subtitle: string | null;
   description: string | null;
   startsAt: string;
   endsAt: string | null;
@@ -141,6 +142,11 @@ export function EventsCarousel({ slides }: { slides: EventSlide[] }) {
                 <h3 className="line-clamp-2 max-w-[720px] text-xl font-extrabold leading-tight text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)] sm:text-3xl">
                   {slide.title}
                 </h3>
+                {slide.subtitle && (
+                  <p className="mt-1 line-clamp-1 max-w-[720px] text-base font-medium text-white/85 [text-shadow:0_1px_6px_rgba(0,0,0,.8)] sm:text-xl">
+                    {slide.subtitle}
+                  </p>
+                )}
                 {slide.description && (
                   <p className="mt-2 line-clamp-2 max-w-[720px] text-sm leading-relaxed text-white/90 [text-shadow:0_1px_6px_rgba(0,0,0,.8)] sm:line-clamp-3 sm:text-base">
                     {slide.description}

@@ -81,6 +81,7 @@ export function PublicEventDetail({ event }: { event: PublicEvent }) {
           <Badge variant="neutral">{EVENT_TYPE_LABELS[event.type]}</Badge>
         </div>
         <h1 className="mb-1 text-3xl font-bold tracking-tight">{event.title}</h1>
+        {event.subtitle ? <p className="mb-2 text-xl font-medium text-muted-foreground">{event.subtitle}</p> : null}
         {event.hostName ? <p className="text-sm text-muted-foreground">Hosted by {event.hostName}</p> : null}
         <p className="text-sm text-muted-foreground">
           {hasMounted ? formatEventDateRange(event.startsAt, event.endsAt) : null}

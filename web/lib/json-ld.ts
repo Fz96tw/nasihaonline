@@ -90,6 +90,7 @@ export function buildBreadcrumbJsonLd(items: Array<{ name: string; path: string 
 export function buildEventJsonLd(event: {
   seriesId: string;
   title: string;
+  subtitle?: string | null;
   description: string | null;
   startsAt: string;
   endsAt: string | null;
@@ -100,7 +101,7 @@ export function buildEventJsonLd(event: {
   return {
     "@context": "https://schema.org",
     "@type": "Event",
-    name: event.title,
+    name: event.subtitle ? `${event.title} — ${event.subtitle}` : event.title,
     startDate: event.startsAt,
     ...(event.endsAt ? { endDate: event.endsAt } : {}),
     ...(event.description ? { description: event.description } : {}),

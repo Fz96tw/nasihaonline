@@ -9,6 +9,8 @@ import { splitGuestAddresses } from "@/lib/guest-address";
 // lib/events-server.ts, not here.
 const eventFieldsSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(200),
+  // Optional display line under the title (Event.subtitle).
+  subtitle: z.string().trim().max(150, "Keep the subtitle under 150 characters").nullable(),
   description: z.string().trim().max(2000).nullable(),
   type: z.nativeEnum(EventType, { message: "Select an event type" }),
   startsAt: z.string().trim().min(1, "Start date and time are required"),

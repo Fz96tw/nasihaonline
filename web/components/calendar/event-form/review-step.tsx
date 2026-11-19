@@ -148,6 +148,7 @@ export function ReviewStep({
 
       <Section title="Basics" stepId="basics" issues={issuesByStep.basics} onEdit={onEdit}>
         <Row label="Title">{values.title.trim() || NOT_SET}</Row>
+        <Row label="Subtitle">{values.subtitle?.trim() || NOT_SET}</Row>
         <Row label="Type">{values.type ? EVENT_TYPE_LABELS[values.type] : NOT_SET}</Row>
         <Row label="Description">{values.description?.trim() || NOT_SET}</Row>
         <Row label="Hero image">

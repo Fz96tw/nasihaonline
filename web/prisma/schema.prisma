@@ -1268,6 +1268,10 @@ enum AttendanceRole {
 model Event {
   id                              String          @id @default(cuid())
   title                           String
+  // Optional secondary line shown under the title in a lighter style
+  // (cards, carousel, detail pages, feed). Display-only: emails, .ics and
+  // Google Calendar still carry just the title.
+  subtitle                        String?
   description                     String?
   type                            EventType
   hostId                          String

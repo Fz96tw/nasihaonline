@@ -57,6 +57,7 @@ export async function EventsCalendarSection() {
     slides.push({
       id: event.seriesId,
       title: event.title,
+      subtitle: event.subtitle,
       description: event.description,
       startsAt: event.startsAt,
       endsAt: event.endsAt,

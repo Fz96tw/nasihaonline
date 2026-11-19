@@ -456,6 +456,11 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                           </Badge>
                         )}
                       </div>
+                      {item.eventSubtitle && !isDiscussionReplyRow && (
+                        <div className="line-clamp-1 text-base font-medium text-muted-foreground">
+                          <HighlightText text={item.eventSubtitle} query={q} />
+                        </div>
+                      )}
                       {!isDiscussionReplyRow && (
                         <div
                           className={cn(

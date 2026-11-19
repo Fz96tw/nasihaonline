@@ -85,6 +85,7 @@ export async function POST(request: Request) {
 
   const parsed = schema.safeParse({
     title: formData.get("title"),
+    subtitle: formData.get("subtitle") || null,
     description: formData.get("description") || null,
     type: formData.get("type"),
     startsAt: formData.get("startsAt"),

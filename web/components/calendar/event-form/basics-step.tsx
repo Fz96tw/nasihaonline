@@ -4,7 +4,7 @@ import type { UseFormReturn } from "react-hook-form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EventType } from "@/lib/generated/prisma/enums";
 import { EVENT_TYPE_LABELS } from "@/lib/events";
@@ -37,6 +37,25 @@ export function BasicsStep({
             <FormControl>
               <Input placeholder="e.g. Cardiology Update 2026" {...field} />
             </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="subtitle"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Subtitle (optional)</FormLabel>
+            <FormControl>
+              <Input
+                placeholder="e.g. A conversation with Dr. Amina Yusuf"
+                value={field.value ?? ""}
+                onChange={(e) => field.onChange(e.target.value.length > 0 ? e.target.value : null)}
+              />
+            </FormControl>
+            <FormDescription>Shown under the title in a lighter style.</FormDescription>
             <FormMessage />
           </FormItem>
         )}
