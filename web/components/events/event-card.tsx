@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Lock } from "lucide-react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { RsvpBlurb, RsvpButton } from "@/components/calendar/rsvp-button";
 import { LiveEventBadge } from "@/components/events/live-event-badge";
 import { FeedEventDateBadge } from "@/components/feed/feed-event-date-badge";
-import { RegisterBlurb, RegisterButton } from "@/components/events/register-button";
+import { RegisterButton } from "@/components/events/register-button";
 import { EVENT_TYPE_LABELS, getEventAudienceBadge, type EventWithRsvp } from "@/lib/events";
 import { EventVisibility } from "@/lib/generated/prisma/enums";
 import { useHasMounted } from "@/lib/use-has-mounted";
@@ -51,6 +51,45 @@ function CardLinkWrapper({ href, children }: { href: string | null; children: Re
   );
 }
 
+/**
+ * The description clamped to 3 lines, with "Read more" only when it actually
+ * overflows (measured after layout, so a short description gets no link).
+ * Links to the full event page rather than expanding in place: cards sit in
+ * a grid, and one card growing would make its whole row jump. A signed-out
+ * visitor's card is already one big link to /events/[id], so there it's
+ * plain link-styled text (a nested <a> isn't allowed); a member's card isn't
+ * wrapped, so it gets a real link to their /calendar/[id] view.
+ */
+function ClampedDescription({ text, readMoreHref }: { text: string; readMoreHref: string | null }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [text]);
+
+  return (
+    <>
+      <p ref={ref} className="line-clamp-3">
+        {text}
+      </p>
+      {overflows &&
+        (readMoreHref ? (
+          <Link href={readMoreHref} className="mt-1 inline-block font-medium text-primary hover:underline">
+            Read more
+          </Link>
+        ) : (
+          <span className="mt-1 inline-block font-medium text-primary">Read more</span>
+        ))}
+    </>
+  );
+}
+
 // The footer CTA branches three ways (§4.6): a members-only event drives
 // "Join to RSVP" (signed out) or the RsvpButton /calendar also uses (signed
 // in); an open event lets a signed-in member RSVP the same way, but a
@@ -70,9 +109,12 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
     <Card className="flex h-full flex-col overflow-hidden">
       <CardLinkWrapper href={detailHref}>
         {event.heroImageUrl ? (
-          <div className="relative w-full shrink-0">
+          // Fixed 2:1 frame (cropped to fill) rather than the upload's own
+          // shape, so a tall/square banner can't stretch the card and every
+          // card's text starts at the same height across a grid row.
+          <div className="relative aspect-[2/1] w-full shrink-0 overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
-            <img src={event.heroImageUrl} alt="" className="h-auto w-full" />
+            <img src={event.heroImageUrl} alt="" className="h-full w-full object-cover object-center" />
             <div className="absolute inset-0 bg-[rgba(10,20,70,.4)]" />
             <FeedEventDateBadge startsAt={event.startsAt} endsAt={event.endsAt ?? undefined} variant="overlay" />
           </div>
@@ -124,7 +166,7 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
         </CardHeader>
         {event.description ? (
           <CardContent className="pt-0 text-sm leading-relaxed text-muted-foreground">
-            {event.description}
+            <ClampedDescription text={event.description} readMoreHref={detailHref ? null : `/calendar/${event.seriesId}`} />
           </CardContent>
         ) : null}
       </CardLinkWrapper>
@@ -135,10 +177,9 @@ export function EventCard({ event, isSignedIn }: { event: EventWithRsvp; isSigne
             {!rsvped ? <RsvpBlurb className="text-xs text-muted-foreground" /> : null}
           </>
         ) : event.open ? (
-          <>
-            <RegisterButton eventId={event.seriesId} eventTitle={event.title} />
-            <RegisterBlurb className="text-muted-foreground" />
-          </>
+          // The "no account needed / check your spam folder" note lives in
+          // the Register dialog itself, not repeated on every card.
+          <RegisterButton eventId={event.seriesId} eventTitle={event.title} />
         ) : (
           <Button size="sm" asChild>
             <Link href="/join">Join to RSVP</Link>

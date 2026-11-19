@@ -138,7 +138,7 @@ export function RegisterButton({
           <DialogTitle>Register for {eventTitle}</DialogTitle>
           <DialogDescription>
             This event is open to the public — no NASIHA account needed. We&apos;ll email you a
-            confirmation right away, including how to join.
+            confirmation right away, including how to join. If you don&apos;t see it, check your spam folder.
           </DialogDescription>
         </DialogHeader>
 
