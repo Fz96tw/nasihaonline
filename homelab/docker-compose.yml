@@ -2,6 +2,9 @@ name: nasihaonline
 
 services:
   postgres:
+    # Come back on their own after a host reboot (2026-11-20 outage: these
+    # six had no policy and stayed down while the proxy/LiveKit restarted).
+    restart: unless-stopped
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: nasiha
@@ -21,6 +24,9 @@ services:
       - appnet
 
   redis:
+    # Come back on their own after a host reboot (2026-11-20 outage: these
+    # six had no policy and stayed down while the proxy/LiveKit restarted).
+    restart: unless-stopped
     image: redis:7-alpine
     ports:
       - "6379:6379"
@@ -36,6 +42,9 @@ services:
       - appnet
 
   minio:
+    # Come back on their own after a host reboot (2026-11-20 outage: these
+    # six had no policy and stayed down while the proxy/LiveKit restarted).
+    restart: unless-stopped
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
@@ -56,6 +65,9 @@ services:
       - appnet
 
   meilisearch:
+    # Come back on their own after a host reboot (2026-11-20 outage: these
+    # six had no policy and stayed down while the proxy/LiveKit restarted).
+    restart: unless-stopped
     image: getmeili/meilisearch:v1.10
     environment:
       MEILI_MASTER_KEY: nasiha-dev-master-key
@@ -74,6 +86,9 @@ services:
       - appnet
 
   app:
+    # Come back on their own after a host reboot (2026-11-20 outage: these
+    # six had no policy and stayed down while the proxy/LiveKit restarted).
+    restart: unless-stopped
     # Anchored so `worker` below reuses this verbatim — app and worker build
     # the exact same web/Dockerfile (worker just overrides `command:` to run
     # the queue processor instead of `next start`), so any build arg it
@@ -146,6 +161,9 @@ services:
       - appnet
 
   worker:
+    # Come back on their own after a host reboot (2026-11-20 outage: these
+    # six had no policy and stayed down while the proxy/LiveKit restarted).
+    restart: unless-stopped
     build: *web-build
     command: ["npm", "run", "worker"]
     environment:
