@@ -53,8 +53,38 @@ function isProtectedPageRoute(pathname: string) {
  * disclosed Clerk bypass (GHSA-vqx2-fgx2-5wq9); this two-layer setup is the
  * defense-in-depth pattern Clerk now recommends.
  */
+/**
+ * True when the request was navigated to from another page on this site
+ * (logo click, in-app link, client-side nav/prefetch). Compares the Referer's
+ * host against the host the request came in on — behind nginx-proxy-manager
+ * that's X-Forwarded-Host/Host, not request.url's internal host. A missing
+ * Referer (typed URL, bookmark, privacy-stripped) counts as external.
+ */
+function isInternalNavigation(request: NextRequest) {
+  const referer = request.headers.get("referer");
+  if (!referer) return false;
+  const host =
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  if (!host) return false;
+  try {
+    return new URL(referer).host === host;
+  } catch {
+    return false;
+  }
+}
+
 const withClerk = clerkMiddleware(async (auth, request) => {
   const { pathname } = request.nextUrl;
+
+  // Signed-in members arriving at the landing page from outside the site
+  // (typed URL, bookmark, search result) go straight to their feed. Links
+  // to "/" from inside the site still show the landing page.
+  if (pathname === "/" && request.method === "GET" && !isInternalNavigation(request)) {
+    const { userId } = await auth();
+    if (userId) {
+      return NextResponse.redirect(new URL("/whats-new", request.url));
+    }
+  }
 
   if (isApiRoute(pathname) && !isWebhookRoute(pathname)) {
     if (!SAFE_METHODS.has(request.method)) {
