@@ -486,6 +486,7 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
       externalUrl: true,
       deidentificationConfirmed: true,
       contributorId: true,
+      visibility: true,
       tags: { select: { tagId: true } },
       attachments: { select: { fileName: true, objectKey: true }, take: 1 },
     },
@@ -509,6 +510,7 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
     externalUrl: item.externalUrl,
     deidentificationConfirmed: item.deidentificationConfirmed,
     contributorId: item.contributorId,
+    visibility: item.visibility,
     attachment: item.attachments[0]
       ? { fileName: item.attachments[0].fileName, url: getKnowledgeDocumentUrl(item.attachments[0].objectKey) }
       : null,
@@ -531,11 +533,22 @@ export async function getKnowledgeItemForEdit(id: string): Promise<KnowledgeItem
  * skipped (same relaxations as createKnowledgeItem's draft mode), and
  * `mode: "submit"` is the draft's real first submission — it resolves
  * `licenseConsented`/`visibility`/`invitedUserIds` exactly as
- * createKnowledgeItem does (those fields are otherwise create-only and
- * absent from this input) and transitions the row to `pending_review`.
+ * createKnowledgeItem does and transitions the row to `pending_review`.
  * `mode: "draft"` against a non-draft row is rejected (nothing to
  * un-submit); once the row is no longer `draft`, `mode` is ignored and
  * behavior is exactly what it was before this initiative.
+ *
+ * Visibility is editable after submission too, in both directions (owner,
+ * Steward or admin — the same edit authority as every other field here).
+ * Public → restricted needs at least one eligible invitee from
+ * `invitedUserIds`; they're notified/emailed the same way as an invitee
+ * added later through updateKnowledgeItemInvitees (only once the item is
+ * visible — a pending/rejected item's invitees hear about it at publish).
+ * Restricted → public clears the invited list (no longer meaningful, and
+ * a later switch back to restricted starts from a fresh, notified list)
+ * and notifies no one. `invitedUserIds` is ignored on a non-draft item
+ * otherwise; an already-restricted item's list is managed only through
+ * updateKnowledgeItemInvitees. Omitting `visibility` keeps the stored value.
  */
 export async function updateKnowledgeItem(
   id: string,
@@ -545,7 +558,7 @@ export async function updateKnowledgeItem(
     body: string | null;
     contentType: KnowledgeContentType;
     level: KnowledgeLevel | null;
-    /** Required, multi-select — genuinely editable here, unlike visibility/invitedUserIds which stay create-only. */
+    /** Required, multi-select — genuinely editable here. */
     communityIds: string[];
     categoryIds: string[];
     tagIds: string[];
@@ -555,7 +568,7 @@ export async function updateKnowledgeItem(
     showTitleOverlay: boolean;
     file: File | null;
     heroImage: File | null;
-    /** Only meaningful while the row is still `status: draft` — see doc comment above. */
+    /** licenseConsented only matters while the row is still `status: draft`; visibility/invitedUserIds also drive a post-submission visibility change — see doc comment above. */
     licenseConsented?: boolean;
     visibility?: KnowledgeVisibility;
     invitedUserIds?: string[];
@@ -568,11 +581,15 @@ export async function updateKnowledgeItem(
       id: true,
       contributorId: true,
       status: true,
+      visibility: true,
       heroImageUrl: true,
       attachments: { select: { id: true, objectKey: true }, take: 1 },
     },
   });
   if (!item) throw new KnowledgeItemError(404, "Resource not found.");
+  if (input.visibility !== undefined && !Object.values(KnowledgeVisibility).includes(input.visibility)) {
+    throw new KnowledgeItemError(400, "Invalid visibility.");
+  }
 
   const isPrivileged = actingUser.role === Role.admin || actingUser.role === Role.moderator;
   if (!isPrivileged && item.contributorId !== actingUser.id) {
@@ -628,9 +645,8 @@ export async function updateKnowledgeItem(
     throw new KnowledgeItemError(400, "A file upload or external link is required for this content type.");
   }
 
-  // Only meaningful while the row is still a draft — visibility/invitedUserIds
-  // are otherwise create-only and this form section stays hidden once
-  // published, same as before this initiative.
+  // A draft's first submission resolves visibility/invitees from scratch;
+  // a post-submission visibility change is handled separately below.
   let resolvedVisibility: KnowledgeVisibility | undefined;
   let invitedUsers: { id: string }[] = [];
   if (wasDraft) {
@@ -653,6 +669,28 @@ export async function updateKnowledgeItem(
       throw new KnowledgeItemError(400, "You must acknowledge the content licensing terms to submit.");
     }
   }
+
+  // Post-submission visibility change (see doc comment above).
+  const changesVisibility = !wasDraft && input.visibility !== undefined && input.visibility !== item.visibility;
+  const becomesRestricted = changesVisibility && input.visibility === KnowledgeVisibility.restricted;
+  const becomesPublic = changesVisibility && input.visibility === KnowledgeVisibility.public;
+  const newlyInvited = becomesRestricted
+    ? await db.user.findMany({
+        where: {
+          id: { in: input.invitedUserIds ?? [], notIn: [item.contributorId] },
+          tier: { in: DIRECTORY_TIERS },
+          profile: { listInDirectory: true },
+        },
+        select: { id: true, email: true, name: true },
+      })
+    : [];
+  if (becomesRestricted && newlyInvited.length === 0) {
+    throw new KnowledgeItemError(400, "Select at least one member to invite.");
+  }
+  const itemIsVisible = item.status === KnowledgeStatus.published || item.status === KnowledgeStatus.flagged;
+  const contributorName = becomesRestricted && itemIsVisible
+    ? ((await db.user.findUnique({ where: { id: item.contributorId }, select: { name: true } }))?.name ?? "A member")
+    : "A member";
 
   let newAttachment: { objectKey: string; fileName: string; mimeType: string; sizeBytes: number } | null = null;
   if (requiresAttachmentOrLink && input.file) {
@@ -704,8 +742,24 @@ export async function updateKnowledgeItem(
     // separate updateKnowledgeItemInvitees action — re-resolving it on every
     // save here is safe only because it's gated to wasDraft, where this is
     // still the item's pre-publish, single-owner editing loop.
-    if (wasDraft) {
+    if (wasDraft || becomesPublic) {
       await tx.knowledgeItemInvitee.deleteMany({ where: { knowledgeItemId: item.id } });
+    }
+    if (becomesRestricted) {
+      // Defensive: a public item shouldn't have invitee rows, but clear any
+      // so createMany can't collide with the (item, user) unique key.
+      await tx.knowledgeItemInvitee.deleteMany({ where: { knowledgeItemId: item.id } });
+      await tx.knowledgeItemInvitee.createMany({
+        data: newlyInvited.map((user) => ({ knowledgeItemId: item.id, userId: user.id })),
+      });
+      if (itemIsVisible) {
+        await notifyInvitedLibraryUsers(tx, {
+          knowledgeItemId: item.id,
+          title: input.title,
+          contributorName,
+          userIds: newlyInvited.map((user) => user.id),
+        });
+      }
     }
     if (dropsExistingAttachment) {
       await tx.knowledgeAttachment.delete({ where: { id: existingAttachment!.id } });
@@ -733,7 +787,9 @@ export async function updateKnowledgeItem(
               invitees:
                 invitedUsers.length > 0 ? { create: invitedUsers.map((user) => ({ userId: user.id })) } : undefined,
             }
-          : {}),
+          : changesVisibility
+            ? { visibility: input.visibility }
+            : {}),
         communities: { create: input.communityIds.map((communityId) => ({ communityId })) },
         categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
         tags: { create: input.tagIds.map((tagId) => ({ tagId })) },
@@ -769,6 +825,17 @@ export async function updateKnowledgeItem(
   if (wasDraft) {
     await ensureCommunityMembership(
       [item.contributorId, ...invitedUsers.map((user) => user.id)],
+      input.communityIds,
+    );
+  }
+
+  if (becomesRestricted) {
+    // Best-effort, after commit — same as updateKnowledgeItemInvitees.
+    if (itemIsVisible) {
+      await emailInvitedLibraryUsers(newlyInvited, { knowledgeItemId: item.id, title: input.title, contributorName });
+    }
+    await ensureCommunityMembership(
+      newlyInvited.map((user) => user.id),
       input.communityIds,
     );
   }

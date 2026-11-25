@@ -80,6 +80,7 @@ export function ReviewStep({
   form,
   existingItem,
   isFirstSubmission,
+  storedVisibility,
   communities,
   categories,
   tags,
@@ -93,6 +94,8 @@ export function ReviewStep({
   form: UseFormReturn<CreateKnowledgeItemValues>;
   existingItem?: KnowledgeItemForEdit;
   isFirstSubmission: boolean;
+  /** A submitted item's saved visibility — undefined for a first submission. */
+  storedVisibility?: KnowledgeVisibility;
   communities: { id: string; name: string }[];
   categories: KnowledgeCategoryOption[];
   tags: KnowledgeTagOption[];
@@ -108,9 +111,11 @@ export function ReviewStep({
   const isCaseStudy = values.contentType === KnowledgeContentType.case_study;
   const isBlogPost = values.contentType === KnowledgeContentType.blog_post;
   const isRestricted = values.visibility === KnowledgeVisibility.restricted;
-  const blockingSteps = RESOURCE_STEPS.filter((step) => step.id !== "audience" || isFirstSubmission).filter(
-    (step) => issuesByStep[step.id].length > 0,
-  );
+  const blockingSteps = RESOURCE_STEPS.filter((step) => issuesByStep[step.id].length > 0);
+  // Invitees are only picked in this form for a first submission or a
+  // public → restricted switch; otherwise they're managed on the item page.
+  const picksInvitees = isFirstSubmission || storedVisibility === KnowledgeVisibility.public;
+  const visibilityChanged = storedVisibility !== undefined && values.visibility !== storedVisibility;
   const verb = isFirstSubmission ? "submit" : "save";
 
   const names = <T extends { id: string; name: string }>(options: T[], ids: string[]) =>
@@ -187,17 +192,18 @@ export function ReviewStep({
         )}
       </Section>
 
-      {isFirstSubmission && (
-        <Section title="Audience & visibility" stepId="audience" issues={issuesByStep.audience} onEdit={onEdit}>
-          <Row label="Access">{VISIBILITY_LABELS[values.visibility]}</Row>
-          {isRestricted && (
-            <Row label="Invited">
-              {values.invitedUserIds.length > 0 ? `${values.invitedUserIds.length} member(s)` : NOT_SET}
-            </Row>
-          )}
-          <Row label="License">{values.licenseConsented ? "Acknowledged" : NOT_SET}</Row>
-        </Section>
-      )}
+      <Section title="Audience & visibility" stepId="audience" issues={issuesByStep.audience} onEdit={onEdit}>
+        <Row label="Access">
+          {VISIBILITY_LABELS[values.visibility]}
+          {visibilityChanged && <span className="text-warning"> (changed)</span>}
+        </Row>
+        {isRestricted && picksInvitees && (
+          <Row label="Invited">
+            {values.invitedUserIds.length > 0 ? `${values.invitedUserIds.length} member(s)` : NOT_SET}
+          </Row>
+        )}
+        {isFirstSubmission && <Row label="License">{values.licenseConsented ? "Acknowledged" : NOT_SET}</Row>}
+      </Section>
     </section>
   );
 }

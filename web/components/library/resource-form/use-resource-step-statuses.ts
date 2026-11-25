@@ -1,10 +1,7 @@
 import type { UseFormReturn } from "react-hook-form";
+import type { ZodTypeAny } from "zod";
 import { KnowledgeContentType } from "@/lib/generated/prisma/enums";
-import {
-  createKnowledgeItemSchema,
-  updateKnowledgeItemSchema,
-  type CreateKnowledgeItemValues,
-} from "@/lib/validation/knowledge";
+import type { CreateKnowledgeItemValues } from "@/lib/validation/knowledge";
 import { collectWizardIssues } from "@/components/shared/wizard/collect-issues";
 import {
   RESOURCE_STEPS,
@@ -23,12 +20,13 @@ import {
  */
 export function useResourceStepStatuses({
   form,
-  isFirstSubmission,
+  strictSchema,
   isExisting,
   visited,
 }: {
   form: UseFormReturn<CreateKnowledgeItemValues>;
-  isFirstSubmission: boolean;
+  /** createKnowledgeItemSchema, or editKnowledgeItemSchema for a submitted item — the same one Submit runs. */
+  strictSchema: ZodTypeAny;
   isExisting: boolean;
   visited: ReadonlySet<ResourceStepId>;
 }): { statuses: ResourceStepStatuses; issuesByStep: ResourceStepIssues } {
@@ -36,7 +34,7 @@ export function useResourceStepStatuses({
   const { dirtyFields } = form.formState;
 
   const issues = collectWizardIssues(
-    isFirstSubmission ? createKnowledgeItemSchema : updateKnowledgeItemSchema,
+    strictSchema,
     values,
     [
       { field: "title", isEmpty: (v) => !v.title.trim(), value: "placeholder" },

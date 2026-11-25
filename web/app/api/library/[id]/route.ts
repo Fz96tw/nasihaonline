@@ -66,12 +66,16 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   // updateKnowledgeItemSchema (used for mode: "submit") has no
   // licenseConsented/visibility/invitedUserIds fields, so Zod strips them
   // from parsed.data even though we passed them above — re-attach them
-  // directly from the raw form values. updateKnowledgeItem only reads these
-  // while the row is still a draft, so this is a no-op for every other edit.
+  // directly from the raw form values. updateKnowledgeItem uses all three
+  // for a draft's first submission, and visibility/invitedUserIds for a
+  // post-submission visibility change (validating the value itself). A
+  // missing visibility stays undefined — the draft path defaults it to
+  // public, a submitted item keeps its stored value.
+  const rawVisibility = formData.get("visibility");
   const draftTransitionFields = {
     licenseConsented: formData.get("licenseConsented") === "true",
-    visibility: (formData.get("visibility") as KnowledgeVisibility | null) ?? KnowledgeVisibility.public,
-    invitedUserIds: invitedUserIds as string[],
+    visibility: typeof rawVisibility === "string" ? (rawVisibility as KnowledgeVisibility) : undefined,
+    invitedUserIds: Array.isArray(invitedUserIds) ? invitedUserIds.filter((id): id is string => typeof id === "string") : [],
   };
 
   try {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,7 +21,7 @@ import { type KnowledgeCategoryOption, type KnowledgeItemForEdit, type Knowledge
 import {
   createKnowledgeItemSchema,
   draftKnowledgeItemSchema,
-  updateKnowledgeItemSchema,
+  editKnowledgeItemSchema,
   type CreateKnowledgeItemValues,
 } from "@/lib/validation/knowledge";
 import { getCsrfToken } from "@/lib/csrf-client";
@@ -76,19 +76,18 @@ const DEFAULT_VALUES: CreateKnowledgeItemValues = {
  *
  * Restricted Knowledge Library Submissions, Objective 03: `visibility` is a
  * 2-way choice (public / restricted), mirroring SubmitEventForm's audience
- * picker — normally create-only (edit mode hides the section and always
- * submits it as public with no invitees, since editing an already-submitted
- * item can't change it), EXCEPT while `existingItem.status === draft`: a
- * draft's real first submission is deferred to when it's actually submitted
- * for review, so this section (and licenseConsented below) stays visible
- * and editable for as long as the item is still a draft — see
- * `isFirstSubmission` below.
+ * picker. While the item is new or still a draft (`isFirstSubmission`) the
+ * Audience step works as at creation, with licenseConsented. Once submitted,
+ * the step stays but only the visibility select is editable (both directions,
+ * with a warning when it changes); invitees are only picked here when a
+ * public item is switched to restricted — an already-restricted item's list
+ * is managed from its detail page (ManageInvitees).
  *
  * Save as Draft initiative: the live RHF resolver is always the lenient
  * `draftKnowledgeItemSchema` (only title+contentType required) so neither
  * button is ever blocked by an incomplete form; "Submit for Review"/"Save
  * Changes" instead runs the real strict schema (createKnowledgeItemSchema/
- * updateKnowledgeItemSchema) by hand inside onSubmit, mapping any failures
+ * editKnowledgeItemSchema) by hand inside onSubmit, mapping any failures
  * onto the form via setError. "Save Draft" skips that manual check
  * entirely and posts with `action: "draft"`.
  */
@@ -133,6 +132,12 @@ export function SubmitResourceForm({
   // creation — so those fields behave exactly like brand-new-item mode
   // (rendered + required) for as long as the item stays a draft.
   const isFirstSubmission = !existingItem || existingItem.status === KnowledgeStatus.draft;
+  // Visibility the item was saved with — undefined for a first submission.
+  const storedVisibility = existingItem && !isFirstSubmission ? existingItem.visibility : undefined;
+  const strictSchema = useMemo(
+    () => (storedVisibility === undefined ? createKnowledgeItemSchema : editKnowledgeItemSchema(storedVisibility)),
+    [storedVisibility],
+  );
 
   const form = useForm<CreateKnowledgeItemValues>({
     resolver: zodResolver(draftKnowledgeItemSchema),
@@ -142,8 +147,6 @@ export function SubmitResourceForm({
           body: existingItem.body,
           contentType: existingItem.contentType,
           level: existingItem.level,
-          // Genuinely editable, like categoryIds below (unlike visibility/
-          // invitedUserIds, which stay create-only once past isFirstSubmission).
           communityIds: existingItem.communityIds,
           categoryIds: existingItem.categoryIds,
           tagIds: existingItem.tagIds,
@@ -152,13 +155,12 @@ export function SubmitResourceForm({
           deidentificationConfirmed: existingItem.deidentificationConfirmed,
           showTitleOverlay: existingItem.showTitleOverlay,
           licenseConsented: isFirstSubmission ? false : true,
-          // Visibility isn't editable past a draft's first submission —
-          // hidden from the UI and hardcoded here, same "harmless
-          // placeholder" pattern as SubmitEventForm's edit-mode
-          // invitedUserIds. While still a draft, KnowledgeItemForEdit
-          // doesn't carry the real value either (never set yet), so this
-          // starts at the same default a new item would.
-          visibility: KnowledgeVisibility.public,
+          // A submitted item starts from its stored visibility. A draft
+          // starts from the new-item default, as before. invitedUserIds
+          // always starts empty: it's only used for a draft's first
+          // submission or a public → restricted switch, and
+          // editKnowledgeItemSchema only requires it in that second case.
+          visibility: storedVisibility ?? KnowledgeVisibility.public,
           invitedUserIds: [],
         }
       : initialContentType
@@ -216,18 +218,16 @@ export function SubmitResourceForm({
 
   // Wizard navigation. The step map shows every step and lets the contributor
   // jump to any of them at any time; "Next" only warns (it never blocks) about
-  // the step being left, using the same strict schema Submit runs. A
-  // submitted item has no Audience step — visibility/invitees/license consent
-  // are only editable while the item is still a first submission.
+  // the step being left, using the same strict schema Submit runs.
   const [activeStep, setActiveStep] = useState<ResourceStepId>("basics");
   const [visitedSteps, setVisitedSteps] = useState<ReadonlySet<ResourceStepId>>(() => new Set());
   const { statuses: stepStatuses, issuesByStep } = useResourceStepStatuses({
     form,
-    isFirstSubmission,
+    strictSchema,
     isExisting: existingItem !== undefined,
     visited: visitedSteps,
   });
-  const fieldSteps = RESOURCE_STEPS.filter((step) => step.id !== "audience" || isFirstSubmission);
+  const fieldSteps = RESOURCE_STEPS;
   const wizardSteps = [...fieldSteps, REVIEW_STEP];
 
   // Errors set by hand ("Next", or a rejected Submit) are never re-checked by
@@ -281,7 +281,6 @@ export function SubmitResourceForm({
     // Review"/"Save Changes" instead runs the real strict schema here, by
     // hand, only when that's the button that was actually clicked.
     if (action === "submit") {
-      const strictSchema = isFirstSubmission ? createKnowledgeItemSchema : updateKnowledgeItemSchema;
       const result = strictSchema.safeParse(values);
       if (!result.success) {
         for (const issue of result.error.issues) {
@@ -306,9 +305,6 @@ export function SubmitResourceForm({
       if (values.body) formData.append("body", values.body);
       formData.append("contentType", values.contentType);
       if (values.level) formData.append("level", values.level);
-      // Genuinely editable — sent unconditionally, unlike visibility/
-      // invitedUserIds below which stop being sent once isFirstSubmission
-      // goes false.
       values.communityIds.forEach((communityId) => formData.append("communityIds", communityId));
       values.categoryIds.forEach((categoryId) => formData.append("categoryIds", categoryId));
       values.tagIds.forEach((tagId) => formData.append("tagIds", tagId));
@@ -319,11 +315,11 @@ export function SubmitResourceForm({
       }
       formData.append("deidentificationConfirmed", String(isCaseStudy && values.deidentificationConfirmed));
       formData.append("showTitleOverlay", String(values.showTitleOverlay));
-      if (isFirstSubmission) {
-        formData.append("licenseConsented", String(values.licenseConsented));
-        formData.append("visibility", values.visibility);
-        formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
-      }
+      if (isFirstSubmission) formData.append("licenseConsented", String(values.licenseConsented));
+      formData.append("visibility", values.visibility);
+      // Ignored by the server for a submitted item unless it's switching
+      // public → restricted (see updateKnowledgeItem).
+      formData.append("invitedUserIds", JSON.stringify(values.invitedUserIds));
       if (requiresAttachmentOrLink && sourceMode === "file" && file) formData.append("file", file);
       if (heroImage) formData.append("heroImage", heroImage);
 
@@ -427,17 +423,23 @@ export function SubmitResourceForm({
             />
           </WizardPanel>
 
-          {isFirstSubmission && (
-            <WizardPanel id="audience">
-              <AudienceStep form={form} currentUserId={currentUserId} />
-            </WizardPanel>
-          )}
+          <WizardPanel id="audience">
+            <AudienceStep
+              form={form}
+              currentUserId={existingItem?.contributorId ?? currentUserId}
+              storedVisibility={storedVisibility}
+              isPublished={
+                existingItem?.status === KnowledgeStatus.published || existingItem?.status === KnowledgeStatus.flagged
+              }
+            />
+          </WizardPanel>
 
           <WizardPanel id="review">
             <ReviewStep
               form={form}
               existingItem={existingItem}
               isFirstSubmission={isFirstSubmission}
+              storedVisibility={storedVisibility}
               communities={communities}
               categories={categories}
               tags={tags}

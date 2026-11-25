@@ -1886,8 +1886,11 @@ enum KnowledgeLevel {
 // layered on top of it, not a bypass of it. Excluded from Meilisearch
 // entirely (search-index-sync.ts) — an invitee finds a restricted item only
 // via the regular browse/detail queries, not search-as-you-type.
-// Create-only, mirroring Event.visibility — nothing in the edit path
-// (updateKnowledgeItem) ever changes it after creation.
+// Editable after submission in both directions by the contributor, a
+// Steward or an admin via the edit form (updateKnowledgeItem) — unlike
+// Event.visibility, which stays create-only. Restricted → public clears
+// the invitee list; public → restricted requires ≥1 invitee and notifies
+// them once the item is visible.
 enum KnowledgeVisibility {
   public
   restricted

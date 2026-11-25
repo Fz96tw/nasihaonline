@@ -99,9 +99,10 @@ function withContentTypeRefinements<Schema extends z.ZodType<z.infer<typeof know
 }
 
 // Restricted Knowledge Library Submissions, Objective 03 — mirrors
-// requireRestrictedEventInvariants in lib/validation/event.ts. Create-only
-// (see KnowledgeVisibility's schema comment): updateKnowledgeItemSchema
-// below never gains these fields.
+// requireRestrictedEventInvariants in lib/validation/event.ts. Also applied
+// by editKnowledgeItemSchema below, but only when an edit moves a public
+// item to restricted — an already-restricted item's invitees are managed
+// from its detail page, not the edit form.
 function requireRestrictedKnowledgeItemInvariants(
   data: { visibility: KnowledgeVisibility; invitedUserIds: string[] },
   ctx: z.RefinementCtx,
@@ -131,6 +132,27 @@ export type CreateKnowledgeItemValues = z.infer<typeof createKnowledgeItemSchema
 /** PATCH /api/library/:id body shape (editing a submission) — same fields minus licenseConsented. */
 export const updateKnowledgeItemSchema = withContentTypeRefinements(knowledgeItemBaseSchema);
 export type UpdateKnowledgeItemValues = z.infer<typeof updateKnowledgeItemSchema>;
+
+/**
+ * The edit form's strict "Save Changes" schema for an already-submitted item
+ * (client-side only — the PATCH route parses updateKnowledgeItemSchema and
+ * updateKnowledgeItem re-checks the visibility change against the stored
+ * row). Visibility is editable in both directions; picking invitees is only
+ * required when the edit moves a public item to restricted. Keyed on the
+ * item's stored visibility rather than a fixed rule, so a restricted item
+ * that stays restricted (its invitedUserIds default to [] in the form — the
+ * existing list is managed via ManageInvitees) is never blocked from saving.
+ */
+export function editKnowledgeItemSchema(storedVisibility: KnowledgeVisibility) {
+  return withContentTypeRefinements(
+    knowledgeItemBaseSchema.extend({
+      visibility: z.nativeEnum(KnowledgeVisibility),
+      invitedUserIds: z.array(z.string()),
+    }),
+  ).superRefine((data, ctx) => {
+    if (storedVisibility === KnowledgeVisibility.public) requireRestrictedKnowledgeItemInvariants(data, ctx);
+  });
+}
 
 /**
  * "Save Draft" (Save as Draft initiative) — only `title` + `contentType`

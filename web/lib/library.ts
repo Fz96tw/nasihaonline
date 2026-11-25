@@ -166,6 +166,8 @@ export type KnowledgeItemForEdit = {
   externalUrl: string | null;
   deidentificationConfirmed: boolean;
   contributorId: string;
+  // Editable after submission (both directions) — see editKnowledgeItemSchema.
+  visibility: KnowledgeVisibility;
   attachment: { fileName: string; url: string } | null;
 };
 
