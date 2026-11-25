@@ -1,4 +1,5 @@
 import "server-only";
+import { signInHref } from "@/lib/sign-in-link";
 import sanitizeHtml from "sanitize-html";
 import { db } from "@/lib/db";
 import {
@@ -1152,7 +1153,8 @@ async function emailInvitedLibraryUsers(
   params: { knowledgeItemId: string; title: string; contributorName: string },
 ): Promise<void> {
   if (users.length === 0) return;
-  const link = `${APP_URL}/library/${params.knowledgeItemId}`;
+  // Through /sign-in so a signed-out invitee lands on the item, not a 404.
+  const link = signInHref(`/library/${params.knowledgeItemId}`, APP_URL);
   await Promise.allSettled(
     users.map((user) =>
       sendLibraryInviteEmail(user.email, user.name ?? "there", {

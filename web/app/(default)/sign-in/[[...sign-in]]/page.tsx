@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { SignIn } from "@clerk/nextjs";
 import { getSessionUser } from "@/lib/auth";
+import { safeRedirectPath } from "@/lib/sign-in-link";
 
 export const metadata: Metadata = {
   title: "Sign In",
@@ -25,13 +26,15 @@ export const metadata: Metadata = {
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ session_expired?: string }>;
+  searchParams: Promise<{ session_expired?: string; redirect_url?: string }>;
 }) {
+  const { session_expired: sessionExpired, redirect_url: redirectUrl } = await searchParams;
   const user = await getSessionUser();
   if (user?.suspended) redirect("/account-suspended");
-  if (user) redirect("/whats-new");
-
-  const { session_expired: sessionExpired } = await searchParams;
+  // Links into private content (invite emails, the "Sign in to view" pages)
+  // go through /sign-in?redirect_url=…; a member who's already signed in
+  // skips straight to that page. Clerk handles the param after a real sign-in.
+  if (user) redirect(safeRedirectPath(redirectUrl) ?? "/whats-new");
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">

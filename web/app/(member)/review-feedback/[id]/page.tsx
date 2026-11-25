@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { UserCheck } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import {
@@ -56,7 +56,9 @@ export default async function ReviewItemDetailPage({
   searchParams: { q?: string };
 }) {
   const user = await getSessionUser();
-  if (!user) redirect("/sign-in");
+  // Signed out → not-found.tsx's "Sign in to view" prompt, which returns
+  // here after sign-in (a bare redirect to /sign-in lost the item).
+  if (!user) notFound();
 
   const { id } = await params;
   const item = await getReviewItemDetail(id, user);

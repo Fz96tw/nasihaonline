@@ -1,4 +1,5 @@
 import "server-only";
+import { signInHref } from "@/lib/sign-in-link";
 import { db } from "@/lib/db";
 import {
   uploadKnowledgeDocument,
@@ -261,7 +262,8 @@ async function emailInvitedReviewUsers(
   params: { reviewItemId: string; title: string; submitterName: string },
 ): Promise<void> {
   if (users.length === 0) return;
-  const link = `${APP_URL}/review-feedback/${params.reviewItemId}`;
+  // Through /sign-in so a signed-out invitee lands on the item, not a 404.
+  const link = signInHref(`/review-feedback/${params.reviewItemId}`, APP_URL);
   await Promise.allSettled(
     users.map((user) =>
       sendReviewInviteEmail(user.email, user.name ?? "there", {
