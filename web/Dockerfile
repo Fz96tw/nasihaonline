@@ -32,7 +32,11 @@ RUN npx prisma generate
 # next build's type-check pass on this app's size needs a bigger heap than
 # Node's default (~2GB) or it OOMs mid-build.
 ENV NODE_OPTIONS=--max-old-space-size=4096
-RUN npm run build
+# Drop next build's own compile cache (several hundred MB) in the same layer:
+# `next start` never reads it, and this layer changes on every deploy, so
+# leaving it in made each deploy upload/download it in full. Next recreates
+# .next/cache/images at runtime for image optimization (container runs as root).
+RUN npm run build && rm -rf .next/cache
 
 EXPOSE 3000
 
