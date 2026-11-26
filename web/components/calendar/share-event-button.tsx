@@ -54,8 +54,12 @@ export function ShareEventButton({ eventId, title, startsAt }: { eventId: string
 
   function handleOpenChange(next: boolean) {
     if (next && shouldUseNativeShare()) {
-      // A cancelled share sheet rejects with AbortError — nothing to do.
-      navigator.share({ title, text: shareText, url }).catch(() => {});
+      // URL only, no `text`: Android's share-sheet "Copy" (and some targets)
+      // join text + url into one string, so the pasted link carried the
+      // message along with it. Chat apps still show the title/image from
+      // the page's Open Graph preview. A cancelled sheet rejects with
+      // AbortError — nothing to do.
+      navigator.share({ title, url }).catch(() => {});
       return;
     }
     setOpen(next);
