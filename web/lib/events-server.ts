@@ -410,6 +410,12 @@ export const PUBLIC_EVENT_WHERE = {
   ...communityVisibilityWhere(null),
 } satisfies Prisma.EventWhereInput;
 
+/** Whether /events/[eventId] resolves for a signed-out visitor — gates the member detail page's Share button so it never hands out a link that 404s (drafts, invite-only, cancelled). */
+export async function isEventPubliclyVisible(eventId: string): Promise<boolean> {
+  const count = await db.event.count({ where: { id: eventId, ...PUBLIC_EVENT_WHERE } });
+  return count > 0;
+}
+
 /** sitemap.xml entries for every event in PUBLIC_EVENT_WHERE, past ones included. */
 export async function getPublicEventSitemapEntries(): Promise<{ id: string; lastModified: Date }[]> {
   const events = await db.event.findMany({

@@ -414,6 +414,10 @@ export async function sendEventGuestInviteEmail(params: {
     ? `Use this link to join the meeting at the scheduled time:\n${joinUrl}`
     : "We'll share the joining details closer to the event.";
 
+  // The public details page (description, host, hero image) — the join
+  // link above only drops the guest into the meeting room itself.
+  const detailsUrl = `${APP_URL}/events/${event.id}`;
+
   const safeHost = escapeHtml(hostName);
   const safeTitle = escapeHtml(event.title);
   const safeWhen = escapeHtml(when);
@@ -429,10 +433,11 @@ export async function sendEventGuestInviteEmail(params: {
       bcc: hostEmail,
       replyTo: hostEmail,
       subject: `${hostName} invited you: ${event.title}`,
-      text: `${hostName} has invited you to "${event.title}" on ${when}, a NASIHA community event.${noteText}\n\n${calendarLine}\n\n${joinLine}\n\nThis link is personal to you — please don't forward it. You can reply to this email to reach ${hostName}.${joinInviteText}\n\n— The NASIHA Team`,
+      text: `${hostName} has invited you to "${event.title}" on ${when}, a NASIHA community event.${noteText}\n\nEvent details:\n${detailsUrl}\n\n${calendarLine}\n\n${joinLine}\n\nThis link is personal to you — please don't forward it. You can reply to this email to reach ${hostName}.${joinInviteText}\n\n— The NASIHA Team`,
       html: `<div>
         <p>${safeHost} has invited you to <strong>${safeTitle}</strong> on ${safeWhen}, a NASIHA community event.</p>
         ${noteHtml}
+        <p><a href="${detailsUrl}">View event details</a></p>
         <p>${calendarLine}</p>
         ${
           joinUrl

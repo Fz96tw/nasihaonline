@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RsvpBlurb, RsvpButton } from "@/components/calendar/rsvp-button";
 import { AddToCalendarButton } from "@/components/calendar/add-to-calendar-button";
+import { ShareEventButton } from "@/components/calendar/share-event-button";
 import { EventViewCounter } from "@/components/calendar/event-view-counter";
 import { ManageInvitees } from "@/components/calendar/manage-invitees";
 import { ManageCoHosts } from "@/components/calendar/manage-co-hosts";
@@ -89,6 +90,7 @@ export function EventDetail({
   notificationBroadcasts,
   attendeeMessages,
   highlightQuery,
+  isPubliclyShareable,
 }: {
   event: MemberEvent;
   canEdit: boolean;
@@ -110,6 +112,8 @@ export function EventDetail({
   attendeeMessages: { items: EventAttendeeMessageItem[]; memberCount: number; guestCount: number } | null;
   /** Active search query when arriving from a search result (see lib/feed.ts's withFeedRef) — highlights every match in the title/description. */
   highlightQuery?: string;
+  /** Event resolves at the public /events/[eventId] page (isEventPubliclyVisible) — shows the Share button. */
+  isPubliclyShareable: boolean;
 }) {
   const [event, setEvent] = useState(initialEvent);
   const hasMounted = useHasMounted();
@@ -331,6 +335,9 @@ export function EventDetail({
             eventId={event.seriesId}
             occurrenceIso={event.isRecurring ? event.startsAt : undefined}
           />
+        )}
+        {isPubliclyShareable && !event.cancelled && (
+          <ShareEventButton eventId={event.seriesId} title={event.title} startsAt={event.startsAt} />
         )}
         {canEdit && (
           <Button size="sm" variant="outline" asChild>

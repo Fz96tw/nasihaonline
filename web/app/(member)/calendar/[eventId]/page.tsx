@@ -12,6 +12,7 @@ import {
   getEventRoster,
   getMemberEventById,
   getPeopleYouMetAtEvent,
+  isEventPubliclyVisible,
 } from "@/lib/events-server";
 import { getDirectoryMemberById, getMentionableMembers } from "@/lib/members-server";
 import { getForumThreadDetail } from "@/lib/forums-server";
@@ -105,7 +106,7 @@ export default async function EventDetailPage({
   // can never also be `open`, the only way EventRegistration rows exist).
   // Resend Notifications' history trail (event detail page) — host/admin
   // only (resendEventNotifications' own gate applies to both visibilities).
-  const [attendees, hostProfile, roster, attendanceChecklist, notificationBroadcasts, attendeeMessages, peopleYouMet] = await Promise.all([
+  const [attendees, hostProfile, roster, attendanceChecklist, notificationBroadcasts, attendeeMessages, peopleYouMet, isPubliclyShareable] = await Promise.all([
     canEdit && !isRestricted ? getEventAttendees(event.seriesId) : Promise.resolve(null),
     getDirectoryMemberById(event.hostId),
     isRestricted ? getEventRoster(event.seriesId) : Promise.resolve(null),
@@ -120,6 +121,7 @@ export default async function EventDetailPage({
         ]).then(([items, counts]) => ({ items, memberCount: counts.members, guestCount: counts.guests }))
       : Promise.resolve(null),
     getPeopleYouMetAtEvent(event, user),
+    isEventPubliclyVisible(event.seriesId),
   ]);
 
   // Co-hosts can be managed for any visibility once published, by the same
@@ -171,6 +173,7 @@ export default async function EventDetailPage({
         hostProfile={hostProfile}
         roster={roster}
         coHosts={coHosts}
+        isPubliclyShareable={isPubliclyShareable}
         attendanceChecklist={attendanceChecklist}
         notificationBroadcasts={notificationBroadcasts}
         attendeeMessages={attendeeMessages}
