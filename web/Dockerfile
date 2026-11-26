@@ -1,12 +1,25 @@
+# Dependency manifest without "scripts": the npm ci layer below (~1.7GB) is
+# cached by the exact files copied into it, so editing an npm script (e.g.
+# adding a test file to "test") used to force a full reinstall and a full
+# re-upload of that layer on the next deploy. BuildKit keys the COPY --from
+# below on file content, so an unchanged dependency set reuses the cached layer.
+FROM node:20-alpine AS manifest
+WORKDIR /m
+COPY package.json package-lock.json ./
+RUN node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));delete p.scripts;fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\\n')"
+
 FROM node:20-alpine
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-COPY scripts ./scripts
+COPY --from=manifest /m/package.json /m/package-lock.json ./
+# Dependencies' own install scripts still run; only this app's scripts are gone.
 RUN npm ci
 
 COPY . .
+# This app's postinstall (dropped from the manifest above), run now that
+# scripts/ and the real package.json are in place.
+RUN node scripts/copy-pdf-worker.mjs
 
 # Build-time only — `prisma generate` just needs a well-formed value (no live
 # connection), and `next build` inlines NEXT_PUBLIC_* into client bundles.
