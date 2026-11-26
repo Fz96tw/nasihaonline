@@ -1,0 +1,20 @@
+# Credentials (prod Clerk keys, admin email, saved session) — never commit
+tool/.clerk.env
+tool/.demo-email
+tool/.state.json
+tool/node_modules/
+
+# Private inputs: member names to blur, member meeting recording, presenter clip, licensed music
+names.txt
+recs/
+overlay/
+music_in/
+
+# Recording and render output
+raw*/
+out*/
+scout/
+chk/
+*.mp4
+*.png
+*.wav
