@@ -3,7 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Lock, Pin } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
-import { getForumThreadDetail } from "@/lib/forums-server";
+import { ShareButton } from "@/components/shared/share-button";
+import { getForumThreadDetail, isForumThreadPubliclyReadable } from "@/lib/forums-server";
 import { getGroupMessageRedirect } from "@/lib/inbox-groups-server";
 import { getMentionableMembers } from "@/lib/members-server";
 import { ForumThreadView } from "@/components/forums/forum-thread-view";
@@ -100,6 +101,9 @@ export default async function ForumThreadPage({
   const isPrivilegedOverride = isPrivileged && isRestricted && !isAuthor && !isInvitee;
   const canManageInvitees = isRestricted && (isAuthor || isPrivileged);
   const audienceBadge = getForumThreadAudienceBadge(thread);
+  // Only public threads get Share — the button itself tells a member the
+  // link opens for non-members (never Clinical Discussions/restricted).
+  const isPubliclyShareable = !isRestricted && (await isForumThreadPubliclyReadable(thread.id));
 
   // Member-Initiated Restricted Forum Threads (§4.13/§11.16) — a restricted
   // thread's `@`-mention candidates (both the composer's autocomplete and
@@ -159,7 +163,7 @@ export default async function ForumThreadPage({
             </div>
           )}
         </div>
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <p className="text-sm text-muted-foreground">
             Started by {thread.authorName ?? "A member"} in{" "}
             {user ? (
@@ -170,12 +174,17 @@ export default async function ForumThreadPage({
               <span className="font-medium text-foreground">{thread.forum.name}</span>
             )}
           </p>
-          <ThreadViewCounter
-            threadId={thread.id}
-            initialViews={thread.viewCount}
-            commentCount={thread.replyCount}
-            record={thread.canParticipate}
-          />
+          <div className="flex shrink-0 items-center gap-3">
+            <ThreadViewCounter
+              threadId={thread.id}
+              initialViews={thread.viewCount}
+              commentCount={thread.replyCount}
+              record={thread.canParticipate}
+            />
+            {isPubliclyShareable && (
+              <ShareButton path={`/forums/${thread.forum.slug}/${thread.id}`} title={thread.title} align="end" />
+            )}
+          </div>
         </div>
       </div>
 

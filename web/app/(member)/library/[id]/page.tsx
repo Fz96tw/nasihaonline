@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
+import { ShareButton } from "@/components/shared/share-button";
 import {
   getKnowledgeItemRoster,
   getPublishedKnowledgeItemById,
   getPublishedKnowledgeItemsByContributor,
+  isKnowledgeItemPubliclyReadable,
 } from "@/lib/library-server";
 import { MessageMemberButton } from "@/components/members/message-member-button";
 import { FollowMemberButton } from "@/components/members/follow-member-button";
@@ -275,6 +277,8 @@ export default async function LibraryItemDetailPage({
         )}
         {user && item.status === KnowledgeStatus.published && <LibraryFlagButton itemId={item.id} initialFlagged={false} />}
         {user && !item.forumThreadId && <LibraryDiscussionLink itemId={item.id} initialThreadId={item.forumThreadId} />}
+        {/* Signed-out readers can pass a public item along too. */}
+        {isKnowledgeItemPubliclyReadable(item) && <ShareButton path={`/library/${item.id}`} title={item.title} />}
       </div>
 
       {!user && (
