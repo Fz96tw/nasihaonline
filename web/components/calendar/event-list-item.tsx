@@ -55,7 +55,7 @@ export function EventListItem({
           >
             {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
             <img src={event.heroImageUrl} alt="" className="h-full w-full object-cover" />
-            <FeedEventDateBadge startsAt={event.startsAt} endsAt={event.endsAt ?? undefined} variant="overlay" />
+            <FeedEventDateBadge startsAt={event.startsAt} endsAt={event.endsAt ?? undefined} variant="overlay" size="sm" />
           </Link>
         ) : null}
         {/* Same date tile as the public /events cards: over the thumbnail's

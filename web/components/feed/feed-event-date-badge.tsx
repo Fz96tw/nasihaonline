@@ -56,7 +56,9 @@ export function useEventStatus(startsAt: string, endsAt?: string): EventStatus |
  * number, start time + zone, and a status footer ("Live now", "Today",
  * "Tomorrow", "In N days", "Ended") when one applies. `overlay` pins it to
  * the top-right of the row's hero image; `inline` sits to the right of the
- * title for an event row without an image.
+ * title for an event row without an image. `size="sm"` is a compact tile
+ * for small thumbnails (e.g. the /calendar list) where the full-size one
+ * would swamp the picture.
  *
  * Every value depends on the viewer's own timezone/clock, so nothing is
  * rendered inside the tile until mount (same hydration guard the old
@@ -68,12 +70,14 @@ export function FeedEventDateBadge({
   endsAt,
   variant,
   rescheduled = false,
+  size = "default",
 }: {
   startsAt: string;
   endsAt?: string;
   variant: "overlay" | "inline";
   /** The host moved this event: a "NEW DATE" strip tops the tile, so it's unambiguous that the date shown is the new one. */
   rescheduled?: boolean;
+  size?: "default" | "sm";
 }) {
   const hasMounted = useHasMounted();
   const status = useEventStatus(startsAt, endsAt);
@@ -101,15 +105,20 @@ export function FeedEventDateBadge({
   // readable on light and busy photos alike. Inline (no banner) has nothing
   // to show through, so it keeps a solid card.
   const glass = variant === "overlay";
+  const sm = size === "sm";
 
   return (
     <div
       role="img"
       aria-label={hasMounted ? `Event ${ended ? "was" : rescheduled ? "rescheduled, now starts" : "starts"} ${fullLabel}${statusText ? ` — ${statusText}` : ""}` : "Event date"}
       className={cn(
-        "flex w-[4.75rem] flex-shrink-0 flex-col overflow-hidden rounded-lg text-center",
+        "flex flex-shrink-0 flex-col overflow-hidden text-center",
+        sm ? "w-14 rounded-md" : "w-[4.75rem] rounded-lg",
         glass
-          ? "absolute right-3 top-3 bg-black/40 text-white shadow-lg ring-1 ring-white/25 backdrop-blur-md [text-shadow:0_1px_4px_rgba(0,0,0,.6)] sm:w-[5.25rem]"
+          ? cn(
+              "absolute bg-black/40 text-white shadow-lg ring-1 ring-white/25 backdrop-blur-md [text-shadow:0_1px_4px_rgba(0,0,0,.6)]",
+              sm ? "right-2 top-2" : "right-3 top-3 sm:w-[5.25rem]",
+            )
           : "border bg-card text-card-foreground shadow-sm",
       )}
     >
@@ -118,7 +127,8 @@ export function FeedEventDateBadge({
           {rescheduled && !ended && (
             <div
               className={cn(
-                "py-0.5 text-[10px] font-extrabold uppercase leading-tight tracking-wider",
+                "py-0.5 font-extrabold uppercase leading-tight",
+                sm ? "text-[8px] tracking-normal" : "text-[10px] tracking-wider",
                 glass ? "bg-amber-300/90 text-amber-950 [text-shadow:none]" : "bg-amber-100 text-amber-900",
               )}
             >
@@ -127,7 +137,8 @@ export function FeedEventDateBadge({
           )}
           <div
             className={cn(
-              "py-0.5 text-xs font-bold tracking-wider",
+              "py-0.5 font-bold tracking-wider",
+              sm ? "text-[9px]" : "text-xs",
               ended
                 ? glass ? "bg-white/25 text-white" : "bg-neutral-500 text-white"
                 : glass ? "bg-primary/85 text-primary-foreground" : "bg-primary text-primary-foreground",
@@ -137,7 +148,8 @@ export function FeedEventDateBadge({
           </div>
           <div
             className={cn(
-              "pt-1 text-3xl font-extrabold leading-none sm:text-4xl",
+              "pt-1 font-extrabold leading-none",
+              sm ? "text-xl" : "text-3xl sm:text-4xl",
               ended && (glass ? "text-white/70" : "text-neutral-500"),
             )}
           >
@@ -145,31 +157,41 @@ export function FeedEventDateBadge({
           </div>
           <div
             className={cn(
-              "mt-1 px-1 text-xs font-semibold leading-tight",
+              "mt-1 px-1 font-semibold leading-tight",
+              sm ? "text-[9px]" : "text-xs",
               ended && (glass ? "text-white/70" : "text-neutral-500"),
             )}
           >
             {time}
           </div>
-          <div className={cn("pb-1 text-[10px] font-medium leading-tight", glass ? "text-white/80" : "text-neutral-500")}>
+          <div
+            className={cn(
+              "pb-1 font-medium leading-tight",
+              sm ? "text-[8px]" : "text-[10px]",
+              glass ? "text-white/80" : "text-neutral-500",
+            )}
+          >
             {zone}
           </div>
           {statusText && (
             <div
               className={cn(
-                "flex items-center justify-center gap-1 px-1 py-0.5 text-[10px] font-bold uppercase leading-tight tracking-normal",
+                "flex items-center justify-center whitespace-nowrap px-1 py-0.5 font-bold uppercase leading-tight tracking-normal",
+                sm ? "gap-0.5 text-[8px]" : "gap-1 text-[10px]",
                 status?.kind === "live" && "bg-red-600/90 text-white",
                 status?.kind === "ended" && (glass ? "bg-white/20 text-white" : "bg-neutral-200 text-neutral-600"),
                 status?.kind === "soon" && (glass ? "bg-amber-300/90 text-amber-950 [text-shadow:none]" : "bg-amber-100 text-amber-900"),
               )}
             >
-              {status?.kind === "live" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />}
+              {status?.kind === "live" && (
+                <span className={cn("animate-pulse rounded-full bg-white", sm ? "h-1 w-1" : "h-1.5 w-1.5")} />
+              )}
               {statusText}
             </div>
           )}
         </>
       ) : (
-        <div className="h-[5.5rem]" />
+        <div className={sm ? "h-[3.75rem]" : "h-[5.5rem]"} />
       )}
     </div>
   );
