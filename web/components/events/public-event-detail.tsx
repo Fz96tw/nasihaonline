@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { LiveEventBadge } from "@/components/events/live-event-badge";
+import { FeedEventDateBadge } from "@/components/feed/feed-event-date-badge";
 import { RegisterBlurb, RegisterButton } from "@/components/events/register-button";
 import { PUBLIC_DEFAULT_EVENT_MS } from "@/lib/session-reminders";
 import { Badge } from "@/components/ui/badge";
@@ -68,9 +69,11 @@ export function PublicEventDetail({ event }: { event: PublicEvent }) {
   return (
     <div className="flex flex-col gap-6">
       {event.heroImageUrl && (
-        <div className="flex h-72 w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
+        <div className="relative flex h-72 w-full items-center justify-center overflow-hidden rounded-lg bg-muted">
           {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
           <img src={event.heroImageUrl} alt={event.title} className="h-full w-full object-cover" />
+          {/* Same date tile as the listing cards; the text date range below stays as the full start–end detail. */}
+          <FeedEventDateBadge startsAt={event.startsAt} endsAt={event.endsAt ?? undefined} variant="overlay" />
         </div>
       )}
 
