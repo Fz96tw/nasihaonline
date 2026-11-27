@@ -42,14 +42,39 @@ export type MeetingWaitingRoomStatus = {
   awaitingHostApproval?: boolean;
 };
 
-/** Always hours:minutes:seconds, zero-padded — a fixed-width format reads better at large sizes than one that reflows as hours drop off. */
-function formatCountdown(msRemaining: number): string {
+/**
+ * Days / hours / minutes / seconds as labeled blocks (a bare "129:12:51" is
+ * hard to read once it's more than a day out). The days block only appears
+ * while at least a day remains; the rest are always shown, zero-padded, so
+ * the width doesn't reflow every second.
+ */
+function countdownParts(msRemaining: number): { value: string; label: string }[] {
   const totalSeconds = Math.max(0, Math.floor(msRemaining / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  const parts = [
+    { value: pad(hours), label: hours === 1 ? "hour" : "hours" },
+    { value: pad(minutes), label: minutes === 1 ? "minute" : "minutes" },
+    { value: pad(seconds), label: seconds === 1 ? "second" : "seconds" },
+  ];
+  return days > 0 ? [{ value: String(days), label: days === 1 ? "day" : "days" }, ...parts] : parts;
+}
+
+function Countdown({ msRemaining }: { msRemaining: number }) {
+  const parts = countdownParts(msRemaining);
+  return (
+    <div className="flex items-start justify-center gap-3 sm:gap-6">
+      {parts.map((part) => (
+        <div key={part.label.replace(/s$/, "")} className="flex min-w-[3.5rem] flex-col items-center sm:min-w-[5.5rem]">
+          <span className="font-mono text-4xl font-bold tabular-nums tracking-tight sm:text-7xl">{part.value}</span>
+          <span className="mt-1 text-xs uppercase tracking-wide text-muted-foreground sm:text-sm">{part.label}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 // Same weekday/month/day/hour/minute/timeZoneName shape as
@@ -496,9 +521,7 @@ export function MeetingWaitingRoom({
           ) : isBeforeStart ? (
             <div className="flex flex-col items-center gap-1">
               <p className="text-sm text-muted-foreground">Starts in</p>
-              <p className="font-mono text-7xl font-bold tabular-nums tracking-tight">
-                {formatCountdown(msRemaining)}
-              </p>
+              <Countdown msRemaining={msRemaining} />
             </div>
           ) : (
             <p className="text-muted-foreground">Waiting for the host to start the meeting…</p>
