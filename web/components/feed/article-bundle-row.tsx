@@ -156,8 +156,9 @@ export function ArticleBundleRow({ item }: { item: FeedItem & { articleBundle: N
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" aria-hidden />
                   {/* Padding on the wrapper, not the clamped h3 — padding there would show a 4th line peeking out. */}
-                  <div className="absolute inset-x-0 bottom-0 p-3">
-                    <h3 className="line-clamp-4 text-lg font-semibold leading-snug text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">
+                  <div className="absolute inset-x-0 bottom-0 p-3 sm:px-4">
+                    {/* sm+: the same text-2xl/font-bold as other feed rows' titles (FeedRow); mobile keeps text-lg so 4 lines fit the narrower banner. */}
+                    <h3 className="line-clamp-4 text-lg font-semibold leading-snug text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.6)] sm:text-2xl sm:font-bold">
                       {slide.title}
                     </h3>
                   </div>
