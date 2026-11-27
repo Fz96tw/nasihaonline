@@ -79,8 +79,8 @@ export type FeedItem = {
   eventSubtitle?: string;
   /** Events only: true when an upcoming event was rescheduled — its row sits at the reschedule time and the date badge shows a "NEW DATE" strip. */
   eventRescheduled?: boolean;
-  /** Events only, and only when the viewer may RSVP/join at all (restricted events: host, co-host, invitee, or admin) — drives FeedEventFooter's RSVP / You're going / Join now button. `isHost` covers co-hosts too: neither RSVPs, both can join. */
-  eventActions?: { eventId: string; rsvped: boolean; isHost: boolean; hasMeeting: boolean };
+  /** Events only, and only when the viewer may RSVP/join at all (restricted events: host, co-host, invitee, or admin) — drives FeedEventFooter's RSVP / You're going / Join now button. `isHost` is the event's own host (never RSVPs); `isCoHost` is a designated co-host, who may still RSVP like any member — both join without an RSVP. */
+  eventActions?: { eventId: string; rsvped: boolean; isHost: boolean; isCoHost: boolean; hasMeeting: boolean };
   /** Events with a linked Events-forum thread (§4.6) or library items with a started on-demand discussion thread (§4.9) carry this — undefined when there's no thread yet. */
   forumReplyCount?: number;
   /** Only events carry a detail-page unique-visitor count (§4.6) — undefined for every other type. */

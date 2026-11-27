@@ -4,6 +4,7 @@ import { type MouseEvent, type ReactNode, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Eye, MessageSquare, Users, Video } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RsvpButton } from "@/components/calendar/rsvp-button";
 import { useEventStatus } from "@/components/feed/feed-event-date-badge";
@@ -83,7 +84,8 @@ function JoinNowButton({ eventId, direct }: { eventId: string; direct: boolean }
  * so an RSVP toggle can update it in place from the API's returned count.
  *
  * - live + has a meeting                → Join now (host, co-host, or anyone allowed to RSVP)
- * - upcoming, or live without a meeting → RSVP / You're going (not for the host/co-host, who never RSVP)
+ * - upcoming, or live without a meeting → RSVP / You're going (not for the host, who never RSVPs; co-hosts may)
+ * A co-host also gets a "You're co-hosting" badge beside the button, until the event ends.
  * - ended                               → no button
  * Before mount (status unknown) no button renders, so SSR and hydration agree.
  * `item.eventActions` is absent when the viewer can't RSVP at all (a
@@ -99,7 +101,7 @@ export function FeedEventFooter({ item }: { item: FeedItem }) {
   let action: ReactNode = null;
   if (actions && status && status.kind !== "ended") {
     if (status.kind === "live" && actions.hasMeeting) {
-      action = <JoinNowButton eventId={actions.eventId} direct={actions.isHost || rsvped} />;
+      action = <JoinNowButton eventId={actions.eventId} direct={actions.isHost || actions.isCoHost || rsvped} />;
     } else if (!actions.isHost) {
       action = (
         <RsvpButton
@@ -115,6 +117,15 @@ export function FeedEventFooter({ item }: { item: FeedItem }) {
         />
       );
     }
+  }
+
+  if (actions?.isCoHost && status && status.kind !== "ended") {
+    action = (
+      <div className="flex flex-wrap items-center gap-2">
+        {action}
+        <Badge variant="info">You&apos;re co-hosting</Badge>
+      </div>
+    );
   }
 
   const hasCounts = attendeeCount !== undefined;

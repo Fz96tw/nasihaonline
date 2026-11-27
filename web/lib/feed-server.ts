@@ -161,14 +161,16 @@ function feedEventActions(
   viewerRole: Role | undefined,
 ): FeedItem["eventActions"] {
   if (!viewerId) return undefined;
-  const isHost = event.hostId === viewerId || event.coHosts.length > 0;
+  const isHost = event.hostId === viewerId;
+  const isCoHost = !isHost && event.coHosts.length > 0;
   const canRsvp =
-    event.visibility !== EventVisibility.invited || isHost || event.invitees.length > 0 || viewerRole === Role.admin;
+    event.visibility !== EventVisibility.invited || isHost || isCoHost || event.invitees.length > 0 || viewerRole === Role.admin;
   if (!canRsvp) return undefined;
   return {
     eventId: event.id,
     rsvped: event.rsvps.length > 0,
     isHost,
+    isCoHost,
     hasMeeting: !!(event.meetingUrl || event.livekitRoomName),
   };
 }
