@@ -202,6 +202,8 @@ export type AttendanceChecklistMember = {
   minutesAttended: number | null;
   /** Whether the host may confirm this member's attendance credit (5+ minutes when there's meeting data; otherwise a restricted event's invitee). */
   eligible: boolean;
+  /** The viewer's own row, for a non-admin viewer (a co-host who attended) — nobody but an admin confirms their own credit. */
+  isSelf: boolean;
 };
 
 // /calendar/[eventId]'s host/admin-only attendee list (§4.6) — RSVP'd

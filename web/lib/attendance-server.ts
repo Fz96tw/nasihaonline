@@ -203,6 +203,9 @@ export async function recordHostAttendance(
  *   session from before tracking existed) the host's word is all there is,
  *   so an invitee stays confirmable as before.
  * The host is never listed — their own hours go through the admin queue.
+ * The host, a co-host or an admin may confirm (recordAttendeeAttendance);
+ * a co-host's own row is flagged isSelf, since only an admin confirms
+ * their own credit.
  * Caller enforces the access gate (same "caller enforces" convention as
  * getEventAttendees/getEventRoster) — the page only renders this for a past
  * event the viewer can edit.
@@ -210,6 +213,7 @@ export async function recordHostAttendance(
 export async function getEventAttendanceChecklist(
   eventId: string,
   occurrenceDate: Date,
+  viewer: { id: string; role: Role },
 ): Promise<AttendanceChecklistMember[]> {
   const event = await db.event.findUnique({
     where: { id: eventId },
@@ -260,6 +264,7 @@ export async function getEventAttendanceChecklist(
         recorded: recordedIds.has(userId),
         minutesAttended,
         eligible: minutesAttended !== null ? minutesAttended >= MIN_ATTENDANCE_MINUTES : invitedIds.has(userId),
+        isSelf: userId === viewer.id && viewer.role !== Role.admin,
       },
     ];
   });
@@ -271,9 +276,9 @@ export async function getEventAttendanceChecklist(
  * extended to every Nasiha Conference event) — parallel to but distinct
  * from recordHostAttendance() above, which stays exactly as-is for the
  * host's own row. Single-action, same "recording is itself the
- * confirmation" shape as the host's own entry — the host (or an admin) is
- * the one calling this, marking someone else's attendance, so there's no
- * self-report risk. Who qualifies mirrors getEventAttendanceChecklist: on a
+ * confirmation" shape as the host's own entry — the host, a co-host or an
+ * admin is the one calling this, and only an admin may mark themselves, so
+ * there's no self-report risk. Who qualifies mirrors getEventAttendanceChecklist: on a
  * Nasiha Conference session with meeting data, at least
  * MIN_ATTENDANCE_MINUTES in the room; otherwise (no data) only a restricted
  * event's invitee.
@@ -298,8 +303,20 @@ export async function recordAttendeeAttendance(
 
   const isAdmin = actingUser.role === Role.admin;
   const isHost = event.hostId === actingUser.id;
-  if (!isAdmin && !isHost) {
-    throw new AttendanceError(403, "Only the event's host or an admin can record attendance.");
+  // Co-hosts exist only on Nasiha Conference events (EventCoHost).
+  const isCoHost =
+    !isAdmin &&
+    !isHost &&
+    isLiveKit &&
+    (await db.eventCoHost.findUnique({
+      where: { eventId_userId: { eventId, userId: actingUser.id } },
+      select: { id: true },
+    })) !== null;
+  if (!isAdmin && !isHost && !isCoHost) {
+    throw new AttendanceError(403, "Only the event's host, a co-host or an admin can record attendance.");
+  }
+  if (!isAdmin && targetUserId === actingUser.id) {
+    throw new AttendanceError(403, "You can't confirm your own attendance — ask the host or an admin.");
   }
 
   if (occurrenceDate >= new Date()) {

@@ -106,13 +106,17 @@ export default async function EventDetailPage({
   // can never also be `open`, the only way EventRegistration rows exist).
   // Resend Notifications' history trail (event detail page) — host/admin
   // only (resendEventNotifications' own gate applies to both visibilities).
+  // Co-hosts exist only on Nasiha Conference events. Resolved before the
+  // fetches below because co-hosts can also confirm attendance.
+  const isCoHost = Boolean(event.livekitRoomName) && !isHost && (await isEventCoHost(event.seriesId, user.id));
+
   const [attendees, hostProfile, roster, attendanceChecklist, notificationBroadcasts, attendeeMessages, peopleYouMet, isPubliclyShareable] = await Promise.all([
     canEdit && !isRestricted ? getEventAttendees(event.seriesId) : Promise.resolve(null),
     getDirectoryMemberById(event.hostId),
     isRestricted ? getEventRoster(event.seriesId) : Promise.resolve(null),
     // Restricted events (invitee list) and every Nasiha Conference event (who joined the meeting, with minutes).
-    canEdit && (isRestricted || Boolean(event.livekitRoomName)) && isPast
-      ? getEventAttendanceChecklist(event.seriesId, new Date(event.startsAt))
+    (canEdit || isCoHost) && (isRestricted || Boolean(event.livekitRoomName)) && isPast
+      ? getEventAttendanceChecklist(event.seriesId, new Date(event.startsAt), user)
       : Promise.resolve(null),
     canEdit ? getEventNotificationBroadcasts(event.seriesId) : Promise.resolve(null),
     canEdit
@@ -128,7 +132,6 @@ export default async function EventDetailPage({
   // Co-hosts can be managed for any visibility once published, by the same
   // people who can change them in the live meeting (host, co-host) plus
   // admins — only for Nasiha Conference events, the only kind with co-hosts.
-  const isCoHost = Boolean(event.livekitRoomName) && !isHost && (await isEventCoHost(event.seriesId, user.id));
   const canManageCoHosts = Boolean(event.livekitRoomName) && !event.cancelled && (canEdit || isCoHost);
   const coHosts = canManageCoHosts ? await getEventCoHosts(event.seriesId) : null;
 

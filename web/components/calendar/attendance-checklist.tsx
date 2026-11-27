@@ -79,6 +79,8 @@ export function AttendanceChecklist({
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 Attended
               </span>
+            ) : member.isSelf ? (
+              <span className="flex-shrink-0 text-xs text-muted-foreground">You — the host confirms</span>
             ) : !member.eligible ? (
               <span className="flex-shrink-0 text-xs text-muted-foreground">
                 {member.minutesAttended !== null ? `Under ${MIN_ATTENDANCE_MINUTES} min` : "Not eligible"}
