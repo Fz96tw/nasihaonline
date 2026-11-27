@@ -13,8 +13,9 @@ import type { UserModel } from "@/lib/generated/prisma/models/User";
 import { createNotification } from "@/lib/notifications-server";
 import { formatHours } from "@/lib/contributions";
 import { getProfileAvatarUrl } from "@/lib/storage";
-import type { AttendanceChecklistMember, PastEventForAttendance } from "@/lib/events";
+import { MIN_ATTENDANCE_MINUTES, type AttendanceChecklistMember, type PastEventForAttendance } from "@/lib/events";
 import { expandOccurrences, type RecurrenceInput } from "@/lib/recurrence";
+import { getPresenceMinutes } from "@/lib/meeting-presence-server";
 
 /** The rate-card key that prices hosting an event (§4.4, seeded in prisma/seed.ts). */
 const HOST_EVENT_ACTIVITY_KEY = "lecture_webinar";
@@ -192,49 +193,90 @@ export async function recordHostAttendance(
 }
 
 /**
- * Invited-member checklist for a restricted event's host-facing attendance
- * UI (Audience-Restricted Group Events, Objective 04) — every EventInvitee,
- * flagged with whether their attendee-role Attendance row already exists.
+ * The host-facing post-event attendance checklist (Audience-Restricted Group
+ * Events, Objective 04, extended to every Nasiha Conference event):
+ * - a Nasiha Conference (LiveKit) event lists every member who joined the
+ *   meeting, with the minutes they were in it (lib/meeting-presence-server.ts);
+ *   only those with at least MIN_ATTENDANCE_MINUTES can be confirmed;
+ * - a restricted event also lists every invitee, joined or not. Where there's
+ *   no meeting data for the session (a Meet/in-person event, or a LiveKit
+ *   session from before tracking existed) the host's word is all there is,
+ *   so an invitee stays confirmable as before.
+ * The host is never listed — their own hours go through the admin queue.
  * Caller enforces the access gate (same "caller enforces" convention as
- * getEventAttendees/getEventRoster) — the page only renders this for a
- * restricted, past event the viewer can already edit.
+ * getEventAttendees/getEventRoster) — the page only renders this for a past
+ * event the viewer can edit.
  */
 export async function getEventAttendanceChecklist(
   eventId: string,
   occurrenceDate: Date,
 ): Promise<AttendanceChecklistMember[]> {
-  const [invitees, recorded] = await Promise.all([
-    db.eventInvitee.findMany({
-      where: { eventId },
-      select: { userId: true, user: { select: { name: true, profile: { select: { avatarUrl: true } } } } },
-      orderBy: { createdAt: "asc" },
-    }),
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { hostId: true, visibility: true, livekitRoomName: true },
+  });
+  if (!event) return [];
+  const isRestricted = event.visibility === EventVisibility.invited;
+  const isLiveKit = Boolean(event.livekitRoomName);
+
+  const [invitees, recorded, presence] = await Promise.all([
+    isRestricted
+      ? db.eventInvitee.findMany({ where: { eventId }, select: { userId: true }, orderBy: { createdAt: "asc" } })
+      : Promise.resolve([]),
     db.attendance.findMany({
       where: { eventId, role: AttendanceRole.attendee, occurrenceDate },
       select: { userId: true },
     }),
+    isLiveKit ? getPresenceMinutes(eventId, occurrenceDate) : Promise.resolve(null),
   ]);
 
+  const tracked = presence?.tracked ?? false;
+  const minutesByUser = presence?.minutesByUser ?? new Map<string, number>();
+  const invitedIds = new Set(invitees.map((invitee) => invitee.userId));
   const recordedIds = new Set(recorded.map((row) => row.userId));
-  return invitees.map((invitee) => ({
-    userId: invitee.userId,
-    name: invitee.user.name,
-    avatarUrl: getProfileAvatarUrl(invitee.user.profile?.avatarUrl ?? null),
-    recorded: recordedIds.has(invitee.userId),
-  }));
+
+  // Joined members first (longest stay first), then invitees who never joined.
+  const joinedIds = Array.from(minutesByUser.keys()).sort((a, b) => minutesByUser.get(b)! - minutesByUser.get(a)!);
+  const candidateIds = Array.from(new Set([...joinedIds, ...invitees.map((invitee) => invitee.userId)])).filter(
+    (userId) => userId !== event.hostId,
+  );
+  if (candidateIds.length === 0) return [];
+
+  const users = await db.user.findMany({
+    where: { id: { in: candidateIds } },
+    select: { id: true, name: true, profile: { select: { avatarUrl: true } } },
+  });
+  const usersById = new Map(users.map((user) => [user.id, user]));
+
+  return candidateIds.flatMap((userId) => {
+    const user = usersById.get(userId);
+    if (!user) return [];
+    const minutesAttended = tracked ? (minutesByUser.get(userId) ?? 0) : null;
+    return [
+      {
+        userId,
+        name: user.name,
+        avatarUrl: getProfileAvatarUrl(user.profile?.avatarUrl ?? null),
+        recorded: recordedIds.has(userId),
+        minutesAttended,
+        eligible: minutesAttended !== null ? minutesAttended >= MIN_ATTENDANCE_MINUTES : invitedIds.has(userId),
+      },
+    ];
+  });
 }
 
 /**
- * Records one invited member's Attendance on a restricted event and
- * auto-posts their confirmed Knowledge Hours earn (Audience-Restricted
- * Group Events, Objective 04) — parallel to but distinct from
- * recordHostAttendance() above, which stays exactly as-is for the host's
- * own row and for community events generally. Single-action, same
- * "recording is itself the confirmation, no separate approval step" shape
- * as the host's own entry — the organizer (or an admin) is the one calling
- * this, marking someone else's attendance, so there's no self-report risk
- * to guard against the way there would be if attendees recorded
- * themselves.
+ * Records one member's attendee Attendance and auto-posts their confirmed
+ * Knowledge Hours earn (Audience-Restricted Group Events, Objective 04,
+ * extended to every Nasiha Conference event) — parallel to but distinct
+ * from recordHostAttendance() above, which stays exactly as-is for the
+ * host's own row. Single-action, same "recording is itself the
+ * confirmation" shape as the host's own entry — the host (or an admin) is
+ * the one calling this, marking someone else's attendance, so there's no
+ * self-report risk. Who qualifies mirrors getEventAttendanceChecklist: on a
+ * Nasiha Conference session with meeting data, at least
+ * MIN_ATTENDANCE_MINUTES in the room; otherwise (no data) only a restricted
+ * event's invitee.
  */
 export async function recordAttendeeAttendance(
   eventId: string,
@@ -244,12 +286,14 @@ export async function recordAttendeeAttendance(
 ): Promise<{ attendanceId: string; ledgerEntryId: string; hoursEarned: number }> {
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { id: true, title: true, hostId: true, visibility: true, startsAt: true },
+    select: { id: true, title: true, hostId: true, visibility: true, startsAt: true, livekitRoomName: true },
   });
   if (!event) throw new AttendanceError(404, "Event not found.");
 
-  if (event.visibility !== EventVisibility.invited) {
-    throw new AttendanceError(400, "Only restricted events track attendee attendance separately.");
+  const isRestricted = event.visibility === EventVisibility.invited;
+  const isLiveKit = Boolean(event.livekitRoomName);
+  if (!isRestricted && !isLiveKit) {
+    throw new AttendanceError(400, "Attendance credit is only tracked for Nasiha Conference and restricted events.");
   }
 
   const isAdmin = actingUser.role === Role.admin;
@@ -262,11 +306,33 @@ export async function recordAttendeeAttendance(
     throw new AttendanceError(409, "Attendance can only be recorded after the event has happened.");
   }
 
-  const invited = await db.eventInvitee.findUnique({
-    where: { eventId_userId: { eventId, userId: targetUserId } },
-    select: { userId: true },
-  });
-  if (!invited) throw new AttendanceError(400, "This member wasn't invited to this event.");
+  if (targetUserId === event.hostId) {
+    throw new AttendanceError(400, "The host's own hours are recorded separately.");
+  }
+
+  const presence = isLiveKit ? await getPresenceMinutes(eventId, occurrenceDate) : null;
+  if (presence?.tracked) {
+    const minutes = presence.minutesByUser.get(targetUserId) ?? 0;
+    if (minutes < MIN_ATTENDANCE_MINUTES) {
+      throw new AttendanceError(
+        409,
+        `This member was in the meeting for ${minutes} min — attendance credit needs at least ${MIN_ATTENDANCE_MINUTES}.`,
+      );
+    }
+  } else {
+    const invited = isRestricted
+      ? await db.eventInvitee.findUnique({
+          where: { eventId_userId: { eventId, userId: targetUserId } },
+          select: { userId: true },
+        })
+      : null;
+    if (!invited) {
+      throw new AttendanceError(
+        400,
+        isRestricted ? "This member wasn't invited to this event." : "There's no meeting attendance recorded for this session.",
+      );
+    }
+  }
 
   const existing = await db.attendance.findUnique({
     where: { eventId_userId_occurrenceDate: { eventId, userId: targetUserId, occurrenceDate } },

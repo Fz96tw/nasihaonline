@@ -2,6 +2,7 @@ import { EgressStatus, TrackSource } from "livekit-server-sdk";
 import { NextResponse, type NextRequest } from "next/server";
 import { resetMeetingOnRoomEmpty, verifyLiveKitWebhook } from "@/lib/livekit";
 import { syncRecordingLayout } from "@/lib/livekit-egress";
+import { closeOpenPresences, recordParticipantJoined, recordParticipantLeft } from "@/lib/meeting-presence-server";
 import {
   attachLiveKitEventRecordingSegment,
   finalizeEventChatTranscript,
@@ -51,7 +52,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid webhook signature" }, { status: 400 });
   }
 
+  // LiveKit stamps each webhook with its own send time (unix seconds); fall
+  // back to receipt time if it's missing.
+  const eventAt = event.createdAt ? new Date(Number(event.createdAt) * 1000) : new Date();
+
   if (event.event === "room_finished" && event.room?.name) {
+    await closeOpenPresences(event.room.name, eventAt).catch((error) => {
+      console.error("[livekit] Failed to close open meeting presences", error);
+    });
     await resetMeetingOnRoomEmpty(event.room.name);
     await finalizeEventChatTranscript(event.room.name).catch((error) => {
       console.error("[livekit] Failed to finalize chat transcript", error);
@@ -60,6 +68,24 @@ export async function POST(request: NextRequest) {
       console.error("[livekit] Failed to finalize meeting request chat transcript", error);
     });
     console.log(`[livekit] room_finished received, reset meeting for room ${event.room.name}`);
+  }
+
+  // Attendance tracking for the host's Knowledge Hours checklist (see
+  // lib/meeting-presence-server.ts) — never allowed to fail the webhook.
+  if (event.event === "participant_joined" && event.room?.name && event.participant?.identity && event.participant.sid) {
+    const joinedAt = event.participant.joinedAt ? new Date(Number(event.participant.joinedAt) * 1000) : eventAt;
+    await recordParticipantJoined({
+      roomName: event.room.name,
+      identity: event.participant.identity,
+      participantSid: event.participant.sid,
+      joinedAt,
+    }).catch((error) => {
+      console.error("[livekit] Failed to record participant join", error);
+    });
+  } else if (event.event === "participant_left" && event.participant?.sid) {
+    await recordParticipantLeft(event.participant.sid, eventAt).catch((error) => {
+      console.error("[livekit] Failed to record participant leave", error);
+    });
   }
 
   if (event.event === "egress_ended") {

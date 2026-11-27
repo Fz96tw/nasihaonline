@@ -110,7 +110,8 @@ export default async function EventDetailPage({
     canEdit && !isRestricted ? getEventAttendees(event.seriesId) : Promise.resolve(null),
     getDirectoryMemberById(event.hostId),
     isRestricted ? getEventRoster(event.seriesId) : Promise.resolve(null),
-    canEdit && isRestricted && isPast
+    // Restricted events (invitee list) and every Nasiha Conference event (who joined the meeting, with minutes).
+    canEdit && (isRestricted || Boolean(event.livekitRoomName)) && isPast
       ? getEventAttendanceChecklist(event.seriesId, new Date(event.startsAt))
       : Promise.resolve(null),
     canEdit ? getEventNotificationBroadcasts(event.seriesId) : Promise.resolve(null),

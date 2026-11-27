@@ -86,6 +86,7 @@ model User {
   referredApplications            MembershipApplication[]      @relation("ApplicationReferrer")
   eventRsvps                      RSVP[]                       @relation("EventRsvp")
   eventAttendances                Attendance[]                 @relation("EventAttendance")
+  meetingPresences                MeetingPresence[]            @relation("MeetingPresence")
   eventInvitations                EventInvitee[]               @relation("EventInvitee")
   // Recording Access initiative — members the host has designated as
   // co-host, able to start/stop recording and manage further co-hosts.
@@ -1366,6 +1367,7 @@ model Event {
   recurrence             EventRecurrence?
   rsvps                  RSVP[]
   attendances            Attendance[]
+  meetingPresences       MeetingPresence[]
   registrations          EventRegistration[]
   // Only populated for visibility = invited — who was asked, distinct from
   // RSVP (who responded). Supports add/remove after creation (a later
@@ -1831,6 +1833,31 @@ model Attendance {
   @@unique([eventId, userId, occurrenceDate])
   @@index([eventId])
   @@map("attendance")
+}
+
+// One member's single connection to an event's Nasiha Conference (LiveKit)
+// room, written from the LiveKit webhook's participant_joined/left events —
+// the evidence behind the host's attendance checklist (minutes attended,
+// 15-minute minimum before Knowledge Hours can be confirmed). One row per
+// LiveKit participant sid, so a rejoin or a second device is its own row;
+// minutes are the union of a member's intervals for that occurrence, never
+// a plain sum. Guests (no account) aren't recorded. leftAt stays null while
+// connected; room_finished closes any row a missed participant_left left open.
+model MeetingPresence {
+  id             String    @id @default(cuid())
+  eventId        String
+  event          Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User      @relation("MeetingPresence", fields: [userId], references: [id], onDelete: Cascade)
+  // Same meaning as Attendance.occurrenceDate: the session's own start
+  // (the event's startsAt for a non-recurring event).
+  occurrenceDate DateTime
+  participantSid String    @unique
+  joinedAt       DateTime
+  leftAt         DateTime?
+
+  @@index([eventId, occurrenceDate])
+  @@map("meeting_presences")
 }
 
 // Phase 5 data model — Knowledge Library & Forums (PRD §4.9/§4.13). Blog
