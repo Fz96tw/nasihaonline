@@ -113,7 +113,7 @@ export function FeedEventDateBadge({
       aria-label={hasMounted ? `Event ${ended ? "was" : rescheduled ? "rescheduled, now starts" : "starts"} ${fullLabel}${statusText ? ` — ${statusText}` : ""}` : "Event date"}
       className={cn(
         "flex flex-shrink-0 flex-col overflow-hidden text-center",
-        sm ? "w-14 rounded-md" : "w-[4.75rem] rounded-lg",
+        sm ? "w-[4.75rem] rounded-md" : "w-[4.75rem] rounded-lg",
         glass
           ? cn(
               "absolute bg-black/40 text-white shadow-lg ring-1 ring-white/25 backdrop-blur-md [text-shadow:0_1px_4px_rgba(0,0,0,.6)]",
@@ -148,36 +148,44 @@ export function FeedEventDateBadge({
           </div>
           <div
             className={cn(
-              "pt-1 font-extrabold leading-none",
-              sm ? "text-xl" : "text-3xl sm:text-4xl",
+              "font-extrabold leading-none",
+              sm ? "pt-0.5 text-lg" : "pt-1 text-3xl sm:text-4xl",
               ended && (glass ? "text-white/70" : "text-neutral-500"),
             )}
           >
             {day}
           </div>
-          <div
-            className={cn(
-              "mt-1 px-1 font-semibold leading-tight",
-              sm ? "text-[9px]" : "text-xs",
-              ended && (glass ? "text-white/70" : "text-neutral-500"),
-            )}
-          >
-            {time}
-          </div>
-          <div
-            className={cn(
-              "pb-1 font-medium leading-tight",
-              sm ? "text-[8px]" : "text-[10px]",
-              glass ? "text-white/80" : "text-neutral-500",
-            )}
-          >
-            {zone}
-          </div>
+          {sm ? (
+            // Compact tile: time and zone share one line, so the tile is
+            // wider but a row shorter than the stacked full-size layout.
+            <div
+              className={cn(
+                "whitespace-nowrap px-1 pb-0.5 text-[9px] font-semibold leading-tight",
+                ended && (glass ? "text-white/70" : "text-neutral-500"),
+              )}
+            >
+              {time} <span className={cn("font-medium", glass ? "text-white/80" : "text-neutral-500")}>{zone}</span>
+            </div>
+          ) : (
+            <>
+              <div
+                className={cn(
+                  "mt-1 px-1 text-xs font-semibold leading-tight",
+                  ended && (glass ? "text-white/70" : "text-neutral-500"),
+                )}
+              >
+                {time}
+              </div>
+              <div className={cn("pb-1 text-[10px] font-medium leading-tight", glass ? "text-white/80" : "text-neutral-500")}>
+                {zone}
+              </div>
+            </>
+          )}
           {statusText && (
             <div
               className={cn(
                 "flex items-center justify-center whitespace-nowrap px-1 py-0.5 font-bold uppercase leading-tight tracking-normal",
-                sm ? "gap-0.5 text-[8px]" : "gap-1 text-[10px]",
+                sm ? "gap-0.5 text-[9px]" : "gap-1 text-[10px]",
                 status?.kind === "live" && "bg-red-600/90 text-white",
                 status?.kind === "ended" && (glass ? "bg-white/20 text-white" : "bg-neutral-200 text-neutral-600"),
                 status?.kind === "soon" && (glass ? "bg-amber-300/90 text-amber-950 [text-shadow:none]" : "bg-amber-100 text-amber-900"),
@@ -191,7 +199,7 @@ export function FeedEventDateBadge({
           )}
         </>
       ) : (
-        <div className={sm ? "h-[3.75rem]" : "h-[5.5rem]"} />
+        <div className={sm ? "h-[3rem]" : "h-[5.5rem]"} />
       )}
     </div>
   );
