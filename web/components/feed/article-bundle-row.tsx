@@ -145,7 +145,7 @@ export function ArticleBundleRow({ item }: { item: FeedItem & { articleBundle: N
                 className="flex w-full shrink-0 snap-center flex-col overflow-hidden rounded-md border bg-card transition-colors hover:bg-accent/50"
               >
                 {/* Title overlaid on the image over a dark gradient (like Library's overlay option), so long headlines get 4 lines without growing the card. */}
-                <div className="relative aspect-video w-full bg-muted sm:aspect-[8/3]">
+                <div className="relative aspect-video w-full bg-muted sm:aspect-[2/1]">
                   {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
                   <img
                     src={slide.imageUrl}

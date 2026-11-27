@@ -48,7 +48,7 @@ function FeedRowLink({ item, className, children }: { item: FeedItem; className:
 function FeedImageCarousel({ slides, firstSlideOverlay }: { slides: FeedGallerySlide[]; firstSlideOverlay?: ReactNode }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
-  // Every slide shares one frame so the row doesn't change height as you swipe: 8:3 when the item has a banner
+  // Every slide shares one frame so the row doesn't change height as you swipe: 16:9 (2:1 on sm+) when the item has a banner
   // (hero image — cropped to fill it, centered), else 16:9 when there's a video, else a fixed 192px. Non-banner
   // images are fit (not cropped) inside whichever frame applies.
   const hasBanner = slides.some((slide) => slide.kind === "image" && slide.banner);
@@ -64,7 +64,7 @@ function FeedImageCarousel({ slides, firstSlideOverlay }: { slides: FeedGalleryS
       // eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL (access-gated per request), see Avatar's same rationale
       <img src={slides[0].url} alt="" className={cn(
           "mt-2 w-full rounded-md bg-muted",
-          slides[0].banner ? "aspect-video sm:aspect-[8/3] object-cover object-center" : "max-h-48 object-contain",
+          slides[0].banner ? "aspect-video sm:aspect-[2/1] object-cover object-center" : "max-h-48 object-contain",
         )}
       />
     );
@@ -85,7 +85,7 @@ function FeedImageCarousel({ slides, firstSlideOverlay }: { slides: FeedGalleryS
           {slides.map((slide, i) => (
             <div
               key={`${i}-${slide.kind === "image" ? slide.url : slide.embedUrl}`}
-              className={cn("relative w-full shrink-0 snap-center bg-muted", hasBanner ? "aspect-video sm:aspect-[8/3]" : hasVideo ? "aspect-video" : "h-48")}
+              className={cn("relative w-full shrink-0 snap-center bg-muted", hasBanner ? "aspect-video sm:aspect-[2/1]" : hasVideo ? "aspect-video" : "h-48")}
             >
               {slide.kind === "video" ? (
                 <FeedYoutubePlayer
@@ -371,7 +371,7 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                 ) : (
                   <div className="relative mt-2 w-full overflow-hidden rounded-md">
                     {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
-                    <img src={item.imageUrl!} alt="" className="block aspect-video sm:aspect-[8/3] w-full object-cover object-center" />
+                    <img src={item.imageUrl!} alt="" className="block aspect-video sm:aspect-[2/1] w-full object-cover object-center" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
                     <p className="absolute inset-x-0 bottom-3 line-clamp-4 px-4 text-2xl font-bold text-white [text-shadow:0_2px_10px_rgba(0,0,0,.75)]">
                       {item.isRestricted && (
@@ -506,7 +506,7 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                     <img
                       src={item.imageUrl!}
                       alt=""
-                      className="block aspect-video w-full rounded-md bg-muted object-cover object-center sm:aspect-[8/3]"
+                      className="block aspect-video w-full rounded-md bg-muted object-cover object-center sm:aspect-[2/1]"
                     />
                     <FeedEventDateBadge startsAt={item.eventStartsAt!} endsAt={item.eventEndsAt} variant="overlay" rescheduled={item.eventRescheduled} />
                   </div>
@@ -518,7 +518,7 @@ export function FeedRow({ item, q, currentUserId }: { item: FeedItem; q?: string
                       alt=""
                       className={cn(
                         "mt-2 w-full rounded-md bg-muted",
-                        item.imageIsBodyImage ? "max-h-48 object-contain" : "aspect-video sm:aspect-[8/3] object-cover object-center",
+                        item.imageIsBodyImage ? "max-h-48 object-contain" : "aspect-video sm:aspect-[2/1] object-cover object-center",
                       )}
                     />
                   )
