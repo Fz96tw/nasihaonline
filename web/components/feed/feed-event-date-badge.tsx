@@ -157,7 +157,7 @@ export function FeedEventDateBadge({
           {statusText && (
             <div
               className={cn(
-                "flex items-center justify-center gap-1 py-0.5 text-[11px] font-bold uppercase leading-tight tracking-wide",
+                "flex items-center justify-center gap-1 px-1 py-0.5 text-[10px] font-bold uppercase leading-tight tracking-normal",
                 status?.kind === "live" && "bg-red-600/90 text-white",
                 status?.kind === "ended" && (glass ? "bg-white/20 text-white" : "bg-neutral-200 text-neutral-600"),
                 status?.kind === "soon" && (glass ? "bg-amber-300/90 text-amber-950 [text-shadow:none]" : "bg-amber-100 text-amber-900"),
