@@ -51,17 +51,20 @@ export function EventListItem({
         {event.heroImageUrl ? (
           <Link
             href={eventDetailHref(event)}
-            className="block aspect-video w-full overflow-hidden rounded-md bg-muted sm:aspect-auto sm:h-[9rem] sm:w-64 sm:flex-shrink-0"
+            className="relative block aspect-video w-full overflow-hidden rounded-md bg-muted sm:aspect-auto sm:h-[9rem] sm:w-64 sm:flex-shrink-0"
           >
             {/* eslint-disable-next-line @next/next/no-img-element -- MinIO-proxied URL, see Avatar's same rationale */}
             <img src={event.heroImageUrl} alt="" className="h-full w-full object-cover" />
+            <FeedEventDateBadge startsAt={event.startsAt} endsAt={event.endsAt ?? undefined} variant="overlay" />
           </Link>
         ) : null}
-        {/* Date tile sits between the thumbnail and the text rather than
-            overlaid on the thumbnail, which is too small to carry it — same
-            badge as the public /events cards, in its solid "inline" style. */}
+        {/* Same date tile as the public /events cards: over the thumbnail's
+            corner when there is one, otherwise in its solid "inline" style
+            ahead of the text. */}
         <div className="flex min-w-0 flex-1 items-start gap-3">
-          <FeedEventDateBadge startsAt={event.startsAt} endsAt={event.endsAt ?? undefined} variant="inline" />
+          {!event.heroImageUrl && (
+            <FeedEventDateBadge startsAt={event.startsAt} endsAt={event.endsAt ?? undefined} variant="inline" />
+          )}
           <div className="min-w-0 flex-1">
             <div className="mb-1 flex flex-wrap items-center gap-2">
               {inProgress ? <Badge variant="success">In progress</Badge> : null}
