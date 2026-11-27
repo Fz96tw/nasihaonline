@@ -57,10 +57,11 @@ export function EventListItem({
             <img src={event.heroImageUrl} alt="" className="h-full w-full object-cover" />
           </Link>
         ) : null}
-        {/* Date tile sits right of the text rather than overlaid on the
-            thumbnail, which is too small to carry it — same badge as the
-            public /events cards, in its solid "inline" style. */}
+        {/* Date tile sits between the thumbnail and the text rather than
+            overlaid on the thumbnail, which is too small to carry it — same
+            badge as the public /events cards, in its solid "inline" style. */}
         <div className="flex min-w-0 flex-1 items-start gap-3">
+          <FeedEventDateBadge startsAt={event.startsAt} endsAt={event.endsAt ?? undefined} variant="inline" />
           <div className="min-w-0 flex-1">
             <div className="mb-1 flex flex-wrap items-center gap-2">
               {inProgress ? <Badge variant="success">In progress</Badge> : null}
@@ -99,7 +100,6 @@ export function EventListItem({
               </Button>
             ) : null}
           </div>
-          <FeedEventDateBadge startsAt={event.startsAt} endsAt={event.endsAt ?? undefined} variant="inline" />
         </div>
       </div>
       {isPast ? null : (
