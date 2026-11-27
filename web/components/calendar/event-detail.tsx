@@ -177,7 +177,9 @@ export function EventDetail({
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <Badge variant={audienceBadge.variant}>{audienceBadge.label}</Badge>
           <Badge variant="neutral">{EVENT_TYPE_LABELS[event.type]}</Badge>
-          {isCoHost && !isHost && !event.cancelled && !isPast && <Badge variant="info">You&apos;re co-hosting</Badge>}
+          {(isHost || isCoHost) && !event.cancelled && !isPast && (
+            <Badge variant="info">{isHost ? <>You&apos;re hosting</> : <>You&apos;re co-hosting</>}</Badge>
+          )}
           {!roster && (
             <span className="flex items-center gap-1 text-xs text-muted-foreground" title="Registered or RSVP'd">
               <Users className="h-3.5 w-3.5" />

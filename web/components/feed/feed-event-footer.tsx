@@ -85,7 +85,7 @@ function JoinNowButton({ eventId, direct }: { eventId: string; direct: boolean }
  *
  * - live + has a meeting                → Join now (host, co-host, or anyone allowed to RSVP)
  * - upcoming, or live without a meeting → RSVP / You're going (not for the host, who never RSVPs; co-hosts may)
- * A co-host also gets a "You're co-hosting" badge beside the button, until the event ends.
+ * The host / a co-host also gets a "You're hosting" / "You're co-hosting" badge beside the button, until the event ends.
  * - ended                               → no button
  * Before mount (status unknown) no button renders, so SSR and hydration agree.
  * `item.eventActions` is absent when the viewer can't RSVP at all (a
@@ -119,11 +119,11 @@ export function FeedEventFooter({ item }: { item: FeedItem }) {
     }
   }
 
-  if (actions?.isCoHost && status && status.kind !== "ended") {
+  if ((actions?.isHost || actions?.isCoHost) && status && status.kind !== "ended") {
     action = (
       <div className="flex flex-wrap items-center gap-2">
         {action}
-        <Badge variant="info">You&apos;re co-hosting</Badge>
+        <Badge variant="info">{actions.isHost ? <>You&apos;re hosting</> : <>You&apos;re co-hosting</>}</Badge>
       </div>
     );
   }
