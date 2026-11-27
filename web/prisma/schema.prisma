@@ -1838,7 +1838,7 @@ model Attendance {
 // One member's single connection to an event's Nasiha Conference (LiveKit)
 // room, written from the LiveKit webhook's participant_joined/left events —
 // the evidence behind the host's attendance checklist (minutes attended,
-// 15-minute minimum before Knowledge Hours can be confirmed). One row per
+// 5-minute minimum before Knowledge Hours can be confirmed). One row per
 // LiveKit participant sid, so a rejoin or a second device is its own row;
 // minutes are the union of a member's intervals for that occurrence, never
 // a plain sum. Guests (no account) aren't recorded. leftAt stays null while

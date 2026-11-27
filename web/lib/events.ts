@@ -191,7 +191,7 @@ export const ROSTER_STATUS_VARIANT: Record<EventRosterMember["status"], "neutral
 // attendee-role Attendance row (and confirmed Knowledge Hours earn)
 // already exists.
 /** A member must have been in a Nasiha Conference meeting this long before the host can confirm their attendance credit. */
-export const MIN_ATTENDANCE_MINUTES = 15;
+export const MIN_ATTENDANCE_MINUTES = 5;
 
 export type AttendanceChecklistMember = {
   userId: string;
@@ -200,7 +200,7 @@ export type AttendanceChecklistMember = {
   recorded: boolean;
   /** Minutes in the Nasiha Conference meeting for this session; null when there's no meeting data (not a LiveKit event, or a session from before tracking). */
   minutesAttended: number | null;
-  /** Whether the host may confirm this member's attendance credit (15+ minutes when there's meeting data; otherwise a restricted event's invitee). */
+  /** Whether the host may confirm this member's attendance credit (5+ minutes when there's meeting data; otherwise a restricted event's invitee). */
   eligible: boolean;
 };
 

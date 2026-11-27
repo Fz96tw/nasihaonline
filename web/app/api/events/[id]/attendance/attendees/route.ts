@@ -11,7 +11,7 @@ const recordAttendeeSchema = z.object({ userId: z.string().min(1), occurrenceDat
  * confirmed Knowledge Hours earn (Audience-Restricted Group Events,
  * Objective 04). Distinct from POST /api/events/:id/attendance (the host's
  * own row, untouched). Authorization and eligibility beyond "is signed in"
- * (host or admin, started sessions only, 15+ meeting minutes when there's
+ * (host or admin, started sessions only, 5+ meeting minutes when there's
  * meeting data) live in recordAttendeeAttendance().
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
