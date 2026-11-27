@@ -3,8 +3,7 @@
 import { type MouseEvent, type ReactNode, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { Eye, MessageSquare, Users, Video } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Eye, MessageSquare, Mic, Users, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RsvpButton } from "@/components/calendar/rsvp-button";
 import { useEventStatus } from "@/components/feed/feed-event-date-badge";
@@ -123,7 +122,11 @@ export function FeedEventFooter({ item }: { item: FeedItem }) {
     action = (
       <div className="flex flex-wrap items-center gap-2">
         {action}
-        <Badge variant="info">{actions.isHost ? <>You&apos;re hosting</> : <>You&apos;re co-hosting</>}</Badge>
+        {/* A label, not a button — but typeset like the xs RsvpButton beside it (bold, uppercase, h-7) so the pair reads as one row; tinted fill, no border, so it doesn't look clickable. */}
+        <span className="inline-flex h-7 items-center whitespace-nowrap rounded-md bg-primary/10 px-2.5 text-xs font-bold uppercase tracking-wide text-primary">
+          <Mic className="mr-1 h-3.5 w-3.5" aria-hidden />
+          {actions.isHost ? <>You&apos;re hosting</> : <>You&apos;re co-hosting</>}
+        </span>
       </div>
     );
   }
